@@ -276,6 +276,32 @@ function testPaperMetaOrderKeepsEvidenceBetweenTitleAndStars() {
   assert.ok(tagsIndex > starsIndex, 'tags should stay on the same metadata line after stars');
 }
 
+function testQuickLinksCenterTextAndDetachIcon() {
+  const sidebar = loadSidebarForTest('#/');
+  const tools = sidebar.__test;
+  assert.equal(typeof tools.renderQuickLink, 'function');
+
+  const html = tools.renderQuickLink('dpr-sidebar-quick-home', '#/', '🏠', '首页');
+  assert.ok(html.includes('class="dpr-sidebar-quick dpr-sidebar-quick-home"'));
+  assert.ok(html.includes('<span class="dpr-sidebar-quick-label"><span class="dpr-sidebar-quick-icon" aria-hidden="true">🏠</span>首页</span>'));
+
+  const css = fs.readFileSync('app/app.css', 'utf8');
+  const quickRule = cssRule(css, '.dpr-sidebar-quick');
+  assert.ok(/position:\s*relative/i.test(quickRule));
+  assert.ok(/justify-content:\s*center/i.test(quickRule));
+
+  const labelRule = cssRule(css, '.dpr-sidebar-quick-label');
+  assert.ok(/position:\s*relative/i.test(labelRule));
+  assert.ok(/display:\s*inline-block/i.test(labelRule));
+  assert.ok(/text-align:\s*center/i.test(labelRule));
+
+  const iconRule = cssRule(css, '.dpr-sidebar-quick-icon');
+  assert.ok(/position:\s*absolute/i.test(iconRule));
+  assert.ok(/right:\s*calc\(100%\s*\+\s*4px\)/i.test(iconRule));
+  assert.ok(/top:\s*50%/i.test(iconRule));
+  assert.ok(/transform:\s*translateY\(-50%\)/i.test(iconRule));
+}
+
 function testSidebarSortsByNewestTimeFirst() {
   const sidebar = loadSidebarForTest('#/202606/25/new');
   const tools = sidebar.__test;
@@ -644,6 +670,7 @@ testAxisViewsForDailyAndConference();
 testAxisTabsRenderUnreadCounts();
 testPaperEvidenceAndActionButtonsRender();
 testPaperMetaOrderKeepsEvidenceBetweenTitleAndStars();
+testQuickLinksCenterTextAndDetachIcon();
 testSidebarSortsByNewestTimeFirst();
 testSidebarUtilityHelpers();
 testEvidenceCssIsPersistent();

@@ -1058,6 +1058,17 @@
     node.classList.remove('app-nav', 'no-badge');
   }
 
+  function renderQuickLink(className, href, icon, label) {
+    return (
+      '<a class="dpr-sidebar-quick ' + safeAttr(className) + '" href="' + safeAttr(href) + '">' +
+      '<span class="dpr-sidebar-quick-label"><span class="dpr-sidebar-quick-icon" aria-hidden="true">' +
+      safeText(icon) +
+      '</span>' +
+      safeText(label) +
+      '</span></a>'
+    );
+  }
+
   function renderShell(root) {
     var homeHref = (state.model.home && state.model.home.href) || '#/';
     var tutorialHref = (state.model.tutorial && state.model.tutorial.href) || '#/tutorial/README';
@@ -1069,8 +1080,8 @@
       '<button type="button" class="dpr-sidebar-mobile-toggle" aria-label="切换侧边栏">' +
       '<span></span><span></span><span></span></button>' +
       '<header class="dpr-sidebar-header">' +
-      '  <a class="dpr-sidebar-quick dpr-sidebar-quick-home" href="' + safeAttr(homeHref) + '"><span>🏠</span>' + safeText(homeLabel) + '</a>' +
-      '  <a class="dpr-sidebar-quick dpr-sidebar-quick-tutorial" href="' + safeAttr(tutorialHref) + '"><span>📖</span>' + safeText(tutorialLabel) + '</a>' +
+      renderQuickLink('dpr-sidebar-quick-home', homeHref, '🏠', homeLabel) +
+      renderQuickLink('dpr-sidebar-quick-tutorial', tutorialHref, '📖', tutorialLabel) +
       '</header>' +
       '<div class="dpr-sidebar-toolbar">' +
       '  <div class="dpr-sidebar-search-wrap">' +
@@ -1863,6 +1874,7 @@
         rerenderOptionsForStatusClick: rerenderOptionsForStatusClick,
         syncActiveOptionsForInitialLoad: syncActiveOptionsForInitialLoad,
         updatePaperTitleOverflowMarks: updatePaperTitleOverflowMarks,
+        renderQuickLink: renderQuickLink,
       },
     };
   }
