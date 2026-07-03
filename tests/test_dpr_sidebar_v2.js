@@ -840,7 +840,7 @@ function testSidebarPaperVisualStateCssContract() {
   assert.ok(/white-space:\s*nowrap/i.test(titleRule));
   assert.ok(/overflow:\s*hidden/i.test(titleRule));
   assert.ok(/text-overflow:\s*clip/i.test(titleRule));
-  assert.ok(/padding-right:\s*calc\(20px \+ 1ch\)/i.test(titleRule));
+  assert.ok(/padding-right:\s*calc\(20px \+ 3ch\)/i.test(titleRule));
   assert.ok(/box-sizing:\s*border-box/i.test(titleRule));
   assert.ok(!/-webkit-line-clamp/i.test(titleRule));
 
