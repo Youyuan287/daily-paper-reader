@@ -1,0 +1,1703 @@
+Masked Point-Entity Contrast for Open-Vocabulary 3D Scene Understanding
+Yan Wang1˚
+Baoxiong Jia1˚
+Ziyu Zhu1,2
+Siyuan Huang1
+1State Key Laboratory of General Artificial Intelligence, BIGAI
+2Tsinghua University
+https://mpec-3d.github.io
+OpenScene
+MPEC
+ScanNet Eff.
+L.R. 5% 
+ScanNet Eff.
+L.R. 10% 
+ScanNet Eff.
+L.R. 20% 
+ScanNet Eff.
+L.A. 20 
+ScanNet Eff.
+L.A. 50 
+ScanNet Eff.
+L.A. 100 
+ScanNet Eff.
+L.A. 200 
+ScanNet O.V.
+Sem. Seg
+66.0
+64.0
+Z.S. MultiScan
+O.V. Sem. Seg
+45.0
+41.3
+Z.S. MultiScan
+Grounding
+17.0
+ScanNet200
+Sem. Seg.
+31.8
+58.5
+SQA3D
+48.5
+47.5
+80.3
+Scan2Cap
+80.2
+Multi3dRefer
+50.8
+50.1
+ScanRefer
+51.8
+51.2
+ScanNet
+Sem. Seg.
+75.8
+75.7
+13.3
+30.0
+ScanNet
+Ins. Seg.
+62.5
+62.3
+ScanNet200
+Ins. Seg.
+31.6
+ScanNet Eff.
+L.R. 1% 
+40.8
+27.5
+30.7
+52.9
+66.5
+64.0
+66.3
+62.9
+61.2
+72.0
+67.3
+69.2
+70.3
+73.1
+71.8
+MPEC
+SOTA
+62.0
+TAIL CLASSES
+“Plant”
+SPATIAL REFERRAL
+“This is the lamp on the round 
+table. It is by the corner.”
+VISUAL AMBIGUITY
+“Towel”
+Figure 1. Qualitative and Quantitative Analysis of MPEC Results. MPEC achieves state-of-the-art on open-vocabulary 3D semantic
+segmentation. Compared with OpenScene [54], MPEC is more robust to tail classes, visual ambiguity, and detailed descriptions, e.g., spatial
+referral. The radar chart highlights the performance advantages of MPEC across various 3D scene understanding tasks.
+Abstract
+Open-vocabulary 3D scene understanding is pivotal for
+enhancing physical intelligence, as it enables embodied
+agents to interpret and interact dynamically within real-
+world environments. This paper introduces MPEC, a novel
+Masked Point-Entity Contrastive learning method for open-
+vocabulary 3D semantic segmentation that leverages both
+3D entity-language alignment and point-entity consistency
+across different point cloud views to foster entity-specific
+feature representations.
+MPEC improves semantic dis-
+crimination and enhances the differentiation of unique in-
+stances, achieving state-of-the-art results on ScanNet for
+open-vocabulary 3D semantic segmentation and demonstrat-
+ing superior zero-shot scene understanding capabilities. Ex-
+tensive fine-tuning experiments on 8 datasets, spanning from
+low-level perception to high-level reasoning tasks, showcase
+˚ indicates equal contribution.
+the potential of learned 3D features, driving consistent per-
+formance gains across varied 3D scene understanding tasks.
+1. Introduction
+Open-vocabulary 3D scene understanding [54] is an emerg-
+ing research topic with significant implications for embodied
+AI [2, 16, 24, 28, 52, 80, 88]. This task requires the model to
+act beyond recognizing only predefined 3D object categories
+and concepts seen during training, enabling it to identify
+flexible concepts based on instructions while preserving suf-
+ficient spatial or geometry information to support tasks like
+reconstruction [42, 43, 50, 51] and manipulation [20, 39, 88].
+However, developing scene representations that pos-
+sess both flexible semantic understanding capability and
+accurate spatial and geometric information presents non-
+trivial challenges. Due to the lack of available paired 3D
+vision-language (3D-VL) data, recent methods leverage
+This CVPR paper is the Open Access version, provided by the Computer Vision Foundation.
+Except for this watermark, it is identical to the accepted version;
+the final published version of the proceedings is available on IEEE Xplore.
+14125
+
+
+2D foundation models [18, 37, 38, 56] either to generate
+data [14, 35, 78] for 3D-language alignment training or
+to provide semantically aligned 2D representations from
+individual images which are then merged into global 3D
+representations [73, 79] or distilled into trainable 3D en-
+coders [54]. However, such pipelines can struggle to pre-
+serve 3D spatial information, primarily due to the limited
+field of view in individual images, which hinders the capture
+of global spatial relationships between objects, and the chal-
+lenges in maintaining multi-view consistency, especially by
+semantic representations rather than pixel-level information.
+Considering the intrinsic uniqueness of individual entities
+in 3D scenes, particularly for tasks requiring spatial reason-
+ing in 3D-VL and embodied AI, we emphasize the need for
+representations that not only align with language but also
+distinguish between instances within the scene.
+Previous methods for incorporating spatial and geomet-
+ric information without supervision have largely focused
+on investigating the inherent correlations in point clouds,
+with much of the work centered on unsupervised and self-
+supervised representation learning [81], particularly via con-
+trastive learning approaches [26, 64, 69, 71]. These meth-
+ods typically create positive and negative point cloud pairs
+through various strategies to form the concept of neigh-
+bors [69], regions [26], and semantic prototypes [64]. How-
+ever, none of these approaches are effectively suited for
+aligning with language in complex 3D scenes, as they tend
+to be either overly fragmented or coarse-grained and fail to
+capture the concept of objects within the scene.
+In this paper, we address the aforementioned challenges
+by learning 3D representations that preserve both flexible
+semantic understanding and entity-specific geometric and
+spatial information. To achieve this, we propose MPEC, a
+simple yet effective entity-level contrastive framework for
+training open-vocabulary 3D scene understanding models.
+Our approach bridges efforts from open-vocabulary scene
+understanding and unsupervised scene representation learn-
+ing [64, 69], while also leveraging recent advancements in
+3D-VL scaling [32, 66, 77, 80]. Methodologically, we apply
+augmentations [69] to generate multiple views of a scene.
+We generate 3D object entity masks with off-the-shelf object
+models [59, 60], and form contrastive pairs between different
+views, enforcing feature similarity within the same entities
+across views and dissimilarity across different ones. Finally,
+we align 3D point features merged from different views with
+language generated by foundation models [32, 35, 78] on
+diverse scenes through contrastive alignment.
+MPEC achieves state-of-the-art open-vocabulary 3D se-
+mantic segmentation results with 66.0% foreground mIoU
+and 81.3% foreground mAcc on ScanNet [12]. The trained
+3D encoder also demonstrates strong generalization across
+various downstream tasks after fine-tuning, from low-level
+perception [19, 34] to high-level reasoning tasks [1, 6, 8, 45,
+84]. Notably, MPEC especially boosts the performance of
+ScanNet Data Efficient Benchmark [26], improving mIoU
+from 30.7% [64] to 40.8% with just 1% of the scenes trained.
+We also provide an empirical analysis of the framework,
+breaking down each module’s contribution to the overall
+performance. In addition, we conduct extensive experiments
+to assess how different scene sources and language types
+affect performance. In summary, our contributions are:
+• We present MPEC, a novel contrastive framework with
+both point-to-entity and entity-to-language alignments,
+achieving new state-of-the-arts in open-vocabulary 3D
+scene understanding tasks.
+• Through extensive experiments on 7 tasks over 8 datasets,
+we demonstrate that MPEC achieves state-of-the-art re-
+sults in both zero-shot and fine-tuned settings, particularly
+excelling in data-scarce scenarios.
+• We analyze how model architectures and data sources im-
+pact model performance, highlighting cross-view contrast
+and data domain selection as key factors for contrastive
+learning, offering new insights for future research.
+2. Related Work
+Open-Vocabulary 3D Scene Understanding
+Open-
+vocabulary 3D scene understanding typically involves two
+signature tasks: open-vocabulary 3D semantic segmenta-
+tion [7, 14, 35, 40, 54, 65, 78] and open-vocabulary 3D
+instance segmentation [31, 49, 60]. Both tasks aim to predict
+3D segmentation masks for class labels or object instances
+using natural language descriptions, without requiring prior
+model training on specific object categories. Despite sig-
+nificant advancements in open-vocabulary understanding
+within the 2D domain [10, 18, 33, 38, 56, 68, 70, 91], achiev-
+ing open-vocabulary 3D scene understanding from point
+clouds [14, 29, 32, 35, 54, 60, 74, 78] remains challenging
+due to the scarcity of large-scale training data.
+Existing approaches leverage 2D foundation models [18,
+37, 38, 56] to bridge the gap between language and 3D
+point cloud data. With off-the-shelf 3D segmentation mod-
+els [44, 59] or back-projection from 2D foundation mod-
+els [37, 91], existing methods learn point-language align-
+ment for open-vocabulary semantic [14, 35, 54, 78] and in-
+stance segmentation [31, 60]. These methods align 3D point
+clouds and language either by directly distilling language
+and image features from 2D vision-language (2D-VL) mod-
+els into 3D learnable backbones or by contrastively align-
+ing point and language features, similar to approaches in
+2D [56]. However, a key limitation of these models is the
+insufficient incorporation of 3D information during model
+learning, which restricts their performance on a wide range
+of 3D-VL tasks. For instance, in OpenScene [54], as illus-
+trated in Fig. 1, the model struggles with 2D visual ambigui-
+ties (e.g., objects with similar colors) and faces challenges
+in accurately identifying specific object instances. This is-
+14126
+
+
+sue arises primarily because the 2D-VL model used to train
+the 3D scene encoder was based on category-level text de-
+scriptions, which lack spatial and 3D geometric context,
+thereby limiting the model’s understanding of the 3D struc-
+ture of objects. Therefore, we emphasize the crucial role
+of 3D information from the scene representation itself in
+open-vocabulary scene understanding tasks.
+Pre-training for 3D Point Clouds
+Motivated by the suc-
+cessful application of the “pre-train then fine-tune” paradigm
+in 2D vision research, there has been growing interest in 3D
+point cloud representation learning [26, 30, 48, 62, 64, 67,
+69, 71, 76, 81, 85], demonstrating positive impacts on down-
+stream tasks. These approaches can be categorized into two
+paradigms: mask modeling and contrastive learning. Mask
+modeling methods [48, 62, 67, 76, 81, 85] focus on recon-
+structing the coordinates or features of masked points. In
+contrast, contrastive learning methods [26, 30, 64, 71] create
+positive and negative pairs within 3D point clouds for dis-
+criminative learning. To enhance the learning of contrastive-
+based methods, MSC [69] incorporates masked point mod-
+eling as additional reconstructive supervision. GroupCon-
+trast [64] builds on this by introducing semantic prototypes
+for discovering local neighborhoods. However, these meth-
+ods still lack a concept of objects, making them inapplicable
+for aligning with language.
+Meanwhile, recent research has shown a growing inter-
+est in vision-language pre-training for 3D point cloud un-
+derstanding. Methods like 3D-VisTA [93], 3DVLP [83],
+and SynVL3D [75] employ unsupervised pre-training strate-
+gies such as masked modeling and contrastive learning [32],
+while other approaches utilize multi-task training for vision-
+language alignment [4, 9, 94]. With the emergence of 3D
+Large Language Model (3D-LLM) [23, 25, 36, 46, 86], re-
+cent efforts like LEO [28], MiniGPT-3D [61] and LLaVA-
+3D [92] have focused on aligning object-level or voxel-
+level features with LLMs through explicit alignment training
+stage [23, 41]. These studies demonstrate that improved
+vision-language alignment leads to enhanced performance
+on downstream tasks [17, 21, 27–29, 55]. However, a crit-
+ical gap remains in the lack of a robust, open-vocabulary
+3D encoder capable of directly processing scene-level point
+clouds [28, 29, 92, 94]. Our work addresses this need by
+introducing a powerful 3D encoder, which has the potential
+to further advance the capabilities of 3D-LLM.
+3. Method
+In this section, we elaborate on the proposed masked point-
+entity contrastive learning framework for open-vocabulary
+3D scene understanding. The overall architecture is pre-
+sented in Fig. 2. In essence, our model aims to learn 3D point
+features FP P RNˆD that maintain 3D information of 3D
+scenes, a vision-language (VL-) adapter ProjVLp¨q that maps
+these 3D features into the semantic space which is aligned
+with language features FT extracted from a pre-trained text
+encoder. The input of our framework mainly consists of three
+components: 1) 3D scene point cloud P “ pP , Cq, where
+P P RNˆ3 and C P RNˆ3 represents spatial coordinates
+and colors of the points. 2) K 3D entity mask proposals
+obtained with off-the-shelf methods which are merged into
+M P tBG, 1, ¨ ¨ ¨ , KuN where BG denotes the background.
+3) Text descriptions T “ ttiuNT
+i“1 including captions and
+referrals, which could be generated for each entity proposal
+by template-based methods or foundation models.
+3.1. Point-to-Entity Alignment
+Cross-view Feature Extraction
+We start by extracting
+separate point features from different augmented views of
+the scene for contrastive representation learning. Specifically,
+given a 3D point cloud P, two distinct augmented views Pu
+and Pv are generated, along with their transformed entity
+masks Mu and Mv. Following the practice of previous
+works [22, 69, 72], we divide the unioned set of point clouds
+into non-overlapping grids based on the original spatial loca-
+tions. Then two sets of non-overlapping grid masks Gu and
+Gv are randomly generated and applied to the corresponding
+views. We use the same mask token embedding t P R3 for
+the color of all masked points. We then feed the masked
+point clouds of separate views into the 3D U-Net encoder
+Epcd to extract per-point embeddings:
+Fl “ Epcdpp1 ´ GlqPl ` GlTlq,
+l P tu, vu,
+(1)
+where Tu and Tv are the expansions of the learnable em-
+bedding vector to fit the dimension with point cloud across
+different views, respectively.
+Point-to-Entity Contrastive Learning
+After obtaining
+the point features from two views, we perform point-to-entity
+contrastive learning to incorporate entity information into our
+learned scene representations. Specifically, we calculate the
+cosine similarity matrix suÑv between all pairs of matched
+points by computing the similarities of point i from view
+u to points in view v belonging to entities and background
+separately. Let dcospf1, f2q “
+f T
+1 ¨f2
+}f1}¨}f2} to denote the cosine
+similarity function, for points Ev
+k “ tj | Mvrjs “ eku that
+belong to entity ek in view v, we have:
+suÑv
+i,ek “
+1
+|Ek|
+ÿ
+jPEk
+suÑv
+i,j
+“
+1
+|Ek|
+ÿ
+jPEk
+dcospF i
+u, F j
+v q. (2)
+Meanwhile,
+for the remaining L background points
+tb1, b2, ¨ ¨ ¨ , bLu in view v, we compute the similarity be-
+tween point i to the each bj in view v with cosine similarity
+suÑv
+i,bj
+“ dcospF i
+u, F bj
+v q. After these calculations, we obtain
+the entity-aware point similarities suÑv
+i
+for point i by
+suÑv
+i
+“ Concat
+´
+suÑv
+i,e1 , ¨ ¨ ¨ , suÑv
+i,eK , suÑv
+i,b1 , ¨ ¨ ¨ , suÑv
+i,bL
+¯
+, (3)
+14127
+
+
+𝑠𝑒2,𝑡1
+𝑠𝑒2,𝑡2
+𝑠𝑒2,𝑡3
+𝑠𝑒2,𝑡4
+…
+𝑠𝑒2,𝑡𝑁𝑡
+𝑠𝑒1,𝑡1
+𝑠𝑒1,𝑡2
+𝑠𝑒1,𝑡3
+𝑠𝑒1,𝑡4
+…
+𝑠𝑒1,𝑡𝑁𝑡
+𝑠𝑒4,𝑡1
+𝑠𝑒4,𝑡2
+𝑠𝑒4,𝑡3
+𝑠𝑒4,𝑡4
+…
+𝑠𝑒4,𝑡𝑁𝑡
+𝑠𝑒3,𝑡1
+𝑠𝑒3,𝑡2
+𝑠𝑒3,𝑡3
+𝑠𝑒3,𝑡4
+…
+𝑠𝑒3,𝑡𝑁𝑡
+…
+…
+…
+…
+…
+…
+𝑠𝑒𝑘,𝑡1 𝑠𝑒𝑘,𝑡2 𝑠𝑒𝑘,𝑡3 𝑠𝑒𝑘,𝑡4
+…
+𝑠𝑒𝑘,𝑡𝑁𝑡
+Entities
+…
+…
+Languages
+POINT-TO-ENTITY 
+CONTRAST
+CLIP Text Encoder
+2D & 3D
+Segmentor
+Entities
+3D UNet
+Entity Masks
+𝑴
+…
+VL-Adapter
+…
+ENTITY-TO-LANGUAGE
+CONTRAST
+…
+Entities
+…
+Backgrounds
+…
+Points
+𝑣→𝑢
+𝑠1,𝑒1
+𝑢→𝑣…
+𝑠1,𝑒𝑘
+𝑢→𝑣𝑠1,𝑏1
+𝑢→𝑣…
+𝑠1,𝑏𝐿
+𝑢→𝑣
+𝑠2,𝑒1
+𝑢→𝑣…
+𝑠2,𝑒𝑘
+𝑢→𝑣𝑠2,𝑏1
+𝑢→𝑣…
+𝑠2,𝑏𝐿
+𝑢→𝑣
+𝑠3,𝑒1
+𝑢→𝑣…
+𝑠3,𝑒𝑘
+𝑢→𝑣𝑠3,𝑏1
+𝑢→𝑣…
+𝑠3,𝑏𝐿
+𝑢→𝑣
+𝑠4,𝑒1
+𝑢→𝑣…
+𝑠4,𝑒𝑘
+𝑢→𝑣𝑠4,𝑏1
+𝑢→𝑣…
+𝑠4,𝑏𝐿
+𝑢→𝑣
+…
+…
+…
+…
+…
+…
+𝑠𝑁,𝑒1
+𝑢→𝑣…
+𝑠3,𝑒𝑘
+𝑢→𝑣𝑠𝑁,𝑏1
+𝑢→𝑣
+…
+𝑠𝑁,𝑏𝐿
+𝑢→𝑣
+…
+Entities
+…
+Backgrounds
+…
+Points
+𝑢→𝑣
+𝑭𝓟
+𝑭𝑽𝑳
+The toilet 
+is behind 
+the ottoman.
+The bicycle 
+is in front 
+of the desk.
+The floor is 
+supporting 
+the bed.'
+The couch is 
+to the right 
+of the 
+bicycle.
+Placed on 
+the floor is 
+the desk.
+…
+View 𝒖
+View 𝒗
+Text
+Descrip.
+Figure 2. The Overall Pipeline of MPEC. Given a 3D point cloud as input, we predict entity mask proposals and generate text descriptions
+for each entity. Then different views of the scene are randomly masked and we replace the masked point features with learnable embeddings.
+A 3D UNet then extracts per-point features. Guided by the entity masks, cross-view point-to-entity contrastive learning is conducted to
+enforce cross-view consistency and distinguishment across different entities. Then we merge the point features from two views and align the
+feature dimension of points with text features extracted by CLIP with a VL-Adapter. Finally, entity-to-language contrastive learning is
+performed for open-vocabulary 3D scene understanding.
+and add point-entity contrastive supervision depending on
+whether point i belongs to an entity or background in view
+u. If point i belongs to an entity, then we have
+ℓuÑv
+i
+“ ´ log
+exppsuÑv
+i,¯e
+{τq
+ř
+r exppsuÑv
+i,r
+{τq,
+(4)
+where ¯e is the entity in view v that point i belongs to. If
+point i belongs to the background, then we use
+ℓuÑv
+i
+“ ´ log
+exppsuÑv
+i,¯b
+{τq
+ř
+r exppsuÑv
+i,r
+{τq,
+(5)
+to align point i with its corresponding background point ¯b
+in view v with a temperature factor τ. We can similarly
+compute the similarity from view v to u and obtain the final
+point-entity contrastive loss:
+Lp2e “ 1
+2
+˜
+1
+N
+ÿ
+i
+ℓuÑv
+i
+` 1
+N
+ÿ
+j
+ℓvÑu
+j
+¸
+.
+(6)
+3.2. Entity-to-Language Alignment
+To achieve open-vocabulary 3D scene understanding, we
+align the 3D point features with language features. First, we
+merge the 3D point features from both views to generate
+the final point features FP. Next, we feed the text descrip-
+tions of 3D entities to a frozen text encoder Etxt to extract
+language features FT . Then we perform entity-to-language
+contrastive learning to align the 3D point features with their
+corresponding language features.
+Point Features Merging
+In Sec. 3.1, we extract point
+features Fu and Fv for different augmented views of the
+input point cloud. To fully utilize the advantages of both
+views’ features and further align with language features, we
+merge Fu and Fv to obtain point features FP by taking the
+mean feature of matched points in the two views. We then
+feed the merged features to the VL-adapter ProjVLp¨q to
+align the dimension of point and language features:
+FP “ MeanpFu, Fvq,
+FVL “ ProjVLpFPq.
+(7)
+Language Feature Extraction
+Given various text descrip-
+tions T , e.g., object captions Tcap and referrals Tref of dif-
+ferent 3D entities in the scene, we random sample NT de-
+scriptions and extract their embeddings using the pre-trained
+CLIP text encoder Etxt of CLIP [56]:
+FT “ EtxtpT q P RNTˆD.
+(8)
+Entity-to-Language Contrastive Learning
+After obtain-
+ing the adapted 3D point features FVL and entity text descrip-
+tion features FT , we conduct entity-to-language contrastive
+learning to align their representations. Analogous to Sec. 3.1,
+we employ a point-discriminative loss to enforce consistency
+among matched point-language pairs, while contrasting un-
+matched pairs. Specifically, given the language features FT
+and adapted vision features FVL, we first compute the co-
+sine similarity matrix stÑe. For language description i, we
+14128
+
+
+compute its similarity to all points in an entity ek by
+stÑe
+i,ek “
+1
+|Ek|
+ÿ
+jPEk
+dcospF i
+T , F j
+VLq,
+(9)
+where Ek “ tj|Mrjs “ eku denotes the set of points that
+belongs to entity ek. We concatenate text-to-entity similari-
+ties stÑe
+i
+between text i and all entity features derived from
+FVL by
+stÑe
+i
+“ ConcatpstÑp
+i,e1 , stÑp
+i,e2 , ¨ ¨ ¨ , stÑe
+i,eKq.
+(10)
+Let ¯e denote the entity that aligns with text description i,
+we compute the text-to-entity contrastive loss with tempera-
+ture factor τ as:
+ℓtÑe
+i
+“ ´ log
+exppstÑe
+i,¯e {τq
+ř
+k exppstÑe
+i,k {τq.
+(11)
+Similarly, we can compute the entity-to-text similarity
+seÑt. However, in contrast to the direct symmetry between
+point-to-entity and entity-to-point alignment in Sec. 3.1, the
+entity-to-text loss ℓeÑt needs adjustments as different de-
+scriptions can refer to the same object entity in the scene
+and thus disable the application of the cross-entropy loss.
+Therefore, we replace the loss with a binary cross-entropy
+loss when applying the entity-to-language supervision:
+ℓeÑt
+k
+“ ´ 1
+NT
+ÿ
+tPT
+“
+1pt P t¯tuq log
+`
+σ
+`
+seÑt
+k,t
+˘˘
+`
+p1 ´ 1 pt P t¯tuqq log
+`
+1 ´ σ
+`
+seÑt
+k,t
+˘˘‰
+,
+(12)
+where t¯tu is the set of text descriptions that describes enitity
+k, 1p¨q is an indicator function testing if a text t is within the
+descriptive texts t¯tu of the entity k. Finally, we combine the
+two-side contrast for entity-to-language alignment with:
+Le2l “ α 1
+Nt
+Nt
+ÿ
+i“1
+ℓtÑe
+i
+` β 1
+K
+K
+ÿ
+k“1
+ℓeÑt
+k
+,
+(13)
+where factors α and β serve to balance the scale of cross-
+entropy loss and binary cross-entropy loss.
+3.3. Model Learning
+Training Data
+We obtain training data following the data
+curation pipeline from SceneVerse [32]. Specifically, we
+use an off-the-shelf 3D instance segmentation model [94]
+to generate entity mask proposals on ScanNet and generate
+referential and descriptive text of objects with the help of
+scene graphs and 2D foundation models [53] for fair compar-
+isons with existing methods. We also leverage the generated
+paired 3D-VL data from other real 3D scene datasets, in-
+cluding 3RScan [63], HM3D [57] and MultiScan [47] in
+SceneVerse as additional training data.
+Learning Objectives
+Our training objective is fully
+contrastive-based.
+We combine both the point-to-entity
+alignment in Eq. (6) and the entity-to-language alignment
+in Eq. (13), enabling the end-to-end training of the 3D en-
+coder Epcd and the VL-adapter ProjVLp¨q, leading to a final
+loss function as:
+Loverall “ Lp2e ` Le2l.
+(14)
+Implementation Details
+For our default model, we adopt
+sparse-convolution based UNet (SPUNet) [11, 19] as the
+3D encoder and CLIP [56] as the text encoder. The VL-
+adapter is implemented with a two-layer MLP. During train-
+ing, we only update the parameters of the 3D encoder and
+VL-adapter and keep the text encoder frozen. We provide
+more training details in the supplementary.
+4. Experiments
+In our experiments, we focus the following questions:
+• How effective are scene representations learned by MPEC
+for open-vocabulary scene understanding tasks?
+• Does the learned model show zero-shot transfer capabili-
+ties in data-scarce scenarios?
+• How do the learned semantically aligned representation
+compare with previous pre-training methods for diverse
+3D-VL tasks, including segmentation, object referral,
+question answering, etc.?
+• How does each component of MPEC contribute to model
+performance? Does training data domain and language
+type affect model performance?
+In the following sections, we detail the design of experiments
+to address these key questions and demonstrate the effective-
+ness of MPEC as a general open-vocabulary pre-training
+pipeline as well as a plug-and-play backbone for various
+downstream tasks. We provide more experiment details and
+additional experiment results in the supplementary.
+4.1. Open-vocabulary Scene Understanding
+Experiment Settings
+We select open-vocabulary semantic
+segmentation (OV-SemSeg) as a signature task for evaluating
+models’ open-vocabulary scene understanding capabilities.
+Specifically, we follow previous works [14, 35, 78] to evalu-
+ate the foreground mIoU (f-mIoU, %) and foreground mAcc
+(f-mAcc, %) on ScanNet by providing all class categories
+from ScanNet20 as input texts. We directly use the aligned
+3D features FVL without applying the cross-view augmen-
+tation and pass the category texts into the frozen CLIP text
+encoder, using the best match between the two features as
+the prediction for the final class category.
+Results & Analyses
+As shown in Tab. 1, MPEC achieves
+state-of-the-art performance, with 66.0% f-mIoU and 81.3%
+f-mAcc, outperforming previous state-of-the-art OV3D [35]
+14129
+
+
+Table 1. Open-Vocabulary 3D Semantic Segmentation on Scan-
+Net [12]. We report foreground mIoU (f-mIoU, %) and foreground
+mAcc (f-mAcc, %). : and ; mean results reproduced by Region-
+PLC [78] and Uni3D [90], independently.
+Method
+Network
+f-mIoU
+f-mAcc
+MaskCLIP: [89]
+CLIP [56]
+23.1
+40.9
+OpenScene-2D [54]
+LSeg [38]
+58.0
+68.5
+CLIP2; [82]
+CLIP [56]
+-
+38.5
+Uni3D; [90]
+ViT [15]
+-
+45.8
+OpenScene-3D: [54]
+SPUNet16 [19]
+57.2
+69.9
+OpenScene-3D: [54]
+SPUNet32 [19]
+57.8
+70.3
+PLA: [14]
+SPUNet16 [19]
+17.7
+33.5
+PLA: [14]
+SPUNet32 [19]
+19.1
+41.5
+RegionPLC [78]
+SPUNet16 [19]
+56.9
+75.6
+RegionPLC [78]
+SPUNet32 [19]
+59.6
+77.5
+OV3D [35]
+SPUNet16 [19]
+64.0
+76.3
+MPEC
+SPUNet16 [19]
+64.6
+79.5
+MPEC
+SPUNet32 [19]
+66.0
+81.3
+by 3.0% and 6.5%, respectively. MPEC also shows a sig-
+nificant improvement („10%) over OpenScene, which uses
+pre-trained 2D-VL model as supervision for 3D representa-
+tion learning. This highlights the benefit of incorporating
+3D information into scene representation learning. Addi-
+tionally, we report model performance using the SPUNet16
+architecture for the 3D encoder, demonstrating consistent
+improvements over previous methods with the same back-
+bone. These results showcase better alignment of our learned
+3D scene representations to language descriptions using the
+MPEC framework.
+Per-category Results
+Due to the page limit, we provide
+per-category performance analysis on ScanNet20 [12] in the
+supplementary. In conclusion, we find that MPEC achieves
+much higher IoU than previous open-source state-of-the-art
+RegionPLC [78] on many categories with similar accura-
+cies, indicating fewer false positives and better geometric
+understanding.
+Qualitative Results
+We provide more qualitative results
+in Fig. 3, including relatively good and bad cases. The ba-
+sic object category understanding and more complex object
+referral results are shown in the top row and bottom row
+in Fig. 3, respectively. MPEC shows superior basic cate-
+gory understanding capabilities with clear object boundaries,
+which attribute to the fine-grained geometry understanding.
+Moreover, MPEC can handle visual grounding tasks that
+take more complex texts as input. However, when handling
+distractions with similar appearances and locations, MPEC
+still faces challenges. We attribute this to the limitations
+of the fixed CLIP text encoder, which struggles to handle
+long and detailed descriptions required for precise visual
+grounding. We provide further investigation on this topic in
+the supplementary.
+Refrigerator
+Radiator
+This is an L shaped couch. It is 
+in front of a table.
+The towel is to the left of the sink. 
+It is the first towel from the right. 
+This is a tall brown wooden 
+cabinet . It is called a wardrobe.
+Chair
+Figure 3. Qualitative Results on ScanNet [12]. We show relatively
+good and bad cases in blue and red.
+4.2. Zero-shot Transfer and Long-tail Scenarios
+Experiment Settings
+To assess the generalization capa-
+bility of learned representations to unseen scenes and lan-
+guage descriptions, we evaluate the f-mIoU and f-mAcc on
+OV-SemSeg in two settings:
+• Zero-shot Transfer: For zero-shot transfer experiments,
+we evaluate MPEC on the unseen SceneVerse-val [32] and
+Matterport3D [5]. To clarify, the SceneVerse-val zero-shot
+transfer setting requires excluding MultiScan [47] scenes
+and languages from training while testing on MultiScan
+data. We adhered to this protocol, removing MultiScan
+data during training for fair comparisons.
+• Long-tail Scenarios: We provide the performance on
+ScanNet200 [58] dataset, which is a more challenging
+scenario and includes a large number of test classes.
+Results & Analyses
+We present experimental results on
+zero-shot transfer in Tab. 2 and Tab. 3, as well as long-tail
+scenarios in Tab. 4. Our findings are as follows:
+• Zero-shot Transfer: For zero-shot transfer on SceneVerse-
+val [32], as shown in Tab. 2, MPEC significantly outper-
+forms existing methods by a large margin. Specifically, for
+f-mIoU, we outperform the second-best OpenScene [54]
+by 3.7%, and for f-mAcc, we surpass the second-best Re-
+gionPLC [78] by 7.2%. We further provide results on Mat-
+terport3D [5] in Tab. 3. It’s worth noting that, compared
+with OpenScene [54] and OV3D [35], our MPEC omits
+Matterport3D during training. However, MPEC achieves
+comparable performance with these domain-specific meth-
+ods. Specifically, we achieve 47.7% f-mIoU and 69.8%
+f-mAcc. Compared with OV3D [35], MPEC is 2.7%
+lower on f-mIoU, but significantly outperforms 4.1% f-
+mAcc. MPEC also surpasses another zero-shot method
+RegionPLC [78] by about 20% on both f-mIoU and f-
+mAcc. These results show that MPEC can generalize
+better to unseen scenarios.
+• Long-tail Scenarios: We provide the results on Scan-
+Net200 [58] in Tab. 4. MPEC achieves state-of-the-art
+14130
+
+
+Table 2. Zero-Shot Open-Vocabulary 3D Semantic Segmenta-
+tion on SceneVerse-val [32]. We report f-mIoU (%) and f-mAcc
+(%).
+Method
+f-mIoU
+f-mAcc
+OpenScene [54]
+41.3
+52.5
+RegionPLC [78]
+39.1
+56.4
+MPEC
+45.0
+63.6
+Table 3. Open-Vocabulary 3D Semantic Segmentation on Mat-
+terport3D [5]. We report the f-mIoU (%) and f-mAcc (%). ; means
+results reproduced by OV3D [35].
+Method
+Zero-Shot
+f-mIoU
+f-mAcc
+OpenScene-3D; [54]
+✗
+49.7
+64.0
+OV3D [35]
+✗
+50.4
+65.7
+RegionPLC [78]
+✓
+28.9
+43.8
+MPEC
+✓
+47.7
+69.8
+performance, with 10.8% f-mIoU and 27.4% f-mAcc, out-
+performing existing models by a large margin („10% im-
+provement in f-mAcc). This indicates that MPEC can
+capture fine-grained taxonomic distinctions, ultimately
+benefiting complex downstream embodied tasks.
+4.3. Fine-tuning on Downstream Tasks
+Experiment Settings
+We evaluate the adaptability of our
+learned 3D encoder as a general 3D backbone for fine-tuning
+on diverse 3D tasks. Specifically, we consider the following
+two levels of tasks:
+• Low-level Perception: For this group of tasks, we con-
+sider closed-set semantic and instance segmentation as
+representatives to compare our model against previous 3D
+point cloud representation learning methods. Concretely,
+we compare MPEC with unsupervised scene represen-
+tation methods following the setting in [64] on ScanNet
+and ScanNet200, using mIoU and mAP@0.5 as metrics
+for semantic and instance segmentation respectively. We
+fine-tune our learned 3D scene representation FP from
+the 3D encoder on the downstream tasks. We also conduct
+data efficiency experiments following [26].
+• High-level Reasoning: We further test if the scene rep-
+resentation learned by MPEC can be directly adopted
+in more 3D-VL tasks including grounding, captioning,
+and question answering. To achieve this goal, we se-
+lect a recent state-of-the-art 3D-VL model, PQ3D [94],
+that leverages the same backbone architecture as the ones
+used in MPEC for comparative studies. By replacing
+PQ3D’s 3D encoder with our pre-trained method, we re-
+port model performance with fine-tuning on: (i) visual
+grounding datasets, including ScanRefer [6], Nr3D and
+Sr3D [1], Multi3dRefer [84]; (ii) 3D question-answering
+dataset SQA3D [45]; and (iii) scene captioning dataset
+Table 4. Open-Vocabulary 3D Semantic Segmentation on Scan-
+Net200 [58]. We report f-mIoU (%) and f-mAcc (%). ; means
+results reproduced by OV3D [35].
+Method
+f-mIoU
+f-mAcc
+PLA [14]
+1.8
+3.1
+OpenScene-3D; [54]
+7.3
+-
+RegionPLC [78]
+9.1
+17.3
+OV3D [35]
+8.7
+-
+MPEC
+10.8
+27.4
+Scan2Cap [8]. We report model performance under the
+convention of each dataset. Specifically, for grounding
+results on ScanRefer [6] and Multi3dRefer [84], we re-
+port the grounding accuracies of predictions whose ob-
+ject bounding boxes overlap the ground truth with IoU
+> 0.5 (Acc@0.5). For visual grounding on Nr3D and
+Sr3D of Referit3D [1], we report the grounding accuracies
+using ground-truth masks (Acc). For 3D dense caption-
+ing on Scan2Cap [8], we report CIDEr under IoU@0.5
+(CIDEr@0.5). For situated reasoning on SQA3D [45], we
+report the answer accuracies (AccQA).
+Results & Analyses
+We provide fine-tuning results for
+low-level perception tasks in Tab. 5 and results for high-level
+reasoning tasks in Tab. 6. Our findings on these two groups
+of tasks are as follows:
+• Low-level Perception: For close-set semantic segmenta-
+tion, MPEC achieves considerable performance gains over
+existing methods. Specifically, it surpasses previous meth-
+ods on both ScanNet [12] and ScanNet200 [58], achieving
+mIoUs of 75.8% and 31.8%, respectively, with a notable
+1.8% improvement on ScanNet200 over GC [64]. For
+close-set instance segmentation, MPEC performs com-
+parably well to GC on ScanNet [12], yet significantly
+outperforms on ScaNet200 [58]. Specifically, our MPEC
+achieves mAP@0.5 of 31.6%, achieving substantial im-
+provements over the previous state-of-the-art GC’s 27.5%.
+We attribute these gains to our proposed masked point-
+entity contrastive learning framework, which provides
+more discriminative features across 3D entities. Data effi-
+ciency experiments are provided in supplementary.
+• High-level Reasoning: As shown in Tab. 6, when substitut-
+ing the 3D backbone with MPEC for fine-tuning on high-
+level 3D-VL tasks, the model achieves consistent and no-
+table improvements in most reasoning tasks. Specifically,
+MPEC with PQ3D task heads sets new state-of-the-art
+performance on 3D visual grounding datasets, including
+ScanRefer [6], Nr3D [1], Sr3D [1], and Multi3dRefer [84].
+Additionally, our model also boosts the accuracy on
+SQA3D [45] from 47.1% to 47.5%. These findings high-
+light MPEC ’s adaptability and its potential to serve as an
+initial backbone weight for various downstream tasks.
+14131
+
+
+Table 5. Fine-Tuning Results on Perception Tasks. We report mIoU (%) for semantic segmentation and mAP@0.5 (%) for instance
+segmentation on ScanNet [12] and ScanNet200 [58].
+Datasets
+Semantic Segmentation (mIoU)
+Instance Segmentation (mAP@0.5)
+SC
+PC [71]
+CSC [26]
+MSC [69]
+GC [64]
+MPEC
+SC
+PC [71]
+CSC [26]
+MSC [69]
+GC [64]
+MPEC
+ScanNet [12]
+72.2
+74.1
+73.8
+75.3
+75.7
+75.8
+56.9
+58.0
+59.4
+59.6
+62.3
+62.5
+ScanNet200 [58]
+25.0
+26.2
+26.4
+28.8
+30.0
+31.8
+24.5
+24.9
+25.2
+26.8
+27.5
+31.6
+Table 6. Fine-Tuning Results on Reasoning Tasks. The grounding
+accuracy of ScanRefer [6] and Multi3DRefer [84] are reported
+under IoU@0.5. The results of Nr3D and Sr3D [1] are reported
+using ground-truth masks. We report CIDEr under IoU@0.5 on
+Scan2Cap [8] and answer accuracy on SQA3D [45].
+Method
+ScanRefer
+Nr3D
+Sr3D
+Multi3DRefer
+Scan2Cap
+SQA3D
+Acc@0.5
+Acc
+Acc
+F1@0.5
+CIDEr@0.5
+AccQA
+3DJCG
+37.3
+-
+-
+26.6
+47.7
+-
+M3DRef-CLIP
+44.7
+49.4
+-
+38.4
+-
+-
+3D-VisTA
+45.8
+64.2
+76.4
+-
+66.9
+48.5
+Vote2CapDetr
+-
+-
+-
+-
+64.3
+-
+PQ3D
+51.2
+66.7
+79.7
+50.1
+80.3
+47.1
+MPEC + PQ3D
+51.8
+66.7
+80.0
+50.8
+80.2
+47.5
+4.4. Additional Discussions
+In this subsection, we conduct ablation studies on model
+design and data engineering.
+Model Design
+In Tab. 7, we show the results with dif-
+ferent model designs on open-vocabulary 3D semantic seg-
+mentation on ScanNet [12]. Specifically, directly applying
+Le2e with Le2l without employing cross mask augmentations
+leads to a noticeable drop on f-mIoU and f-mAcc, com-
+pared to minimizing Le2l alone. We hypothesize this may
+be attributed to the model’s tendency to overemphasize the
+uniqueness of each entity within a single view, thereby ne-
+glecting shared attributes across entities. By introducing
+masked cross-view augmentations, minimizing Le2e across
+views encourages the model to distinguish entities between
+views without enforcing distinctiveness within the same view.
+This adjustment helps preserve common attributes for differ-
+ent entities, such as semantic categories.
+Text Descriptions Type
+The text descriptions of entities
+include two types: captions Tcap which provide detailed de-
+scriptions of an object’s visual and physical properties, and
+referrals Tref which articulate the spatial relationships be-
+tween the entity and other objects within the scene. We
+conduct an ablation study on each description type in Tab. 8.
+As shown in Tab. 8, leveraging both description types yields
+the best performance. This result aligns with our expecta-
+tions, as combining an entity’s inherent attributes with its
+relationships with other entities provides a more comprehen-
+sive understanding of the 3D entity.
+Training Dataset
+Our training dataset, SceneVerse [32],
+is composed of seven datasets, including real-world scene
+datasets ScanNet [12], MultiScan [47], RScan [63], ARK-
+itScenes [3] and HM3D [57] as well as synthetic environ-
+Table 7.
+Ablation Analysis on Model Design.
+We report f-
+mIoU (%) and f-mAcc (%) on ScanNet [12].
+Le2l
+Le2e
+Cross-View Aug.
+f-mIoU
+f-mAcc
+✓
+63.6
+79.2
+✓
+✓
+62.2
+78.5
+✓
+✓
+✓
+64.6
+79.5
+Table 8. Ablation Analysis on Text Type. We report f-mIoU (%)
+and f-mAcc (%) on ScanNet [12].
+Tcap
+Tref
+f-mIoU
+f-mAcc
+✓
+57.6
+74.8
+✓
+61.7
+77.2
+✓
+✓
+64.6
+79.5
+ments from Structured3D [87] and ProcTHOR [13]. For
+our ablation study, we discard ARKitScenes [3] and the syn-
+thetic datasets, i.e. Structured3D [87] and ProcTHOR [13],
+to analyze the influence of different real-world data sources,
+as shown in Tab. 9. We observe obvious performance gains
+when scaling up the training data.
+Table 9. Ablation Analysis on Training Dataset. We report
+f-mIoU and f-mAcc on ScanNet [12] after training on different
+combinations of datasets.
+ScanNet [12]
+MultiScan [47]
+RScan [63]
+HM3D [57]
+f-mIoU
+f-mAcc
+✓
+56.4
+74.3
+✓
+✓
+57.7
+75.1
+✓
+✓
+59.9
+76.5
+✓
+✓
+63.3
+79.3
+✓
+✓
+✓
+60.6
+77.4
+✓
+✓
+✓
+63.3
+79.0
+✓
+✓
+✓
+62.7
+78.3
+✓
+✓
+✓
+✓
+64.6
+79.5
+5. Conclusion
+In this paper, we propose a novel entity-level contrastive
+learning framework, MPEC, for open-vocabulary 3D scene
+understanding, which achieves state-of-the-art performance
+on open-vocabulary 3D semantic segmentation. Through
+fine-tuning on diverse downstream tasks, our model demon-
+strates high effectiveness and transferability, showcasing its
+potential as a foundational approach for 3D vision-language
+applications. Furthermore, our data scale ablation study
+reveals the importance of large-scale 3D vision-language
+datasets in advancing 3D foundation models, underscoring a
+critical area for future development.
+14132
+
+
+References
+[1] Panos Achlioptas, Ahmed Abdelreheem, Fei Xia, Mohamed
+Elhoseiny, and Leonidas Guibas. Referit3d: Neural listeners
+for fine-grained 3d object identification in real-world scenes.
+In ECCV, pages 422–440. Springer, 2020. 2, 7, 8
+[2] Michael Ahn, Anthony Brohan, Noah Brown, Yevgen Chebo-
+tar, Omar Cortes, Byron David, Chelsea Finn, Chuyuan Fu,
+Keerthana Gopalakrishnan, Karol Hausman, et al. Do as i
+can, not as i say: Grounding language in robotic affordances.
+arXiv preprint arXiv:2204.01691, 2022. 1
+[3] Gilad Baruch, Zhuoyuan Chen, Afshin Dehghan, Tal Dimry,
+Yuri Feigin, Peter Fu, Thomas Gebauer, Brandon Joffe, Daniel
+Kurz, Arik Schwartz, et al. Arkitscenes: A diverse real-world
+dataset for 3d indoor scene understanding using mobile rgb-d
+data. In NIPSD, 2021. 8
+[4] Daigang Cai, Lichen Zhao, Jing Zhang, Lu Sheng, and Dong
+Xu. 3djcg: A unified framework for joint dense captioning
+and visual grounding on 3d point clouds. In CVPR, pages
+16464–16473, 2022. 3
+[5] Angel Chang, Angela Dai, Thomas Funkhouser, Maciej
+Halber, Matthias Niessner, Manolis Savva, Shuran Song,
+Andy Zeng, and Yinda Zhang.
+Matterport3d: Learning
+from rgb-d data in indoor environments.
+arXiv preprint
+arXiv:1709.06158, 2017. 6, 7
+[6] Dave Zhenyu Chen, Angel X Chang, and Matthias Nießner.
+Scanrefer: 3d object localization in rgb-d scans using natural
+language. In ECCV, pages 202–221. Springer, 2020. 2, 7, 8
+[7] Runnan Chen, Youquan Liu, Lingdong Kong, Xinge Zhu,
+Yuexin Ma, Yikang Li, Yuenan Hou, Yu Qiao, and Wenping
+Wang. Clip2scene: Towards label-efficient 3d scene under-
+standing by clip. In CVPR, pages 7020–7030, 2023. 2
+[8] Zhenyu Chen, Ali Gholami, Matthias Nießner, and Angel X
+Chang. Scan2cap: Context-aware dense captioning in rgb-d
+scans. In CVPR, pages 3193–3203, 2021. 2, 7, 8
+[9] Zhenyu Chen, Ronghang Hu, Xinlei Chen, Matthias Nießner,
+and Angel X Chang. Unit3d: A unified transformer for 3d
+dense captioning and visual grounding. In ICCV, pages 18109–
+18119, 2023. 3
+[10] Seokju Cho, Heeseong Shin, Sunghwan Hong, Anurag Arnab,
+Paul Hongsuck Seo, and Seungryong Kim. Cat-seg: Cost
+aggregation for open-vocabulary semantic segmentation. In
+CVPR, pages 4113–4123, 2024. 2
+[11] Christopher Choy, JunYoung Gwak, and Silvio Savarese. 4d
+spatio-temporal convnets: Minkowski convolutional neural
+networks. In CVPR, pages 3075–3084, 2019. 5
+[12] Angela Dai, Angel X Chang, Manolis Savva, Maciej Halber,
+Thomas Funkhouser, and Matthias Nießner. Scannet: Richly-
+annotated 3d reconstructions of indoor scenes. In CVPR,
+pages 5828–5839, 2017. 2, 6, 7, 8
+[13] Matt Deitke, Eli VanderBilt, Alvaro Herrasti, Luca Weihs,
+Kiana Ehsani, Jordi Salvador, Winson Han, Eric Kolve,
+Aniruddha Kembhavi, and Roozbeh Mottaghi.
+Procthor:
+Large-scale embodied ai using procedural generation. In
+NeurIPS, pages 5982–5994. Curran Associates, Inc., 2022. 8
+[14] Runyu Ding, Jihan Yang, Chuhui Xue, Wenqing Zhang, Song
+Bai, and Xiaojuan Qi. Pla: Language-driven open-vocabulary
+3d scene understanding. In CVPR, pages 7010–7019, 2023.
+2, 5, 6, 7
+[15] Alexey Dosovitskiy. An image is worth 16x16 words: Trans-
+formers for image recognition at scale.
+arXiv preprint
+arXiv:2010.11929, 2020. 6
+[16] Roya Firoozi, Johnathan Tucker, Stephen Tian, Anirudha
+Majumdar, Jiankai Sun, Weiyu Liu, Yuke Zhu, Shuran
+Song, Ashish Kapoor, Karol Hausman, et al. Foundation
+models in robotics: Applications, challenges, and the fu-
+ture. The International Journal of Robotics Research, page
+02783649241281508, 2023. 1
+[17] Rao Fu, Jingyu Liu, Xilun Chen, Yixin Nie, and Wen-
+han Xiong.
+Scene-llm: Extending language model for
+3d visual understanding and reasoning.
+arXiv preprint
+arXiv:2403.11401, 2024. 3
+[18] Golnaz Ghiasi, Xiuye Gu, Yin Cui, and Tsung-Yi Lin. Scaling
+open-vocabulary image segmentation with image-level labels.
+In ECCV, pages 540–557. Springer, 2022. 2
+[19] Benjamin Graham, Martin Engelcke, and Laurens Van
+Der Maaten. 3d semantic segmentation with submanifold
+sparse convolutional networks. In CVPR, pages 9224–9232,
+2018. 2, 5, 6
+[20] Qiao Gu, Ali Kuwajerwala, Sacha Morin, Krishna Murthy
+Jatavallabhula, Bipasha Sen, Aditya Agarwal, Corban Rivera,
+William Paul, Kirsty Ellis, Rama Chellappa, et al. Concept-
+graphs: Open-vocabulary 3d scene graphs for perception and
+planning. In ICRA, pages 5021–5028. IEEE, 2024. 1
+[21] Ziyu Guo, Renrui Zhang, Xiangyang Zhu, Yiwen Tang,
+Xianzheng Ma, Jiaming Han, Kexin Chen, Peng Gao, Xi-
+anzhi Li, Hongsheng Li, et al.
+Point-bind & point-llm:
+Aligning point cloud with multi-modality for 3d understand-
+ing, generation, and instruction following. arXiv preprint
+arXiv:2309.00615, 2023. 3
+[22] Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr
+Dollár, and Ross Girshick. Masked autoencoders are scalable
+vision learners. In CVPR, pages 16000–16009, 2022. 3
+[23] Yining Hong, Haoyu Zhen, Peihao Chen, Shuhong Zheng,
+Yilun Du, Zhenfang Chen, and Chuang Gan. 3d-llm: Injecting
+the 3d world into large language models. NIPS, 36:20482–
+20494, 2023. 3
+[24] Yining Hong, Haoyu Zhen, Peihao Chen, Shuhong Zheng,
+Yilun Du, Zhenfang Chen, and Chuang Gan. 3d-llm: Injecting
+the 3d world into large language models. NIPS, 36:20482–
+20494, 2023. 1
+[25] Yining Hong, Zishuo Zheng, Peihao Chen, Yian Wang, Jun-
+yan Li, and Chuang Gan. Multiply: A multisensory object-
+centric embodied large language model in 3d world. In CVPR,
+pages 26406–26416, 2024. 3
+[26] Ji Hou, Benjamin Graham, Matthias Nießner, and Saining
+Xie. Exploring data-efficient 3d scene understanding with
+contrastive scene contexts. In CVPR, pages 15587–15597,
+2021. 2, 3, 7, 8
+[27] Haifeng Huang, Yilun Chen, Zehan Wang, Rongjie Huang,
+Runsen Xu, Tai Wang, Luping Liu, Xize Cheng, Yang Zhao,
+Jiangmiao Pang, et al. Chat-scene: Bridging 3d scene and
+large language models with object identifiers. In NIPS, 2024.
+3
+14133
+
+
+[28] Jiangyong Huang, Silong Yong, Xiaojian Ma, Xiongkun
+Linghu, Puhao Li, Yan Wang, Qing Li, Song-Chun Zhu, Baox-
+iong Jia, and Siyuan Huang. An embodied generalist agent in
+3d world. arXiv preprint arXiv:2311.12871, 2023. 1, 3
+[29] Jiangyong Huang, Baoxiong Jia, Yan Wang, Ziyu Zhu,
+Xiongkun Linghu, Qing Li, Song-Chun Zhu, and Siyuan
+Huang. Unveiling the mist over 3d vision-language under-
+standing: Object-centric evaluation with chain-of-analysis. In
+CVPR, 2025. 2, 3
+[30] Siyuan Huang, Yichen Xie, Song-Chun Zhu, and Yixin Zhu.
+Spatio-temporal self-supervised representation learning for
+3d point clouds. In ICCV, pages 6535–6545, 2021. 3
+[31] Zhening Huang, Xiaoyang Wu, Xi Chen, Hengshuang Zhao,
+Lei Zhu, and Joan Lasenby. Openins3d: Snap and lookup for
+3d open-vocabulary instance segmentation. In ECCV, pages
+169–185. Springer, 2025. 2
+[32] Baoxiong Jia, Yixin Chen, Huangyue Yu, Yan Wang, Xuesong
+Niu, Tengyu Liu, Qing Li, and Siyuan Huang. Sceneverse:
+Scaling 3d vision-language learning for grounded scene un-
+derstanding. arXiv preprint arXiv:2401.09340, 2024. 2, 3, 5,
+6, 7, 8
+[33] Chao Jia, Yinfei Yang, Ye Xia, Yi-Ting Chen, Zarana Parekh,
+Hieu Pham, Quoc Le, Yun-Hsuan Sung, Zhen Li, and Tom
+Duerig. Scaling up visual and vision-language representation
+learning with noisy text supervision. In ICML, pages 4904–
+4916. PMLR, 2021. 2
+[34] Li Jiang, Hengshuang Zhao, Shaoshuai Shi, Shu Liu, Chi-
+Wing Fu, and Jiaya Jia. Pointgroup: Dual-set point grouping
+for 3d instance segmentation. In CVPR, pages 4867–4876,
+2020. 2
+[35] Li Jiang, Shaoshuai Shi, and Bernt Schiele. Open-vocabulary
+3d semantic segmentation with foundation models. In CVPR,
+pages 21284–21294, 2024. 2, 5, 6, 7
+[36] Weitai Kang, Haifeng Huang, Yuzhang Shang, Mubarak
+Shah, and Yan Yan.
+Robin3d: Improving 3d large lan-
+guage model via robust instruction tuning. arXiv preprint
+arXiv:2410.00255, 2024. 3
+[37] Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao,
+Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer White-
+head, Alexander C Berg, Wan-Yen Lo, et al. Segment any-
+thing. In ICCV, pages 4015–4026, 2023. 2
+[38] Boyi Li, Kilian Q Weinberger, Serge Belongie, Vladlen
+Koltun, and René Ranftl. Language-driven semantic seg-
+mentation. arXiv preprint arXiv:2201.03546, 2022. 2, 6
+[39] Kailin Li, Puhao Li, Tengyu Liu, Yuyang Li, and Siyuan
+Huang. Maniptrans: Efficient dexterous bimanual manipula-
+tion transfer via residual learning. In CVPR, 2025. 1
+[40] Ruihuang Li, Zhengqiang Zhang, Chenhang He, Zhiyuan Ma,
+Vishal M Patel, and Lei Zhang. Dense multimodal alignment
+for open-vocabulary 3d scene understanding. In ECCV, pages
+416–434. Springer, 2024. 2
+[41] Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee.
+Visual instruction tuning, 2023. 3
+[42] Yu Liu, Baoxiong Jia, Ruijie Lu, Junfeng Ni, Song-Chun Zhu,
+and Siyuan Huang. Building interactable replicas of complex
+articulated objects via gaussian splatting. In ICLR, 2025. 1
+[43] Ruijie Lu, Yixin Chen, Junfeng Ni, Baoxiong Jia, Yu Liu, Di-
+wen Wan, Gang Zeng, and Siyuan Huang. Movis: Enhancing
+multi-object novel view synthesis for indoor scenes. In CVPR,
+2025. 1
+[44] Shiyang Lu, Haonan Chang, Eric Pu Jing, Abdeslam Boular-
+ias, and Kostas Bekris. Ovir-3d: Open-vocabulary 3d instance
+retrieval without training on 3d data. In CoRL, pages 1610–
+1620. PMLR, 2023. 2
+[45] Xiaojian Ma, Silong Yong, Zilong Zheng, Qing Li, Yitao
+Liang, Song-Chun Zhu, and Siyuan Huang.
+Sqa3d: Sit-
+uated question answering in 3d scenes.
+arXiv preprint
+arXiv:2210.07474, 2022. 2, 7, 8
+[46] Xianzheng Ma, Yash Bhalgat, Brandon Smart, Shuai Chen,
+Xinghui Li, Jian Ding, Jindong Gu, Dave Zhenyu Chen,
+Songyou Peng, Jia-Wang Bian, et al.
+When llms step
+into the 3d world: A survey and meta-analysis of 3d tasks
+via multi-modal large language models.
+arXiv preprint
+arXiv:2405.10255, 2024. 3
+[47] Yongsen Mao, Yiming Zhang, Hanxiao Jiang, Angel Chang,
+and Manolis Savva. Multiscan: Scalable rgbd scanning for 3d
+environments with articulated objects. In NIPS, 2022. 5, 6, 8
+[48] Chen Min, Liang Xiao, Dawei Zhao, Yiming Nie, and Bin
+Dai. Occupancy-mae: Self-supervised pre-training large-
+scale lidar point clouds with masked occupancy autoencoders.
+IEEE Transactions on Intelligent Vehicles, 2023. 3
+[49] Phuc Nguyen, Tuan Duc Ngo, Evangelos Kalogerakis,
+Chuang Gan, Anh Tran, Cuong Pham, and Khoi Nguyen.
+Open3dis: Open-vocabulary 3d instance segmentation with
+2d mask guidance. In CVPR, 2024. 2
+[50] Junfeng Ni, Yixin Chen, Bohan Jing, Nan Jiang, Bin Wang,
+Bo Dai, Puhao Li, Yixin Zhu, Song-Chun Zhu, and Siyuan
+Huang. Phyrecon: Physically plausible neural scene recon-
+struction. In NeurIPS, 2024. 1
+[51] Junfeng Ni, Yu Liu, Ruijie Lu, Zirui Zhou, Song-Chun Zhu,
+Yixin Chen, and Siyuan Huang. Decompositional neural
+scene reconstruction with generative diffusion prior. In CVPR,
+2025. 1
+[52] Abby O’Neill, Abdul Rehman, Abhinav Gupta, Abhiram
+Maddukuri, Abhishek Gupta, Abhishek Padalkar, Abraham
+Lee, Acorn Pooley, Agrim Gupta, Ajay Mandlekar, et al.
+Open x-embodiment: Robotic learning datasets and rt-x mod-
+els. arXiv preprint arXiv:2310.08864, 2023. 1
+[53] OpenAI. Gpt-4 with vision (gpt-4v) system card, 2023. 5
+[54] Songyou Peng, Kyle Genova, Chiyu Jiang, Andrea Tagliasac-
+chi, Marc Pollefeys, Thomas Funkhouser, et al. Openscene:
+3d scene understanding with open vocabularies. In CVPR,
+pages 815–824, 2023. 1, 2, 6, 7
+[55] Zekun Qi, Runpei Dong, Shaochen Zhang, Haoran Geng,
+Chunrui Han, Zheng Ge, Li Yi, and Kaisheng Ma. Shapellm:
+Universal 3d object understanding for embodied interaction.
+In ECCV, pages 214–238. Springer, 2025. 3
+[56] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya
+Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry,
+Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning
+transferable visual models from natural language supervision.
+In ICML, pages 8748–8763. PMLR, 2021. 2, 4, 5, 6
+14134
+
+
+[57] Santhosh K Ramakrishnan, Aaron Gokaslan, Erik Wijmans,
+Oleksandr Maksymets, Alex Clegg, John Turner, Eric Un-
+dersander, Wojciech Galuba, Andrew Westbury, Angel X
+Chang, et al. Habitat-matterport 3d dataset (hm3d): 1000
+large-scale 3d environments for embodied ai. arXiv preprint
+arXiv:2109.08238, 2021. 5, 8
+[58] David Rozenberszki, Or Litany, and Angela Dai. Language-
+grounded indoor 3d semantic segmentation in the wild. In
+ECCV, pages 125–141. Springer, 2022. 6, 7, 8
+[59] Jonas Schult, Francis Engelmann, Alexander Hermans, Or
+Litany, Siyu Tang, and Bastian Leibe. Mask3d: Mask trans-
+former for 3d semantic instance segmentation. In ICRA, pages
+8216–8223. IEEE, 2023. 2
+[60] Ayça Takmaz, Elisabetta Fedele, Robert W Sumner, Marc
+Pollefeys, Federico Tombari, and Francis Engelmann. Open-
+mask3d: open-vocabulary 3d instance segmentation. In NIPS,
+pages 68367–68390, 2023. 2
+[61] Yuan Tang, Xu Han, Xianzhi Li, Qiao Yu, Yixue Hao, Long
+Hu, and Min Chen.
+Minigpt-3d: Efficiently aligning 3d
+point clouds with large language models using 2d priors. In
+ACMMM, pages 6617–6626, 2024. 3
+[62] Xiaoyu Tian, Haoxi Ran, Yue Wang, and Hang Zhao. Geomae:
+Masked geometric target prediction for self-supervised point
+cloud pre-training. In CVPR, pages 13570–13580, 2023. 3
+[63] Johanna Wald, Armen Avetisyan, Nassir Navab, Federico
+Tombari, and Matthias Nießner. Rio: 3d object instance re-
+localization in changing indoor environments. In ICCV, 2019.
+5, 8
+[64] Chengyao Wang, Li Jiang, Xiaoyang Wu, Zhuotao Tian, Bo-
+hao Peng, Hengshuang Zhao, and Jiaya Jia. Groupcontrast:
+Semantic-aware self-supervised representation learning for
+3d understanding. In CVPR, pages 4917–4928, 2024. 2, 3, 7,
+8
+[65] Pengfei Wang, Yuxi Wang, Shuai Li, Zhaoxiang Zhang, Zhen
+Lei, and Lei Zhang. Open vocabulary 3d scene understanding
+via geometry guided self-distillation. In ECCV, pages 442–
+460. Springer, 2024. 2
+[66] Tai Wang, Xiaohan Mao, Chenming Zhu, Runsen Xu,
+Ruiyuan Lyu, Peisen Li, Xiao Chen, Wenwei Zhang, Kai
+Chen, Tianfan Xue, et al. Embodiedscan: A holistic multi-
+modal 3d perception suite towards embodied ai. In CVPR,
+2024. 2
+[67] Weijie Wei, Fatemeh Karimi Nejadasl, Theo Gevers, and
+Martin R Oswald. T-mae: Temporal masked autoencoders
+for point cloud representation learning.
+arXiv preprint
+arXiv:2312.10217, 2023. 3
+[68] Size Wu, Wenwei Zhang, Lumin Xu, Sheng Jin, Xiangtai Li,
+Wentao Liu, and Chen Change Loy. Clipself: Vision trans-
+former distills itself for open-vocabulary dense prediction.
+arXiv preprint arXiv:2310.01403, 2023. 2
+[69] Xiaoyang Wu, Xin Wen, Xihui Liu, and Hengshuang Zhao.
+Masked scene contrast: A scalable framework for unsuper-
+vised 3d representation learning. In CVPR, pages 9415–9424,
+2023. 2, 3, 8
+[70] Bin Xie, Jiale Cao, Jin Xie, Fahad Shahbaz Khan, and Yanwei
+Pang. Sed: A simple encoder-decoder for open-vocabulary
+semantic segmentation. In CVPR, pages 3426–3436, 2024. 2
+[71] Saining Xie, Jiatao Gu, Demi Guo, Charles R Qi, Leonidas
+Guibas, and Or Litany. Pointcontrast: Unsupervised pre-
+training for 3d point cloud understanding. In ECCV, pages
+574–591. Springer, 2020. 2, 3, 8
+[72] Zhenda Xie, Zheng Zhang, Yue Cao, Yutong Lin, Jianmin
+Bao, Zhuliang Yao, Qi Dai, and Han Hu. Simmim: A simple
+framework for masked image modeling. In CVPR, pages
+9653–9663, 2022. 3
+[73] Mutian Xu, Xingyilang Yin, Lingteng Qiu, Yang Liu, Xin
+Tong, and Xiaoguang Han. Sampro3d: Locating sam prompts
+in 3d for zero-shot scene segmentation.
+arXiv preprint
+arXiv:2311.17707, 2023. 2
+[74] Mi Yan, Jiazhao Zhang, Yan Zhu, and He Wang. Maskclus-
+tering: View consensus based mask graph clustering for open-
+vocabulary 3d instance segmentation. In CVPR, pages 28274–
+28284, 2024. 2
+[75] Dejie Yang, Zhu Xu, Wentao Mo, Qingchao Chen, Siyuan
+Huang, and Yang Liu. 3d vision and language pretraining with
+large-scale synthetic data. arXiv preprint arXiv:2407.06084,
+2024. 3
+[76] Honghui Yang, Tong He, Jiaheng Liu, Hua Chen, Boxi Wu,
+Binbin Lin, Xiaofei He, and Wanli Ouyang. Gd-mae: gener-
+ative decoder for mae pre-training on lidar point clouds. In
+CVPR, pages 9403–9414, 2023. 3
+[77] Jianing Yang, Xuweiyi Chen, Nikhil Madaan, Madhavan Iyen-
+gar, Shengyi Qian, David F Fouhey, and Joyce Chai. 3d-grand:
+A million-scale dataset for 3d-llms with better grounding and
+less hallucination. arXiv preprint arXiv:2406.05132, 2024. 2
+[78] Jihan Yang, Runyu Ding, Weipeng Deng, Zhe Wang, and
+Xiaojuan Qi. Regionplc: Regional point-language contrastive
+learning for open-world 3d scene understanding. In CVPR,
+2024. 2, 5, 6, 7
+[79] Yunhan Yang, Xiaoyang Wu, Tong He, Hengshuang Zhao,
+and Xihui Liu. Sam3d: Segment anything in 3d scenes. arXiv
+preprint arXiv:2306.03908, 2023. 2
+[80] Huangyue Yu, Baoxiong Jia, Yixin Chen, Yandan Yang,
+Puhao Li, Rongpeng Su, Jiaxin Li, Qing Li, Wei Liang, Song-
+Chun Zhu, Tengyu Liu, and Siyuan Huang. Metascenes:
+Towards automated replica creation for real-world 3d scans.
+In CVPR, 2025. 1, 2
+[81] Xumin Yu, Lulu Tang, Yongming Rao, Tiejun Huang, Jie
+Zhou, and Jiwen Lu. Point-bert: Pre-training 3d point cloud
+transformers with masked point modeling. In CVPR, pages
+19313–19322, 2022. 2, 3
+[82] Yihan Zeng, Chenhan Jiang, Jiageng Mao, Jianhua Han, Chao-
+qiang Ye, Qingqiu Huang, Dit-Yan Yeung, Zhen Yang, Xiao-
+dan Liang, and Hang Xu. Clip2: Contrastive language-image-
+point pretraining from real-world point cloud data. In CVPR,
+pages 15244–15253, 2023. 6
+[83] Taolin Zhang, Sunan He, Tao Dai, Zhi Wang, Bin Chen,
+and Shu-Tao Xia. Vision-language pre-training with object
+contrastive learning for 3d scene understanding. In AAAI,
+pages 7296–7304, 2024. 3
+[84] Yiming Zhang, ZeMing Gong, and Angel X Chang.
+Multi3drefer: Grounding text description to multiple 3d ob-
+jects. In ICCV, pages 15225–15236, 2023. 2, 7, 8
+14135
+
+
+[85] Zaiwei Zhang, Rohit Girdhar, Armand Joulin, and Ishan
+Misra. Self-supervised pretraining of 3d features on any
+point-cloud. In ICCV, pages 10252–10263, 2021. 3
+[86] Haoyu Zhen, Xiaowen Qiu, Peihao Chen, Jincheng Yang, Xin
+Yan, Yilun Du, Yining Hong, and Chuang Gan. 3d-vla: A
+3d vision-language-action generative world model. arXiv
+preprint arXiv:2403.09631, 2024. 3
+[87] Jia Zheng, Junfei Zhang, Jing Li, Rui Tang, Shenghua Gao,
+and Zihan Zhou.
+Structured3d: A large photo-realistic
+dataset for structured 3d modeling. In ECCV, pages 519–
+535. Springer, 2020. 8
+[88] Peiyuan Zhi, Zhiyuan Zhang, Muzhi Han, Zeyu Zhang, Zhi-
+tian Li, Ziyuan Jiao, Baoxiong Jia, and Siyuan Huang. Closed-
+loop open-vocabulary mobile manipulation with gpt-4v. arXiv
+preprint arXiv:2404.10220, 2024. 1
+[89] Chong Zhou, Chen Change Loy, and Bo Dai. Extract free
+dense labels from clip. In ECCV, pages 696–712. Springer,
+2022. 6
+[90] Junsheng Zhou, Jinsheng Wang, Baorui Ma, Yu-Shen Liu,
+Tiejun Huang, and Xinlong Wang. Uni3d: Exploring unified
+3d representation at scale. arXiv preprint arXiv:2310.06773,
+2023. 6
+[91] Xingyi Zhou, Rohit Girdhar, Armand Joulin, Philipp Krähen-
+bühl, and Ishan Misra. Detecting twenty-thousand classes
+using image-level supervision. In ECCV, pages 350–368.
+Springer, 2022. 2
+[92] Chenming Zhu, Tai Wang, Wenwei Zhang, Jiangmiao Pang,
+and Xihui Liu. Llava-3d: A simple yet effective pathway
+to empowering lmms with 3d-awareness.
+arXiv preprint
+arXiv:2409.18125, 2024. 3
+[93] Ziyu Zhu, Xiaojian Ma, Yixin Chen, Zhidong Deng, Siyuan
+Huang, and Qing Li. 3d-vista: Pre-trained transformer for 3d
+vision and text alignment. In ICCV, pages 2911–2921, 2023.
+3
+[94] Ziyu Zhu, Zhuofan Zhang, Xiaojian Ma, Xuesong Niu, Yixin
+Chen, Baoxiong Jia, Zhidong Deng, Siyuan Huang, and Qing
+Li. Unifying 3d vision-language understanding via prompt-
+able queries. arXiv preprint arXiv:2405.11442, 2024. 3, 5,
+7
+14136

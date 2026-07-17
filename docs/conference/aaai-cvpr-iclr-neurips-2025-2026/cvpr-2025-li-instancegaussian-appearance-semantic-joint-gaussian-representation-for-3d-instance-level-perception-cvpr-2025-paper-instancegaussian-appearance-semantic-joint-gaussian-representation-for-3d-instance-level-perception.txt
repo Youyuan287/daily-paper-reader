@@ -1,0 +1,468 @@
+Title: InstanceGaussian: Appearance-Semantic Joint Gaussian Representation for 3D Instance-Level Perception
+
+URL Source: https://openaccess.thecvf.com/content/CVPR2025/papers/Li_InstanceGaussian_Appearance-Semantic_Joint_Gaussian_Representation_for_3D_Instance-Level_Perception_CVPR_2025_paper.pdf
+
+Published Time: Mon, 19 May 2025 12:40:12 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+InstanceGaussian: Appearance-Semantic Joint Gaussian Representation for 3D Instance-Level Perception 
+
+Haijie Li 1 Yanmin Wu 1 Jiarui Meng 1 Qiankun Gao 1 Zhiyao Zhang 3
+
+Ronggang Wang 1,2 Jian Zhang 1,2* 
+
+> 1
+
+School of Electronic and Computer Engineering, Peking University, China 
+
+> 2
+
+Guangdong Provincial Key Laboratory of Ultra High Definition Immersive Media Technology, Shenzhen Graduate School, Peking University 
+
+> 3
+
+College of Information Science and Engineering, Northeastern University, China 
+
+Abstract 
+
+3D scene understanding is vital for applications in au-tonomous driving, robotics, and augmented reality. How-ever, scene understanding based on 3D Gaussian Splat-ting faces three key challenges: (i) an imbalance be-tween appearance and semantics, (ii) inconsistencies in object boundaries, and (iii) difficulties with top-down in-stance segmentation. To address these challenges, we pro-pose InstanceGaussian , a method that jointly learns ap-pearance and semantic features while adaptively aggre-gating instances. Our contributions are as follows: (i) a new Semantic-Scaffold-GS representation to improve fea-ture representation and boundary delineation, (ii) a pro-gressive training strategy for enhanced stability and seg-mentation, and (iii) a category-agnostic, bottom-up in-stance aggregation approach for better segmentation. Ex-perimental results demonstrate that our approach achieves state-of-the-art performance in category-agnostic, open-vocabulary 3D point-level segmentation, validating the effectiveness of our proposed method. Project page: https://lhj-git.github.io/InstanceGaussian/ 
+
+1. Introduction 
+
+3D scene understanding aims to comprehensively capture a scene’s content, structure, and semantics, addressing tasks like instance segmentation, object detection, and open-vocabulary queries. This is crucial for applications in au-tonomous driving, robotics, and augmented reality, where detailed scene comprehension can significantly improve performance and safety. Traditional 3D representations,          
+
+> ∗Corresponding author This work is supported by Guangdong Provincial Key Labora-tory of Ultra High Definition Immersive Media Technology(Grant No. 2024B1212010006)
+
+such as voxels, point clouds, and meshes, provide structured models but often involve trade-offs between spatial reso-lution and computational efficiency. 3D Gaussian Splat-ting (3DGS) [16] offers a novel approach that combines the explicitness of traditional representations with neural adaptability, enabling efficient and detailed scene modeling. 3DGS is particularly promising for advancing 3D scene un-derstanding by effectively balancing quality and efficiency in capturing complex scene geometry. In the realm of 3D scene understanding utilizing 3DGS, three critical challenges emerge. 1) The first is an inher-ent imbalance in the representation of appearance versus semantics. Capturing the fine-grained texture details of a given object or region necessitates multiple Gaussians, each with varied appearance attributes. However, these Gaus-sians collectively require only a single, shared semantic attribute to accurately represent the semantics of the re-gion. This imbalance results in a scenario where the num-ber of Gaussians may be sufficient for appearance repre-sentation yet redundant for semantic expression. 2) The second challenge is an inconsistency between appearance and semantics. Without semantic constraints, i.e. , in pure appearance reconstruction, a single Gaussian can repre-sent different objects or regions. At object boundaries, for instance, a single Gaussian may simultaneously represent both the object’s foreground and background. Recent ap-proaches, such as language-embedded Gaussian Splatting techniques [25, 34], employ a decoupled learning strategy that overlooks the interdependence between color and se-mantics, leading to inconsistencies between appearance and semantics and posing significant challenges for both 3D point segmentation and 2D image segmentation. 3) Thirdly, previous approaches are predominantly designed in a top-down manner, often relying on prior category information. For instance, GaussianGrouping [38] defines the number of instances based on 2D tracking results, FastLGS [14] uses This CVPR paper is the Open Access version, provided by the Computer Vision Foundation. Except for this watermark, it is identical to the accepted version; the final published version of the proceedings is available on IEEE Xplore. 14078 the count of matches in cross-view settings to determine the number of objects, and OpenGaussian [34] relies on a pre-defined number of codebook entries. Such methods are prone to issues arising from uneven category distributions, often resulting in over-segmentation or under-segmentation when handling fine-grained instances in complex scenes. To address these challenges, we propose InstanceGaus-sian , a method capable of jointly learning object appearance and instance features while adaptively aggregating objects. Our contributions are summarized as follows: 1. Semantic-Scaffold-GS Representation : We introduce a novel representation method that balances appearance and semantics. By more flexibly allocating the seman-tic and appearance attributes of Gaussians, this method enables the learning of more accurate object geometric boundaries and yields improved feature representations. 2. Progressive Appearance-Semantic Joint Training Strategy : We propose a progressive training strategy that optimizes the joint representation of appearance and semantics* in a step-by-step manner. This ensures their consistency throughout the training process, thereby en-hancing the model’s stability and improving the accu-racy of downstream tasks such as 3D point segmentation and 2D image segmentation. 3. Bottom-Up, Category-Agnostic Instance Aggrega-tion : To further enhance the capability of 3D instance segmentation, we introduce a bottom-up, category-agnostic instance aggregation method. This method employs a clustering algorithm based on farthest point sampling and connected component analysis, effectively avoiding over-segmentation or under-segmentation. 
+
+2. Related Work 
+
+2.1. 3D Representation 
+
+3D representation involves the digital description and mod-eling of objects and scenes in three-dimensional space us-ing techniques such as voxels, point clouds, meshes, signed distance functions, and neural representations. Neural rep-resentations have made substantial progress with techniques like NeRF [22], which has notably enhanced the quality of novel view synthesis through learning-based optimiza-tion. Various methods [2–4, 15] have been proposed to fur-ther enhance NeRF’s expressive capabilities, but they often face challenges with slow training and rendering speeds. To address these issues, alternative approaches focusing on explicit representations have been developed, which have been effective in reducing the computational burden and decreasing training and inference times. These meth-ods include voxels [10, 27, 30], hash grids [23] and point  
+
+> ∗The term “semantic” is used here to distinguish it from “appear-ance”. In subsequent sections and code implementations, this concept will be explicitly referred to as “instance features”.
+
+clouds [1, 28, 31]. 3D Gaussian Splatting (3DGS) [16] is an innovative representation technique for modeling and rendering 3D scenes using Gaussian distributions. In recent advance-ments [11, 12, 20, 21, 36, 40], Scaffold-GS [20] forms a hierarchical and region-aware scene representation that re-spects the underlying geometric structure of the scene. This strategy exploits scene structure to guide and constrain the distribution of 3D Gaussians, allowing them to locally adapt to varying viewing angles and distances. This innovation allows for enhanced adaptation to various viewpoints and distances while preserving the scene’s underlying structure, showcasing the ongoing advancements in 3DGS and its role in shaping the future of neural rendering. 
+
+2.2. 3D Perception via 2D-3D Correlation 
+
+Recent advancements in 3D perception have seen the in-tegration of 2D Vision-Language Models (VLMs) with 3D point cloud processing, leading to significant progress in the field [13, 32, 33, 35, 42]. These methods primarily focus on aligning features and projecting 3D data into 2D to enhance zero-shot learning capabilities. Existing approaches that ex-ploit the 2D-3D correlation can be broadly categorized into two types: one leverages feature information from 2D im-ages, while the other utilizes segmentation masks derived from 2D images. 
+
+Feature Distillation . The significant advancements in 2D scene understanding, initiated by SAM [18] and its vari-ants, have inspired integrating semantic features into NeRF. Various methods have been developed to incorporate se-mantic features from models like CLIP [26] and DINO [5] into NeRF, enhancing 3D segmentation, understanding, and editing tasks. LeRF [17] distills features from accessible VLMs such as CLIP into a 3D scene represented by NeRF. Additionally, [19] presents a 3D open-vocabulary segmen-tation pipeline using NeRF. Within the 3DGS framework, LEGaussians [29] introduces uncertainty and semantic fea-ture attributes to each Gaussian, rendering a semantic map with corresponding uncertainties. This map is compared with quantized CLIP and DINO dense features extracted from the ground truth image. LangSplat [25] employs a scene-wise language autoencoder to learn language fea-tures in the scene-specific latent space, effectively discern-ing clear boundaries between objects in rendered feature images. Feature3DGS [41] distills SAM’s encoder features into 3D Gaussians and employs SAM’s decoder to inter-pret 2D rendered feature maps for segmentation. However, feature distillation-based approaches face challenges such as high training costs, significant storage requirements, and slow inference times, limiting their practical application. 
+
+2D Mask Lifting . Recent works have explored lifting 2D segmentation masks into 3D space [6, 7, 24, 34, 37– 39]. SAI3D [39] and Open3DIS [24] propose methods 14079 Reconstructed points Appearance -semantic joint rep. 3D appearance & semantic (ellipsoid mode) 
+
+FPS 
+
+Sampling 
+
+Over 
+
+Segem. 
+
+Agg.  
+
+> <latexit sha1_base64="0eMzHBHCGcSGDu9dwaP/Kjac4Lw=">AAAC5nicjVHLSsNAFD2N7/qKunQTLYILKamIuhTduHChYFWoUibTqQ3mRWYiSMnanTtx6w+41U8R/0D/wjtjCtYiOiHJmXPvOTP3Xi8JfKlc961kDQ2PjI6NT5Qnp6ZnZu25+RMZZykXdR4HcXrmMSkCPxJ15atAnCWpYKEXiFPvak/HT69FKv04OlY3ibgI2WXkt33OFFFNe+k8ZKrDWdA9yJ1mV+Zr/QTPm3bFrbpmOYOgVoAKinUY2684RwsxODKEEIigCAdgkPQ0UIOLhLgLdIlLCfkmLpCjTNqMsgRlMGKv6HtJu0bBRrTXntKoOZ0S0JuS0sEKaWLKSwnr0xwTz4yzZn/z7hpPfbcb+nuFV0isQofYv3S9zP/qdC0KbWybGnyqKTGMro4XLpnpir65860qRQ4JcRq3KJ4S5kbZ67NjNNLUrnvLTPzdZGpW73mRm+FD35IGXPs5zkFwsl6tbVY3jzYqO7vFqMexiGWs0jy3sIN9HKJO3rd4wjNerI51Z91bD1+pVqnQLKBvWY+fD+mdZQ==</latexit>
+
+Ls, Lc 
+
+> <latexit sha1_base64="PiYWMgjqBV6Yr2wOrvGJG/6nDS8=">AAAC13icjVHLSsNAFD3GV33XunQTLIKrkopUl0U3LlxUsFWxpUym0zY0LyYTsZTiTtz6A271j8Q/0L/wzhjBB6ITkpw5954zc+91Y99LlOM8T1iTU9Mzs7m5+YXFpeWV/GqhkUSp5KLOIz+SZy5LhO+Foq485YuzWAoWuL44dQcHOn56KWTiReGJGsaiFbBe6HU9zhRR7XyhGTDV58wfHY3t9kj23HE7X3RKjln2T1DOQBHZqkX5JzTRQQSOFAEEQijCPhgSei5QhoOYuBZGxElCnokLjDFP2pSyBGUwYgf07dHuImND2mvPxKg5neLTK0lpY5M0EeVJwvo028RT46zZ37xHxlPfbUh/N/MKiFXoE/uX7iPzvzpdi0IXe6YGj2qKDaOr45lLarqib25/qkqRQ0ycxh2KS8LcKD/6bBtNYmrXvWUm/mIyNav3PMtN8apvSQMufx/nT9DYLpUrpcrxTrG6n406h3VsYIvmuYsqDlFDnbyvcI8HPFrn1rV1Y92+p1oTmWYNX5Z19watPpcX</latexit>
+
+Lrgb Figure 1. Top row: Appearance-semantic joint Gaussian representation avoids the imbalance and inconsistency in appearance-semantic learning. Bottom row: Bottom-up instantiation: Over-segmentation is achieved via FPS sampling and clustering, followed by instantiation through graph-connectivity-based aggregation. 
+
+for merging 3D superpoints [9] guided by predictions from SAM. MaskClustering [37] introduces a mask graph clus-tering approach based on the view consensus rate, targeting open-vocabulary 3D instance segmentation. To achieve the 2D mask consistency across views, GaussianGrouping [38] performs simultaneous reconstruction and segmentation of open-world 3D objects, guided by 2D mask predictions ob-tained from SAM and 3D spatial consistency constraints. SAGA [6] utilizes a contrastive learning approach with masks generated by SAM. It maps SAM’s features into a low-dimensional space using a trainable MLP, replicat-ing these features to address inconsistency issues. Click-Gaussian [7] introduces an efficient method for interactive segmentation of 3D Gaussians. It uses two-level granular-ity feature fields from 2D masks and incorporates Global Feature-guided Learning (GFL) to resolve cross-view in-consistencies. OpenGaussian [34] employs SAM masks to train instance features with 3D consistency, propos-ing a two-stage codebook for feature discretization and an instance-level 3D-2D feature association method that links 3D points to 2D masks and CLIP features, demonstrating effectiveness in open vocabulary-based 3D object selection and understanding. However, OpenGaussian uses a fixed codebook entry count and does not fully exploit the conti-nuity of 3D space, which constrains its performance. 
+
+3. Method 
+
+3.1. Preliminary 
+
+3D Gaussian Splatting [16]. Given a set of n 3D Gaus-sians G, each with center μ, color c, opacity σ, rotation 
+
+R and scale S, they are rendered as an image Iren at a specific viewpoint via differentiable rasterization D. The reconstruction loss Lrgb is then calculated by comparing 
+
+Iren with the GT image Igt . This process can be simpli-fied as shown below, where blue variables are optimizable parameters. 
+
+G(μ, c, σ, R, S)n Iren Lrgb Igt 
+
+D
+
+OpenGaussian [34]. Based on 3DGS, OpenGaussian adds an instance feature f ∈ R6 for each Gaussian, passes it through differentiable rasterization D to render feature map M ∈ RH×W ×6, and computes intra-mask smooth-ness loss Ls and inter-mask contrastive loss Lc with SAM masks B ∈ RH×W ×1. This process simplifies as follows, where only the feature f is optimized while other appear-ance attributes are frozen (shown in gray). 
+
+G(μ, c, σ, R, S, f )n M Ls, Lc B
+
+D
+
+Ls =
+
+mX
+
+i=1 
+
+HX
+
+h=1 
+
+WX
+
+w=1 
+
+Bi,h,w · M :,h,w − ¯M i
+
+2 , (1) 
+
+Lc = 1
+
+m(m − 1) 
+
+mX
+
+i=1 
+
+mX
+
+j=1 ,j ̸ =i
+
+1
+
+¯M i − ¯M j
+
+2 , (2) where H, W represents the image size and m corresponds to the number of SAM masks in the current view. The Ls
+
+aims to make each pixel feature M :,h,w converge towards the average feature ¯M i of its associated mask for intra-mask smoothness. The Lc seeks to maximize the separation between the average features ¯M i, ¯M j of different masks. 
+
+Scaffold-GS [20]. It derives n neural Gaussian points G
+
+from n′ anchor points A (n = 10 n′ in their implementa-tion). The Gaussian centers μ are obtained by shifting its anchor centers μ′ by an offset o, while other appearance attributes are decoded from the appearance embedding e
+
+through MLPs. As shown below, the blue parts are learn-14080 forward backward 
+
+fire A detach A share 
+
+(a) 0-10k (b) 10 -20k (c) 20 -30k 
+
+<latexit sha1_base64="geoh1+x1QNUb31t4Atx22beIbw4=">AAADGnicjVHLSsNAFD3G97vq0k2wCC6kJFWr7kQ3Ln1VBSuSTMc6NC8yE6GU/ol/4s6duBXEpTsfP+GdMQUtiE5I5t5zzzmZO9dPAiGV4zz3Wf0Dg0PDI6Nj4xOTU9OFmdljGWcp41UWB3F66nuSByLiVSVUwE+TlHuhH/ATv7mj6yfXPJUijo5UK+HnodeIxKVgniLoolCt+XFQl62QtjbrLNvf81qY9SJSNEKvBzzoyQ87F4WiU3KdtY1y2XZKjlkUbLqVFWfddnOkiHztxYUn1FBHDIYMITgiKIoDeJD0nMGFg4Swc7QJSykSps7RwRhpM2JxYniENunboOwsRyPKtac0akZ/CehNSWljkTQx8VKK9d9sU8+Ms0Z/824bT322Fu1+7hUSqnBF6F+6LvO/Ot2LwiU2TA+CekoMortjuUtmbkWf3P7WlSKHhDAd16meUsyMsnvPttFI07u+W8/UXw1TozpnOTfDmz4lDbg7Rfv34Lhcciulyv5qcWs7H/UI5rGAJZrnOrawiz1UyfsWL3jHh3Vj3Vn31sMX1erLNXP4sazHTycLtE8=</latexit> 
+
+c, μ,  , R, S <latexit sha1_base64="nzGqC0/YYodn9VQA0p0Lr/NBcFs=">AAAC0XicjVHLSsNAFD2Nr1pfVZdugkVwVVLpa1l047KifUBbJUmnNTQvJhMhlIK49Qfc6k+Jf6B/4Z0xBUWKTsjMnXPPOTN3rhW6TiQM4y2jLS2vrK5l13Mbm1vbO/ndvXYUxNxmLTtwA961zIi5js9awhEu64acmZ7lso41OZP5zh3jkRP4VyIJ2cAzx74zcmxTEHTdtwJ3GCUeLdPR7CZfMIqVcr1Wqem/g1LRUKOAdDSD/Cv6GCKAjRgeGHwIil2YiOjroQQDIWEDTAnjFDkqzzBDjrQxsRgxTEInNI9p10tRn/bSM1Jqm05x6eek1HFEmoB4nGJ5mq7ysXKW6CLvqfKUd0totVIvj1CBW0L/0s2Z/9XJWgRGqKsaHKopVIiszk5dYvUq8ub6t6oEOYSEyXhIeU6xrZTzd9aVJlK1y7c1Vf5dMSUq93bKjfEhb0kNnndRXxy0T4qlarF6US40TtNWZ3GAQxxTP2to4BxNtMib4wnPeNEutUS71x6+qFom1ezjx9AePwF45pXv</latexit> 
+
+f
+
+<latexit sha1_base64="PiYWMgjqBV6Yr2wOrvGJG/6nDS8=">AAAC13icjVHLSsNAFD3GV33XunQTLIKrkopUl0U3LlxUsFWxpUym0zY0LyYTsZTiTtz6A271j8Q/0L/wzhjBB6ITkpw5954zc+91Y99LlOM8T1iTU9Mzs7m5+YXFpeWV/GqhkUSp5KLOIz+SZy5LhO+Foq485YuzWAoWuL44dQcHOn56KWTiReGJGsaiFbBe6HU9zhRR7XyhGTDV58wfHY3t9kj23HE7X3RKjln2T1DOQBHZqkX5JzTRQQSOFAEEQijCPhgSei5QhoOYuBZGxElCnokLjDFP2pSyBGUwYgf07dHuImND2mvPxKg5neLTK0lpY5M0EeVJwvo028RT46zZ37xHxlPfbUh/N/MKiFXoE/uX7iPzvzpdi0IXe6YGj2qKDaOr45lLarqib25/qkqRQ0ycxh2KS8LcKD/6bBtNYmrXvWUm/mIyNav3PMtN8apvSQMufx/nT9DYLpUrpcrxTrG6n406h3VsYIvmuYsqDlFDnbyvcI8HPFrn1rV1Y92+p1oTmWYNX5Z19watPpcX</latexit> 
+
+Lrgb 
+
+<latexit sha1_base64="0eMzHBHCGcSGDu9dwaP/Kjac4Lw=">AAAC5nicjVHLSsNAFD2N7/qKunQTLYILKamIuhTduHChYFWoUibTqQ3mRWYiSMnanTtx6w+41U8R/0D/wjtjCtYiOiHJmXPvOTP3Xi8JfKlc961kDQ2PjI6NT5Qnp6ZnZu25+RMZZykXdR4HcXrmMSkCPxJ15atAnCWpYKEXiFPvak/HT69FKv04OlY3ibgI2WXkt33OFFFNe+k8ZKrDWdA9yJ1mV+Zr/QTPm3bFrbpmOYOgVoAKinUY2684RwsxODKEEIigCAdgkPQ0UIOLhLgLdIlLCfkmLpCjTNqMsgRlMGKv6HtJu0bBRrTXntKoOZ0S0JuS0sEKaWLKSwnr0xwTz4yzZn/z7hpPfbcb+nuFV0isQofYv3S9zP/qdC0KbWybGnyqKTGMro4XLpnpir65860qRQ4JcRq3KJ4S5kbZ67NjNNLUrnvLTPzdZGpW73mRm+FD35IGXPs5zkFwsl6tbVY3jzYqO7vFqMexiGWs0jy3sIN9HKJO3rd4wjNerI51Z91bD1+pVqnQLKBvWY+fD+mdZQ==</latexit> 
+
+Ls, Lc
+
+<latexit sha1_base64="TF5PiPpPz9l2656l3s6BUdO/+OM=">AAAC2XicjVHLSsNAFD2Nr1pf8bFzEyyCq5KIVJdFN7qrYB9QS0nSaQ3Ni8lEqKULd+LWH3CrPyT+gf6Fd8YU1CI6ITNnzr3nzNy5Tux7iTDN15w2Mzs3v5BfLCwtr6yu6esb9SRKuctqbuRHvOnYCfO9kNWEJ3zWjDmzA8dnDWdwIuONa8YTLwovxDBm7cDuh17Pc21BVEffunQiv5sMA1pGZ+POiLNw3NGLZslUw5gGVgaKyEY10l9wiS4iuEgRgCGEIOzDRkJfCxZMxMS1MSKOE/JUnGGMAmlTymKUYRM7oLlPu1bGhrSXnolSu3SKTz8npYFd0kSUxwnL0wwVT5WzZH/zHilPebchrU7mFRArcEXsX7pJ5n91shaBHo5UDR7VFCtGVudmLql6FXlz40tVghxi4iTuUpwTdpVy8s6G0iSqdvm2toq/qUzJyr2b5aZ4l7ekBls/2zkN6vslq1wqnx8UK8dZq/PYxg72qJ+HqOAUVdTI+waPeMKz1tJutTvt/jNVy2WaTXwb2sMHDUGYbw==</latexit> 
+
+Iren 
+
+<latexit sha1_base64="bu/ZflMcu/LU3kRnKMDKKB8xwp8=">AAAC0XicjVHLSgMxFD0dX7W+qi7dDBbBVZkRqS6LbtwIFe0D2iozaVqHzotMRiilIG79Abf6U+If6F94E0dQi2iGSU7OveckN9eNfS+RlvWSM2Zm5+YX8ouFpeWV1bXi+kYjiVLBeJ1FfiRarpNw3wt5XXrS561YcCdwfd50h8cq3rzhIvGi8EKOYt4NnEHo9T3mSKIuO27k95JRQMv4dHJVLFllSw9zGtgZKCEbtaj4jA56iMCQIgBHCEnYh4OEvjZsWIiJ62JMnCDk6TjHBAXSppTFKcMhdkjzgHbtjA1przwTrWZ0ik+/IKWJHdJElCcIq9NMHU+1s2J/8x5rT3W3Ea1u5hUQK3FN7F+6z8z/6lQtEn0c6ho8qinWjKqOZS6pfhV1c/NLVZIcYuIU7lFcEGZa+fnOptYkunb1to6Ov+pMxao9y3JTvKlbUoPtn+2cBo29sl0pV872S9WjrNV5bGEbu9TPA1Rxghrq5C3wgEc8GefGyLg17j5SjVym2cS3Ydy/A0RSlWo=</latexit> 
+
+M
+
+<latexit sha1_base64="/VjfSBsHpGx+36UTJRFYz6J+X9k=">AAAC0XicjVHLSgMxFD0d3++qSzeDRXA1ZERr3RXduFS0D/DFTJrWwXmRyQilFMStP+BWf0r8A/0Lb+IUdFE0wyQ3555zkpvrp2GQKcbeS9bE5NT0zOzc/MLi0vJKeXWtmSW55KLBkzCRbd/LRBjEoqECFYp2KoUX+aFo+XdHOt+6FzILkvhc9VNxFXm9OOgG3FMEXV/6SdjJ+hEtg+7wplxhjsvcao3ZzGFmUFA72N3bYbZbIBUU4yQpv+ESHSTgyBFBIIaiOISHjL4LuGBICbvCgDBJUWDyAkPMkzYnliCGR+gdzT3aXRRoTHvtmRk1p1NC+iUpbWyRJiGepFifZpt8bpw1Os57YDz13fq0+oVXRKjCLaF/6UbM/+p0LQpd1EwNAdWUGkRXxwuX3LyKvrn9oypFDilhOu5QXlLMjXL0zrbRZKZ2/baeyX8Ypkb1nhfcHJ/6ltTgURft8UFzx3GrTvV0t1I/LFo9iw1sYpv6uY86jnGCBnlLPOMFr9aZ1bcerMdvqlUqNOv4NaynL+Tvla8=</latexit> 
+
+f
+
+<latexit sha1_base64="IXlmsbV4YbSwYUlGrYQUwYHWJRQ=">AAADC3icjVHLSsNAFD3G97vq0k2wCC5KSUWr7kRBXPqqFtpSknRaB/MiMxFK6Sf4J+7ciVt/wI2IfoD+hXfGFLRSdEIy5557z8ncuU7kcSEt62XIGB4ZHRufmJyanpmdm88sLJ6LMIldVnJDL4zLji2YxwNWklx6rBzFzPYdj104V/sqf3HNYsHD4Ey2I1bz7VbAm9y1JVH1zEHVCb2GaPu0dap+0s2ZPxjBW77dR570xafdXD2TtfIbW5s7xR3zNyjkLb2ySNdRmHlGFQ2EcJHAB0MASdiDDUFPBQVYiIiroUNcTIjrPEMXU6RNqIpRhU3sFX1bFFVSNqBYeQqtdukvHr0xKU2skiakupiw+pup84l2Vuwg7472VGdr0+6kXj6xEpfE/qXrVf5Xp3qRaGJb98Cpp0gzqjs3dUn0raiTm9+6kuQQEadwg/IxYVcre/dsao3Qvau7tXX+XVcqVsVuWpvgQ52SBtybojkYnK/nC8V88Xgju7uXjnoCy1jBGs1zC7s4xBFK5H2LJ7zizbgx7ox74+Gr1BhKNUv4sYzHT29rrfc=</latexit> 
+
+μ,  , R, S,
+
+<latexit sha1_base64="geoh1+x1QNUb31t4Atx22beIbw4=">AAADGnicjVHLSsNAFD3G97vq0k2wCC6kJFWr7kQ3Ln1VBSuSTMc6NC8yE6GU/ol/4s6duBXEpTsfP+GdMQUtiE5I5t5zzzmZO9dPAiGV4zz3Wf0Dg0PDI6Nj4xOTU9OFmdljGWcp41UWB3F66nuSByLiVSVUwE+TlHuhH/ATv7mj6yfXPJUijo5UK+HnodeIxKVgniLoolCt+XFQl62QtjbrLNvf81qY9SJSNEKvBzzoyQ87F4WiU3KdtY1y2XZKjlkUbLqVFWfddnOkiHztxYUn1FBHDIYMITgiKIoDeJD0nMGFg4Swc7QJSykSps7RwRhpM2JxYniENunboOwsRyPKtac0akZ/CehNSWljkTQx8VKK9d9sU8+Ms0Z/824bT322Fu1+7hUSqnBF6F+6LvO/Ot2LwiU2TA+CekoMortjuUtmbkWf3P7WlSKHhDAd16meUsyMsnvPttFI07u+W8/UXw1TozpnOTfDmz4lDbg7Rfv34Lhcciulyv5qcWs7H/UI5rGAJZrnOrawiz1UyfsWL3jHh3Vj3Vn31sMX1erLNXP4sazHTycLtE8=</latexit> 
+
+c, μ,  , R, S <latexit sha1_base64="geoh1+x1QNUb31t4Atx22beIbw4=">AAADGnicjVHLSsNAFD3G97vq0k2wCC6kJFWr7kQ3Ln1VBSuSTMc6NC8yE6GU/ol/4s6duBXEpTsfP+GdMQUtiE5I5t5zzzmZO9dPAiGV4zz3Wf0Dg0PDI6Nj4xOTU9OFmdljGWcp41UWB3F66nuSByLiVSVUwE+TlHuhH/ATv7mj6yfXPJUijo5UK+HnodeIxKVgniLoolCt+XFQl62QtjbrLNvf81qY9SJSNEKvBzzoyQ87F4WiU3KdtY1y2XZKjlkUbLqVFWfddnOkiHztxYUn1FBHDIYMITgiKIoDeJD0nMGFg4Swc7QJSykSps7RwRhpM2JxYniENunboOwsRyPKtac0akZ/CehNSWljkTQx8VKK9d9sU8+Ms0Z/824bT322Fu1+7hUSqnBF6F+6LvO/Ot2LwiU2TA+CekoMortjuUtmbkWf3P7WlSKHhDAd16meUsyMsnvPttFI07u+W8/UXw1TozpnOTfDmz4lDbg7Rfv34Lhcciulyv5qcWs7H/UI5rGAJZrnOrawiz1UyfsWL3jHh3Vj3Vn31sMX1erLNXP4sazHTycLtE8=</latexit> 
+
+c, μ,  , R, S
+
+<latexit sha1_base64="w1aRr/WWI+bHth/0d+LVzOkUOy4=">AAADCnicjVHLTttAFD24lHchbZdsLCIkFlFkI5SQHWqF1CUtDSARhGxnSEfxS55xpSjKH/RPumOH2PYHuqpafoD+BWemjgRIqIxlz7nn3nM8d26Yx1Jpz/s947yYfTk3v7C4tLzyanWt9vrNkcrKIhLdKIuz4iQMlIhlKrpa6lic5IUIkjAWx+HwvckffxWFkln6WY9ycZYEg1ReyCjQpM5r+70wi/tqlHAb95Jy0nhAKDlIgknDvU9+ehQfThrntbrX9DqdVsdzCewi2G23/W3f9SumjmodZLVf6KGPDBFKJBBIoYljBFB8TuHDQ07uDGNyBZG0eYEJlqgtWSVYEZAd8jtgdFqxKWPjqaw64l9ivgWVLjapyVhXEJu/uTZfWmfDPuU9tp7mbCPuYeWVkNX4QvZ/umnlc3WmF40L7NoeJHvKLWO6iyqX0t6KObl7rytNh5ycwX3mC+LIKqf37FqNsr2buw1s/tZWGtbEUVVb4q85JQc8naL7NDjabvqtZuvjTn3vXTXqBaxjA1ucZxt7+IADdOn9HT/xBzfON+fSuXKu/5U6M5XmLR4s58cdY0+tkA==</latexit> 
+
+μ,  , R, S, <latexit sha1_base64="/VjfSBsHpGx+36UTJRFYz6J+X9k=">AAAC0XicjVHLSgMxFD0d3++qSzeDRXA1ZERr3RXduFS0D/DFTJrWwXmRyQilFMStP+BWf0r8A/0Lb+IUdFE0wyQ3555zkpvrp2GQKcbeS9bE5NT0zOzc/MLi0vJKeXWtmSW55KLBkzCRbd/LRBjEoqECFYp2KoUX+aFo+XdHOt+6FzILkvhc9VNxFXm9OOgG3FMEXV/6SdjJ+hEtg+7wplxhjsvcao3ZzGFmUFA72N3bYbZbIBUU4yQpv+ESHSTgyBFBIIaiOISHjL4LuGBICbvCgDBJUWDyAkPMkzYnliCGR+gdzT3aXRRoTHvtmRk1p1NC+iUpbWyRJiGepFifZpt8bpw1Os57YDz13fq0+oVXRKjCLaF/6UbM/+p0LQpd1EwNAdWUGkRXxwuX3LyKvrn9oypFDilhOu5QXlLMjXL0zrbRZKZ2/baeyX8Ypkb1nhfcHJ/6ltTgURft8UFzx3GrTvV0t1I/LFo9iw1sYpv6uY86jnGCBnlLPOMFr9aZ1bcerMdvqlUqNOv4NaynL+Tvla8=</latexit> 
+
+f
+
+<latexit sha1_base64="PiYWMgjqBV6Yr2wOrvGJG/6nDS8=">AAAC13icjVHLSsNAFD3GV33XunQTLIKrkopUl0U3LlxUsFWxpUym0zY0LyYTsZTiTtz6A271j8Q/0L/wzhjBB6ITkpw5954zc+91Y99LlOM8T1iTU9Mzs7m5+YXFpeWV/GqhkUSp5KLOIz+SZy5LhO+Foq485YuzWAoWuL44dQcHOn56KWTiReGJGsaiFbBe6HU9zhRR7XyhGTDV58wfHY3t9kj23HE7X3RKjln2T1DOQBHZqkX5JzTRQQSOFAEEQijCPhgSei5QhoOYuBZGxElCnokLjDFP2pSyBGUwYgf07dHuImND2mvPxKg5neLTK0lpY5M0EeVJwvo028RT46zZ37xHxlPfbUh/N/MKiFXoE/uX7iPzvzpdi0IXe6YGj2qKDaOr45lLarqib25/qkqRQ0ycxh2KS8LcKD/6bBtNYmrXvWUm/mIyNav3PMtN8apvSQMufx/nT9DYLpUrpcrxTrG6n406h3VsYIvmuYsqDlFDnbyvcI8HPFrn1rV1Y92+p1oTmWYNX5Z19watPpcX</latexit> 
+
+Lrgb 
+
+<latexit sha1_base64="PiYWMgjqBV6Yr2wOrvGJG/6nDS8=">AAAC13icjVHLSsNAFD3GV33XunQTLIKrkopUl0U3LlxUsFWxpUym0zY0LyYTsZTiTtz6A271j8Q/0L/wzhjBB6ITkpw5954zc+91Y99LlOM8T1iTU9Mzs7m5+YXFpeWV/GqhkUSp5KLOIz+SZy5LhO+Foq485YuzWAoWuL44dQcHOn56KWTiReGJGsaiFbBe6HU9zhRR7XyhGTDV58wfHY3t9kj23HE7X3RKjln2T1DOQBHZqkX5JzTRQQSOFAEEQijCPhgSei5QhoOYuBZGxElCnokLjDFP2pSyBGUwYgf07dHuImND2mvPxKg5neLTK0lpY5M0EeVJwvo028RT46zZ37xHxlPfbUh/N/MKiFXoE/uX7iPzvzpdi0IXe6YGj2qKDaOr45lLarqib25/qkqRQ0ycxh2KS8LcKD/6bBtNYmrXvWUm/mIyNav3PMtN8apvSQMufx/nT9DYLpUrpcrxTrG6n406h3VsYIvmuYsqDlFDnbyvcI8HPFrn1rV1Y92+p1oTmWYNX5Z19watPpcX</latexit> 
+
+Lrgb 
+
+<latexit sha1_base64="0eMzHBHCGcSGDu9dwaP/Kjac4Lw=">AAAC5nicjVHLSsNAFD2N7/qKunQTLYILKamIuhTduHChYFWoUibTqQ3mRWYiSMnanTtx6w+41U8R/0D/wjtjCtYiOiHJmXPvOTP3Xi8JfKlc961kDQ2PjI6NT5Qnp6ZnZu25+RMZZykXdR4HcXrmMSkCPxJ15atAnCWpYKEXiFPvak/HT69FKv04OlY3ibgI2WXkt33OFFFNe+k8ZKrDWdA9yJ1mV+Zr/QTPm3bFrbpmOYOgVoAKinUY2684RwsxODKEEIigCAdgkPQ0UIOLhLgLdIlLCfkmLpCjTNqMsgRlMGKv6HtJu0bBRrTXntKoOZ0S0JuS0sEKaWLKSwnr0xwTz4yzZn/z7hpPfbcb+nuFV0isQofYv3S9zP/qdC0KbWybGnyqKTGMro4XLpnpir65860qRQ4JcRq3KJ4S5kbZ67NjNNLUrnvLTPzdZGpW73mRm+FD35IGXPs5zkFwsl6tbVY3jzYqO7vFqMexiGWs0jy3sIN9HKJO3rd4wjNerI51Z91bD1+pVqnQLKBvWY+fD+mdZQ==</latexit> 
+
+Ls, Lc
+
+<latexit sha1_base64="TF5PiPpPz9l2656l3s6BUdO/+OM=">AAAC2XicjVHLSsNAFD2Nr1pf8bFzEyyCq5KIVJdFN7qrYB9QS0nSaQ3Ni8lEqKULd+LWH3CrPyT+gf6Fd8YU1CI6ITNnzr3nzNy5Tux7iTDN15w2Mzs3v5BfLCwtr6yu6esb9SRKuctqbuRHvOnYCfO9kNWEJ3zWjDmzA8dnDWdwIuONa8YTLwovxDBm7cDuh17Pc21BVEffunQiv5sMA1pGZ+POiLNw3NGLZslUw5gGVgaKyEY10l9wiS4iuEgRgCGEIOzDRkJfCxZMxMS1MSKOE/JUnGGMAmlTymKUYRM7oLlPu1bGhrSXnolSu3SKTz8npYFd0kSUxwnL0wwVT5WzZH/zHilPebchrU7mFRArcEXsX7pJ5n91shaBHo5UDR7VFCtGVudmLql6FXlz40tVghxi4iTuUpwTdpVy8s6G0iSqdvm2toq/qUzJyr2b5aZ4l7ekBls/2zkN6vslq1wqnx8UK8dZq/PYxg72qJ+HqOAUVdTI+waPeMKz1tJutTvt/jNVy2WaTXwb2sMHDUGYbw==</latexit> 
+
+Iren 
+
+<latexit sha1_base64="TF5PiPpPz9l2656l3s6BUdO/+OM=">AAAC2XicjVHLSsNAFD2Nr1pf8bFzEyyCq5KIVJdFN7qrYB9QS0nSaQ3Ni8lEqKULd+LWH3CrPyT+gf6Fd8YU1CI6ITNnzr3nzNy5Tux7iTDN15w2Mzs3v5BfLCwtr6yu6esb9SRKuctqbuRHvOnYCfO9kNWEJ3zWjDmzA8dnDWdwIuONa8YTLwovxDBm7cDuh17Pc21BVEffunQiv5sMA1pGZ+POiLNw3NGLZslUw5gGVgaKyEY10l9wiS4iuEgRgCGEIOzDRkJfCxZMxMS1MSKOE/JUnGGMAmlTymKUYRM7oLlPu1bGhrSXnolSu3SKTz8npYFd0kSUxwnL0wwVT5WzZH/zHilPebchrU7mFRArcEXsX7pJ5n91shaBHo5UDR7VFCtGVudmLql6FXlz40tVghxi4iTuUpwTdpVy8s6G0iSqdvm2toq/qUzJyr2b5aZ4l7ekBls/2zkN6vslq1wqnx8UK8dZq/PYxg72qJ+HqOAUVdTI+waPeMKz1tJutTvt/jNVy2WaTXwb2sMHDUGYbw==</latexit> 
+
+Iren 
+
+<latexit sha1_base64="bu/ZflMcu/LU3kRnKMDKKB8xwp8=">AAAC0XicjVHLSgMxFD0dX7W+qi7dDBbBVZkRqS6LbtwIFe0D2iozaVqHzotMRiilIG79Abf6U+If6F94E0dQi2iGSU7OveckN9eNfS+RlvWSM2Zm5+YX8ouFpeWV1bXi+kYjiVLBeJ1FfiRarpNw3wt5XXrS561YcCdwfd50h8cq3rzhIvGi8EKOYt4NnEHo9T3mSKIuO27k95JRQMv4dHJVLFllSw9zGtgZKCEbtaj4jA56iMCQIgBHCEnYh4OEvjZsWIiJ62JMnCDk6TjHBAXSppTFKcMhdkjzgHbtjA1przwTrWZ0ik+/IKWJHdJElCcIq9NMHU+1s2J/8x5rT3W3Ea1u5hUQK3FN7F+6z8z/6lQtEn0c6ho8qinWjKqOZS6pfhV1c/NLVZIcYuIU7lFcEGZa+fnOptYkunb1to6Ov+pMxao9y3JTvKlbUoPtn+2cBo29sl0pV872S9WjrNV5bGEbu9TPA1Rxghrq5C3wgEc8GefGyLg17j5SjVym2cS3Ydy/A0RSlWo=</latexit> 
+
+MFigure 2. Progressive appearance-semantic joint training. (a) Train appearance only; (b) Independent appearance-semantic training; (c) Joint appearance-semantic training. 
+
+able parameters, and their optimization process is similar to 3DGS. 
+
+A(μ′, e)n′ G(μ, c, σ, R, S)n Iren Lrgb Igt 
+
+D
+
++ o
+
+MLPs 
+
+3.2. Appearance-semantic joint Gaussian Repre-sentation 
+
+(1) Appearance-semantic balanced representation. 
+
+For the same object or region, the texture details may vary while the semantics remain consistent. Consequently, many Gaussians with diverse appearance attributes are required to represent the texture details of the region. These Gaus-sians require only a single semantic attribute to effectively capture the region’s semantics, meaning the same number of Gaussians may under-represent appearance while over-representing semantics. We refer to this phenomenon as the imbalance in the representation of appearance and se-mantics by Gaussians. To this end, we propose a Semantic-Scaffold-GS representation to balance appearance and se-mantics: 
+
+A(μ′, e, f )n′ G(μ, c, σ, R, S, f )n Iren ,
+
+M
+
+Lrgb ,
+
+Ls, Lc
+
+Igt ,
+
+B
+
+D
+
++ o share 
+
+MLPs 
+
+The blue parts are the optimizable parameters; see Sec. 3.1 for variable definitions. Similar to Scaffold-GS, we derive 
+
+n neural Gaussian points G from n′ anchor points A
+
+(n = 5 n′ in our implementation). Specifically, each group of 5 child Gaussians with different appearance attributes is decoded from the appearance embedding e of their common parent anchor point using MLPs. However, at the semantic level, these 5 child Gaussians share the same instance feature f as their parent anchor point. On the one hand, this representation strengthens the learning of appearance, especially in scenes represented by sparse points ( e.g. , ScanNet and SLAM-reconstructed scenes); on the other hand, sharing features among neighboring points significantly enhances the efficiency of semantic learning. The process is described in the top row of Fig. 1. 
+
+(2) Appearance-semantic consistency learning. With-out semantic constraints, i.e. , pure appearance reconstruc-tion, a Gaussian can represent across objects/regions. For instance, at boundaries, a single Gaussian may simultane-ously represent both the object and the background. Re-cent language-embedded Gaussian Splatting works [25, 34] follow a paradigm of pre-training appearance reconstruc-tion, freezing the appearance properties, and subsequently learning semantic attributes. This tends to cause incon-sistencies between appearance and semantics, posing chal-lenges for 3D point segmentation and 2D image segmen-tation. Therefore, we propose a progressive appearance-semantic joint training strategy to ensure their consistency as shown in Fig. 2: during the 0-10k steps, only the appear-ance attributes are trained, then appearance and semantics are trained independently in the 10k-20k steps, and finally, appearance and semantics are jointly trained in the 20k-30k steps. Here, we employ the loss (Eq. (1) (2)) of OpenGaus-sian to train instance features, but its inter-mask contrastive loss value is too large, causing instability of joint training. We overcome this problem through the following improve-ments: 
+
+Lc = 1
+
+m(m − 1) 
+
+mX
+
+i=1 
+
+mX
+
+j=1 ,j ̸ =i
+
+1∥ ¯Mi− ¯Mj ∥2<τ 
+
+¯M i − ¯M j
+
+2 , (3) where 1∥ ¯Mi− ¯Mj ∥2<τ takes values of 1 or 0, aiming to truncate the loss between two objects whose dissimilarity (quantified by the L2 distance) exceeds a threshold τ (set to 0.4 in our implementation). This improvement is intuitive because there is no need to enforce that the features of two different objects are infinitely distant from each other. 
+
+3.3. Bottom-up Category-Agnostic Instantiation 
+
+We employ a bottom-up method for category-agnostic in-stantiation. Specifically, we first over-segment the scene into numerous sub-objects. Then, we construct a graph of these sub-objects and perform aggregation based on the graph connectivity, adaptively obtaining several indepen-dent and complete objects. The bottom row of Fig. 1 de-scribes this process. 
+
+(1) Over-segmentation. Inspired by point cloud percep-tion methods, which utilize farthest point sampling (FPS) algorithms to sample seed points for candidate proposals from dense point clouds, we achieve over-segmentation of the scene through FPS-based clustering. We first sample s seed points from all n Gaussians through FPS and use them as the initial centers of s clus-ters, where s is much greater than the number of objects in the scene, with a default value of 1000. Then we start the clustering process, updating the instance feature of all Gaussians and the s clusters. This process can be formu-lated as: ¯f , ¯μ,¯I = ϕ(X), (4) 
+
+X = [PE( μ) ∈ Rn×d; f ∈ Rn×6], (5) 14081 Algorithm 1 Bottom-up category-agnostic instantiation 
+
+Input: μ, f - point position and feature, s - the number of over-segmented sub-objects, r-voxel resolution, γ -connectivity threshold. 
+
+Output: well-segmented complete object ˆI, ˆf . 
+
+> 1:
+
+procedure OVER SEGMENTATION (μ, f , s, r, γ ) 
+
+> 2:
+
+¯f , ¯μ ← F P S (f , μ, s ) ▷ initialize s centers  
+
+> 3:
+
+X ← concat P E (μ) and f ▷ Eq. (5)  
+
+> 4:
+
+¯I, ¯f , ¯μ ← k−means (X, s ) ▷ Eq. (4)  
+
+> 5:
+
+return SUB OBJECT AGG (μ,¯I, ¯f , s, r, γ ) 
+
+> 6:
+
+end procedure  
+
+> 7:
+
+procedure SUB OBJECT AGG (μ,¯I, ¯f , s, r, γ ) 
+
+> 8:
+
+G ∈ Rs×s ← initialize the graph with zeros  
+
+> 9:
+
+Vox ← V oxelization (μ,¯I, r ) ▷ sub-obj. voxels  
+
+> 10:
+
+for i in [0 , s ) do  
+
+> 11:
+
+for j in [0 , s ) do  
+
+> 12:
+
+dis (i, j ) ← L2distance ( ¯f i, ¯f j ) 
+
+> 13:
+
+1(i, j ) ← near (Vox i, Vox j ) 
+
+> 14:
+
+Gij ← dis (i, j ) · 1(i, j ) ▷ Eq. (6)  
+
+> 15:
+
+end for  
+
+> 16:
+
+end for  
+
+> 17:
+
+ˆI, ˆf ← Aggregation (G, γ ) 
+
+> 18:
+
+return ˆI, ˆf 
+
+> 19:
+
+end procedure 
+
+where ϕ(·) denotes the k-means, X ∈ Rn×(d+6) is the attribute of the n Gaussians participating in the cluster-ing, which is the concatenation of the positional encoding (PE( ·)) for position μ and the instance feature f . Finally, s
+
+sub-object clusters are obtained, ¯f ∈ Rs×6 is their feature, 
+
+¯μ ∈ Rs×3 is their centers, ¯I ∈ Zn 
+
+> [0 ,s )
+
+represents the label in-dicating which subobject each point belongs to. During this process, only the feature f needs to be optimized, while the position μ is frozen. This process is shown in lines 1-4 of Alg. 1. 
+
+(2) Graph connectivity-based sub-objects aggrega-tion. This process is shown in lines 7-19 of Alg. 1. We use the s sub-objects obtained from the over-segmentation step as nodes to construct a graph and aggregate the sub-objects into complete objects by evaluating node connectivity. This graph can be represented by an s × s adjacency matrix G.
+
+Gij represents the connectivity (edge) between the i-th and 
+
+j-th sub-objects (nodes): 
+
+Gij = ∥ ¯f i − ¯f j ∥2 · 1(i, j ), (6) where we design two connectivity criteria: 1) the L2 dis-tance of the node features, a closer distance indicates that the two nodes are more likely to be merged; 2) the spa-tial relationship between the nodes is represented by the in-dicator function 1(·), which determines whether two sub-objects are adjacent or share voxels by voxelizing the 3D space with a resolution r, and returns 0 or 1. After constructing the graph, we perform aggregation on the nodes with connectivity values Gij in the range (0 , γ ]
+
+using the standard graph connected component algorithm (such as breadth-first search), where γ is set to 0.1 in our implementation. Due to the indicator function, our graph is sparse and can be accelerated through the union-find method. Finally, by aggregating the feature-spatial similar sub-objects, we adaptively obtain several ( e.g. , m) indepen-dent and complete objects with ˆf ∈ Rm×6 representing their feature, ˆI ∈ Zn 
+
+> [0 ,m )
+
+representing point label. 
+
+4. Experiments* 
+
+4.1. Category-Agnostic 3D Instance Segmentation 
+
+Settings. 1) Task : Category-agnostic 3D instance segmentation aims to segment independent 3D ob-jects/instances in a given point cloud (Gaussians can nat-urally be treated as points) scene without considering their semantic categories, ensuring that each point ultimately be-longs to only one instance. 2) Dataset and Metrics : Fol-lowing OpenGaussian, we evaluate using the ScanNet [8] dataset with GT instance-level annotations. More specifi-cally, we calculate the instance-level mIoU and mAcc met-rics for the 10 scenes selected by OpenGaussian. 3) Base-line: We mainly compare with Gaussian-based methods OpenGaussian [34] and GaussianGrouping [38] with RGB images and SAM masks as input. Additionally, we pro-vide the performance of the depth-assisted back-projection method MaskClustering [37] as a reference. 
+
+Results. Quantitative results, as shown in Tab. 1, demonstrate that InstanceGaussian significantly outper-forms Gaussian-based methods and achieves comparable results to MaskClustering which uses depth to assist. Gaus-sianGrouping relies on a tracking-based model for cross-view object association, which is prone to tracking fail-ures in complex scenes like ScanNet, characterized by sig-nificant viewpoint changes and occlusions, consequently leading to lower performance. Although OpenGaussian achieves instance feature learning with cross-view 3D consistency by the smooth-contrast losses, avoiding ex-plicit tracking-based association, its performance bottle-neck lies in the brute-force, naive k-means clustering, lack-ing parameter adaptability. Our method enables more dis-criminative feature learning through appearance-semantic joint representation and training, achieving more accurate and generalizable 3D instance segmentation through over-segmentation followed by connectivity-based adaptive ag-gregation. The visualization results are shown in Fig. 3, where the well-segmented instances faithfully reflect the performance advantages of InstanceGaussian.    
+
+> ∗Please refer to the supplementary materials for additional 3D/2D visualization results and comparisons with more methods. 14082
+
+Reference Mesh Reference Mesh OpenGaussian OpenGaussian Gaussian Grouping Gaussian Grouping InstanceGaussian InstanceGaussian Ground Truth Ground Truth Figure 3. Visualization comparison of category-agnostic 3D instance segmentation result. InstanceGaussian outperforms OpenGaussian and GaussainGrouping in accurately distinguishing different 3D objects. Type Methods mIoU ↑ mAcc. ↑
+
+Depth-aided MaskClustering [37] 54.17 80.95 Gaussian-based GaussianGrouping [38] 22.55 30.54 OpenGaussian [34] 27.32 52.44 
+
+InstanceGaussian (ours) 50.27 80.22 
+
+Table 1. Performance of category-agnostic 3D instance segmenta-tion on the Scannet dataset. Accurate is measured by mAcc@0.25. 
+
+4.2. Open-Vocabulary Query Point Cloud Under-standing 
+
+After 3D instantiation as mentioned in Sec. 3.3, we adopt the 2D mask-3D instance association method proposed by OpenGaussian to associate each 3D instance with a 512-dim CLIP image feature. This allows us to support text-based understanding by extracting 512-dim CLIP text features and calculating cosine similarity. 
+
+Settings. 1) Task : This task takes text as input and finds the matching point cloud by calculating the cosine similar-ity between text features and point features. In theory, it supports arbitrary open vocabulary input, but to compute quantitative metrics with the annotated GT point cloud, we use text that corresponds to the pre-defined categories as queries. 2) Dataset and Metrics : Following OpenGaus-sian, we use 19, 15, and 10 categories from ScanNet as text queries, assigning the closest text to the point cloud to com-pute the mIoU and mAcc for each category. 3) Baseline: 
+
+We mainly compare with the recent Gaussian-based meth-Type Methods 19 classes 15 classes 10 classes mIoU mAcc. mIoU mAcc. mIoU mAcc. Depth MaskClustering [37] 34.59 54.32 34.00 45.07 38.10 56.74 Gaussian-based LangSplat [25] 3.78 9.11 5.35 13.20 8.40 22.06 LEGaussians [29] 3.84 10.87 9.01 22.22 12.82 28.62 OpenGaussian [34] 24.73 41.54 30.13 48.25 38.29 55.19       
+
+> InstanceGaussian 40.66 54.01 42.51 59.15 47.94 64.01
+
+Table 2. Performance of open vocabulary semantic segmentation on the Scannet dataset. Accurate is measured by mAcc@0.25. 
+
+ods LangSplat, LEGaussians, and OpenGaussian. We also provide the performance of a SOTA method MaskCluster-ing utilizing depth information to assist back projection as a comparison. 
+
+Results. The quantitative results are shown in Tab. 2 , where InstanceGaussian achieves SOTA performance un-der the settings of 19, 15, and 10 categories, significantly outperforming Gaussian-based methods. The poor perfor-mance of LangSplat and LEGaussians stems from ambigu-ous Gaussian feature learning and detrimental language feature distillation. The performance of OpenGaussian is limited by its coupled appearance-semantic representation and fixed cluster count. GaussianGrouping is not included in the comparison because it does not support 3D-level text queries. Surprisingly, our method even surpasses the depth-assisted MaskClustering, although it outperforms our method in the category-agnostic instance segmentation task. We analyze that the reason lies in its heavy reliance on high-quality SAM masks. Fig. 4 shows the results of rel-evance point cloud retrieval using text queries, in which 14083 Reference mesh ”bicycle ” ”refrigerator ” ”cold ” ”ride ” ”music ”                      
+
+> Reference mesh ”bed ””chair ””curtain ””sleep ””sit ”Reference mesh ”bed ””chair ””curtain ””sleep ””sit ”Figure 4. Open-vocabulary query point cloud Understanding on ScanNet dataset. InstanceGaussian shows advanced text query capabilities. Methods mIoU ↑mAcc. ↑
+> LangSplat [25] 9.66 12.41 LEGaussians [29] 16.21 23.82 OpenGaussian [34] 38.36 51.34
+> InstanceGaussian (ours) 45.30 58.44
+> Table 3. Performance of open vocabulary 3D object selection and rendering on Lerf dataset. Accurate is measured by mAcc@0.25.
+
+both common categories (such as “bed”, “curtain”) are used as queries, and the ability to understand open-vocabulary (such as “ride”, “music”) is also demonstrated. 
+
+4.3. Open Vocabulary 3D Object Selection and Rendering 
+
+Settings. 1) Task : Similar to Sec. 4.2, we first use open vocabulary text to select matching 3D Gaussians, and then render the 3D Gaussians into multi-view 2D images through the rasterization pipeline of 3DGS. 2) Dataset and Met-rics : Following LangSplat and OpenGaussian, we use the LeRF [17] dataset for evaluation, and after rendering the selected 3D objects into 2D images, we calculate the mIoU and mAcc between the rendered 2D objects and the GT 2D target objects. 3) Baseline : Only Gaussian-based methods possess 3D point-level perception and rendering capabili-ties, thus we only compare against Gaussian-based methods Langsplat, Legaussian, and OpenGaussian. 
+
+Result. Quantitative results are displayed in the Tab. 3, which demonstrates that even when rendering 3D Gaussians onto 2D images for evaluation. As previously analyzed, LangSplat and LEGaussian, due to their poor 3D percep-tion capabilities, fail to accurately select 3D Gaussians rel-evant to the text query, resulting in low-quality rendering results. The performance advantage of our method stems from two aspects. First, the bottom-up adaptive instanti-ation ensures good discrimination between objects. Sec-ond, the joint representation and learning of appearance and semantics avoid the appearance-semantic inconsistency present in OpenGaussian. The qualitative results in Fig. 5 more intuitively demonstrate this point. Our method ren-ders objects with clearer boundaries, unlike OpenGaussian,               
+
+> Case Jotin-repres. Joint-train Sematic Seg. Instance Seg. #1 ✓30.71 47.40 #2 ✓33.15 49.57 #3 ✓✓40.66 50.27
+> Table 4. Performance of instance and semantic segmentation with different representation and training strategies on Scannet. Evalu-ated by mIoU.
+
+which due to its appearance-semantic ambiguity, requires some Gaussians to represent multiple objects/regions, espe-cially evident in the boundary areas. 
+
+4.4. Ablation Study 
+
+4.4.1. Gaussian Representation and Training Strategy 
+
+We conduct the ablation studies as shown in Tab. 4 to demonstrate the effectiveness of our Semantic-Scaffold-GS joint representation and progressive joint training strategy. The experiments are evaluated using the semantic and in-stance segmentation tasks on the ScanNet dataset. The joint representation achieves a balance between appearance and semantics, allowing the same anchor point to express differ-ent appearances while sharing the same semantics. The pro-gressive joint training avoids inconsistencies in appearance and semantics, enhances the distinguishability between ob-jects, and thus leads to improved instance segmentation and semantic understanding performance. Fig. 6 more intuitively demonstrates our avoidance of in-consistency. The first and second rows respectively visu-alize the appearance color and instance features of the 3D Gaussian ellipsoid in the 3D viewer, where the ellipse rep-resents the boundary of the Gaussian. Fig. 6 (a)(c) shows the results of our joint training, which achieve clearer and more distinctive expressions in both appearance and seman-tics compared to Fig. 6 (b)(d). This improvement not only brings benefits to the understanding of the 3D level ( i.e. , the semantic level, as proven by our quantitative ablation stud-ies), but also enhances the quality of object rendering ( i.e. ,the appearance level, as shown in Sec. 4.3). 14084 ”bag of cookies ” ”apple ””bag of cookies ” ”apple ”                  
+
+> ”spatula ””red cup ””spatula ””red cup ”
+> ”old camera ””rubics cube ””old camera ””rubics cube ”
+> Reference images OpenGaussian InstanceGaussian Reference images OpenGaussian InstanceGaussian Reference images OpenGaussian InstanceGaussian Reference images OpenGaussian InstanceGaussian Reference images OpenGaussian InstanceGaussian Reference images OpenGaussian InstanceGaussian
+
+Figure 5. Open-vocabulary 3D object selection and rendering on the LeRF dataset. InstanceGaussian outperforms OpenGaussian in accurately identifying the objects’ boundaries by text queries. (a) Ours (b) w/o joint training (c) Ours (d) w/o joint training      
+
+> Appearance
+> color
+> (in 3D viewer)
+> Semantic feat.
+> (in 3D viewer)
+> Reference
+> image s
+
+Figure 6. Visualization results of the appearance color and instance features of the Gaussians ellipsoid in the 3D viewer demonstrate that our method achieves superior appearance-semantic consistency. (a)(c): Results of progressive joint training. (b)(d): Without joint training. Case feature voxelize Semantic Seg. Instance Seg. #1 ✓ 21.75 27.50 #2 ✓ 28.98 43.41 #3 ✓ ✓ 40.66 50.27 Table 5. Performance of instance and semantic segmentation with different connectivity condition strategies. Evaluated by mIoU. 
+
+4.4.2. Aggregation Condition 
+
+In the process of aggregating over-segmented sub-objects based on a connectivity graph, we considered two connec-tivity conditions: the L2 distance of instance features, and the proximity judgment after voxelization. We conduct an ablation study on its configuration as shown in Tab. 5. In case #1, we use the color of the Gaus-sians as a feature and consider their positions for aggrega-tion, which results in poor performance. In case #2, we only consider instance features and achieve a significant perfor-mance improvement, demonstrating the effectiveness of our feature learning. In case #3, we take both conditions into account and achieve the best performance, which is an in-tuitive idea that in aggregation, we need to consider both semantic similarity and spatial proximity. 
+
+5. Conclusion and Limitation 
+
+In this paper, we introduce an appearance-semantic com-pact Gaussian representation to address the imbalance be-tween appearance and instance features using Gaussians. On one hand, this representation enhances the learning of appearance; on the other hand, sharing features among neighboring points significantly boosts the efficiency of semantic learning. The bottom-up category-agnostic in-stantiation adaptively determines the number of categories, cleverly avoiding the issue of over-segmentation or under-segmentation. In category-agnostic segmentation tasks, we significantly outperform previous models, achieving state-of-the-art (SOTA) performance in open vocabulary under-standing for 3D point-level tasks. Despite achieving novel performance on multiple tasks, our method still has the following limitations: 1) Longer training time for slower rendering, since the appearance at-tributes need to be calculated through MLP. 2) Segmenta-tion accuracy is still affected when most of the images in the scene are incorrectly segmented by SAM. Failure case analyses can be found in the supplementary materials . We hope those drawbacks can be addressed in future works. 14085 References 
+
+[1] Kara-Ali Aliev, Artem Sevastopolsky, Maria Kolos, Dmitry Ulyanov, and Victor Lempitsky. Neural point-based graphics. In European Conference on Computer Vision (ECCV) , 2020. 2 [2] Jonathan T Barron, Ben Mildenhall, Matthew Tancik, Peter Hedman, Ricardo Martin-Brualla, and Pratul P Srinivasan. Mip-nerf: A multiscale representation for anti-aliasing neural radiance fields. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 2021. 2 [3] Jonathan T Barron, Ben Mildenhall, Dor Verbin, Pratul P Srinivasan, and Peter Hedman. Mip-nerf 360: Unbounded anti-aliased neural radiance fields. In Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2022. [4] Jonathan T Barron, Ben Mildenhall, Dor Verbin, Pratul P Srinivasan, and Peter Hedman. Zip-nerf: Anti-aliased grid-based neural radiance fields. In Pro-ceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 2023. 2 [5] Mathilde Caron, Hugo Touvron, Ishan Misra, Herv´ eJ´ egou, Julien Mairal, Piotr Bojanowski, and Armand Joulin. Emerging properties in self-supervised vision transformers. In Proceedings of the IEEE/CVF inter-national conference on computer vision (ICCV) , 2021. 2[6] Jiazhong Cen, Jiemin Fang, Chen Yang, Lingxi Xie, Xiaopeng Zhang, Wei Shen, and Qi Tian. Segment any 3d gaussians. arXiv preprint arXiv:2312.00860 ,2023. 2, 3 [7] Seokhun Choi, Hyeonseop Song, Jaechul Kim, Tae-hyeong Kim, and Hoseok Do. Click-gaussian: Inter-active segmentation to any 3d gaussians. In European Conference on Computer Vision (ECCV) , 2024. 2, 3 [8] Angela Dai, Angel X Chang, Manolis Savva, Maciej Halber, Thomas Funkhouser, and Matthias Nießner. Scannet: Richly-annotated 3d reconstructions of in-door scenes. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) ,2017. 5 [9] Pedro F Felzenszwalb and Daniel P Huttenlocher. Ef-ficient graph-based image segmentation. International journal of computer vision , 2004. 3 [10] Sara Fridovich-Keil, Alex Yu, Matthew Tancik, Qin-hong Chen, Benjamin Recht, and Angjoo Kanazawa. Plenoxels: Radiance fields without neural networks. In Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition (CVPR) , 2022. 2[11] Qiankun Gao, Jiarui Meng, Chengxiang Wen, Jie Chen, and Jian Zhang. Hicom: Hierarchical coherent motion for dynamic streamable scenes with 3d gaus-sian splatting. In Advances in Neural Information Pro-cessing Systems (NeurIPS) , 2024. 2 [12] Binbin Huang, Zehao Yu, Anpei Chen, Andreas Geiger, and Shenghua Gao. 2d gaussian splatting for geometrically accurate radiance fields. In ACM SIG-GRAPH 2024 Conference Papers , 2024. 2 [13] Tianyu Huang, Bowen Dong, Yunhan Yang, Xiaoshui Huang, Rynson WH Lau, Wanli Ouyang, and Wang-meng Zuo. Clip2point: Transfer clip to point cloud classification with image-depth pre-training. In Pro-ceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 2023. 2 [14] Yuzhou Ji, He Zhu, Junshu Tang, Wuyi Liu, Zhizhong Zhang, Xin Tan, and Yuan Xie. Fastlgs: Speeding up language embedded gaussians with feature grid map-ping. In Proceedings of the AAAI Conference on Arti-ficial Intelligence , 2025. 1 [15] Yifan Jiang, Peter Hedman, Ben Mildenhall, Dejia Xu, Jonathan T Barron, Zhangyang Wang, and Tian-fan Xue. Alignerf: High-fidelity neural radiance fields via alignment-aware training. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pat-tern Recognition (CVPR) , 2023. 2 [16] Bernhard Kerbl, Georgios Kopanas, Thomas Leimk¨ uhler, and George Drettakis. 3d gaussian splatting for real-time radiance field rendering. ACM Transactions on Graphics (TOG) , 2023. 1, 2, 3 [17] Justin Kerr, Chung Min Kim, Ken Goldberg, Angjoo Kanazawa, and Matthew Tancik. Lerf: Language embedded radiance fields. In Proceedings of the IEEE/CVF International Conference on Computer Vi-sion (ICCV) , 2023. 2, 7 [18] Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alexander C Berg, Wan-Yen Lo, et al. Segment anything. In Proceedings of the IEEE/CVF International Conference on Computer Vi-sion (ICCV) , 2023. 2 [19] Kunhao Liu, Fangneng Zhan, Jiahui Zhang, Muyu Xu, Yingchen Yu, Abdulmotaleb El Saddik, Christian Theobalt, Eric Xing, and Shijian Lu. Weakly super-vised 3d open-vocabulary segmentation. In NeurIPS ,2023. 2 [20] Tao Lu, Mulin Yu, Linning Xu, Yuanbo Xiangli, Limin Wang, Dahua Lin, and Bo Dai. Scaffold-gs: Structured 3d gaussians for view-adaptive rendering. In Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition (CVPR) , 2024. 2, 3 [21] Jiarui Meng, Haijie Li, Yanmin Wu, Qiankun Gao, Shuzhou Yang, Jian Zhang, and Siwei Ma. Mirror-3dgs: Incorporating mirror reflections into 3d gaus-14086 sian splatting. In 2024 IEEE International Confer-ence on Visual Communications and Image Process-ing (VCIP) , pages 1–5. IEEE, 2024. 2 [22] Ben Mildenhall, Pratul P Srinivasan, Matthew Tancik, Jonathan T Barron, Ravi Ramamoorthi, and Ren Ng. Nerf: Representing scenes as neural radiance fields for view synthesis. Communications of the ACM , 2021. 2 [23] Thomas M¨ uller, Alex Evans, Christoph Schied, and Alexander Keller. Instant neural graphics primitives with a multiresolution hash encoding. ACM transac-tions on graphics (TOG) , 2022. 2 [24] Phuc Nguyen, Tuan Duc Ngo, Evangelos Kaloger-akis, Chuang Gan, Anh Tran, Cuong Pham, and Khoi Nguyen. Open3dis: Open-vocabulary 3d instance seg-mentation with 2d mask guidance. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024. 2 [25] Minghan Qin, Wanhua Li, Jiawei Zhou, Haoqian Wang, and Hanspeter Pfister. Langsplat: 3d language gaussian splatting. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-tion , pages 20051–20060, 2024. 1, 2, 4, 6, 7 [26] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sas-try, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural language supervision. In International conference on machine learning , 2021. 2 [27] Christian Reiser, Rick Szeliski, Dor Verbin, Pratul Srinivasan, Ben Mildenhall, Andreas Geiger, Jon Bar-ron, and Peter Hedman. Merf: Memory-efficient radi-ance fields for real-time view synthesis in unbounded scenes. ACM Transactions on Graphics (TOG) , 2023. 2[28] Darius R¨ uckert, Linus Franke, and Marc Stamminger. Adop: Approximate differentiable one-pixel point rendering. ACM TOG , 2022. 2 [29] Jin-Chuan Shi, Miao Wang, Hao-Bin Duan, and Shao-Hua Guan. Language embedded 3d gaussians for open-vocabulary scene understanding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 5333–5343, 2024. 2, 6, 7 [30] Cheng Sun, Min Sun, and Hwann-Tzong Chen. Direct voxel grid optimization: Super-fast convergence for radiance fields reconstruction. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pat-tern Recognition (CVPR) , 2022. 2 [31] Yifan Wang, Felice Serena, Shihao Wu, Cengiz ¨Oztireli, and Olga Sorkine-Hornung. Differentiable surface splatting for point-based geometry processing. 
+
+ACM Transactions on Graphics (TOG) , 2019. 2 [32] Yanmin Wu, Xinhua Cheng, Renrui Zhang, Zesen Cheng, and Jian Zhang. Eda: Explicit text-decoupling and dense alignment for 3d visual grounding. In Pro-ceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2023. 2 [33] Yanmin Wu, Qiankun Gao, Renrui Zhang, Haijie Li, and Jian Zhang. Language-assisted 3d scene under-standing. IEEE Transactions on Multimedia , 2025. 2 [34] Yanmin Wu, Jiarui Meng, Haijie Li, Chenming Wu, Yahao Shi, Xinhua Cheng, Chen Zhao, Haocheng Feng, Errui Ding, Jingdong Wang, and Jian Zhang. Opengaussian: Towards point-level 3d gaussian-based open vocabulary understanding. In Advances in Neu-ral Information Processing Systems , volume 37, pages 19114–19138, 2024. 1, 2, 3, 4, 5, 6, 7 [35] Le Xue, Ning Yu, Shu Zhang, Artemis Panagopoulou, Junnan Li, Roberto Mart´ ın-Mart´ ın, Jiajun Wu, Caim-ing Xiong, Ran Xu, Juan Carlos Niebles, et al. Ulip-2: Towards scalable multimodal pre-training for 3d un-derstanding. In Proceedings of the IEEE/CVF Con-ference on Computer Vision and Pattern Recognition (CVPR) , 2024. 2 [36] Chi Yan, Delin Qu, Dan Xu, Bin Zhao, Zhigang Wang, Dong Wang, and Xuelong Li. Gs-slam: Dense visual slam with 3d gaussian splatting. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pat-tern Recognition (CVPR) , 2024. 2 [37] Mi Yan, Jiazhao Zhang, Yan Zhu, and He Wang. Maskclustering: View consensus based mask graph clustering for open-vocabulary 3d instance segmen-tation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) ,2024. 2, 3, 5, 6 [38] Mingqiao Ye, Martin Danelljan, Fisher Yu, and Lei Ke. Gaussian grouping: Segment and edit anything in 3d scenes. In European Conference on Computer Vision (ECCV) , 2024. 1, 3, 5, 6 [39] Yingda Yin, Yuzheng Liu, Yang Xiao, Daniel Cohen-Or, Jingwei Huang, and Baoquan Chen. Sai3d: Seg-ment any instance in 3d scenes. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pat-tern Recognition (CVPR) , 2024. 2 [40] Zehao Yu, Anpei Chen, Binbin Huang, Torsten Sat-tler, and Andreas Geiger. Mip-splatting: Alias-free 3d gaussian splatting. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-tion (CVPR) , 2024. 2 [41] Shijie Zhou, Haoran Chang, Sicheng Jiang, Zhiwen Fan, Zehao Zhu, Dejia Xu, Pradyumna Chari, Suya You, Zhangyang Wang, and Achuta Kadambi. Fea-ture 3dgs: Supercharging 3d gaussian splatting to en-able distilled feature fields. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pat-tern Recognition (CVPR) , 2024. 2 14087 [42] Xiangyang Zhu, Renrui Zhang, Bowei He, Ziyu Guo, Ziyao Zeng, Zipeng Qin, Shanghang Zhang, and Peng Gao. Pointclip v2: Prompting clip and gpt for pow-erful 3d open-world learning. In Proceedings of the IEEE/CVF International Conference on Computer Vi-sion (ICCV) , 2023. 2 14088

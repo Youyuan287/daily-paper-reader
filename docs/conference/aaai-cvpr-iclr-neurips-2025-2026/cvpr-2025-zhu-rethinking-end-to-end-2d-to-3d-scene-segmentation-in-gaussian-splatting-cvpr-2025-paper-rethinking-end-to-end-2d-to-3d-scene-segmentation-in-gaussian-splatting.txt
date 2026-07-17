@@ -1,0 +1,1152 @@
+Rethinking End-to-End 2D to 3D Scene Segmentation in Gaussian Splatting
+Runsong Zhu1
+Shi Qiu1
+Zhengzhe Liu2,3
+Ka-Hei Hui1
+Qianyi Wu4
+Pheng-Ann Heng1
+Chi-Wing Fu1
+1The Chinese University of Hong Kong
+2 Lingnan University
+3 Carnegie Mellon University
+4 Monash University
+Abstract
+Lifting multi-view 2D instance segmentation to a radiance
+field has proven effective to enhance 3D understanding. Ex-
+isting works rely on direct matching for end-to-end lift-
+ing, yielding inferior results, or employ a two-stage solu-
+tion constrained by complex pre- or post-processing.
+In
+this work, we design Unified-Lift, a new end-to-end object-
+aware lifting approach that aims for high-quality 3D seg-
+mentation based on our object-aware 3D Gaussian repre-
+sentation. To start, we augment each Gaussian point with
+a Gaussian-level feature learned using a contrastive loss to
+encode instance information. Importantly, we introduce a
+learnable object-level codebook to account for individual
+objects in the scene for an explicit object-level understand-
+ing and associate the encoded object-level features with
+the Gaussian-level point features for segmentation predic-
+tions. While promising, achieving effective codebook learn-
+ing is nontrivial and a naive solution leads to degraded
+performance. Hence, we formulate the association learn-
+ing module and the noisy label filtering module for effec-
+tive and robust codebook learning. We conduct experiments
+on three benchmarks LERF-Masked, Replica, and Messy
+Rooms. Both qualitative and quantitative results manifest
+that our Unified-Lift clearly outperforms existing methods
+in terms of segmentation quality and time efficiency.
+1. Introduction
+Accurate 3D scene segmentation enhances scene under-
+standing and facilitates scene editing, benefiting many
+downstream applications in virtual reality, augmented re-
+ality, and robotics. However, accurate 3D scene segmen-
+tation is challenging to obtain, due to limited 3D dataset
+size and labor-intensive manual labeling in 3D. To bypass
+these challenges, recent studies [1, 33, 44] suggest lifting
+2D segmentations predicted by foundation models [3, 15]
+to the 3D scene modeled by a radiance field for instance-
+level understanding. Yet, 2D instance segmentations pre-
+dicted by models like SAM [15] lack consistency across
+different views, e.g., the same object may have different IDs
+when viewed from different angles, leading to conflicting
+supervision. Besides, inferior segmentations, e.g., under- or
+over-segmentation, make the lifting process challenging.
+Various strategies have been proposed to address the
+above issues. An early work Panoptic Lifting [33] trains a
+NeRF to render instance predictions in an end-to-end man-
+ner and matches the model’s 3D predictions with the ini-
+tial 2D segmentation masks to provide supervision. How-
+ever, this approach tends to produce multi-view inconsis-
+tent segmentation as it is highly sensitive to the variances
+of matching results. Subsequently, [23, 39] propose object
+association techniques as a preprocessing to prepare view-
+consistent 2D segmentation maps with improved multi-
+view consistency (see Fig. 1 (b)). However, the prepro-
+cessing stage often struggles to produce accurate results
+and the accumulated error can further degrade the perfor-
+mance. The recent state-of-the-art methods [1, 40] encode
+instance information in the feature field using contrastive
+learning and apply a clustering as a postprocessing to pro-
+duce the final segmentations (see Fig. 1 (c)). Though sig-
+nificant improvements are achieved, their performance is al-
+ways constrained by the naive clustering postprocess, which
+is hyperparameter-sensitive and also induces error accumu-
+lation. Given the above concerns, we come up with this
+question: “Can we have an end-to-end lifting framework
+for accurate 3D scene segmentation, without the need of
+pre- or post-processing?”
+In this work, we propose Unified-Lift, a new end-to-
+end object-aware lifting method for accurate 3D scene seg-
+mentation, facilitating the generation of coherent and view-
+consistent instance segmentation across different views. We
+exploit recent advancement of the radiance field, i.e., 3D
+Gaussian splatting (3D-GS) [12], as the 3D scene repre-
+sentation due to its superior efficiency and rendering qual-
+ity. Specifically, we augment each Gaussian point in 3D-
+GS with a Gaussian-level feature and learn these features
+using contrastive learning defined in individual views. In
+particular, we introduce a novel global object-level code-
+book to represent each object in the 3D scene. This code-
+This CVPR paper is the Open Access version, provided by the Computer Vision Foundation.
+Except for this watermark, it is identical to the accepted version;
+the final published version of the proceedings is available on IEEE Xplore.
+3656
+
+
+Figure 1. Comparing the pipeline of our method against previous lifting solutions.
+book is further associated with the rendered Gaussian-level
+features to predict segmentation results, enhancing object-
+level awareness during training. However, effective code-
+book learning is nontrivial. Naive training solutions can
+lead to suboptimal performance. Hence, we present effec-
+tive learning strategies to optimize the object-level code-
+book. First, we introduce a novel association learning mod-
+ule, in which we design an area-aware ID mapping al-
+gorithm to generate pseudo-labels of association with en-
+hanced multi-view consistency. Additionally, we present
+two complementary loss functions, i.e., sparsity and con-
+centration parts, to achieve more reliable object-level un-
+derstanding. Second, we design a novel noisy label filtering
+module to enhance the robustness of our method by estimat-
+ing an uncertainty map for the segmentation masks, leverag-
+ing the learned Gaussian-level features in a self-supervised
+manner. During inference, we obtain novel-view instance
+segmentation results without any pre- or post-processing,
+effectively avoiding error accumulation.
+To evaluate the effectiveness of Unified-Lift, we conduct
+experiments on the widely-used LERF-Masked [39] dataset
+and the indoor scene dataset Replica [35]. Both quantitative
+and qualitative results demonstrate that Unified-Lift outper-
+forms all the existing lifting methods by a notable margin.
+Further, we conduct additional experiments on the challeng-
+ing Messy Rooms dataset [1], where each scene contains up
+to 500 objects, demonstrating the scalability of Unified-Lift
+in handling large numbers of objects.
+Our main contributions are summarized as follows:
+• We propose a new end-to-end object-aware lifting
+method (named Unified-Lift) for accurate 3D scene seg-
+mentation by jointly learning the Gaussian-level features
+and a global object-level codebook.
+• We present a novel association learning module and a
+noisy label filtering module to facilitate effective learning
+of the object-level codebook.
+• Unified-Lift sets a new state-of-the-art performance on
+multiple datasets and demonstrate strong scalability in
+handling scenes with a large number of objects, without
+requiring pre- or post-processing.
+2. Related Work
+Radiance field: from implicit to explicit.
+Radiance field
+emerges as a promising representation for reconstructing
+3D scenes with various properties, e.g., geometries, col-
+ors, and semantics, from only 2D inputs such as RGB
+images and segmentation masks.
+Neural Radiance Field
+(NeRF) [25] models the radiance field using a neural net-
+work composed of layers of multilayer perceptrons. Since
+then, various works attempt to improve the efficiency of
+NeRF, e.g., by explicitly formulating the field using 3D
+structures such as voxels [2, 22] and hash grids [27]. Later
+on, 3D Gaussian Splatting (3D-GS) [5, 11, 12, 21, 38, 41,
+43] is introduced to model the radiance field as a set of ex-
+plicit Gaussian points. This approach allows for a splatting-
+style rendering [16], which is highly efficient and demon-
+strates great potential of real-time rendering. Given the ad-
+vantages, we employ 3D-GS as the backbone representation
+in our framework for creating consistent 3D segmentations.
+Segmentation: from 2D to 3D.
+Segmentation is a long-
+standing task in computer vision research. Recent progress
+witnesses advancements in 2D, thanks to the availability of
+large-scale datasets. Notably, various foundation models,
+such as SAM [15] and its subsequent works [18, 37], show
+great performance in numerous 2D segmentation tasks and
+demonstrate robust zero-shot segmentation capabilities.
+Beyond segmenting pixels in image level, 3D segmenta-
+tion aims to partition 3D structures, such as point clouds
+and voxels [10, 26, 34, 45], or to perform segmentation
+and 3D reconstruction simultaneously from input 2D im-
+ages [7, 28, 32]. However, due to tedious work needed in
+collecting annotated 3D data, the scale of 3D datasets (e.g.,
+1,503 scenes in ScanNet [8]) is usually at least one order
+3657
+
+
+of magnitude smaller than that of 2D datasets (e.g., 11M
+diverse images and 1.1B high-quality segmentation masks
+in SA-1B [15]). Hence, the trained models are applicable
+mostly to limited 3D object categories within the available
+dataset. To effectively construct 3D segmentation, we pro-
+pose lifting the segmentation results from 2D foundation
+models by explicitly incorporating an object-level under-
+standing of the 3D scene.
+Lifting 2D segmentation to 3D scene understanding in
+radiance field.
+Various works [1, 30, 44] propose lever-
+aging radiance fields to lift independently-inferred 2D infor-
+mation into the 3D space for 3D scene segmentation and un-
+derstanding. Some works focus on semantic segmentation,
+aiming to infer semantic information in the 3D scene, such
+as object properties and categories, where 2D segmentation
+predictions are obtained via differentiable rendering. To ac-
+complish this, most existing works tend to optimize a 3D
+radiance field, which is supervised by semantic or feature
+maps derived from 2D foundation models. For example,
+Semantic-NeRF [44] optimizes an additional semantic field
+from 2D semantic maps for novel-view semantic rendering.
+Besides, some studies [13, 19, 30, 42] distill CLIP [31] or
+DINO [29] features into a feature radiance field to facilitate
+open-vocabulary semantic segmentation.
+Unlike semantic segmentation, instance segmentation
+predicted by 2D foundation models, such as SAM [15] and
+MaskFormer [3], lack consistency across multiple views.
+An early work, Panoptic Lifting [33], formulates the radi-
+ance field as a distribution of instance IDs and employs the
+Hungarian algorithm for each 2D segmentation to obtain
+pseudo labels as the supervision signal. To improve the per-
+formance, later works [9, 23, 39] attempt to pre-process the
+2D instance segmentations (e.g., using video tracker [4] or
+heuristic Gaussian matching [23]) to simplify the task and
+obtain view-consistent labels for supervision. Recent state-
+of-the-art methods [1, 6, 9, 14, 40, 46] construct 3D consis-
+tent feature fields and supervise them using contrastive loss
+within each 2D segmentation. This avoids the need to es-
+tablish correspondences between different views. However,
+since radiance fields contain only features, inferring the fi-
+nal segmentation requires an additional clustering step, such
+as HDBSCAN [24], which can be rather sensitive to the
+choice of the hyperparameters. In this work, we propose
+a new end-to-end object-aware lifting pipeline for accurate
+3D scene segmentation, avoiding the need of pre- or post-
+processing. By formulating an object-level codebook rep-
+resentation and designing dedicated modules for effective
+codebook learning, we obtain an object-level understanding
+of the scene to greatly enhance the segmentation quality.
+3. Method
+Given a set of posed images with 2D instance segmentation
+masks {K}, our goal is to lift 2D segmentations to 3D and
+produce an accurate and consistent 3D segmentation of the
+scene, represented by the 3D Gaussian Splatting (3D-GS)
+model. In this work, we obtain the initial 2D masks using a
+zero-shot 2D segmentation model, specifically the Segment
+Anything Model (SAM [15]). Fig. 2 illustrates the overview
+of our Unified-Lift, which consists of three major compo-
+nents. (i) We augment each Gaussian point in the 3D-GS
+representation with an additional Gaussian-level feature and
+employ contrastive loss to optimize the rendered Gaussian-
+level features (Fig. 2 top; detailed in Sec. 3.1). (ii) We im-
+pose an object-level understanding on the 3D scene to en-
+hance segmentation quality by formulating an object-level
+codebook and associating the codebook with the Gaussian-
+level features through an object-Gaussians association for
+segmentation predictions (Fig. 2 bottom-left; detailed in
+Sec. 3.2). (iii) We introduce two novel modules for effec-
+tive codebook learning based on the object-Gaussians asso-
+ciation: the association learning module and the noisy label
+filtering module (Fig. 2 bottom-right: detailed in Sec. 3.3).
+3.1. Learning Gaussian-level features
+3D-GS backbone.
+The 3D Gaussian Splatting (3D-GS)
+model [12] encapsulates a 3D scene using explicit 3D
+Gaussians and utilizes differentiable rasterization for effi-
+cient rendering. Mathematically, 3D-GS aims to learn a
+set of N 3D Gaussian points G = {gi}N
+i=1, where gi =
+{pi, si, qi, oi, ci} represents the trainable parameters for
+the i-th Gaussian point. The 3D Gaussian function Gi(x)
+is defined by the center point pi, the scaling factor si, and
+the quaternion qi. Moreover, oi is the opacity value and ci
+is the color values modeled by spherical harmonics coeffi-
+cients. Following an efficient tile-based rasterization intro-
+duced in [12], the 3D Gaussian function Gi is first trans-
+formed to the 2D Gaussian function G′
+i on the image plane.
+Then, a rasterizer is designed to sort the 2D Gaussians and
+employ the α-blending to compute the color Cu for the
+query pixel u: Cu = P
+i∈N ciαi
+Qi−1
+t=1(1 −αt), αi =
+oiG′
+i(u), where N is the number of sorted 2D Gaussians
+associated with pixel u. Subsequently, all parameters in
+{gi}N
+i=1 are optimized using the photometric loss between
+the rendered colors and the observed image colors.
+Contrastive learning for Gaussian-level features.
+To
+encode the instance segmentation information of the 3D
+scene, each 3D Gaussian point gi is augmented with a
+Gaussian-level learnable feature fi ∈Rd, where d is the fea-
+ture dimension. Similar to the color information, we can ap-
+ply differentiable rasterization to efficiently render the fea-
+ture Fu for pixel u: Fu = P
+i∈N fiαi
+Qi−1
+t=1(1 −αt), αi =
+oiG′
+i(u). Following existing state-of-the-art methods [1,
+40], we employ the contrastive learning technique to op-
+timize the Gaussian-level features fi from individual views.
+Specifically, we apply the following InfoNCE loss [20] to
+supervise the rendered features:
+3658
+
+
+Figure 2. Overview of our Unified-Lift, which is built on the 3D Gaussian Splatting (3D-GS) representation (top-left). In our pipeline, we
+first augment each Gaussian point in 3D-GS with a Gaussian-level feature and utilize the contrastive loss to optimize the rendered features
+(see top; detailed in Sec. 3.1). To impose an object-level understanding of the 3D scene, we introduce an additional object-level codebook
+and establish associations between the object-level features and the Gaussian-level features (see bottom-left; detailed in Sec. 3.2). Further,
+we propose two novel modules, the association learning module and the noisy label filtering module, to robustly and accurately learn the
+codebook (see bottom-right; detailed in Sec. 3.3).
+Lcontra = −1
+|Ω|
+X
+Ωj∈Ω
+X
+u∈Ωj
+log
+exp
+ sim
+ Fu, Fj
+
+P
+Ωl∈Ωexp
+ sim
+ Fu, Fl
+,
+(1)
+where similarity kernel function sim uses the dot product
+operation here and Ωis the set of pixel samples. In specific,
+Ωj denotes the pixel samples with the same instance ID j
+according to the 2D segmentation K, Fj and Fl represent
+the mean features (centroids) for Ωj and Ωl, respectively.
+3.2. Object-level codebook representation
+While Gaussian-level features implicitly encode instance
+information within the scene, they lack explicit object-level
+understanding and require an additional clustering post-
+process to extract this information for segmentation predic-
+tion [1, 40]. Consequently, these instance predictions not
+only suffer from tedious hyperparameter tuning but also en-
+counter issues such as under- or over-segmentation due to
+the accumulated errors (see, e.g., Fig. 3). Hence, we aim
+to obtain an explicit object-level understanding of the 3D
+scene by jointly learning it with the Gaussian-level features,
+getting rid of the constraints of post-processing.
+Object-level codebook.
+As shown in Fig. 2 bottom-left,
+based on the Gaussian-level features, we introduce a learn-
+able and global object-level codebook representation to im-
+pose an object-level understanding of the 3D scene. Practi-
+cally, we represent the object-level codebook as a compact
+matrix Fobj := [F1
+obj, F2
+obj, · · · , FL
+obj]T , where Fobj ∈
+RL×d, L is the maximum object number, and d denotes the
+same feature dimension used in the Gaussian-level features.
+Figure 3. Visual comparisons. Segmentation results produced by
+our method and the Gaussian-level feature-based method [40] with
+post-processing [24]. Their result tends to overlook small objects
+and produces artifacts. In contrast, our method generates more
+accurate segmentations.
+Notably, each row in the matrix Fobj corresponds to an un-
+derlying object in the 3D scene.
+We further establish the object-Gaussians association
+formulation to connect the object-level codebook with the
+Gaussian-level features. Given a pose, we render the feature
+map F from the optimized Gaussian-level features, with
+Fu ∈Rd denoting the feature for pixel u. Particularly, we
+propose the following association equation to calculate the
+probability distribution Pu ∈RL for pixel u:
+Pu = [
+exp
+ sim
+ Fu, F1
+obj
+
+PL
+o=1 exp
+
+sim
+
+Fu, Fo
+obj
+,
+exp
+ sim
+ Fu, F2
+obj
+
+PL
+o=1 exp
+
+sim
+
+Fu, Fo
+obj
+
+, · · · ,
+exp
+ sim
+ Fu, FL
+obj
+
+PL
+o=1 exp
+
+sim
+
+Fu, Fo
+obj
+],
+(2)
+where we use the same similarity kernel function sim
+as in Eq. 1, maintaining consistency with the learning of
+Gaussian-level features.
+3659
+
+
+Figure 4. The comparison between the generated pseudo label re-
+sults by Panoptic Lifting [33] and our method. With the designed
+area-aware ID mapping, we can obtain more view-consistent seg-
+mentation as the pseudo labels to facilitate the codebook learning.
+Baseline strategy for learning the object-level codebook.
+To automatically learn the object-level codebook during
+training, a straightforward solution is to directly optimize
+the object-Gaussians association predictions. To obtain the
+pseudo-labels for this optimization, we can match the 2D
+segmentation results with the current object-Gaussians as-
+sociation results via the linear assignment algorithm [17].
+In practice, we first need to recover the mapping Π from the
+original instance IDs in the 2D segmentation to the global
+IDs {0, 1, 2, · · · , L −1} in the 3D scene. Following [33],
+the expected mapping Π⋆is defined by:
+Π⋆:= argmax
+Π
+X
+Ωj∈Ω
+X
+u∈Ωj
+Pu (Π(j))
+|Ωj|
+,
+(3)
+where Pu (Π(j)) is the Π(j)-th value in the probability
+prediction Pu. Then, we apply the cross-entropy loss as a
+sparsity term to regress the probability distribution based on
+calculated pseudo-labels:
+Lclass := −1
+|Ω|
+X
+u∈Ω
+log Pu (Π⋆(Ku)) ,
+(4)
+where the Ku is the instance ID for pixel u, given the 2D
+instance segmentation masks K.
+Inference with the object-level codebook.
+Benefiting
+from the learned explicit object-level codebook represen-
+tation, our method achieves an end-to-end segmentation in-
+ference without the need for a complicated post-processing.
+In general, to render a segmentation in novel views, we
+first (i) render the Gaussian-level features; then (ii) calcu-
+late the probability using the object-Gaussians association
+equation; and (iii) determine the segmentation ID by select-
+ing the index of the codebook that exhibits the highest sim-
+ilarity. Furthermore, the same association equation can be
+directly applied to determine the instance ID for each 3D
+Gaussian.
+3.3. Learning strategy for object-level codebook
+Although our baseline strategy for learning the codebook
+is technically feasible, it faces limitations in terms of per-
+formance and robustness. To address these challenges and
+improve codebook learning, we introduce two novel mod-
+ules: the association learning module and the noisy label
+filtering module.
+Figure 5. Visual comparison of the generated uncertainty maps
+and 2D instance segmentation masks from different views of the
+“Office3” scene in the Replica dataset [35].
+3.3.1. Association learning module
+Our association learning module aims to improve the multi-
+view consistency of pseudo-labels and provide more robust
+association constraints. To achieve this, we introduce an
+area-aware ID mapping method and a concentration part to
+ensure more comprehensive association constraints.
+Area-aware ID mapping.
+We observe that the ID map-
+ping described in Eq. 2 is sensitive to the small segments
+in specific views, thereby further causing the multi-view in-
+consistency issue, as shown in Fig. 4. To mitigate this issue
+and improve the multi-view consistency of the generated
+pseudo-labels, we propose an area-aware ID mapping func-
+tion, formulated as:
+Π⋆:= argmax
+Π
+X
+Ωj∈Ω
+X
+u∈Ωj
+Pu (Π(j)).
+(5)
+Compared to the previous formulation in Eq. 3, the key
+distinction lies in the removal of the normalization term.
+This design prioritizes the influence of large segments in
+the mapping process, resulting in more consistent mapping
+across views, as qualitatively shown in Fig. 4. More analy-
+sis is provided in Sec. 4.4 and the supplementary material.
+Concentration constraint.
+We assume that the object-
+level features assigned in the codebook should align with
+the clustered Gaussian-level features. Moreover, the clus-
+tered Gaussian-level features, optimized using a contrastive
+loss with dot product similarity, tend to exhibit similar di-
+rections. Building on this insight, we propose an additional
+concentration constraint to minimize the directional differ-
+ences between the codebook and all corresponding normal-
+ized Gaussian-level features:
+Lconcen :=
+1
+|Ω|
+X
+u∈Ω
+∥FΠ⋆(Ku)
+obj
+−Fu/∥Fu∥∥1.
+(6)
+Thus, we formulate the total association constraint loss
+as a linear combination of the sparsity component in Eq. 4
+and the concentration component in Eq. 6, providing a com-
+prehensive association constraint for the object-level code-
+book.
+3.3.2. Noisy label filtering module
+To enhance the robustness against noise in the 2D instance
+segmentation masks, we propose a filtering module that re-
+moves less accurate 2D predictions by leveraging multi-
+view consistently rendered Gaussian-level features. Specif-
+ically, we calculate the uncertainty value Wu for pixel u as
+3660
+
+
+Wu = 1 −
+exp
+ sim
+ Fu, F(Ku)
+
+P
+Ωl∈Ωexp
+ sim
+ Fu, Fl
+,
+(7)
+where F(Ku) is the mean feature (centroid) for Ω(Ku). In
+practice, we model the uncertainty by assessing whether the
+features corresponding to the current 2D instance segmen-
+tation are sufficiently discriminative. Accordingly, we can
+effectively filter out labels with high uncertainty values (i.e.,
+noisy labels) and integrate this filtering into our association
+constraints. The overall loss for our proposed learning strat-
+egy of the object-level codebook is
+L = −1
+|Ω|
+X
+u∈Ω
+1(Wu≤τ)(wclass log Pu (Π⋆(Ku))
+|
+{z
+}
+Sparsity part in Eq. 4
++
+wconcen∥FΠ⋆(Ku)
+obj
+−Fu/∥Fu∥∥1
+|
+{z
+}
+Concentration part in Eq. 6
+),
+(8)
+where wclass, wconcen are weight hyper-parameters, and
+τ = 0.8 is a pre-defined threshold for filtering noisy la-
+bels. As verified in Fig. 5, regions with high values in the
+calculated uncertainty map largely align with areas of noisy
+segmentation. More analysis can be found in Sec. 4.4.
+4. Experiments
+4.1. Experiments setting
+Implementation details.
+Our implementation is based on
+the official codebase of 3D-GS [12]. We utilize the same
+photometric loss term in [12] to optimize the associated
+3D Gaussian parameters. For the Gaussian-level features,
+we set the feature dimension to 16, following the baseline
+works such as OmniSeg3D-GS [40] and Gaussian Group-
+ing [39]. To optimize the Gaussian-level features, we apply
+the same contrastive loss used in [40]. For the object-level
+codebook, we set the maximum object number L to 256
+and use the proposed loss defined in Eq. 8 to optimize the
+object-level codebook from a random initialization. Empir-
+ically, we set wclass = 1 × 10−3 and wconcen = 1 × 10−1
+by default. All parameters are jointly optimized, with the
+number of training iterations set to 30,000 for all datasets.
+More details are provided in the supplementary material.
+Datasets.
+We conduct experiments on the widely-used
+LERF-Mask dataset [39] and the Replica dataset [35] to
+present both quantitative and qualitative comparisons. The
+LERF-Mask dataset includes three scenes, “figures”, “ra-
+men”, and “teatime”, each with six to ten object segmen-
+tation annotations. For the Replica dataset, we prepare our
+customized data and re-evaluate all comparative methods
+using this dataset since the data used in Gaussian Group-
+ing [39] is not publicly available until March 2025. Fol-
+lowing the processing in [36], we select eight scenes for ex-
+periments. Besides, we use the official Segment Anything
+Model (SAM) [15] to make predictions and obtain the initial
+Method
+Venue
+Type
+mIoU (%) mBIoU (%)
+LERF [13]
+ICCV’23
+CLIP feature
+37.2
+29.3
+LangSplat [30]
+CVPR’24
+CLIP feature
+57.6
+53.6
+Gaussian Grouping [39]
+ECCV’24 Pre-processing
+72.8
+67.6
+Gaga [23]
+Arxiv’24 Pre-processing
+74.7
+72.2
+OmniSeg3D-GS [40](†)
+CVPR’24 Post-processing
+74.7
+71.8
+Panoptic-Lifting-GS [33](*) CVPR’23
+End-to-end
+70.7
+65.8
+Unified-Lift (ours)
+-
+End-to-end
+80.9
+77.1
+Table 1.
+Results on the LERF-Mask dataset [39].
+We report
+the mIoU and mBIoU metrics following Gaussian Grouping [39].
+* indicates self-implementation, and † indicates that the results are
+reported under the best-found hyper-parameter (i.e., minimal clus-
+ter size in HDBSCAN [24]).
+Method
+Type
+mIoU (%)
+F-score (%)
+Gaussian Grouping [39]
+Pre-processing
+23.6
+30.4
+OmniSeg3D-GS [40](†)
+Post-processing
+39.1
+35.9
+Panoptic-Lifting-GS [33](*)
+End-to-end
+25.3
+32.9
+Unified-Lift (ours)
+End-to-end
+41.6
+43.9
+Table 2. Results on the Replica dataset [35]. We report the mIoU,
+and F-score metrics. * indicates self-implementation, and † in-
+dicates that the results are reported under the best-found hyper-
+parameter (i.e., minimal cluster size for HDBSCAN [24]).
+2D segmentation, empirically choosing the largest granular-
+ity that provides the object-level segmentation context.
+Metrics.
+For the LERF-Mask dataset, we adopt the eval-
+uation protocol from [39] following the existing works [23,
+39], using the mean Intersection over Union (mIoU) and the
+boundary IoU (mBIoU) metrics. For the Replica dataset, we
+first use the linear assignment algorithm to calculate the best
+matching of IoU between the segmentation predictions and
+ground-truth data; we then report both the mIoU metric and
+F-score, using an IoU threshold of 0.5 as the criterion.
+Comparisons.
+We compare our proposed method with
+three types of lifting approaches based on 3D-GS: (i) lift-
+ing methods with a preprocessing, such as Gaussian Group-
+ing [39] and Gaga [23]; (ii) the lifting method with a
+post-processing, i.e., OmniSeg3D-GS [40]; and (iii) a di-
+rect lifting baseline (i.e., “Panoptic-Lifting-GS” denoted in
+Tab. 1, Tab. 2, and Tab. 3) that is derived from Panoptic-
+Lifting [33].
+To ensure fair comparisons, we evaluate
+the OmniSeg3D-GS baseline using the HDBSCAN [24]
+algorithm to automatically generate segmentation results.
+Further, we report metrics under the best-found hyper-
+parameters, following the common practice used in [1].
+Moreover, we benchmark our method against the recent
+open-vocabulary 3D segmentation techniques, including
+LERF [13] and LangSplat [30].
+4.2. Main experiments
+LERF-Mask dataset.
+To evaluate performance on real-
+world data, we conduct the experiments using the LERF-
+Mask dataset [39]. Quantitative comparisons provided in
+3661
+
+
+Figure 6. Qualitative comparison of our Unified-Lift with previous methods. We provide visual comparisons on the LERF-Masked
+dataset [39] in (a); and on the Replica dataset [35] in (b). Moreover, we present the application results in (c). As shown in the left part of
+(c), we select the potted plants in view 1 and apply the copy & paste operations to the associated Gaussian points. The consistent editing
+results in view 2 and view 3 further demonstrate the advantages of our method. In contrast, using segmentations derived from Gaussian
+Grouping [39] leads to severe artifacts and can even adversely affect unrelated object such as the vase observed in view 3. In addition, we
+illustrate the multi-scale object selection application in the right part of (c). By clicking on the red point in view 1, we consistently select
+the sofa instance at three different granularities across multiple views.
+Backbone
+Type
+Method/ Number
+Old Room Environment (%)
+Large Corridor Environment (%)
+Mean (%)
+Training (h)
+25
+50
+100
+500
+25
+50
+100
+500
+NeRF
+End-to-end
+Panoptic Lifting [33]
+73.2
+69.9
+64.3
+51.0
+65.5
+71.0
+61.8
+49.0
+63.2
+≥20
+Post-processing
+Contrastive Lift [1]
+78.9
+75.8
+69.1
+55.0
+76.5
+75.5
+68.7
+52.5
+69.0
+≥20
+GS
+Post-processing
+OmniSeg3D-GS [40](†)
+80.1
+72.4
+61.4
+46.8
+74.9
+79.6
+63.9
+48.5
+66.0
+≈1
+End-to-end
+Panoptic-Lifting-GS [33](*)
+67.5
+65.1
+59.4
+46.1
+62.2
+65.3
+57.5
+45.5
+58.6
+≈1
+End-to-end
+Unified-Lift (ours)
+79.1
+72.2
+65.9
+53.9
+77.0
+78.9
+70.7
+54.1
+69.0
+≈1
+Table 3. Results on the Messy Rooms dataset [1]. Following [1], PQscene metric is reported on both the “old room” and “large corridor”
+environments with an increasing number of objects in the scene (25, 50, 100, 500). * indicates self-implementation, and † indicates that the
+results are reported under the best-found hyper-parameter (i.e., minimal cluster size for HDBSCAN [24]). Note that, we test the training
+time for all methods using a single NVIDIA 3090 RTX GPU.
+3662
+
+
+Method
+mIoU (%)
+F-score (%)
+Previous end-to-end baseline [33]
+25.3
+32.9
+Our baseline solution (with codebook)
+29.5
+39.2
++ concentration constraint
+36.3
+41.3
++ area-aware ID mapping
+39.2
+41.0
++ noisy label filtering (full method)
+41.6
+43.9
+Table 4. Ablation study on the Replica dataset [35].
+Tab. 1 demonstrate that our Unified-Lift outperforms all
+existing lifting methods, as well as open-vocabulary ap-
+proaches like LERF [13] and LangSplat [30]. Moreover, vi-
+sual comparisons between our Unified-Lift and other meth-
+ods are presented in Fig. 6 (a), demonstrating the effective-
+ness of our approach in achieving consistent and accurate
+3D segmentation.
+Following the process in the baseline
+work [39], we set the segmentation result to empty if the
+calculated IoU between predictions and ground truth falls
+below a predefined threshold.
+Replica dataset.
+To further validate the effectiveness of
+our Unified-Lift, we conduct experiments on the Replica
+dataset [35], which comprises eight distinct scenes. Quanti-
+tative comparisons with state-of-the-art methods, presented
+in Tab. 2, demonstrate that our Unified-Lift achieves the
+best performances across all metrics.
+Visual results, il-
+lustrated in Fig. 6 (b), further verify that our method not
+only produces more accurate segmentations for small ob-
+jects (e.g., vase and button) but also generates significantly
+fewer artifacts compared to the existing methods. Notably,
+even when using the optimal hyper-parameters in HDB-
+SCAN [24] for OmniSeg3D-GS [40], its post-processing
+clustering algorithm struggles to balance accuracy for small
+objects and smooth segmentation for larger objects.
+4.3. Scalability on varying object numbers
+To demonstrate the scalability of our Unified-Lift across
+varying object quantities, we conduct additional experi-
+ments on the widely-used Messy Rooms dataset [1], which
+covers scenes containing up to 500 distinct objects. For fair
+comparisons, we follow the same evaluation protocol used
+in the previous work [1] to calculate the metric that assesses
+the consistency of instance IDs across multiple views [33],
+denoting as PQscene in Tab. 3. Specifically, we choose the
+segment with largest area in the generated instance segmen-
+tation across different views as the background, to gener-
+ate the binary semantic segmentations for PQscene metric
+calculations.
+This approach avoids the need to optimize
+an additional semantic feature in our method, as well as
+in all 3D-GS-based baselines.
+We compare our method
+with the 3D-GS-based baselines (i.e., OmniSeg3D-GS and
+Panoptic-Lifting-GS) and the NeRF-based baselines (i.e.,
+Panoptic Lifting [33] and Contrastive Lift [1]) for a com-
+prehensive evaluation. As shown in Tab. 3, the quantita-
+tive results demonstrate that our method achieves improved
+performance compared to 3D-GS-based baselines, partic-
+ularly in scenes with a large number of objects. Moreover,
+our method achieves results comparable to the current state-
+of-the-art NeRF-based method [1], while requiring signifi-
+cantly less training time.
+4.4. Ablation study
+We conduct a detailed ablation study to validate the effec-
+tiveness of each component in our proposed method. Quan-
+titative results presented in Tab. 4 show that our new end-
+to-end lifting method, combined with a baseline codebook
+learning solution, achieves improved performance com-
+pared to the previous end-to-end baseline (i.e., Panoptic-
+Lifting-GS [33]). Moreover, each proposed learning strat-
+egy further enhances our method’s performance.
+4.5. Applications
+Our method effectively offers an object-level understanding
+of the 3D scene, which can further facilitate downstream
+applications. For example, it enables the direct selection of
+objects in the 3D domain for fundamental copy-and-paste
+operations. Benefiting from our accurate segmentation re-
+sults, the edited outputs appear more natural and exhibit
+fewer artifacts, as illustrated in Fig. 6 (c) left.
+Further-
+more, our method can be easily extended to provide multi-
+granularity understanding, by simply employing segmenta-
+tion at various granularities (e.g., three-level granularity for
+SAM). This capability enables end-to-end multi-scale ob-
+ject selections, as showcased in Fig. 6 (c) right.
+5. Conclusion
+We presented Unified-Lift, a new end-to-end object-aware
+lifting approach based on 3D-GS for constructing accurate
+and efficient 3D scene segmentations. Specifically, we in-
+troduce a novel object-level codebook to incorporate an ex-
+plicit object-level understanding of the 3D scene by learn-
+ing a representation for each object. Method-wise, we first
+augment each Gaussian point with a Gaussian-level point
+feature and adopt the contrastive loss to optimize these fea-
+tures. Then, we formulate the object-level codebook repre-
+sentation and associate it with the Gaussian-level features
+for object-aware segmentation prediction.
+To ensure ef-
+fective and robust learning for the object-level codebook,
+we further propose the association learning module and the
+noisy label filtering module. Extensive experimental results
+manifest the effectiveness of our method over the state of
+the arts, without the need of pre- or post-processing. Fur-
+ther analysis on the Messy Rooms dataset also shows its
+scalability in handling large numbers of objects.
+3663
+
+
+Acknowledgment
+This work is supported by the InnoHK Clusters of the Hong
+Kong SAR Government via the Hong Kong Centre for Lo-
+gistics Robotics; and the Research Grants Council of the
+Hong Kong Special Administrative Region, China, under
+Project CUHK 14200824.
+References
+[1] Yash Bhalgat, Iro Laina, Jo˜ao F Henriques, Andrew Zisser-
+man, and Andrea Vedaldi. Contrastive Lift: 3D object in-
+stance segmentation by slow-fast contrastive fusion. arXiv
+preprint arXiv:2306.04633, 2023. 1, 2, 3, 4, 6, 7, 8
+[2] Anpei Chen, Zexiang Xu, Andreas Geiger, Jingyi Yu, and
+Hao Su. TensoRF: Tensorial radiance fields. In European
+Conference on Computer Vision, pages 333–350. Springer,
+2022. 2
+[3] Bowen Cheng, Ishan Misra, Alexander G Schwing, Alexan-
+der Kirillov, and Rohit Girdhar.
+Masked-attention mask
+transformer for universal image segmentation. In Proceed-
+ings of the IEEE/CVF conference on computer vision and
+pattern recognition, pages 1290–1299, 2022. 1, 3
+[4] Ho Kei Cheng, Seoung Wug Oh, Brian Price, Alexan-
+der Schwing, and Joon-Young Lee.
+Tracking anything
+with decoupled video segmentation. In Proceedings of the
+IEEE/CVF International Conference on Computer Vision,
+pages 1316–1326, 2023. 3
+[5] Kai Cheng, Xiaoxiao Long, Kaizhi Yang, Yao Yao, Wei Yin,
+Yuexin Ma, Wenping Wang, and Xuejin Chen. Gaussian-
+Pro: 3D Gaussian splatting with progressive propagation. In
+Forty-first International Conference on Machine Learning,
+2024. 2
+[6] Seokhun Choi, Hyeonseop Song, Jaechul Kim, Taehyeong
+Kim, and Hoseok Do. Click-Gaussian: Interactive segmenta-
+tion to any 3D Gaussians. arXiv preprint arXiv:2407.11793,
+2024. 3
+[7] Manuel Dahnert, Ji Hou, Matthias Nießner, and Angela Dai.
+Panoptic 3D scene reconstruction from a single rgb image.
+Advances in Neural Information Processing Systems, 34:
+8282–8293, 2021. 2
+[8] Angela Dai, Angel X Chang, Manolis Savva, Maciej Hal-
+ber, Thomas Funkhouser, and Matthias Nießner. Scannet:
+Richly-annotated 3D reconstructions of indoor scenes.
+In
+Proceedings of the IEEE conference on computer vision and
+pattern recognition, pages 5828–5839, 2017. 2
+[9] Bin Dou, Tianyu Zhang, Yongjia Ma, Zhaohui Wang, and
+Zejian Yuan. CoSSegGaussians: Compact and swift scene
+segmenting 3D Gaussians with dual feature fusion. CoRR,
+2024. 3
+[10] Stefano Gasperini, Mohammad-Ali Nikouei Mahani, Al-
+varo Marcos-Ramiro, Nassir Navab, and Federico Tombari.
+Panoster: End-to-end panoptic segmentation of LiDAR point
+clouds. IEEE Robotics and Automation Letters, 6(2):3216–
+3223, 2021. 2
+[11] Binbin Huang, Zehao Yu, Anpei Chen, Andreas Geiger, and
+Shenghua Gao. 2D Gaussian splatting for geometrically ac-
+curate radiance fields. In ACM SIGGRAPH 2024 Conference
+Papers, pages 1–11, 2024. 2
+[12] Bernhard Kerbl, Georgios Kopanas, Thomas Leimk¨uhler,
+and George Drettakis. 3D Gaussian splatting for real-time
+radiance field rendering. ACM Transactions on Graphics, 42
+(4), 2023. 1, 2, 3, 6
+[13] Justin Kerr, Chung Min Kim, Ken Goldberg, Angjoo
+Kanazawa, and Matthew Tancik. LERF: Language embed-
+ded radiance fields.
+In Proceedings of the IEEE/CVF In-
+ternational Conference on Computer Vision, pages 19729–
+19739, 2023. 3, 6, 8
+[14] Chung Min Kim, Mingxuan Wu, Justin Kerr, Ken Gold-
+berg, Matthew Tancik, and Angjoo Kanazawa. GARField:
+Group anything with radiance fields.
+In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, pages 21530–21539, 2024. 3
+[15] Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao,
+Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer White-
+head, Alexander C. Berg, Wan-Yen Lo, Piotr Dollar, and
+Ross Girshick. Segment anything. In Proceedings of the
+IEEE/CVF International Conference on Computer Vision
+(ICCV), pages 4015–4026, 2023. 1, 2, 3, 6
+[16] Georgios Kopanas, Julien Philip, Thomas Leimk¨uhler, and
+George Drettakis.
+Point-based neural rendering with per-
+view optimization. In Computer Graphics Forum, pages 29–
+43. Wiley Online Library, 2021. 2
+[17] Harold W Kuhn. The Hungarian method for the assignment
+problem. Naval research logistics quarterly, 2(1-2):83–97,
+1955. 5
+[18] Feng Li, Hao Zhang, Peize Sun, Xueyan Zou, Shilong
+Liu, Jianwei Yang, Chunyuan Li, Lei Zhang, and Jianfeng
+Gao. Semantic-SAM: Segment and recognize anything at
+any granularity. arXiv preprint arXiv:2307.04767, 2023. 2
+[19] Hao Li, Roy Qin, Zhengyu Zou, Diqi He, Bohan Li,
+Bingquan Dai, Dingewn Zhang, and Junwei Han. LangSurf:
+Language-embedded surface Gaussians for 3D scene under-
+standing. arXiv preprint arXiv:2412.17635, 2024. 3
+[20] Junnan Li, Pan Zhou, Caiming Xiong, and Steven CH Hoi.
+Prototypical contrastive learning of unsupervised representa-
+tions. arXiv preprint arXiv:2005.04966, 2020. 3
+[21] Zhihao Liang, Qi Zhang, Wenbo Hu, Ying Feng, Lei
+Zhu, and Kui Jia.
+Analytic-Splatting:
+Anti-aliased 3D
+Gaussian splatting via analytic integration. arXiv preprint
+arXiv:2403.11056, 2024. 2
+[22] Lingjie Liu, Jiatao Gu, Kyaw Zaw Lin, Tat-Seng Chua, and
+Christian Theobalt. Neural sparse voxel fields. Advances
+in Neural Information Processing Systems, 33:15651–15663,
+2020. 2
+[23] Weijie Lyu, Xueting Li, Abhijit Kundu, Yi-Hsuan Tsai, and
+Ming-Hsuan Yang.
+Gaga: Group any Gaussians via 3D-
+aware memory bank.
+arXiv preprint arXiv:2404.07977,
+2024. 1, 3, 6
+[24] Leland McInnes, John Healy, and Steve Astels.
+hdbscan:
+Hierarchical density based clustering. J. Open Source Softw.,
+2(11):205, 2017. 3, 4, 6, 7, 8
+[25] Ben Mildenhall, Pratul P. Srinivasan, Matthew Tancik,
+Jonathan T. Barron, Ravi Ramamoorthi, and Ren Ng. NeRF:
+3664
+
+
+Representing scenes as neural radiance fields for view syn-
+thesis. Communications of the ACM, 65(1):99–106, 2021.
+2
+[26] Andres Milioto, Jens Behley, Chris McCool, and Cyrill
+Stachniss. LiDAR panoptic segmentation for autonomous
+driving.
+In 2020 IEEE/RSJ International Conference on
+Intelligent Robots and Systems (IROS), pages 8505–8512.
+IEEE, 2020. 2
+[27] Thomas M¨uller, Alex Evans, Christoph Schied, and Alexan-
+der Keller. Instant neural graphics primitives with a mul-
+tiresolution hash encoding. ACM transactions on graphics
+(TOG), 41(4):1–15, 2022. 2
+[28] Gaku Narita, Takashi Seno, Tomoya Ishikawa, and Yohsuke
+Kaji. PanopticFusion: Online volumetric semantic mapping
+at the level of stuff and things. In 2019 IEEE/RSJ Interna-
+tional Conference on Intelligent Robots and Systems (IROS),
+pages 4205–4212. IEEE, 2019. 2
+[29] Maxime Oquab, Timoth´ee Darcet, Th´eo Moutakanni, Huy
+Vo, Marc Szafraniec, Vasil Khalidov, Pierre Fernandez,
+Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, et al.
+DinoV2: Learning robust visual features without supervi-
+sion. arXiv preprint arXiv:2304.07193, 2023. 3
+[30] Minghan Qin, Wanhua Li, Jiawei Zhou, Haoqian Wang, and
+Hanspeter Pfister. LangSplat: 3D language Gaussian splat-
+ting. In Proceedings of the IEEE/CVF Conference on Com-
+puter Vision and Pattern Recognition, pages 20051–20060,
+2024. 3, 6, 8
+[31] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya
+Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry,
+Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning
+transferable visual models from natural language supervi-
+sion. In International conference on machine learning, pages
+8748–8763. PMLR, 2021. 3
+[32] Antoni Rosinol, Arjun Gupta, Marcus Abate, Jingnan Shi,
+and Luca Carlone. 3D dynamic scene graphs: Actionable
+spatial perception with places, objects, and humans. arXiv
+preprint arXiv:2002.06289, 2020. 2
+[33] Yawar Siddiqui, Lorenzo Porzi, Samuel Rota Bul`o, Nor-
+man M¨uller, Matthias Nießner, Angela Dai, and Peter
+Kontschieder. Panoptic lifting for 3D scene understanding
+with neural fields. In Proceedings of the IEEE/CVF Con-
+ference on Computer Vision and Pattern Recognition, pages
+9043–9052, 2023. 1, 3, 5, 6, 7, 8
+[34] Kshitij Sirohi, Rohit Mohan, Daniel B¨uscher, Wolfram Bur-
+gard, and Abhinav Valada. EfficientLPS: Efficient LiDAR
+panoptic segmentation. IEEE Transactions on Robotics, 38
+(3):1894–1914, 2021. 2
+[35] Julian Straub, Thomas Whelan, Lingni Ma, Yufan Chen, Erik
+Wijmans, Simon Green, Jakob J Engel, Raul Mur-Artal, Carl
+Ren, Shobhit Verma, et al. The replica dataset: A digital
+replica of indoor spaces. arXiv preprint arXiv:1906.05797,
+2019. 2, 5, 6, 7, 8
+[36] Matias Turkulainen, Xuqian Ren, Iaroslav Melekhov, Otto
+Seiskari, Esa Rahtu, and Juho Kannala. DN-Splatter: Depth
+and normal priors for gaussian splatting and meshing. arXiv
+preprint arXiv:2403.17822, 2024. 6
+[37] Yunyang Xiong, Bala Varadarajan, Lemeng Wu, Xiaoyu Xi-
+ang, Fanyi Xiao, Chenchen Zhu, Xiaoliang Dai, Dilin Wang,
+Fei Sun, Forrest Iandola, et al.
+EfficientSAM: Leveraged
+masked image pretraining for efficient segment anything. In
+Proceedings of the IEEE/CVF Conference on Computer Vi-
+sion and Pattern Recognition, pages 16111–16121, 2024. 2
+[38] Tian-Xing Xu, Wenbo Hu, Yu-Kun Lai, Ying Shan, and
+Song-Hai Zhang. Texture-GS: Disentangling the geometry
+and texture for 3D Gaussian splatting editing. arXiv preprint
+arXiv:2403.10050, 2024. 2
+[39] Mingqiao Ye, Martin Danelljan, Fisher Yu, and Lei Ke.
+Gaussian grouping: Segment and edit anything in 3D scenes.
+arXiv preprint arXiv:2312.00732, 2023. 1, 2, 3, 6, 7, 8
+[40] Haiyang Ying, Yixuan Yin, Jinzhi Zhang, Fan Wang, Tao
+Yu, Ruqi Huang, and Lu Fang. Omniseg3D: Omniversal 3D
+segmentation via hierarchical contrastive learning. In Pro-
+ceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition, pages 20612–20622, 2024. 1, 3, 4,
+6, 7, 8
+[41] Zehao Yu, Anpei Chen, Binbin Huang, Torsten Sattler, and
+Andreas Geiger.
+Mip-Splatting: Alias-free 3D Gaussian
+splatting. In Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition, pages 19447–
+19456, 2024. 2
+[42] Hao Zhang, Fang Li, and Narendra Ahuja. Open-NeRF: To-
+wards open vocabulary NeRF decomposition. In Proceed-
+ings of the IEEE/CVF Winter Conference on Applications of
+Computer Vision, pages 3456–3465, 2024. 3
+[43] Zheng Zhang, Wenbo Hu, Yixing Lao, Tong He, and
+Hengshuang Zhao.
+Pixel-GS: Density control with pixel-
+aware gradient for 3D Gaussian splatting.
+arXiv preprint
+arXiv:2403.15530, 2024. 2
+[44] Shuaifeng Zhi, Tristan Laidlow, Stefan Leutenegger, and An-
+drew J Davison. In-place scene labelling and understanding
+with implicit scene representation.
+In Proceedings of the
+IEEE/CVF International Conference on Computer Vision,
+pages 15838–15847, 2021. 1, 3
+[45] Zixiang Zhou, Yang Zhang, and Hassan Foroosh. Panoptic-
+PolarNet: Proposal-free LiDAR point cloud panoptic seg-
+mentation.
+In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition, pages 13194–
+13203, 2021. 2
+[46] Runsong Zhu, Shi Qiu, Qianyi Wu, Ka-Hei Hui, Pheng-
+Ann Heng, and Chi-Wing Fu. PCF-Lift: Panoptic lifting by
+probabilistic contrastive fusion. In European Conference on
+Computer Vision, pages 92–108. Springer, 2024. 3
+3665

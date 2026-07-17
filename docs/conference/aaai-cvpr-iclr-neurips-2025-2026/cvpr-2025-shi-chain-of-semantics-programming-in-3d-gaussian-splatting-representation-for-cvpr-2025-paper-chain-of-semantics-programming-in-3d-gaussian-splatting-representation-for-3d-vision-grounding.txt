@@ -1,0 +1,1274 @@
+Chain of Semantics Programming in 3D Gaussian Splatting Representation for
+3D Vision Grounding
+Jiaxin Shi, Mingyue Xiang, Hao Sun, Yixuan Huang, Zhi Weng*
+Inner Mongolia University
+{0221121528, 0221122840, 0223121770, 0231122654}@mail.imu.edu.cn, wzhi@imu.edu.cn
+Abstract
+3D Vision Grounding (3DVG) is a fundamental research
+area that enables agents to perceive and interact with the
+3D world. The challenge of the 3DVG task lies in under-
+standing fine-grained semantics and spatial relationships
+within both the utterance and 3D scene. To address this
+challenge, we propose a zero-shot neuro-symbolic frame-
+work that utilizes a large language model (LLM) as neuro-
+symbolic functions to ground the object within the 3D Gaus-
+sian Splatting (3DGS) representation. By utilizing 3DGS
+representation, we can dynamically render high-quality 2D
+images from various viewpoints to enrich the semantic in-
+formation. Given the complexity of spatial relationships,
+we construct a relationship graph and chain of semantics
+that decouple spatial relationships and facilitate step-by-
+step reasoning within 3DGS representation. Additionally,
+we employ a grounded-aware self-check mechanism to en-
+able the LLM to reflect on its responses and mitigate the
+effects of ambiguity in spatial reasoning. We evaluate our
+method using two publicly available datasets, Nr3D and
+Sr3D, achieving accuracies of 60.8% and 91.4%, respec-
+tively. Notably, our method surpasses current state-of-the-
+art zero-shot methods on the Nr3D dataset. In addition,
+it outperforms the recent supervised models on the Sr3D
+dataset.
+1. Introduction
+3D Vision Grounding (3DVG) has been widely applied in
+virtual reality (VR), the metaverse, and autonomous driv-
+ing [25]. As a fundamental task of understanding spatial
+relationships in 3D scenes and aligning them with human
+natural language, it has recently received significant atten-
+tion [24]. Since the representation of the 3D scene is often
+based on the point cloud, which is semantically sparse and
+subject to noise interference, the 3DVG task faces two main
+challenges: acquiring fine-grained semantics and reasoning
+about complex spatial relationships.
+Utterance: Choose the smaller 
+of the two cabinets that are 
+above the big cabinet. It has a 
+green note attached to it.
+Target ID
+3D Point Cloud
+& Cameras
+3D Gaussian Splatting 
+Representation
+3D Scene Reconstruction
+Programming
+Self-Check 
+Executor
+Interact & 
+Retrieval
+Relationship Graph
+Chain of Semantics
+Utterance Semantics Parsing
+Chain of Semantics Programming
+w. grounded-aware self-check
+Figure 1. Our proposed zero-shot framework enables interaction
+and retrieval within a 3D Gaussian Splatting representation to ob-
+tain fine-grained semantics and supports multi-step spatial reason-
+ing.
+Some prior works have explored the introduction of 2D
+information to gain extra semantics [4, 36, 39–41]. While
+these methods demonstrate strong performance, they of-
+ten rely on generating synthetic 2D images from the point
+cloud, using real 2D images, or mapping 3D information
+onto 2D space. The acquisition of real 2D images is lim-
+ited, particularly from free-viewpoint perspectives, compli-
+cating the alignment with 3D semantics referenced in utter-
+ances [13, 14, 39]. Furthermore, the quality of 2D images
+derived from point clouds is frequently low or incomplete,
+hindering the extraction of clean, fine-grained semantics in
+diverse scenes and also limiting the reasoning of spatial re-
+lationships. Additionally, recent research aims to use pre-
+trained foundation models, such as large language models
+(LLMs) [18] and vision-language models (VLMs) [21, 22],
+for understanding utterance, reasoning spatial relationships,
+and facilitating zero-shot object grounding [36, 40]. While
+these foundational models possess strong capabilities, they
+often simplify complex 3D spatial relationships into basic
+binary relationships and multiple relationships, such as the
+distance between two chairs, the bed being to the left of the
+sofa, and the table positioned between the sofa and the bed
+[15, 16]. They only focused on object-centered relation-
+ships, overlooking the connections between relationships
+and the conditionality of those relationships. For example,
+This CVPR paper is the Open Access version, provided by the Computer Vision Foundation.
+Except for this watermark, it is identical to the accepted version;
+the final published version of the proceedings is available on IEEE Xplore.
+24560
+
+
+if we want to locate the largest window on the left side of the
+room, we not only need to focus on the binary relationship
+”left,” but also on its condition of being the largest window,
+and determine the appropriate viewpoint. This oversight in
+capturing the connection and conditionality of spatial rela-
+tionships results in a significant performance gap in ground-
+ing between these zero-shot methods and the current state-
+of-the-art supervised approaches.
+To solve these two problems, we propose a dynamic
+zero-shot neuro-symbolic framework that integrates 3D and
+high-quality 2D information to grounded reasoning, as
+shown in Figure 1.
+To improve spatial relationship rea-
+soning, we propose the chain of semantics programming,
+which is guided by the connection among relationships and
+the conditionality of relationships. We first decompose the
+utterance into a relationship graph as axillary 3D informa-
+tion to extract the connection between key semantics and
+spatial relationships and construct a chain of semantics to
+split the utterance into multiple grounding steps to explic-
+itly consider the conditionality of the relationships.
+To achieve interactive dynamic reasoning between 3D
+and 2D information through a chain of semantics, we lever-
+age 3D Gaussian Splatting (3DGS) [11, 20, 35] to transform
+raw 3D scenes into dynamic, interactive representations.
+With 3DGS, we can render high-quality 2D images from ar-
+bitrary viewpoints. Our framework explores the 3DGS rep-
+resentation to infer the suitable observation viewpoint based
+on 3D information and the utterance. It then renders the
+corresponding 2D image and extracts fine-grained seman-
+tic information from it. Subsequently, utilizing the 3D and
+2D information, our framework can perform step-by-step
+dynamic reasoning by the chain of semantics programming
+and fine-grained semantics. Additionally, we incorporate a
+grounded-aware self-check mechanism during the reason-
+ing process, enabling autonomous reflection on the ground-
+ing result and error correction. If the framework detects that
+the grounding result is implausible, it will refer to the erro-
+neous reasoning results and restart the reasoning process.
+We evaluated our method using two publicly available
+3DVG datasets: Sr3D [2] attained an overall accuracy of
+91.4%, whereas Nr3D [2] achieved 60.8%. Our method out-
+performed the recent zero-shot methodologies on the Nr3D
+dataset and surpassed the performance of contemporary su-
+pervised methods on the Sr3D dataset. Notably, the exper-
+imental results indicate that utilizing 3DGS led to a 14.7%
+improvement (View Dep.) in the chain of semantics pro-
+gramming on Sr3D. This demonstrates that 3DGS can alle-
+viate ambiguities caused by viewpoint changes and that the
+fine-grained 2D semantics provided by 3DGS are benefi-
+cial. Additionally, the chain of semantics effectively parses
+the complex spatial relationships and provides suitable rea-
+soning steps, especially when combined with programming.
+Our contributions are summarized as follows:
+• We propose a chain of semantics programming method
+with the grounded-aware self-check mechanism for en-
+hanced grounded reasoning in the 3DVG task.
+• We introduce a semantic decomposition method that ex-
+tracts key semantic relationships from natural language
+utterances. This method constructs a relationship graph
+and facilitates a chain of semantics programming, en-
+abling multi-step object grounding.
+• We first use 3DGS to reconstruct the 3D representation,
+which enables interactive reasoning by integrating 3D in-
+formation with high-quality 2D rendered images corre-
+sponding to the observation viewpoints.
+• Our method achieves 91.4% grounding accuracy on Sr3D
+and 60.8% on Nr3D, surpasses prior zero-shot 3DVG
+methods, and demonstrates performance comparable to
+that of state-of-the-art supervised models.
+2. Related Work
+3D Vision Grounding.
+Most methods for 3DVG adopt
+supervised learning. A typical workflow involves pretrain-
+ing a 3D classifier, such as PointNet++ [29], followed
+by the integration of 3D spatial and linguistic features to
+identify target objects [2, 6, 9, 16, 42].
+Two key chal-
+lenges in 3DVG are obtaining fine-grained semantic infor-
+mation and reasoning about complex spatial relationships.
+Some studies address the ambiguity in spatial relationships
+by introducing viewpoint-related information [8, 13, 41].
+Despite these advancements, such methods are often lim-
+ited to the 3D modality, where the sparse and noisy point
+cloud can hinder robust scene understanding [24, 39]. To
+overcome the limitations of 3D data, some methods en-
+hance semantic representation by incorporating 2D features
+[4, 39, 41]. In addition, NS3D [16] and LARC [12] in-
+troduce neuro-symbolic frameworks that encode spatial re-
+lationships as neuro-symbolic programs to improve spa-
+tial reasoning capabilities.
+Recently, the robust reason-
+ing abilities of the LLM have garnered significant atten-
+tion, with several studies leveraging LLMs for zero-shot
+object grounding [15, 17, 30, 33, 34, 36, 40].
+For ex-
+ample, ZS3DVG [40] combines 3D information and 2D
+projections for visual programming. VLM-Grounder [36]
+employs vision-language models based on 2D images for
+reasoning and grounding the object. Our proposed neuro-
+symbolic framework is also zero-shot.
+However, unlike
+previous methods, we achieve multi-step spatial reason-
+ing by parsing the semantics of the utterance and utilizing
+3DGS representation, which enables the simultaneous use
+of viewpoint-related fine-grained 2D semantics and 3D se-
+mantic information.
+3D Gaussian Splatting.
+3D Gaussian Splatting (3DGS)
+is a radiance field technique designed for rapid 3D scene
+reconstruction [11, 20, 35]. Unlike Neural Radiance Fields
+24561
+
+
+(NeRF) [26, 28], which employs neural networks to map co-
+ordinates to colors and densities, 3DGS represents scenes
+through millions of 3D Gaussian kernels [20].
+Given a
+viewpoint’s pose matrix, 3DGS can render the correspond-
+ing 2D image, achieving faster rendering speeds than NeRF
+while maintaining image quality [11, 35]. Recently, 3DGS
+representation has been increasingly applied in 3D vision.
+For instance, GSSLAM [37] incorporates 3D Gaussians
+for scene representation in Simultaneous Localization and
+Mapping (SLAM) systems [19, 27], focusing on balancing
+efficiency and accuracy, significantly enhancing map opti-
+mization and re-rendering processes in RGB-D mapping.
+GaussianNav [23], built upon 3DGS, introduces an innova-
+tive map representation to enrich semantic information and
+texture features within scenes. Gaussian-Det [38] models
+objects continuously by treating input Gaussians as feature
+descriptors across partial surfaces for 3D object detection.
+In this work, we employ 3DGS to reconstruct 3D scenes,
+rendering high-quality 2D images from inferred viewpoints
+to capture fine-grained scene representations.
+Visual Programming with Chain of Thought.
+Visual
+Programming is designed to generate executable code based
+on visual information, serving as an explicit reasoning tech-
+nique that enables LLMs to follow a programmatic Chain of
+Thought, making the reasoning process both visible and in-
+terpretable [10, 15]. Visual Programming has already been
+applied in 3D visual reasoning. For example, NS3D [16]
+utilizes CodeX [5, 7] to generate hierarchical programs,
+while VISPROG [15] leverages in-context learning to create
+high-level modular programs for handling complex, compo-
+sitional natural language reasoning and image editing tasks.
+ViperGPT [31] directly provides LLMs with API access
+to modules, generating executable Python code for image
+grounding. In this work, we utilize a chain of semantics
+to guide code generation, facilitating multi-step spatial rea-
+soning.
+3. Methodology
+In this section, we introduce our proposed zero-shot neuro-
+symbolic framework that employs a LLM as a neuro-
+symbolic function for object grounding. We first parse the
+semantics of the utterance to extract the connections among
+relationships and the conditionality of the relationships, as
+shown in Figure 2 (a). We then reconstruct the 3D scene
+using the 3DGS representation to enable exploration in 3D
+worlds and render free-viewing 2D images, as shown in Fig-
+ure 2 (b). Finally, this framework enables exploration of the
+3DGS representation and utilizes a chain of semantics pro-
+gramming to ground the object, as shown in Figure 2 (c).
+To enhance the effectiveness and robustness of the program-
+ming and reasoning process, we propose a grounded-aware
+self-check mechanism that reflects on the reasoning results.
+3.1. Utterance Semantics Parsing
+The relationships are usually related to each other, and the
+conditional nature of the relationships needs to be taken into
+account. In order to consider these features of the relation-
+ship, we transform the utterance into a relationship graph
+and a chain of semantics.
+  \ma thca l {G}(\mat hcal {U}), \mathcal {C}(\mathcal {U}) = \text {utterance\_parser}(\mathcal {U}) 
+(1)
+where G(U) represents the relationship graph of the ut-
+terance U and C(U) denotes the chain of semantics de-
+rived from decomposing the utterance U.
+The function
+utterance parser(·) is a LLM module.
+Relationship graph for connections among multiple re-
+lationships.
+As shown in the right part of Figure 2 (a),
+we construct the relationship graph to connect multiple re-
+lationships: G(U) = (V, E).
+The set of vertices V
+=
+{note, cabinet, big cabinet}, and the set of edges E
+=
+{(note →note, green), (note →cabinet1, attached), (cab-
+inet1 →big cabinet, above), (cabinet2 →big cabinet,
+above), (cabinet2 →cabinet1, smaller)}.
+Chain of semantics for conditionality of the rela-
+tionships.
+As shown in the left part of Figure 2 (a),
+the utterance has been split into three reasoning steps:
+C(U) ={There are two cabinets above the big cabinet., One
+of the cabinets is smaller than the other., The smaller cabi-
+net has a green note attached to it.}
+3.2. Dynamic Interaction in 3DGS Representation
+3D scene reconstruction.
+To enrich the fine-grained se-
+mantics of the 3D scene, we first utilize 3D Gaussian Splat-
+ting to reconstruct the original 3D scene. For given 3D point
+cloud Opc, 2D image frame Oimg
+i
+, and the pose of each 2D
+image frame Opose
+i
+= (Ri|Ti). The reconstructed scene can
+be represented as:
+  \ m athcal {O}^{ \text {GS}} = \mathcal {GS}(\mathcal {O}^{\text {pc}}, \mathcal {O}^{\text {img}}, \mathcal {O}^{\text {pose}}) 
+(2)
+where OGS represents that the reconstructed scene, GS de-
+notes 3D Gaussian Splatting.
+Observation viewpoint inference.
+To get the correct
+viewpoint, we first filter the 3D scene information O3D, ex-
+tracting the corresponding message referred to in the utter-
+ance.
+  \
+m
+a thcal {O}^{\text {3D}}_f = \text {filter\_scene}(\mathcal {O}^{\text {3D}}, \mathcal {U}) 
+(3)
+where filter scene is a LLM-based function. This function
+aims to use LLM to remove the 3D information of objects
+unrelated to the utterance from the original scene informa-
+tion.
+We then extract all the center points pi ∈R3 of
+each object in the O3D
+f . Among it, the set of the point is
+P = {p1, p2, ..., pn}. We center each point:
+  \ mat h c
+al 
+{\hat { P }} =\ {p_i -\frac {1}{n}\Sigma ^n_{i=1}p_i|i=1,2,...,n\} 
+(4)
+24562
+
+
+Target ID
+Executor
+Self-Check 
+Interact & 
+Retrieval
+(c) Chain of Semantics Programming
+w. grounded-aware self-check
+(b) 3D Scene Reconstruction
+Camera 
+Poses
+2D Frames
+Densify & 
+Prune
+3D 
+Gaussians
+Render
+Cameras
+3D Point Cloud
+3D Gaussian Splatting Representation
+(a) Utterance Semantics Parsing
+Utterance: Choose the smaller of the two cabinets that are above the big cabinet. It has a 
+green note attached to it.
+Relationship Graph
+above
+1
+There are two 
+cabinets above the 
+big cabinet.
+smaller
+2
+One of the cabinets 
+is smaller than the 
+other.
+green note 
+3
+The smaller cabinet 
+has a green note 
+attached to it.
+Chain of Semantics
+cabinet
+cabinet
+big cabinet
+note
+green
+Programming
+Figure 2. The pipeline for grounding an object is as follows: (a), parse the semantics of the utterance into a chain of semantics and a
+relationship graph. (b), reconstruct the 3D scene using the 3DGS representation. Then, based on the given utterance and the 3D scene,
+use the LLM to explore the 3DGS representation, identify a suitable viewpoint for observation, and render the corresponding 2D image
+for additional semantic information. (c), this framework will utilize 2D and 3D information as well as utterance and its parsed relationship
+graph to generate code that is guided by the chain of semantics. The generated code will be executed and will employ a grounded-aware
+self-check mechanism to reevaluate the response and re-ground the object if necessary.
+then compute the covariance matrix Σ of the centered points
+ˆP:
+  
+\
+S i g
+ma = \frac {1}{n-1}\mathcal {\hat {P}}^T\mathcal {\hat {P}} 
+(5)
+next, perform eigen decomposition of Σ to obtain eigenval-
+ues λ1, λ2, λ3, and corresponding eigenvectors v1, v2, v3.
+pick the max eigenvector vmax = max(v1, v2, v3). the trans-
+lation vector can be represented as:
+  T _
+c =
+ \fra c { 1}{n } \Sigma ^n_{i=1}p_i + \alpha \cdot v_{\text {max}} \cdot (\text {max}(\text {range}(P))) 
+(6)
+where α is a padding ratio.
+To make sure that the rendered 2D image is clear, we
+move the T to the 3D Gaussian Splatting training trajec-
+tory T ′, where T ′ is linear interpolation for original T =
+{T1, T2, ..., Tn}.
+  
+T _ c' = \te x t 
+{min}(||T_c-T_i'||) 
+(7)
+Finally, use Look at transformation to calculate the rotation
+matrix Rc:
+  R _c = \te x
+t {
+Loo
+k\_at} (T_c', \frac {1}{n}\Sigma ^n_{i=1}p_i, up) 
+(8)
+where up is the direction of the x-axis in the world coordi-
+nate system.
+Retrieval.
+For the given O3D and U, retrieve the corre-
+sponding 2D image of viewpoint:
+  \math c al {O}^{\te xt {render}} = \text {render}(\mathcal {O}^{\text {GS}}, P_c) 
+(9)
+where render is the Gaussian Splatting render function. and
+Pc = (Rc|T ′
+c). Then, we utilize GPT-4o (Vision) to de-
+scribe the retrieved 2D image in text:
+  \ m athcal {O}^{\text {2D}} = \mathcal {L}_v(\mathcal {O}^{\text {render}}) 
+(10)
+where Lv represent GPT-4o (Vision).
+3.3. Chain of Semantics Programming
+Grounding the object needs more steps to reason the spatial
+relationship and also needs fine-grained semantics. We use
+the chain of semantics to guide the process of programming:
+  \ mathcal {L
+}_p=\
+text {programmer} \xleftarrow {\text {guide}} \mathcal {C}(\mathcal {U}) 
+(11)
+where Lp is a LLM module to generate Python code. We
+then generate Python code using the utterance U, 3D scene
+24563
+
+
+information O3D, and 2D retrieval information O2D:
+  \t e xt {c ode} &= \mathcal {L}_p(\mathcal {U}, \mathcal {O}^{\text {3D}}, \mathcal {O}^{\text {2D}}, \mathcal {G}(\mathcal {U})) \\ \text {target} &= \text {executer}(\text {code} )
+(13)
+where the executer represents the Python code executor.
+Through the chain of semantics programming, our frame-
+work can explicitly account for the conditionality of re-
+lationships and connections among multiple relationships,
+utilizing fine-grained semantics and performing step-by-
+step reasoning.
+3.4. Grounded-aware Self-Check Mechanism
+An error at any reasoning step can significantly affect the
+final reasoning outcome. Additionally, the complexity of
+multi-step reasoning increases the difficulty for LLM in
+generating correct executable code. To address this, we as-
+sess and validate the execution results by re-evaluating the
+grounding outputs.
+  \m a thcal {I}^{\text {err}} = \text {aware}(target) 
+(14)
+here, aware refers to a LLM module that returns the execu-
+tion status of the code and analyzes the underlying causes
+of any discrepancies. For instance, if the user intends to
+locate a single object but two are returned, or if the execu-
+tion yields no results (e.g., no object is located), or if syn-
+tax errors are present in the generated code, the system can
+identify such issues. This approach enables evaluation of
+the reasoning results. If invalid, the grounding process is
+re-executed:
+  co d e = \ math cal {L}_p (\mathcal {U}, \mathcal {O}^{\text {3D}}, \mathcal {O}^{\text {2D}}, \mathcal {G}(\mathcal {U}), \mathcal {I}^{\text {err}}) 
+(15)
+where Ierr represents the error from the previous execution.
+By incorporating the error message into the semantic pro-
+gramming process chain, the same error can be prevented
+in future executions.
+4. Experiments
+4.1. Datasets
+We evaluate our method on three datasets, Sr3D [2] and
+Nr3D [2], both of which are based on the ScanNetV2
+dataset, as shown in Table 1.
+Sr3D comprises 83.5K
+template-based utterances that leverage spatial relationships
+among fine-grained object classes to localize a referred ob-
+ject in a scene, and Nr3D includes 41.5K natural, free-form
+utterances collected by deploying a two-player object refer-
+ence game in 3D scenes [2]. Compared to Sr3D, Nr3D has
+higher semantic complexity, thus, we focus more on Nr3D.
+4.2. Evaluation Configuration
+We follow ReferIt3D [2] to use ground-truth object masks
+and utilize the original 3DGS [20] for 3D scene reconstruc-
+tion. Furthermore, we employ GPT-4o [18] as the core of
+Feature
+Sr3D
+Nr3D
+Language Type
+Template-based
+Natural
+Sample Size
+83.5K
+41.5K
+Human Acc
+86%
+92%
+Table 1. Comparison of Nr3D and Sr3D datasets.
+our framework to understand text and images and perform
+reasoning. This framework is generalizable and applicable
+to other 3D reconstruction methods and LLMs.
+4.3. Comparison to Prior Works
+Achieve zero-shot state-of-the-art grounding perfor-
+mance.
+We compare our method with previous works on
+the Nr3D and Sr3D datasets. Following the ReferIt3D [2]
+benchmarks, we categorize the samples into four classes:
+Easy, Hard, View-Dependent (e.g., front, left, right), and
+View-Independent (e.g., between). In Table 2, we find that
+our method outperforms the current state-of-the-art zero-
+shot methods on the Nr3D dataset and approaches the per-
+formance of the best-supervised models. As shown in Table
+3, our method surpasses the recent supervised models on
+the Sr3D dataset.
+Figure 3.
+Comparison of our zero-shot method with data-
+efficiency supervised model.
+Compared to data-efficiency models with limited data.
+Moreover, some advanced supervised methods demonstrate
+superior data efficiency, maintaining good grounding per-
+formance even with less train data. Following NS3D [16]
+and LARC [12], we also present the results of our method
+against the supervised models on the Sr3D dataset, with
+0.5%, 5% and 10% of the train data, in Table 4 as well as
+Nr3D dataset, with 5%, 15%, and 25% train data, in Table
+5. With limited train data for the supervised models, our
+zero-shot method outperforms all compared models in both
+two datasets, as shown in Figure 3.
+24564
+
+
+Supervised
+2D
+3D
+Model
+Overall
+Easy
+Hard
+View-Dep.
+View-Indep.
+✓
+✓
+SAT [39]
+56.5%
+64.9%
+48.4%
+54.4%
+57.6%
+✓
+✓
+LAR [4]
+48.9%
+58.4%
+42.3%
+47.4%
+52.1%
+✓
+✓
+MVT [8]
+59.5%
+67.4%
+52.7%
+59.1%
+60.3%
+✓
+ViL3DRel [9]
+64.4%
+70.2%
+57.4%
+62.0%
+64.5%
+✓
+3D-VisTA [42]
+64.2%
+72.1%
+56.7%
+61.5%
+65.1%
+✓
+CoT3DRef [1]
+64.4%
+70.0%
+59.2%
+61.9%
+65.7%
+✓
+✓
+ZS3DVG [40]
+39.0%
+46.5%
+31.7%
+36.8%
+40.0%
+✗
+✓
+✗
+VLM-Grounder [36]
+48.0%
+55.2%
+39.5%
+45.8%
+49.4%
+✓
+✓
+Ours
+56.3%
+64.7%
+47.8%
+44.1%
+60.7%
+✓
+✓
+Ours†
+60.8%
+68.3%
+53.3%
+50.7%
+64.5%
+Table 2. Grounding performance on Nr3D. Our method surpasses existing zero-shot methods and approaches the performance of recent
+supervised models. †employs a grounded-aware self-check mechanism.
+Supervised
+2D
+3D
+Model
+Overall
+Easy
+Hard
+View-Dep.
+View-Indep.
+✓
+✓
+SAT [39]
+57.9%
+61.2%
+50.0%
+49.2%
+58.3%
+✓
+✓
+LAR [4]
+59.4%
+63.0%
+51.2%
+50.0%
+59.1%
+✓
+✓
+MVT [8]
+64.5%
+66.9%
+58.8%
+58.4%
+64.7%
+✓
+ViL3DRel [9]
+72.8%
+74.9%
+67.9%
+63.8%
+73.2%
+✓
+3D-VisTA [42]
+76.4%
+78.8%
+71.3%
+58.9%
+77.3%
+✓
+CoT3DRef [1]
+73.6%
+73.0%
+67.2%
+61.9%
+73.7%
+✗
+✓
+✓
+Ours
+89.6%
+90.4%
+87.6%
+52.2%
+90.8%
+✓
+✓
+Ours†
+91.4%
+91.8%
+90.5%
+54.3%
+92.8%
+Table 3. Grounding performance on Sr3D. Our method surpasses recent supervised models.
+†employs a grounded-aware self-check
+mechanism.
+Train Data
+Model
+Overall
+SAT [39]
+17.2%
+0.5%
+MVT [8]
+16.1%
+NS3D [16]
+50.3%
+SAT [39]
+33.0%
+5%
+MVT [8]
+38.0%
+NS3D [16]
+59.7%
+SAT [39]
+36.2%
+10%
+MVT [8]
+49.1%
+NS3D [16]
+61.2%
+0%
+Ours
+91.4%
+Table 4. Performance comparison of our method and prior data ef-
+ficient supervised model, with 0.5%, 5%, 10% train data on Sr3D
+dataset.
+4.4. Ablation study
+In this section, we conduct an ablation study on both
+two datasets to analyze the influence of our proposed
+method, containing Chain of semantics (CoS.), program-
+ming (Prog.), 3D Gaussian Splatting (GS.), and grounded-
+aware self-check mechanism. The object grounding accu-
+racy results from the ablation study of Nr3D and Sr3D are
+shown in Table 6 and Table 7, respectively.
+Train Data
+Model
+Overall
+MVT [8]
+19.5%
+5%
+NS3D [16]
+15.7%
+LARC [12]
+24.9%
+MVT [8]
+24.2%
+15%
+NS3D [16]
+22.2%
+LARC [12]
+32.4%
+MVT [8]
+27.0%
+25%
+NS3D [16]
+23.1%
+LARC [12]
+34.8%
+0%
+Ours
+60.8%
+Table 5. Performance comparison of our method and prior data
+efficient supervised model, with 5%, 15%, 25% train data on Nr3D
+dataset.
+Influence on Chain of Semantics.
+Utilizing only the
+Chain of Semantics on the Nr3D dataset results in an im-
+provement of 2.2% compared to dialogue and 1.9% com-
+pared to programming. On the Sr3D dataset, there is a de-
+crease of 4.0% relative to dialogue; however, it shows an in-
+crease of 1.3% when compared to programming. The utter-
+ances in Sr3D are based on template-based language, mak-
+ing them easier for the LLM to understand. Therefore, us-
+ing the Chain of Semantics in Sr3D paradoxically increases
+the difficulty for the LLM in comprehending semantics. In
+24565
+
+
+Dialogue
+CoS.
+Prog.
+GS.
+Check
+Overall
+Easy
+Hard
+View-Dep.
+View-Indep.
+✓
+43.0%
+53.6%
+33.2%
+37.5%
+45.3%
+✓
+✓
+45.2%
+55.7%
+35.7%
+40.8%
+47.1%
+✓
+53.2%
+66.0%
+42.8%
+42.1%
+57.4%
+✓
+✓
+55.1%
+63.2%
+47.1%
+44.8%
+58.8%
+✓
+✓
+✓
+56.3%
+64.7%
+47.8%
+44.1%
+60.7%
+✓
+✓
+✓
+✓
+60.8%
+68.3%
+53.3%
+50.7%
+64.5%
+Table 6. Ablation study on Nr3D dataset. ”CoS.” stands for Chain of semantics, ”Prog.” for programming, ”GS.” for 3D Gaussian Splatting,
+”Check” for grounded-aware self-check mechanism.
+Dialogue
+CoS.
+Prog.
+GS.
+Check
+Overall
+Easy
+Hard
+View-Dep.
+View-Indep.
+✓
+64.3%
+67.6%
+56.8%
+50.1%
+65.0%
+✓
+✓
+60.3%
+66.4%
+45.8%
+53.1%
+60.6%
+✓
+84.8%
+86.9%
+80.0%
+37.3%
+86.5%
+✓
+✓
+86.1%
+87.4%
+83.5%
+37.5%
+87.3%
+✓
+✓
+✓
+89.6%
+90.4%
+87.6%
+52.2%
+90.8%
+✓
+✓
+✓
+✓
+91.4%
+91.8%
+90.5%
+54.3%
+92.8%
+Table 7. Ablation study on Sr3D dataset. ”CoS.” stands for Chain of semantics, ”Prog.” for programming, ”GS.” for 3D Gaussian Splatting,
+”Check” for grounded-aware self-check mechanism.
+contrast, for Nr3D, the utterances are more natural and less
+structured.
+The LLM faces greater challenges in under-
+standing such utterances, leading to a significant disparity in
+grounding accuracy between Easy and Hard samples, with
+a difference of 15.0% when all modules are enabled. How-
+ever, employing the Chain of Semantics allows for a better
+deconstruction of complex semantic information within ut-
+terances on Nr3D. When grounding objects using dialogue,
+the difference between Easy and Hard samples decreases
+from 20.47% to 20.05%, and in the programming context,
+it drops from 23.2% to 16.1%.
+In the context of object
+grounding through programming, the Chain of Semantics
+yields beneficial improvements across both datasets, partic-
+ularly on Sr3D, where the gap between Easy and Hard sam-
+ples reduces from 6.9% to 3.9%. This is attributed to the
+fact that programming emphasizes logical rigor more than
+dialogue-based object grounding. The Chain of Semantics
+aids the LLM in achieving a more profound semantic un-
+derstanding and progressive reasoning regarding spatial re-
+lationships.
+Influence on Programming.
+Programming improves ob-
+ject grounding by 10.11% on the Nr3D dataset and 20.42%
+on the Sr3D dataset, demonstrating its beneficial impact.
+However, in Sr3D, the view-dependent grounding accu-
+racy decreases by 12.8% (without Chain of Semantics) and
+15.6% (with Chain of Semantics) compared to dialogue.
+Conversely, significant improvements are observed in Easy,
+Hard, and view-independent samples.
+This may be at-
+tributed to the template-based language of the utterances
+in the Sr3D dataset, which lacks sufficient detail for view-
+dependent descriptions. The use of programming for rea-
+soning emphasizes the logical structure of spatial relation-
+ships, resulting in a lower sensitivity to the ambiguous per-
+spective relationships inherent in the utterances. This leads
+to ambiguities when the LLM attempts stepwise reasoning
+through programming. In contrast, the Nr3D dataset fea-
+tures more freely constructed utterances, resulting in less
+pronounced ambiguity due to perspectives than in Sr3D.
+Influence on 3D Gaussian Splatting.
+The use of 3DGS
+enables the model to interact with 3D scenes, allowing the
+LLM to infer fine-grained semantics from specific view-
+points. The introduction of 3DGS enhances grounding ac-
+curacy in both datasets, with improvements of 1.2% on
+Nr3D and 3.5% on Sr3D. Notably, in Sr3D, 3DGS signifi-
+cantly boosts the accuracy of view-dependent samples from
+37.5% to 52.2%, representing an increase of 14.7%. This
+underscores the importance of incorporating viewpoint-
+related fine-grained semantics.
+Influence on Grounded-Aware Self-Check Mechanism.
+This mechanism achieves improvements of 4.5% on Nr3D
+and 1.8% on Sr3D. In the context of programming, gen-
+erating erroneous code is a common occurrence. Without
+this mechanism, when errors occur during code execution,
+the only option is to reattempt reasoning, failing to learn
+from previous mistakes. This challenge is particularly pro-
+nounced in Nr3D, where semantic complexity makes gen-
+erating correct code more difficult. The introduction of this
+mechanism enhances the accuracy of the generated code
+and deepens the reasoning regarding spatial relationships
+24566
+
+
+The chair to the far left hand 
+side of the taller desk with the 
+computer monitor on it
+The blackish pillow under 
+another blue pillow
+The desk beneath the clock 
+on the right hand side of the 
+two desks grouped together
+The foremost pillow on the 
+bed of the group of pillows
+While sitting at the desk, you 
+want the left option of the two 
+books
+Figure 4. Examples of qualitative grounding result. In the scene, the green bounding box represents the ground truth, while the red one
+indicates the same-class distractor. In the utterance, green denotes the object, red indicates the relationship, purple represents color, and
+orange signifies viewpoint relevance.
+and semantic understanding.
+For Easy samples, the im-
+provement is limited to 3.6% on Nr3D and 1.4% on Sr3D;
+however, for Hard samples, the improvements are 5.5% and
+2.9%, respectively, both exceeding the enhancement rates
+observed in Easy samples.
+Ablation on LLM/VLM.
+We also evaluate our method
+using Qwen-VL and Gemini 1.5-pro on the Nr3D dataset,
+as shown in Table 8. Our method still performs well. Espe-
+cially on the easy and view-independent samples, different
+LLMs demonstrate similar performance.
+Model
+Overall
+Easy
+Hard
+View-Dep.
+View-Indep.
+Qwen-VL [3]
+54.5%
+64.00%
+44.0%
+44.1%
+58.4%
+Gemini 1.5-pro [32]
+56.1%
+65.4%
+46.6%
+39.4%
+62.5%
+GPT-4o [18]
+60.8%
+68.3%
+53.3%
+50.7%
+64.5%
+Table 8. Ablation study of LLM/VLM on Nr3D dataset.
+4.5. Qualitative results
+Grounding results.
+In Figure 4, we present some quanti-
+tative grounding results on Nr3D dataset. The first four im-
+ages show successful grounding outcomes. Notably, in the
+fourth image, the utterance encompasses multiple relation-
+ships and a specified viewpoint, demonstrating a high level
+of complexity. This indicates that our method can under-
+stand complex semantic relationships and perform intricate
+spatial reasoning. The fifth image illustrates a failure case
+where dense object grounding becomes more prone to con-
+fusion, increasing the difficulty of grounding to the correct
+object.
+3DGS reconstruction.
+In Figure 5, we visualize exam-
+ples of scenes reconstructed with 3DGS. We used only 3D
+point clouds, images, and corresponding camera parameters
+for the reconstruction, without utilizing depth information
+or 3D meshes. The scenes reconstructed with 3DGS pos-
+sess richer details compared to the meshes. Furthermore,
+3DGS enables rapid 3D reconstruction and 2D rendering,
+placing a lower burden on the devices.
+Scene0264_00
+Scene0648_00
+Scene0704_00
+Mesh
+3DGS
+Figure 5. Examples of scenes reconstructed with 3DGS: the first
+column shows the meshes from ScanNet, and the second column
+presents the reconstructions by 3DGS.
+5. Conclusion
+We present a zero-shot neuro-symbolic framework for 3D
+vision grounding, utilizing a chain of semantics program-
+ming in the 3D Gaussian Splatting representation to facil-
+itate stepwise reasoning. Our method explicitly considers
+the connections and conditionality of spatial relationships
+and interacts with the 3D Gaussian Splatting representation
+to render the corresponding 2D images from specific view-
+points and extract fine-grained semantics.
+Our approach
+surpasses previous zero-shot methods and demonstrates
+strong competitiveness when compared to current state-of-
+the-art supervised models. We show that chain of semantics
+programming enhances the understanding of complex spa-
+tial relationships, and the 3D Gaussian Splatting represen-
+tation provides fine-grained 2D semantics, overcoming the
+limitations of reasoning based solely on 3D information.
+24567
+
+
+Acknowledgments.
+This work is supported by the Na-
+tional College Student Innovation and Entrepreneurship
+Training Program (Key Project in Emerging Engineering
+Disciplines, Project No. 202410126042).
+References
+[1] Eslam Abdelrahman, Mohamed Ayman, Mahmoud Ahmed,
+Habib Slim, and Mohamed Elhoseiny. Cot3dref: Chain-of-
+thoughts data-efficient 3d visual grounding, 2024. 6
+[2] Panos Achlioptas, Ahmed Abdelreheem, Fei Xia, Mohamed
+Elhoseiny, and Leonidas Guibas. Referit3d: Neural listeners
+for fine-grained 3d object identification in real-world scenes.
+In Computer Vision–ECCV 2020: 16th European Confer-
+ence, Glasgow, UK, August 23–28, 2020, Proceedings, Part
+I 16, pages 422–440. Springer, 2020. 2, 5
+[3] Jinze Bai, Shuai Bai, Shusheng Yang, Shijie Wang, Sinan
+Tan, Peng Wang, Junyang Lin, Chang Zhou, and Jingren
+Zhou. Qwen-vl: A frontier large vision-language model with
+versatile abilities. arXiv preprint arXiv:2308.12966, 1(2):3,
+2023. 8
+[4] Eslam Mohamed Bakr, Yasmeen Alsaedy, and Mohamed El-
+hoseiny.
+Look around and refer: 2d synthetic semantics
+knowledge distillation for 3d visual grounding, 2022. 1, 2, 6
+[5] Tom B Brown.
+Language models are few-shot learners.
+arXiv preprint arXiv:2005.14165, 2020. 3
+[6] Dave Zhenyu Chen, Angel X Chang, and Matthias Nießner.
+Scanrefer: 3d object localization in rgb-d scans using natural
+language. In European conference on computer vision, pages
+202–221. Springer, 2020. 2
+[7] Mark Chen, Jerry Tworek, Heewoo Jun, Qiming Yuan, Hen-
+rique Ponde De Oliveira Pinto, Jared Kaplan, Harri Edwards,
+Yuri Burda, Nicholas Joseph, Greg Brockman, et al. Evalu-
+ating large language models trained on code. arXiv preprint
+arXiv:2107.03374, 2021. 3
+[8] Shuo Chen, Tan Yu, and Ping Li.
+Mvt: Multi-view vi-
+sion transformer for 3d object recognition. arXiv preprint
+arXiv:2110.13083, 2021. 2, 6
+[9] Shizhe Chen,
+Makarand Tapaswi,
+Pierre-Louis Guhur,
+Cordelia Schmid, and Ivan Laptev. Language conditioned
+spatial relation reasoning for 3d object grounding.
+In
+NeurIPS, 2022. 2, 6
+[10] Jaemin Cho, Abhay Zala, and Mohit Bansal.
+Visual pro-
+gramming for step-by-step text-to-image generation and
+evaluation. Advances in Neural Information Processing Sys-
+tems, 36, 2024. 3
+[11] Ben Fei, Jingyi Xu, Rui Zhang, Qingyuan Zhou, Weidong
+Yang, and Ying He. 3d gaussian splatting as new era: A
+survey. IEEE Transactions on Visualization and Computer
+Graphics, 2024. 2, 3
+[12] Chun Feng, Joy Hsu, Weiyu Liu, and Jiajun Wu. Naturally
+supervised 3d visual grounding with language-regularized
+concept learners.
+In Proceedings of the IEEE/CVF Con-
+ference on Computer Vision and Pattern Recognition, pages
+13269–13278, 2024. 2, 5, 6
+[13] Liang Geng and Jianqin Yin. Viewinfer3d: 3d visual ground-
+ing based on embodied viewpoint inference. IEEE Robotics
+and Automation Letters, 2024. 1, 2
+[14] Zoey Guo, Yiwen Tang, Ray Zhang, Dong Wang, Zhigang
+Wang, Bin Zhao, and Xuelong Li.
+Viewrefer: Grasp the
+multi-view knowledge for 3d visual grounding. In Proceed-
+ings of the IEEE/CVF International Conference on Com-
+puter Vision, pages 15372–15383, 2023. 1
+[15] Tanmay Gupta and Aniruddha Kembhavi. Visual program-
+ming: Compositional visual reasoning without training. In
+Proceedings of the IEEE/CVF Conference on Computer Vi-
+sion and Pattern Recognition, pages 14953–14962, 2023. 1,
+2, 3
+[16] Joy Hsu, Jiayuan Mao, and Jiajun Wu.
+Ns3d:
+Neuro-
+symbolic grounding of 3d objects and relations. In Proceed-
+ings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition, pages 2614–2623, 2023. 1, 2, 3, 5, 6
+[17] Wenlong Huang, Pieter Abbeel, Deepak Pathak, and Igor
+Mordatch. Language models as zero-shot planners: Extract-
+ing actionable knowledge for embodied agents. In Interna-
+tional conference on machine learning, pages 9118–9147.
+PMLR, 2022. 2
+[18] Raisa Islam and Owana Marzia Moushi.
+Gpt-4o:
+The
+cutting-edge advancement in multimodal llm.
+Authorea
+Preprints, 2024. 1, 5, 8
+[19] Iman Abaspur Kazerouni, Luke Fitzgerald, Gerard Dooly,
+and Daniel Toal. A survey of state-of-the-art on visual slam.
+Expert Systems with Applications, 205:117734, 2022. 3
+[20] Bernhard Kerbl, Georgios Kopanas, Thomas Leimk¨uhler,
+and George Drettakis.
+3d gaussian splatting for real-time
+radiance field rendering. ACM Trans. Graph., 42(4):139–1,
+2023. 2, 3, 5
+[21] Wonkyun Kim, Changin Choi, Wonseok Lee, and Won-
+jong Rhee.
+An image grid can be worth a video: Zero-
+shot video question answering using a vlm. arXiv preprint
+arXiv:2403.18406, 2024. 1
+[22] Weicheng Kuo, Yin Cui, Xiuye Gu, AJ Piergiovanni, and
+Anelia Angelova.
+F-vlm: Open-vocabulary object detec-
+tion upon frozen vision and language models. arXiv preprint
+arXiv:2209.15639, 2022. 1
+[23] Xiaohan Lei, Min Wang, Wengang Zhou, and Houqiang Li.
+Gaussnav: Gaussian splatting for visual navigation. arXiv
+preprint arXiv:2403.11625, 2024. 3
+[24] Yinjie Lei, Zixuan Wang, Feng Chen, Guoqing Wang, Peng
+Wang, and Yang Yang. Recent advances in multi-modal 3d
+scene understanding: A comprehensive survey and evalua-
+tion, 2023. 1, 2
+[25] Daizong Liu, Yang Liu, Wencan Huang, and Wei Hu.
+A survey on text-guided 3d visual grounding: Elements,
+recent advances, and future directions.
+arXiv preprint
+arXiv:2406.05785, 2024. 1
+[26] Ben Mildenhall, Pratul P Srinivasan, Matthew Tancik,
+Jonathan T Barron, Ravi Ramamoorthi, and Ren Ng. Nerf:
+Representing scenes as neural radiance fields for view syn-
+thesis. Communications of the ACM, 65(1):99–106, 2021.
+3
+[27] Raul Mur-Artal, Jose Maria Martinez Montiel, and Juan D
+Tardos. Orb-slam: a versatile and accurate monocular slam
+system. IEEE transactions on robotics, 31(5):1147–1163,
+2015. 3
+24568
+
+
+[28] Albert Pumarola, Enric Corona, Gerard Pons-Moll, and
+Francesc Moreno-Noguer.
+D-nerf: Neural radiance fields
+for dynamic scenes. In Proceedings of the IEEE/CVF Con-
+ference on Computer Vision and Pattern Recognition, pages
+10318–10327, 2021. 3
+[29] Charles Ruizhongtai Qi, Li Yi, Hao Su, and Leonidas J
+Guibas. Pointnet++: Deep hierarchical feature learning on
+point sets in a metric space. Advances in neural information
+processing systems, 30, 2017. 2
+[30] Chan Hee Song, Jiaman Wu, Clayton Washington, Brian M
+Sadler, Wei-Lun Chao, and Yu Su. Llm-planner: Few-shot
+grounded planning for embodied agents with large language
+models. In Proceedings of the IEEE/CVF International Con-
+ference on Computer Vision, pages 2998–3009, 2023. 2
+[31] D´ıdac Sur´ıs, Sachit Menon, and Carl Vondrick. Vipergpt:
+Visual inference via python execution for reasoning.
+In
+Proceedings of the IEEE/CVF International Conference on
+Computer Vision, pages 11888–11898, 2023. 3
+[32] Gemini Team, Petko Georgiev, Ving Ian Lei, Ryan Burnell,
+Libin Bai, Anmol Gulati, Garrett Tanzer, Damien Vincent,
+Zhufeng Pan, Shibo Wang, et al. Gemini 1.5: Unlocking
+multimodal understanding across millions of tokens of con-
+text. arXiv preprint arXiv:2403.05530, 2024. 8
+[33] Lei Wang, Wanyu Xu, Yihuai Lan, Zhiqiang Hu, Yunshi
+Lan, Roy Ka-Wei Lee, and Ee-Peng Lim. Plan-and-solve
+prompting: Improving zero-shot chain-of-thought reasoning
+by large language models. arXiv preprint arXiv:2305.04091,
+2023. 2
+[34] Zihao Wang, Shaofei Cai, Guanzhou Chen, Anji Liu, Xi-
+aojian Ma, and Yitao Liang.
+Describe, explain, plan
+and select: Interactive planning with large language mod-
+els enables open-world multi-task agents.
+arXiv preprint
+arXiv:2302.01560, 2023. 2
+[35] Tong Wu, Yu-Jie Yuan, Ling-Xiao Zhang, Jie Yang, Yan-
+Pei Cao, Ling-Qi Yan, and Lin Gao. Recent advances in 3d
+gaussian splatting. Computational Visual Media, 10(4):613–
+642, 2024. 2, 3
+[36] Runsen Xu, Zhiwei Huang, Tai Wang, Yilun Chen, Jiang-
+miao Pang, and Dahua Lin. Vlm-grounder: A vlm agent for
+zero-shot 3d visual grounding, 2024. 1, 2, 6
+[37] Chi Yan, Delin Qu, Dan Xu, Bin Zhao, Zhigang Wang, Dong
+Wang, and Xuelong Li. Gs-slam: Dense visual slam with 3d
+gaussian splatting. In Proceedings of the IEEE/CVF Con-
+ference on Computer Vision and Pattern Recognition, pages
+19595–19604, 2024. 3
+[38] Hongru Yan, Yu Zheng, and Yueqi Duan.
+Gaussian-det:
+Learning closed-surface gaussians for 3d object detection.
+arXiv preprint arXiv:2410.01404, 2024. 3
+[39] Zhengyuan Yang, Songyang Zhang, Liwei Wang, and Jiebo
+Luo.
+Sat:
+2d semantics assisted training for 3d visual
+grounding, 2021. 1, 2, 6
+[40] Zhihao Yuan, Jinke Ren, Chun-Mei Feng, Hengshuang
+Zhao, Shuguang Cui, and Zhen Li. Visual programming for
+zero-shot open-vocabulary 3d visual grounding, 2024. 1, 2,
+6
+[41] Yiming Zhang,
+ZeMing Gong,
+and Angel X Chang.
+Multi3drefer: Grounding text description to multiple 3d ob-
+jects. In Proceedings of the IEEE/CVF International Con-
+ference on Computer Vision, pages 15225–15236, 2023. 1,
+2
+[42] Ziyu Zhu, Xiaojian Ma, Yixin Chen, Zhidong Deng, Siyuan
+Huang, and Qing Li. 3d-vista: Pre-trained transformer for 3d
+vision and text alignment. In Proceedings of the IEEE/CVF
+International Conference on Computer Vision, pages 2911–
+2921, 2023. 2, 6
+24569

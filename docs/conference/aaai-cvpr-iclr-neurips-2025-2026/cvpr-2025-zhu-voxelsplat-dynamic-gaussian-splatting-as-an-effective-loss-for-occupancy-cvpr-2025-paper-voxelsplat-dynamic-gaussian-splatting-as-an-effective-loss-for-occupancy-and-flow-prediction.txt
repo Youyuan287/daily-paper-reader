@@ -1,0 +1,1242 @@
+VoxelSplat: Dynamic Gaussian Splatting as an Effective Loss for Occupancy and
+Flow Prediction
+Ziyue Zhu1
+Shenlong Wang2
+Jin Xie3†
+Jiang-jiang Liu4
+Jingdong Wang4
+Jian Yang1†
+1PCA Lab, VCIP, College of Computer Science, Nankai University
+2UIUC
+3School of Intelligence Science and Technology, Nanjing University, Suzhou
+4Baidu
+zhuziyue@mail.nankai.edu.cn
+csjxie@nju.edu.cn
+csjyang@nankai.edu.cn
+Abstract
+Recent advancements in camera-based occupancy pre-
+diction have focused on the simultaneous prediction of 3D
+semantics and scene flow, a task that presents significant
+challenges due to specific difficulties, e.g., occlusions and
+unbalanced dynamic environments. In this paper, we ana-
+lyze these challenges and their underlying causes. To ad-
+dress them, we propose a novel regularization framework
+called VoxelSplat. This framework leverages recent devel-
+opments in 3D Gaussian Splatting to enhance model per-
+formance in two key ways: (i) Enhanced Semantics Super-
+vision through 2D Projection: During training, our method
+decodes sparse semantic 3D Gaussians from 3D representa-
+tions and projects them onto the 2D camera view. This pro-
+vides additional supervision signals in the camera-visible
+space, allowing 2D labels to improve the learning of 3D se-
+mantics. (ii) Scene Flow Learning: Our framework uses
+the predicted scene flow to model the motion of Gaussians,
+and is thus able to learn the scene flow of moving objects
+in a self-supervised manner using the labels of adjacent
+frames. Our method can be seamlessly integrated into var-
+ious existing occupancy models, enhancing performance
+without increasing inference time. Extensive experiments on
+benchmark datasets demonstrate the effectiveness of Voxel-
+Splat in improving the accuracy of both semantic occupancy
+and scene flow estimation. The project page and codes are
+available at https://zzy816.github.io/VoxelSplat-Demo/.
+1. Introduction
+Robust and accurate perception is crucial for self-driving
+systems. Camera-centric occupancy map perception has be-
+come popular in both industry and academia [11–13, 20–
+22, 34, 36, 43, 56] due to its low-cost sensors, robustness,
+generalizability, and seamless integration with motion plan-
+ning.
+Joint semantic and flow prediction on occupancy
+† Corresponding authors: Jian Yang and Jin Xie.
+Semantic Gaussians GSt
+scene flow
+updated Gaussians GSt+1
+2D ground truth t & t + 1
+update Gaussians’ centers
+loss
+rendering
+loss
+rendering
+Figure 1. During training, our method additionally predicts 3D
+Gaussians GSt representing semantic logits of occupied regions
+in the current frame. We then obtain Gaussians GSt+1 for the
+future frame by updating their centers using the predicted scene
+flow. By rendering these Gaussians into the camera views of dif-
+ferent time stamps, both semantic and scene flow predictions can
+be supervised using the multi-frame 2D ground truths.
+maps shows great potential, as it can handle both seman-
+tic and dynamic understanding, which are key elements for
+safe driving.
+Despite advancements, camera-based occupancy percep-
+tion faces key challenges. First, large portions of the an-
+notated regions [36, 40, 43] are inaccessible to the camera
+views due to occlusion. The supervision intended to im-
+prove performance on these invisible regions may propagate
+misleading signals along the camera rays to the image fea-
+tures, potentially causing adverse effects and deteriorating
+performance rather than enhancing it.
+Second, voxelized
+representations, while advantageous for their grid structure
+and planner integration, struggle with explicit motion mod-
+eling. Voxels are suited for implicit Eulerian motion, yet
+explicit Laplacian motion is more critical for safe plan-
+ning in self-driving. Finally, most benchmarks and datasets
+This CVPR paper is the Open Access version, provided by the Computer Vision Foundation.
+Except for this watermark, it is identical to the accepted version;
+the final published version of the proceedings is available on IEEE Xplore.
+6761
+
+
+[3, 43] suffer from class and speed imbalances, especially
+for high-speed objects, limiting robustness to rare dynamic
+events and hindering safe driving progress.
+To address these challenges, we present VoxelSplat, a
+novel occupancy perception framework. At the core of our
+method is a new Gaussian splatting-based training mech-
+anism. Inspired by the recent success of Gaussian splat-
+ting in 3D scene modeling and novel view rendering, we
+incorporate dynamic Gaussians into our voxelized repre-
+sentation as an additional header, enabling our voxels to
+render semantics and motion to various viewpoints as im-
+ages, and calculate and minimize rendering losses. Thanks
+to the explicit nature of Gaussians, we can explicitly model
+motion as dynamic movement on Gaussian points, render-
+ing them onto virtual image views to receive supervision
+through differentiable splat rendering. As shown in Fig. 1,
+our method models the occupancy semantic field with 3D
+Gaussians and their motion with predicted scene flows. The
+semantic field of the next frame is predicted by transform-
+ing the Gaussians using the flows. 2D ground truths from
+adjacent frames provide supervision for both semantics and
+flows. Importantly, all additional Gaussian splat rendering
+and supervision occur only during training as extra render-
+ing headers and losses. During inference, we maintain the
+original voxelized pipeline without any additional overhead,
+while benefiting from increased accuracy and robustness.
+We evaluate VoxelSplat across various benchmarks,
+showing improvements over state-of-the-art methods in
+both semantic accuracy by 3.6% and flow estimation ac-
+curacy by 20.2%. Additionally, we demonstrate the flexi-
+bility of VoxelSplat as a training-time plugin that enhances
+performance across diverse occupancy prediction architec-
+tures. We will release the code upon acceptance, providing
+the community with an effective tool to boost the training
+of occupancy perception networks. In summary, our contri-
+butions include:
+• We propose a plug-and-play loss framework that utilizes
+dynamic Gaussian splatting to boost the learning of both
+occupancy and flow prediction.
+• Extensive experiments on benchmark datasets demon-
+strate that our proposed framework significantly improves
+the performance of both semantic and flow prediction
+across various occupancy architectures.
+2. Related Work
+2.1. Camera-based Occupancy Prediction
+Occupancy prediction [8, 30, 31, 35, 37, 39, 42, 44, 47, 54,
+58, 59] has demonstrated significant advantages in 3D scene
+understanding, making it a crucial task in autonomous driv-
+ing research [8, 12, 13, 21, 22, 32, 40, 49, 50, 53, 56]. Un-
+like traditional object detection paradigms, occupancy per-
+ception offers several benefits: it expresses dense 3D ge-
+ometry, accurately provides spatial locations for objects be-
+yond predefined categories, and describes the shapes of ir-
+regular obstacles. These advantages have led to a surge in
+research focused on occupancy prediction tasks [40, 41, 43],
+which predict the occupancy status in the region of interest
+around the ego vehicle from point clouds or images. Recent
+methods typically divide the space into voxel grids, estimat-
+ing the occupancy status and semantics of each grid. For
+example, BEVDet4D [11] directly predict the occupancy
+from bev features. SurroundOcc [46] proposed a surround-
+view 3D occupancy perception method that uses spatial 2D-
+3D attention to lift image features into 3D space, and de-
+signed a pipeline to convert point clouds to dense occupancy
+ground truth. Huang et al. [13] employ the representation
+of tri-plane to represent the occupancy field. Similarly, Vox-
+Former [20] employed an depth-based approach for camera-
+based semantic occupancy prediction. FB-OCC [22] intro-
+duced a novel forward-backward projection method to ad-
+dress the insufficient BEV feature density of forward pro-
+jection and the mismatches in 2D and 3D space caused by
+backward projection. In addition to end-to-end supervision
+of the 3D grid’s semantics, there are other supervision meth-
+ods as well. Surroundsdf [25] implicitly predicts the signed
+distance field (SDF) and semantic field for the continuous
+perception from surround images. RenderOcc [34] predict
+a neural radiance field and use 2D labels as supervision. De-
+spite these advancements, these methods are limited by the
+modeling to dynamic objects.
+2.2. 3D Gaussian Splatting
+The recent groundbreaking work [7, 17, 29, 38, 45, 48,
+52, 57] represents static scenes using Gaussians, with posi-
+tions and appearance learned via a differentiable splatting-
+based renderer. Notably, 3D Gaussian Splatting (3DGS)
+[2, 4, 17] delivers impressive real-time rendering perfor-
+mance through Gaussian split/clone operations and an ef-
+ficient splatting-based rendering technique. Furthermore,
+the recent advanced works explore the potential of Dynamic
+3D Gaussians [1, 5, 26–28, 51, 60] in modeling dynamic
+scenes by representing objects and their movements through
+time-conditioned Gaussian distributions in a 3D space. De-
+formable3DGS [51] learns temporal motion and rotation of
+each 3D Gaussian, making it ideal for dynamic tracking.
+Similarly, [28] predict temporal movements of 3DGS. Real-
+Time4DGS [6] employs 4D Gaussian representation for 3D
+dynamics but uses a 4D rotation formulation, which is less
+interpretable and lacks spatial-temporal separability com-
+pared to rotor-based representation.
+In this work, we explore the potential of dynamic Gaus-
+sians [9, 10, 15, 16, 18, 19, 23, 55] for autonomous driving
+perception by proposing a loss where driving scenes are rep-
+resented by dynamic Gaussians. We demonstrate that com-
+pared to typical BEV and NeRF representations in percep-
+6762
+
+
+tion, dynamic Gaussians better capture geometry and mo-
+tion, enhancing model performance.
+3. Method
+In this section, we first revisit the concept of 3D Gaussian
+Splatting as a preliminary (3.1). We then elaborate on the
+technical details of our framework, including our strategy
+for predicting 3D Gaussians, decomposing dynamic and
+static objects, and the forward rendering process (3.2). Fi-
+nally, we introduce how our rendering regularization losses
+(3.3) enhance the learning of both 3D semantics and scene
+flow. An overview of our framework is shown in Fig. 2.
+3.1. Preliminary: Semantic Gaussian Splatting
+3D Gaussians
+3D Gaussian Splatting (3DGS) [17] has
+demonstrated the capability to achieve real-time, state-of-
+the-art rendering quality for complex scenes. This tech-
+nique encodes a scene as a dense collection of N anisotropic
+3D Gaussian ellipsoids, where each Gaussian is fully char-
+acterized by its 3D covariance matrix Σ and its center posi-
+tion µ:
+G(x) = exp
+
+−1
+2(x −µ)T Σ−1(x −µ)
+
+.
+(1)
+Here, Σ = RScST
+c RT and Sc = diag(sx, sy, sz) ∈R3
+denotes the anisotropic scaling factors, and R ∈SO(3) is
+the rotation matrix, parameterized as a quaternion. Both S
+and R are treated as learnable parameters.
+In addition to µ, S, and R, each Gaussian is further asso-
+ciated with an opacity parameter α ∈(0, 1), which governs
+the transparency of the Gaussian. Compared with NeRF and
+dense BEV features, 3D Gaussians provide a more explicit
+representation of the 3D scene, effectively capturing object
+surfaces. Hence, this representation can be utilized for oc-
+cupancy prediction by modeling the occupied regions.
+Gaussian Splatting for Semantics.
+To render RGB im-
+ages, spherical harmonic (SH) coefficients in Rk are em-
+ployed for each Gaussian to encode view-dependent color
+information, where k is determined by the SH order. How-
+ever, in tasks such as occupancy and flow prediction, color
+information is unnecessary. Therefore, we replace the SH
+coefficients with semantic logits. The blending process is
+governed by the following equations:
+S =
+M
+X
+i=1
+siαi
+i−1
+Y
+j=1
+(1−αj), D =
+M
+X
+i=1
+diαi
+i−1
+Y
+j=1
+(1−αj), (2)
+where S represents the accumulated semantic logits, and D
+represents the depth accumulation for proper depth-aware
+rendering. In the lower right corner of Fig. 2, we render the
+semantics and depth for supervision.
+3.2. VoxelSplat Architecture
+As shown in Fig. 2, we use a backbone voxel architec-
+ture to predict voxel features, semantic logits, and scene
+flows. Weighted point sampling selects Gaussian centers,
+from which dynamic Gaussians are decoded. The Gaus-
+sians are assigned logits and flows to model semantics and
+motion. Finally, we splat the Gaussians into camera views
+for supervision.
+Backbone Voxel Architecture.
+Starting from the occu-
+pancy network architectures [11, 21, 40, 43, 44], we in-
+put multiple consecutive frames of multi-view images to
+the model. This allows the model to leverage temporal in-
+formation, providing a more detailed understanding of the
+dynamic driving scene. The model decodes a voxel feature
+V , which captures the temporal aspects of the driving en-
+vironment. In addition to decoding the voxel feature V ,
+the model also predicts 3D semantics S and scene flow F.
+The 3D semantics S involves classifying different regions
+within the scene into categories. Scene flow F represents
+the motion of objects within the scene over time, providing
+insights into the dynamics of the driving environment. Both
+the 3D semantics S and scene flow F predictions can be
+supervised using the 3D annotations [24].
+Weighted Points Sampling. After obtaining the voxel fea-
+tures V , scene flow F , and 3D semantics S, we additionally
+predict 3D Gaussians, aiming to project and supervise the
+scene flow and semantics in the camera view. Initially, us-
+ing the ray casting toolbox [24], we generate camera masks
+that indicate the visible regions of the scene. From the oc-
+cupied grids within these visible regions, we sample a set of
+voxel center points to serve as the centers of the Gaussians.
+To address the issue of class imbalance and varying
+speed distributions, we design a simple yet effective algo-
+rithm to balance the sampling process. For each data batch
+containing P semantic types, we further divide the voxels
+into Q classes based on their speed, ranging from slow to
+fast. This results in a total of PQ classes. For each class
+(p, q), which contains Np,q voxels, the probability of sam-
+pling voxels from this class is computed as:
+pp,q =
+P(Np,q)
+PP Q
+i=1 P(Np,q)
+,
+P(x) =
+1
+xt + 1,
+(3)
+where P(x) is a function that mitigates the effect of class
+size imbalance by scaling the probabilities.
+Through this process, we obtain a set of 3D coordinates
+{µn}N
+n=1. Using these points, we apply a grid sampling
+strategy to query the output from the occupancy network,
+gathering the corresponding voxel embeddings {vn}N
+n=1,
+scene flows{∆xn}N
+n=1, and semantic logits {sn}N
+n=1. Note
+that ∆x is obtained by multiplying the original predicted
+scene flow by the time interval between two frames, so it
+represents the movement vector of the object.
+6763
+
+
+multi-view images sequence
+occupancy network
+voxel embeddings
+decode
+semantics
+scene flow
+L3D
+L2D
+ground truth
+weighted sampling
+class
+speed
+dynamic 3D gaussians
+update centers: µ + ∆x
+rendering
+gather & decode
+training only
+training & inference
+dynamic semantics depth t&t + 1
+static semantics depth t
+µ ∆x s α r
+sc
+Figure 2. The overview of our framework: (1) Employing an occupancy model integrated with our flow decoder to predict occupancy and
+scene flow. (2) Sampling coordinates from occupied voxel centers using ground truth labels to extract features, semantic logits, and scene
+flow. Then, 3D semantic Gaussians are decoded. (3) Dividing the Gaussians into static and dynamic types, with dynamic ones updated by
+predicted scene flow. (4) Rendering static and dynamic Gaussians separately for 2D supervision.
+Decode Dynamic Gaussians.
+Then, we decode the
+gathered coordinates, embeddings, flow and semantics
+{(µn, sn, ∆xn, vn)}N
+n=1 into 4D gaussians. Specifically,
+we directly use the {µn}N
+n=1 and {sn}N
+n=1 to repre-
+sent the centers and semantics logits of Gaussians, while
+{∆xn}N
+n=1 to denote the movement of Gaussians’ centers
+from the current frame to the next frame. Furthermore, we
+employ a simple two layers MLP as Gaussians Decoder
+G(x) to decode the voxel embeddings {vn}N
+n=1, which
+contain the information of 3D scenes, into the shape at-
+tributes of Gaussians, including opacity α, rotation r, and
+scaling sc. Given the relatively low resolution of the voxel
+space, we add learnable positional embeddings pe to the
+embeddings {vn}N
+n=1. The equations are as follows:
+gn : (µ, ∆x, s, α, r, sc) = (µn, ∆xn, sn, G(vn + pe)).
+(4)
+In this way, we use G = {gn}N
+n=1 to denote the Gaus-
+sians.
+For better learning the scene flow of the moving
+objects, we decompose the Gaussians into static Gs =
+{gs}S
+s=1 and dynamic ones Gd = {gd}D
+d=1, according to
+the semantics of the Gaussians’ centers in the ground truth.
+With the corresponding estimated scene flow {∆xn}D
+d=1,
+we update the gaussians’ centers with µ + ∆x and predict
+the dynamic gaussians of the future frame Gdf = {gf
+d}D
+d=1.
+Splatting Rendering the Current and Future Gaussians.
+After obtaining static Gaussians Gs, and dynamic ones of
+current Gd and future frame Gdf, we apply the fast differen-
+tiable Gaussian rasterization method [17] to render the 2D
+depth maps and semantic maps.
+Using Eqn. (2), we first splat the static Gaussians Gs
+onto the 2D camera plane and render the semantic maps and
+the depth maps (Ss, Ds). Subsequently, we splat both the
+future dynamic Gaussians of current frame and the future
+frame together Gd ∪Gdf and obtain (Sd, Dd) for unsuper-
+vised scene flow learning.
+3.3. Training and inference
+To supervise our predictions, we employ virtual view ren-
+dering to boost training, a simple online strategy to generate
+2D ground truth, and a joint loss to optimize predictions.
+Virtual View Rendering.
+In addition to rendering the
+Gaussians from the current frame’s camera views, we also
+select views from adjacent frames. This strategy provides
+more multi-view cues, aiding the occupancy model in em-
+phasizing future location perception. Finally, we obtain M
+rendering views for static objects {(Ss
+k, Ds
+k)}M
+k=1 and dy-
+namic objects {(Sd
+k, Dd
+k)}M
+k=1.
+Online Label Generation. In line with the way 2D predic-
+tions are generated, we separate the ground truth voxels into
+static and dynamic ones. The dynamic ones are duplicated
+and moved according to the scene flow. With the the effi-
+cient 3DGS tools [17], 2D labels are generated by project-
+ing the static and dynamic voxels into camera views. In this
+way semantics and depth labels of static objects (ˆSs, ˆDs)
+and dynamic ones (ˆSd, ˆDd) are obtained.
+Losses of 3D predictions and rendering results. As our
+method is built upon existing methods [11, 21, 22, 24], we
+use the original occupancy loss function Locc of these meth-
+ods to supervise the semantics. For scene flow prediction,
+6764
+
+
+we apply L 1 loss and assign weights to the voxels based
+on the magnitude of their speed. Our 3D loss L3D is the
+combination of occupancy loss and scene flow loss.
+To supervise the rendering results of the 4D gaussians,
+we employ cross-entropy (CE) loss for the semantic predic-
+tion supervision and L 1 loss for the rendered depth. Thus,
+the 2D loss is defined as:
+L2D =
+X
+k=p,q
+M
+X
+m=1
+CE(Sk
+m, ˆSk
+m) + ||Dk
+m −ˆDk
+m||1
+. (5)
+Note that our 2D loss is only calculated on areas with ren-
+dered values. Finally, the total loss Ltotal is the sum of 2D
+loss and 3D loss .
+Inference. As our VoxelSplat framework is a plug-and-
+play training mechanism to boost performance, the render-
+ing process is not needed in inference. We only employ
+the voxel-based pipeline, as denoted by the upper branch
+in Fig. 2. Thus, our framework provides an effective loss
+design with no additional cost during inference.
+4. Experiments
+4.1. Settings
+Dataset and Metrics. We train and evaluate our model on
+the nuScenes dataset [3], which consists of large-scale mul-
+timodal data collected from 6 surround-view cameras, 1 Li-
+DAR sensor, and 5 radar sensors. The dataset contains 1000
+video sequences, and is divided into 700/150/150 splits for
+training, validation, and testing, respectively. The anno-
+tations for occupancy and flow ground truth are provided
+by OpenOcc [24, 36], which is used as the benchmark in
+the CVPR 2024 workshop challenge. OpenOcc partitions
+each key-frame scene in the nuScenes into H × W × D
+grids, providing 3D ground truth for semantic occupancy
+(H×W ×D) and x-y-direction scene flow (H×W ×D×2).
+Additionally, to ensure a comprehensive comparison across
+a wide range of methods, we also train our models using
+the annotations provided by Occ3D [40] and SurroundOcc
+[46].
+Following the recent work [14, 22, 24], we evaluate our
+occupancy prediction using the RayIoU and mIoU metrics.
+Additionally, we evaluate the quality of predicted scene
+flow by measuring the velocity error for a set of true pos-
+itives (TP) using a 2-meter distance threshold. The absolute
+velocity error (AVE) is calculated for 8 dynamic classes
+Implementation details. Since our method is to introduce
+flow prediction and loss functions on top of existing models,
+we conduct our experiments based on three advanced mod-
+els [11, 22, 24] for occupancy prediction. As there are no
+publicly available open-source models for occupancy and
+flow prediction, we modify the baseline by adding two lin-
+ear layers to the decoder of the occupancy models. Dur-
+ing inference, we only predict the flow belonging to the dy-
+namic object classes. The learning rate, optimization strate-
+gies, and input image size remain consistent with the origi-
+nal settings of the respective models.
+In the the process of our Weighted Points Sampling strat-
+egy, the scene flow are separated to 6 categories in Fig. 6
+according to the speed and we totally sample 100000 points
+for each scene in a batch.
+4.2. Qualitative and Quantitative Comparison
+In this section, we employ RayIoU and mIoU to evaluate
+the quality of the predicted occupancy, and mAVE to assess
+the accuracy of the predicted scene flow. Meanwhile, we
+visualize our prediction results of both occupancy and scene
+flow. The ground truth and results of other methods are also
+provided for comparison.
+Quantitative Results. In Tab. 1 and Tab. 2, our VoxelSplat
+model is built by integrating our flow decoder and rendering
+loss designs into FB-Occ [22].
+In Tab. 1, we compare the quantitative performance of
+our method with several state-of-the-art occupancy predic-
+tion models [11, 21, 22, 24, 34]. The results show that by
+adding our lightweight scene flow decoder, the occupancy
+models [11, 22] are able to predict the scene flow success-
+fully, without a significant drop in semantic prediction per-
+formance. Our VoxelSplat outperforms previous methods
+across all metrics. Compared to FB-Occ, our VoxelSplat
+achieves an improvement of 3.4 and 3.1 in occupancy pre-
+diction, measured by RayIoU and mIoU, respectively. For
+scene flow prediction, VoxelSplat provides a performance
+improvement of 0.202 in mAVE.
+In Tab. 2, we train our model using the OpenOccupancy
+annotations and present the mIoU results for detailed cat-
+egories.
+Since only semantic annotations are provided,
+our flow decoder and speed-based weighted sampling are
+not employed in this experiment. Overall, our VoxelSplat
+achieves improvements of 3.48 and 3.96 in occupancy pre-
+diction (measured by IoU and mIoU) compared to FB-Occ
+[22]. Specifically, our method demonstrates significant im-
+provements in predicting objects (e.g., bicycle, car, pedes-
+trian, and motorcycle) with small proportions, which can be
+attributed to our weighted sampling strategy.
+Qualitative Comparison. In Fig. 3, we show the qualita-
+tive results of our method alongside BEVDet-Occ [11] and
+FB-Occ [22].
+In the first row, we observe that our pre-
+dictions closely match the ground truth in complex street
+scenes. Comparing the ground truth with the different pre-
+diction results in the upper red boxes, we can see that
+our predicted street structure is more accurate than both
+BEVDet-Occ and FB-Occ. In the middle boxes, our method
+successfully predicts the two small blue regions represent-
+ing pedestrians, while FB-Occ fails to identify the pedestri-
+ans, and BEVDet-Occ mispredicts their shape. In the lower
+6765
+
+
+Methods
+Lidar Occ Flow
+RayIoU1m,2m,4m ↑
+RayIoU ↑
+mAVE ↓
+mIoU ↑
+RenderOcc [34]
+✓
+13.4
+19.6
+25.5
+19.5
+-
+24.6
+BEVFormer [21]
+✓
+26.1
+32.3
+38.0
+32.4
+-
+39.1
+BEVDet-Occ (8f) [11]
+✓
+✓
+26.0
+32.4
+38.2
+32.0
+-
+39.2
+FB-Occ (16f) [22]
+✓
+✓
+26.7
+34.1
+39.7
+33.5
+-
+39.4
+SparseOcc (8f) [24]
+✓
+29.1
+35.8
+40.3
+35.1
+-
+30.6
+BEVDet-Occ-flow (8f)
+✓
+✓
+✓
+26.6
+32.9
+38.6
+32.5
+0.545
+39.3
+FB-Occ-flow (16f)
+✓
+✓
+✓
+27.3
+34.3
+38.9
+33.5
+0.505
+39.2
+FB-Occ-flow + Ours
+✓
+✓
+✓
+30.2
+37.8
+42.7
+36.9 (+3.4)
+0.303 (+0.202)
+42.3 (+3.1)
+Table 1. The 3D occupancy prediction performance on the nuScenes validation set is evaluated. The RayIoU and mAVE results are obtained
+using the annotations from OpenOcc [24, 36], while the mIoU results are based on the Occ3D annotations [40]. BEVDet-Occ-flow and
+FB-Occ-flow represent the models with our scene flow decoder integrated into the original architectures.
+Method
+SC
+IoU
+SSC
+mIoU
+barrier
+bicycle
+bus
+car
+const. veh.
+motorcycle
+pedestrian
+traffic cone
+trailer
+truck
+drive. suf.
+other flat
+sidewalk
+terrain
+manmade
+vegetation
+BEVFormer [21]
+30.50 16.75 14.22 6.58 23.46 28.28 8.66 10.77 6.64 4.05 11.20 17.78 37.28 18.00 22.88 22.17 13.80 22.21
+TPVFormer [13]
+11.51 11.66 16.14 7.17 22.63 17.13 8.83 11.39 10.46 8.23 9.43 17.02 8.07 13.64 13.85 10.34 4.90 7.37
+OccFormer [56]
+31.39 19.03 18.65 10.41 23.92 30.29 10.31 14.19 13.59 10.13 12.49 20.77 38.78 19.79 24.19 22.21 13.48 21.35
+SurroundOcc [46]
+31.49 20.30 20.59 11.68 28.06 30.86 10.70 15.14 14.09 12.06 14.38 22.26 37.29 23.70 24.49 22.77 14.89 21.86
+GaussianFormer [14] 29.83 19.10 19.52 11.26 26.11 29.78 10.47 13.83 12.58 8.67 12.74 21.57 39.63 23.28 24.46 22.99 9.59 19.12
+FB-OCC [22]
+32.37 18.68 18.22 11.04 24.30 28.63 8.86 11.27 13.66 8.71 7.99 20.35 40.45 20.86 25.73 23.59 12.67 22.48
+FB-OCC + Ours
+35.85 22.64 22.06 14.27 27.13 31.29 14.43 17.10 15.61 12.90 14.72 24.37 44.06 26.58 28.55 27.03 16.05 26.08
+Table 2. 3D semantic occupancy prediction results on nuScenes validation set with the annotation of OpenOccuancy [43].
+boxes of the second row, two cars are marked by yellow re-
+gions. Our method accurately predicts both the location and
+shape of the cars, while the other methods fail to predict the
+car length correctly.
+In Fig. 4, we visualize the predicted and ground truth
+scene flow.
+In the leftmost scene, four cars are driving
+closely together, and our method accurately predicts the size
+and direction of the scene flows for each vehicle. In the
+third and fourth scenes, the vehicles are moving in differ-
+ent directions and are far from the ego vehicle. Despite this,
+our method still accurately predicts their forward directions,
+with only a small deviation in speed prediction. These vi-
+sual results show that our method performs effectively in
+scene flow prediction and is suitable for real-world applica-
+tions. More results are available in the supplementary.
+4.3. Ablation Study
+In this section, we validate the effectiveness of all proposed
+designs. Specifically, we evaluate: (1) the performance im-
+provement of our method on different models. (2) the su-
+periority of 3D Gaussians over traditional volume rendering
+[34], (3) the impact of dynamic and static decomposition on
+the learning of scene flow, and (4) how weight point sam-
+pling addresses the issue of class imbalance.
+Methods
+RayIoU1,2,4m ↑
+RayIoU ↑
+mAVE ↓
+BEVDet-Occ [11]
+26.0
+32.4
+38.2
+32.0
+-
++ Ours
+29.2
+36.4
+41.1
+35.6 (+3.6)
+0.314
+FB-Occ [22]
+26.7
+34.1
+39.7
+33.5
+-
++ Ours
+30.2
+37.8
+42.7
+36.9 (+3.4)
+0.303
+SparseOcc [24]
+29.1
+35.8
+40.3
+35.1
+-
++ Ours
+31.5
+38.9
+43.5
+38.0 (+2.9)
+0.301
+Table 3. Improvement on different frameworks.
+Improvement on different models. In Tab. 3, we show the
+efficacy and generality of the proposed VoxelSplat frame-
+work on three popular occupancy models: BEVDet-Occ
+[11], FB-Occ [22] and SparseOcc [24].
+By integrating our VoxelSplat into advanced models, the
+occupancy prediction performance of BEVDet-Occ [11],
+FB-Occ [22], and SparseOcc [24] improves by 3.6, 3.4, and
+2.9, respectively. The scene flows are also accurately pre-
+dicted, with mAVE values of 0.314, 0.303, and 0.301.
+6766
+
+
+BEVDet-Occ [11]
+FB-Occ [22]
+Ours
+Ground Truth
+Figure 3. The qualitative comparison of our occupancy prediction with other methods is presented. We highlight the regions where our
+method shows clear superiority using red boxes, emphasizing the areas where the performance differences are most noticeable.
+Ground Truth
+Ours
+Figure 4. We present a qualitative comparison of our occupancy prediction with the ground truth. We use a color scale to represent the
+magnitude of the flow. Red arrows are employed to indicate both the direction and magnitude of the flow.
+Comparison with Volume Rendering.
+The strategy of
+Volume Rendering [33, 34] can also predict 2D camera view
+semantics and depths for auxiliary supervision. In versions
+A and B of Tab. 4, we compare volume rendering with our
+Semantics Gaussian Splatting. The results show that vol-
+ume rendering leads to a performance improvement of 0.4,
+but a 0.024 decrease in mAVE. In contrast, our Semantics
+Gaussian Splatting achieves a significant improvement of
+1.1 in RayIoU and 0.03 in mAVE.
+Unlike volume rendering, which densely samples points
+along many camera rays, our Gaussians are primarily de-
+coded from occupied voxels. Since most sampled points
+are located in empty voxels, volume rendering may focus
+too much on empty space. In contrast, our Semantics Gaus-
+sians concentrate on learning from the occupied space. As
+a result, the 3D Gaussian Splatting strategy provides more
+benefits for the occupancy prediction task.
+Effects of Decomposition. In version C of Tab. 4, we add
+virtual camera views from future time stamps to boost train-
+ing. This leads to an improvement in RayIoU from 33.6 to
+34.1, and a reduction in mAVE from 0.515 to 0.487.
+In version E of Tab. 4, our VoxelSplat separately super-
+vises the rendering results of static and two-frame dynamic
+objects.
+The results show a significant improvement in
+scene flow prediction, with mAVE improving from 0.487 to
+0.353. This demonstrates that this strategy helps the model
+focus more on learning of dynamic objects.
+Effects of Weight Points Sampling. The weighted point
+sampling strategy is designed to address the issues of class
+imbalance and large speed variations in occupancy and flow
+prediction. As shown in Fig. 6, in OpenOcc [3, 36], the
+speeds of most voxels corresponding to dynamic objects
+are lower than 0.5 m/s, making it difficult for the model
+to capture the motion of these objects. At the same time,
+most voxels belong to static objects (e.g.vegetation, man-
+made structures, and sidewalks). The ratios of voxels corre-
+sponding to pedestrians, bicycles, and motorcycles are even
+lower than 1%, which causes the model to pay less attention
+6767
+
+
+Nerf
+Gaussian
+Multi-frames
+Decompose
+WS
+RayIoU1m,2m,4m ↑
+RayIoU ↑
+mAVE ↓
+Version
+BEVDet-Occ-flow (8f)
+26.6
+32.9
+38.6
+32.5
+.545
+A
+✓
+26.9
+33.7
+38.2
+32.9 (+0.4)
+.569 (-.024)
+B
+✓
+27.5
+34.5
+39.1
+33.6 (+1.1)
+.515 (+.030)
+C
+✓
+✓
+27.9
+35.2
+39.3
+34.1 (+1.6)
+.487 (+.068)
+D
+✓
+✓
+25.3
+32.1
+36.8
+31.4 (-1.1)
+.792 (-.247)
+E
+✓
+✓
+✓
+27.6
+35.5
+39.8
+34.3 (+1.8)
+.353 (+.192)
+F
+✓
+✓
+✓
+✓
+29.2
+36.4
+41.1
+35.6 (+3.1)
+.314 (+.231)
+Table 4. Ablation Study our method. Nerf denotes the supervision of volume rendering [33]. Multi-frames denotes using the 2D GT of
+adjust frames. Decompose denotes the separate supervison of dynamic and static objects. WS denotes our Weighted Sampling strategy.
+Figure 5. The effect of sampling function hyperparameter t on
+perception performance.
+to these important classes, despite their significant roles in
+driving decisions.
+To address these challenges, we employ the weighted
+point sampling function defined in Eqn. (3), controlled by
+the hyperparameter t. As shown in Fig. 5, we illustrate the
+influence of t on performance. When t = 0, all voxels have
+equal probabilities of being sampled. As t increases, the
+sampling probability of voxels belonging to dynamic ob-
+jects increases, leading to improved performance in both
+RayIoU and mAVE. However, when t exceeds 0.5, the per-
+formance on dynamic classes no longer improves, while the
+performance on static classes starts to degrade. Based on
+this analysis, we set t = 0.5 in Version F of Tab. 4, resulting
+in performance improvements of 3.1 and 0.231 in RayIoU
+and mAVE, respectively.
+Additionally, we explore to apply the decomposition and
+weighted sampling strategy directly to the 3D loss, without
+incorporating the 2D loss. As shown in Version E of Tab. 4,
+this approach leads to a significant performance drop. We
+hypothesize that this is due to the lack of supervisory signals
+in certain areas of the scene.
+Distribution of scene flow magnitude
+Distribution of semanics
+Figure 6. The semantic and scene flow magnitude distributions of
+OpenOcc [24, 36] are shown. The histogram depicts voxel velocity
+distribution in the dynamic object class before and after weighted
+sampling. The pie chart shows category distributions before and
+after sampling.
+5. Conclusion and Limitation
+In this work, we propose VoxelSplat, a novel Semantic
+Gaussian Splatting framework, to explore the potential of
+4D Gaussians for occupancy and flow prediction. Our fo-
+cus is on the Gaussian rendering loss, with Dynamic &
+Static Decomposition and Weighted Point Sampling de-
+signs, which enhance the model’s ability to learn occupancy
+and scene flow. VoxelSplat is a plug-and-play solution that
+improves the performance of existing occupancy models
+without increasing inference time.
+However, there is still potential for further research in
+applying Gaussians to occupancy and flow prediction. We
+highlight two limitations: (1) Despite the 2D rendering loss
+aiding self-supervised scene flow learning, our model still
+requires ground truth 3D scene flow. (2) This work focuses
+on occupancy and flow prediction but could be extended to
+other autonomous tasks, such as occupancy forecasting.
+6768
+
+
+Acknowledgement
+This
+work
+was
+supported
+by
+the
+National
+Key
+R&D
+Program
+of
+China
+No.
+2024YFC3015801, National Science Fund of China under
+Grant Nos.
+62361166670, 62276144 and U24A20330.
+References
+[1] Jeongmin Bae, Seoha Kim, Youngsik Yun, Hahyun Lee, Gun
+Bang, and Youngjung Uh. Per-gaussian embedding-based
+deformation for deformable 3d gaussian splatting.
+arXiv
+preprint arXiv:2404.03613, 2024. 2
+[2] James F Blinn. A generalization of algebraic surface draw-
+ing. ACM transactions on graphics (TOG), 1(3):235–256,
+1982. 2
+[3] Holger Caesar, Varun Bankiti, Alex H Lang, Sourabh Vora,
+Venice Erin Liong, Qiang Xu, Anush Krishnan, Yu Pan, Gi-
+ancarlo Baldan, and Oscar Beijbom.
+nuscenes: A multi-
+modal dataset for autonomous driving. In Proceedings of
+the IEEE/CVF conference on computer vision and pattern
+recognition, pages 11621–11631, 2020. 2, 5, 7
+[4] Ziyu Chen, Jiawei Yang, Jiahui Huang, Riccardo de Lutio,
+Janick Martinez Esturo, Boris Ivanovic, Or Litany, Zan Go-
+jcic, Sanja Fidler, Marco Pavone, et al. Omnire: Omni ur-
+ban scene reconstruction. arXiv preprint arXiv:2408.16760,
+2024. 2
+[5] Wen-Hsuan Chu, Lei Ke, and Katerina Fragkiadaki. Dream-
+scene4d:
+Dynamic multi-object scene generation from
+monocular videos. arXiv preprint arXiv:2405.02280, 2024.
+2
+[6] Yuanxing Duan, Fangyin Wei, Qiyu Dai, Yuhang He, Wen-
+zheng Chen, and Baoquan Chen.
+4d gaussian splatting:
+Towards efficient novel view synthesis for dynamic scenes.
+arXiv preprint arXiv:2402.03307, 2024. 2
+[7] Qiyuan Feng, Gengchen Cao, Haoxiang Chen, Tai-Jiang Mu,
+Ralph R Martin, and Shi-Min Hu. A new split algorithm
+for 3d gaussian splatting. arXiv preprint arXiv:2403.09143,
+2024. 2
+[8] Wanshui Gan, Fang Liu, Hongbin Xu, Ningkai Mo, and
+Naoto Yokoya. Gaussianocc: Fully self-supervised and effi-
+cient 3d occupancy estimation with gaussian splatting. arXiv
+preprint arXiv:2408.11447, 2024. 2
+[9] Quankai Gao, Qiangeng Xu, Zhe Cao, Ben Mildenhall, Wen-
+chao Ma, Le Chen, Danhang Tang, and Ulrich Neumann.
+Gaussianflow: Splatting gaussian dynamics for 4d content
+creation. arXiv preprint arXiv:2403.12365, 2024. 2
+[10] Zhiyang Guo, Wengang Zhou, Li Li, Min Wang, and
+Houqiang Li.
+Motion-aware 3d gaussian splatting for
+efficient dynamic scene reconstruction.
+arXiv preprint
+arXiv:2403.11447, 2024. 2
+[11] Junjie Huang, Guan Huang, Zheng Zhu, Yun Ye, and Dalong
+Du. Bevdet: High-performance multi-camera 3d object de-
+tection in bird-eye-view. arXiv preprint arXiv:2112.11790,
+2021. 1, 2, 3, 4, 5, 6, 7
+[12] Yuanhui Huang, Wenzhao Zheng, Borui Zhang, Jie Zhou,
+and Jiwen Lu. Selfocc: Self-supervised vision-based 3d oc-
+cupancy prediction. arXiv preprint arXiv:2311.12754, 2023.
+2
+[13] Yuanhui Huang, Wenzhao Zheng, Yunpeng Zhang, Jie Zhou,
+and Jiwen Lu. Tri-perspective view for vision-based 3d se-
+mantic occupancy prediction. In CVPR, pages 9223–9232,
+2023. 1, 2, 6
+[14] Yuanhui Huang, Wenzhao Zheng, Yunpeng Zhang, Jie Zhou,
+and Jiwen Lu.
+Gaussianformer: Scene as gaussians for
+vision-based 3d semantic occupancy prediction.
+arXiv
+preprint arXiv:2405.17429, 2024. 5, 6
+[15] Yi-Hua Huang, Yang-Tian Sun, Ziyi Yang, Xiaoyang Lyu,
+Yan-Pei Cao, and Xiaojuan Qi.
+Sc-gs: Sparse-controlled
+gaussian splatting for editable dynamic scenes. In Proceed-
+ings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition, pages 4220–4230, 2024. 2
+[16] Kai Katsumata, Duc Minh Vo, and Hideki Nakayama. A
+compact dynamic 3d gaussian representation for real-time
+dynamic view synthesis. In European Conference on Com-
+puter Vision, pages 394–412. Springer, 2025. 2
+[17] Bernhard Kerbl, Georgios Kopanas, Thomas Leimk¨uhler,
+and George Drettakis.
+3d gaussian splatting for real-time
+radiance field rendering. ACM TOG, 42(4):1–14, 2023. 2, 3,
+4
+[18] Isaac Labe, Noam Issachar, Itai Lang, and Sagie Benaim.
+Dgd: Dynamic 3d gaussians distillation.
+arXiv preprint
+arXiv:2405.19321, 2024. 2
+[19] Junoh Lee, Chang-Yeon Won, Hyunjun Jung, Inhwan Bae,
+and Hae-Gon Jeon. Fully explicit dynamic gaussian splat-
+ting. arXiv preprint arXiv:2410.15629, 2024. 2
+[20] Yiming Li, Zhiding Yu, Christopher Choy, Chaowei Xiao,
+Jose M Alvarez, Sanja Fidler, Chen Feng, and Anima Anand-
+kumar. Voxformer: Sparse voxel transformer for camera-
+based 3d semantic scene completion. In CVPR, pages 9087–
+9098, 2023. 1, 2
+[21] Zhiqi Li, Wenhai Wang, Hongyang Li, Enze Xie, Chong-
+hao Sima, Tong Lu, Yu Qiao, and Jifeng Dai. Bevformer:
+Learning bird’s-eye-view representation from multi-camera
+images via spatiotemporal transformers. In ECCV, pages 1–
+18. Springer, 2022. 2, 3, 4, 5, 6
+[22] Zhiqi Li, Zhiding Yu, David Austin, Mingsheng Fang, Shiyi
+Lan, Jan Kautz, and Jose M Alvarez. Fb-occ: 3d occupancy
+prediction based on forward-backward view transformation.
+arXiv preprint arXiv:2307.01492, 2023. 1, 2, 4, 5, 6, 7
+[23] Youtian Lin, Zuozhuo Dai, Siyu Zhu, and Yao Yao.
+Gaussian-flow: 4d reconstruction with dynamic 3d gaus-
+sian particle. In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition, pages 21136–
+21145, 2024. 2
+[24] Haisong Liu, Haiguang Wang, Yang Chen, Zetong Yang, Jia
+Zeng, Li Chen, and Limin Wang. Fully sparse 3d panop-
+tic occupancy prediction. arXiv preprint arXiv:2312.17118,
+2023. 3, 4, 5, 6, 8
+[25] Lizhe Liu, Bohua Wang, Hongwei Xie, Daqi Liu, Li Liu,
+Zhiqiang Tian, Kuiyuan Yang, and Bing Wang. Surroundsdf:
+Implicit 3d scene understanding based on signed distance
+field. arXiv preprint arXiv:2403.14366, 2024. 2
+[26] Qingming Liu, Yuan Liu, Jiepeng Wang, Xianqiang Lv,
+Peng Wang, Wenping Wang, and Junhui Hou. Modgs: Dy-
+namic gaussian splatting from causually-captured monocular
+videos. arXiv preprint arXiv:2406.00434, 2024. 2
+6769
+
+
+[27] Zhicheng Lu, Xiang Guo, Le Hui, Tianrui Chen, Min Yang,
+Xiao Tang, Feng Zhu, and Yuchao Dai. 3d geometry-aware
+deformable gaussian splatting for dynamic view synthesis.
+arXiv preprint arXiv:2404.06270, 2024.
+[28] Jonathon Luiten, Georgios Kopanas, Bastian Leibe, and
+Deva Ramanan.
+Dynamic 3d gaussians:
+Tracking
+by persistent dynamic view synthesis.
+arXiv preprint
+arXiv:2308.09713, 2023. 2
+[29] Xiaoyang Lyu, Yang-Tian Sun, Yi-Hua Huang, Xiuzhe Wu,
+Ziyi Yang, Yilun Chen, Jiangmiao Pang, and Xiaojuan Qi.
+3dgsr: Implicit surface reconstruction with 3d gaussian splat-
+ting. arXiv preprint arXiv:2404.00409, 2024. 2
+[30] Junyi Ma, Xieyuanli Chen, Jiawei Huang, Jingyi Xu, Zhen
+Luo, Jintao Xu, Weihao Gu, Rui Ai, and Hesheng Wang.
+Cam4docc: Benchmark for camera-only 4d occupancy fore-
+casting in autonomous driving applications. In Proceedings
+of the IEEE/CVF Conference on Computer Vision and Pat-
+tern Recognition, pages 21486–21495, 2024. 2
+[31] Qihang Ma, Xin Tan, Yanyun Qu, Lizhuang Ma, Zhizhong
+Zhang, and Yuan Xie. Cotr: Compact occupancy transformer
+for vision-based 3d occupancy prediction. In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, pages 19936–19945, 2024. 2
+[32] Ruihang Miao, Weizhou Liu, Mingrui Chen, Zheng Gong,
+Weixin Xu, Chen Hu, and Shuchang Zhou.
+Occdepth:
+A depth-aware method for 3d semantic scene completion.
+arXiv preprint arXiv:2302.13540, 2023. 2
+[33] Ben Mildenhall, Pratul P Srinivasan, Matthew Tancik,
+Jonathan T Barron, Ravi Ramamoorthi, and Ren Ng. Nerf:
+Representing scenes as neural radiance fields for view syn-
+thesis. Communications of the ACM, 65(1):99–106, 2021. 7,
+8
+[34] Mingjie Pan, Jiaming Liu, Renrui Zhang, Peixiang Huang,
+Xiaoqi Li, Li Liu, and Shanghang Zhang.
+Renderocc:
+Vision-centric 3d occupancy prediction with 2d rendering
+supervision. arXiv preprint arXiv:2309.09502, 2023. 1, 2, 5,
+6, 7
+[35] Liang Peng, Junkai Xu, Haoran Cheng, Zheng Yang, Xi-
+aopei Wu, Wei Qian, Wenxiao Wang, Boxi Wu, and Deng
+Cai. Learning occupancy for monocular 3d object detection.
+In Proceedings of the IEEE/CVF Conference on Computer
+Vision and Pattern Recognition, pages 10281–10292, 2024.
+2
+[36] Chonghao Sima, Wenwen Tong, Tai Wang, Li Chen, Silei
+Wu, Hanming Deng, Yi Gu, Lewei Lu, Ping Luo, Dahua
+Lin, and Hongyang Li. Scene as occupancy. Proceedings
+of the IEEE/CVF International Conference on Computer Vi-
+sion, 2023. 1, 5, 6, 7, 8
+[37] Rui Song, Chenwei Liang, Hu Cao, Zhiran Yan, Walter Zim-
+mer, Markus Gross, Andreas Festag, and Alois Knoll. Col-
+laborative semantic occupancy prediction with hybrid fea-
+ture fusion in connected automated vehicles. In Proceedings
+of the IEEE/CVF Conference on Computer Vision and Pat-
+tern Recognition, pages 17996–18006, 2024. 2
+[38] Jiaxiang Tang, Jiawei Ren, Hang Zhou, Ziwei Liu, and Gang
+Zeng. Dreamgaussian: Generative gaussian splatting for effi-
+cient 3d content creation. arXiv preprint arXiv:2309.16653,
+2023. 2
+[39] Pin Tang, Zhongdao Wang, Guoqing Wang, Jilai Zheng, Xi-
+angxuan Ren, Bailan Feng, and Chao Ma. Sparseocc: Re-
+thinking sparse latent representation for vision-based seman-
+tic occupancy prediction. In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition,
+pages 15035–15044, 2024. 2
+[40] Xiaoyu Tian, Tao Jiang, Longfei Yun, Yucheng Mao,
+Huitong Yang, Yue Wang, Yilun Wang, and Hang Zhao.
+Occ3d: A large-scale 3d occupancy prediction benchmark
+for autonomous driving. NeurIPS, 36, 2024. 1, 2, 3, 5, 6
+[41] Wenwen Tong, Chonghao Sima, Tai Wang, Li Chen, Silei
+Wu, Hanming Deng, Yi Gu, Lewei Lu, Ping Luo, Dahua Lin,
+et al. Scene as occupancy. In ICCV, pages 8406–8415, 2023.
+2
+[42] Antonin Vobecky, Oriane Sim´eoni, David Hurych, Spyri-
+don Gidaris, Andrei Bursuc, Patrick P´erez, and Josef Sivic.
+Pop-3d: Open-vocabulary 3d occupancy prediction from im-
+ages. Advances in Neural Information Processing Systems,
+36, 2024. 2
+[43] Xiaofeng Wang, Zheng Zhu, Wenbo Xu, Yunpeng Zhang, Yi
+Wei, Xu Chi, Yun Ye, Dalong Du, Jiwen Lu, and Xingang
+Wang. Openoccupancy: A large scale benchmark for sur-
+rounding semantic occupancy perception. In ICCV, pages
+17850–17859, 2023. 1, 2, 3, 6
+[44] Yuqi Wang, Yuntao Chen, Xingyu Liao, Lue Fan, and Zhaox-
+iang Zhang.
+Panoocc: Unified occupancy representation
+for camera-based 3d panoptic segmentation. arXiv preprint
+arXiv:2306.10013, 2023. 2, 3
+[45] Dongxu Wei, Zhiqi Li, and Peidong Liu. Omni-scene: omni-
+gaussian representation for ego-centric sparse-view scene re-
+construction. In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition, 2025. 2
+[46] Yi Wei, Linqing Zhao, Wenzhao Zheng, Zheng Zhu, Jie
+Zhou, and Jiwen Lu. Surroundocc: Multi-camera 3d occu-
+pancy prediction for autonomous driving.
+In Proceedings
+of the IEEE/CVF International Conference on Computer Vi-
+sion, pages 21729–21740, 2023. 2, 5, 6
+[47] Yuan Wu, Zhiqiang Yan, Zhengxue Wang, Xiang Li, Le
+Hui, and Jian Yang.
+Deep height decoupling for pre-
+cise vision-based 3d occupancy prediction. arXiv preprint
+arXiv:2409.07972, 2024. 2
+[48] Yunzhi Yan, Haotong Lin, Chenxu Zhou, Weijie Wang,
+Haiyang Sun, Kun Zhan, Xianpeng Lang, Xiaowei Zhou,
+and Sida Peng. Street gaussians for modeling dynamic ur-
+ban scenes. arXiv preprint arXiv:2401.01339, 2024. 2
+[49] Zhiqiang Yan, Kun Wang, Xiang Li, Zhenyu Zhang, Jun Li,
+and Jian Yang. Rignet: Repetitive image guided network
+for depth completion. In European Conference on Computer
+Vision, pages 214–230. Springer, 2022. 2
+[50] Zhiqiang Yan, Yuankai Lin, Kun Wang, Yupeng Zheng,
+Yufei Wang, Zhenyu Zhang, Jun Li, and Jian Yang.
+Tri-
+perspective view decomposition for geometry-aware depth
+completion. In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition, pages 4874–
+4884, 2024. 2
+[51] Ziyi Yang, Xinyu Gao, Wen Zhou, Shaohui Jiao, Yuqing
+Zhang, and Xiaogang Jin.
+Deformable 3d gaussians for
+6770
+
+
+high-fidelity monocular dynamic scene reconstruction. arXiv
+preprint arXiv:2309.13101, 2023. 2
+[52] Taoran Yi, Jiemin Fang, Guanjun Wu, Lingxi Xie, Xiaopeng
+Zhang, Wenyu Liu, Qi Tian, and Xinggang Wang. Gaussian-
+dreamer: Fast generation from text to 3d gaussian splatting
+with point cloud priors. arXiv preprint arXiv:2310.08529,
+2023. 2
+[53] Zichen Yu, Changyong Shu, Jiajun Deng, Kangjie Lu, Zong-
+dai Liu, Jiangyong Yu, Dawei Yang, Hui Li, and Yan
+Chen.
+Flashocc:
+Fast and memory-efficient occupancy
+prediction via channel-to-height plugin.
+arXiv preprint
+arXiv:2311.12058, 2023. 2
+[54] Chubin Zhang, Juncheng Yan, Yi Wei, Jiaxin Li, Li Liu,
+Yansong Tang, Yueqi Duan, and Jiwen Lu. Occnerf: Self-
+supervised multi-camera occupancy prediction with neural
+radiance fields. arXiv e-prints, pages arXiv–2312, 2023. 2
+[55] Daiwei Zhang, Gengyan Li, Jiajie Li, Micka¨el Bressieux,
+Otmar Hilliges, Marc Pollefeys, Luc Van Gool, and Xi
+Wang.
+Egogaussian: Dynamic scene understanding from
+egocentric video with 3d gaussian splatting. arXiv preprint
+arXiv:2406.19811, 2024. 2
+[56] Yunpeng Zhang, Zheng Zhu, and Dalong Du. Occformer:
+Dual-path transformer for vision-based 3d semantic occu-
+pancy prediction. In ICCV, pages 9433–9443, 2023. 1, 2,
+6
+[57] Cheng Zhao, Su Sun, Ruoyu Wang, Yuliang Guo, Jun-Jun
+Wan, Zhou Huang, Xinyu Huang, Yingjie Victor Chen, and
+Liu Ren.
+Tclc-gs: Tightly coupled lidar-camera gaussian
+splatting for surrounding autonomous driving scenes. arXiv
+preprint arXiv:2404.02410, 2024. 2
+[58] Linqing Zhao, Xiuwei Xu, Ziwei Wang, Yunpeng Zhang,
+Borui Zhang, Wenzhao Zheng, Dalong Du, Jie Zhou, and
+Jiwen Lu. Lowrankocc: Tensor decomposition and low-rank
+recovery for vision-based 3d semantic occupancy prediction.
+In Proceedings of the IEEE/CVF Conference on Computer
+Vision and Pattern Recognition, pages 9806–9815, 2024. 2
+[59] Wenzhao Zheng, Weiliang Chen, Yuanhui Huang, Borui
+Zhang, Yueqi Duan, and Jiwen Lu.
+Occworld: Learning
+a 3d occupancy world model for autonomous driving.
+In
+European Conference on Computer Vision, pages 55–72.
+Springer, 2025. 2
+[60] Ruijie Zhu, Yanzhe Liang, Hanzhi Chang, Jiacheng Deng,
+Jiahao Lu, Wenfei Yang, Tianzhu Zhang, and Yongdong
+Zhang.
+Motiongs:
+Exploring explicit motion guidance
+for deformable 3d gaussian splatting.
+arXiv preprint
+arXiv:2410.07707, 2024. 2
+6771

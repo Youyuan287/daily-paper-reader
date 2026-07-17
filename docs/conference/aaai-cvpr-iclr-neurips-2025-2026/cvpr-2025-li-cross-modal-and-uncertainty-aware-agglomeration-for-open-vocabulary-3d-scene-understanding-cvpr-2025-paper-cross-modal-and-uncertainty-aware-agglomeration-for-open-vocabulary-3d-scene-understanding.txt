@@ -1,0 +1,371 @@
+Title: Cross-Modal and Uncertainty-Aware Agglomeration for Open-Vocabulary 3D Scene Understanding
+
+URL Source: https://openaccess.thecvf.com/content/CVPR2025/papers/Li_Cross-Modal_and_Uncertainty-Aware_Agglomeration_for_Open-Vocabulary_3D_Scene_Understanding_CVPR_2025_paper.pdf
+
+Published Time: Mon, 02 Jun 2025 01:57:17 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# Cross-Modal and Uncertainty-Aware Agglomeration for Open-Vocabulary 3D Scene Understanding 
+
+# Jinlong Li 1,† Cristiano Saltori 1 Fabio Poiesi 2 Nicu Sebe 11 University of Trento 2 Fondazione Bruno Kessler 
+
+# Abstract 
+
+The lack of a large-scale 3D-text corpus has led recent works to distill open-vocabulary knowledge from vision-language models (VLMs). However, these methods typically rely on a single VLM to align the feature spaces of 3D models within a common language space, which limits the potential of 3D models to leverage the diverse spatial and semantic capabili-ties encapsulated in various foundation models. In this paper, we propose Cross-modal and Uncertainty-aware Agglomer-ation for Open-vocabulary 3D Scene Understanding dubbed 
+
+CUA-O3D , the first model to integrate multiple foundation models—such as CLIP, DINOv2, and Stable Diffusion—into 3D scene understanding. We further introduce a determinis-tic uncertainty estimation to adaptively distill and harmonize the heterogeneous 2D feature embeddings from these models. Our method addresses two key challenges: (1) incorporating semantic priors from VLMs alongside the geometric knowl-edge of spatially-aware vision foundation models, and (2) using a novel deterministic uncertainty estimation to capture model-specific uncertainties across diverse semantic and geometric sensitivities, helping to reconcile heterogeneous representations during training. Extensive experiments on ScanNetV2 and Matterport3D demonstrate that our method not only advances open-vocabulary segmentation but also achieves robust cross-domain alignment and competitive spa-tial perception capabilities. Project webpage: CUA-O3D. 
+
+# 1. Introduction 
+
+3D scene understanding serves as a crucial perception com-ponent for a wide array of real-world applications to help models better understand the physical world, including robot navigation, autonomous vehicles, and virtual real-ity [ 4, 21 , 46 , 79 ]. Typical approaches necessitate a dataset of semantically annotated point clouds, which is both time-consuming ( e.g. , 22.3 minutes for annotating a single scene    
+
+> †Corresponding author: tyronejinlongli@gmail.com.
+> Lseg DINOv2 Stable Diffusion Input GT
+
+Figure 1. Top is feature distribution analysis of different 2d pro-jected feature embeddings from various foundation models (Lseg, DINOv2 and Stable Diffusion), enumerating on the overall Scan-NetV2 train set and counting the frequency of all point features within each bin interval. Bottom is the sample utilizing K-Means 
+
+to cluster projected 3D features into specified clusters to make segmentation comparisons. Different foundation models illustrate heterogeneous yet complementary results. with 20 classes [ 13 ]) and unable to encompass all pos-sible existing categories, thereby limiting their practical utility. To address this limitation, recent works have ex-plored the open-vocabulary 3D scene understanding set-ting [ 15 , 33 , 52 , 53 , 62 ], aiming to localize and recognize arbitrary object classes. This objective is achieved by lever-aging Vision-Language Models (VLMs) [ 34 , 64 ] that, hav-ing been pre-trained on billions of image-text pairs [ 74 ], can gauge the alignment between textual and visual inputs, facili-tating a range of 2D open-vocabulary tasks [ 5 , 20 , 23 , 39 , 97 ]. To adapt these models for 3D downstream tasks ( e.g., seman-tic segmentation), various strategies, predominantly based on distilling multi-view 2D visual features into a 3D-specific model [15, 25, 33, 62, 84], have been employed. However, these methods mainly focus on distilling knowl-edge from one single VLM which limits the potential of 3D models to leverage the diverse spatial and semantic ca-pabilities that have been trained on large-scale images or image-text pairs corpus, as shown in Table 1. Given the This CVPR paper is the Open Access version, provided by the Computer Vision Foundation. Except for this watermark, it is identical to the accepted version; the final published version of the proceedings is available on IEEE Xplore. 19390 existence of various foundation models, such as CLIP [ 64 ], DINOv2 [ 59 ] and Stable Diffusion [ 66 ], etc. , there has been under-explored on how to make better utility of these 2D foundation models to develop the 3D foundation model, wherein no large-scale 3D point-cloud or 3D-text pair corpus available. Very recently, some works [ 18 , 51 ] have started probing the potential of these 2D foundation models on 3D tasks, since different VLMs or visual foundation models showcase unique characteristics. Probe3D [ 18 ] posits the 3D awareness of some visual foundation models, like DINOv2 present well for depth and surface normals. Lexicon3D [ 51 ]finds diffusion models benefit geometric tasks. Nonetheless, there is still a lack of studies on how to aggregate these heterogeneous foundation models into the 3D model which naturally excels at geometric knowledge extraction and lo-cating 3D spatial objects. To explore various foundation model properties when fusing multi-view posed image features to 3D space and enabling model distillation, we first conduct a pilot study to analyze and compare the heterogeneous results shown in Fig. 1. We can observe that the distribution in terms of the feature embeddings from each 2D foundation model mainly follows a gaussian-like feature distribution. At the same time, when clustering these features into specific clusters, the results illustrate heterogeneous and complementary ef-fects across different foundation models. This is also due to the inconsistency across different posed images when the 2D model encounters complex image contexts. This motivates us to develop a new method to harmonize this heteroge-neous knowledge into a 3D model and handle such noisy inconsistency from the fused 2D feature embeddings. In this paper, we present Cross-modal and Uncertainty-aware Agglomeration for Open-vocabulary 3D Scene Un-derstanding, dubbed CUA-O3D , the first method to inte-grate multiple 2D foundation models into one 3D model for scene understanding. Deterministic uncertainty estimation is further introduced to adaptively distill and harmonize the heterogeneous 2D feature embeddings from these models. We show that there are potential inconsistencies yet com-plementarity when attempting to distill different foundation models. Based on our pilot study, we first propose to lever-age distillation loss to supervise 3D model training given several available 2D feature embeddings. Our 3D model con-sists of independent projection layers to be mapped with one VLM or visual foundation model under feature supervision which helps with reconciling the entanglements from hetero-geneous distributions. To resolve the potential noises from 2D models which mainly come from insufficient contexts, a novel deterministic uncertainty estimation is tailored to adap-tively weight the knowledge distillation which can be mod-eled like a gaussian likelihood that follows the distributions as shown at the top of Fig. 1. Specifically, regarding each projection layer to be mapped with the specific 2D model, we tailor an observation noise scalar prediction independently to capture how much the noise is contained in feature super-vision during training, which is termed uncertainty-aware learning. Moving one step forward, as can be observed the distribution in terms of Stable Diffusion shows a bit shift away from the center scale, and usually carries broader value ranges and heavy-tailed (“spike”) values in the projected feature embeddings. A de-mean operation is then adopted to re-center the feature scales, being able to reduce the impact from anomaly points while still allowing points with small scale to guide the 3D model training. As we show experimentally on ScannetV2 [ 13 ] and Mat-terport3D [ 6 ], our approach allows the 3D model agglomer-ates heterogeneous knowledge and reconciles with potential noises from various 2D feature supervisions. Extensive ex-periments demonstrate that our method not only advances open-vocabulary segmentation but also achieves competitive cross-domain alignments and spatial perception capabilities. Additionally, we also validate that our method can achieve significant downstream performance after distillation. In summary, the contributions of this work are: • To the best of our knowledge, we are the first one to in-vestigate the agglomeration of cross-modal knowledge distillation from 2D models to a 3D model, given various strong foundation models available. • We analyze the heterogeneous yet complementary feature embeddings from multiple 2D models and incorporate both semantic- and geometric-aware knowledge into one single 3D model. • We further propose a deterministic uncertainty estimation to enable the 3D model predict independent observation scalar to capture the noise and resolve the heterogeneity from various feature supervisions. • We evaluate our method in a wide set of experiments from 3D open-vocabulary segmentation and present competitive cross-domain validation of our method, while also demon-strating strong downstream performances after distillation. 
+
+# 2. Related Works Open-Vocabulary (OV) 3D scene understanding advances over the previous large corpus of close-set approaches [2, 8, 48 , 49 , 68 , 84 , 93 ], allowing robust zero-shot reasoning and alleviating the need for annotations. Recent advances in Visual-Language Models (VLMs) [ 34 , 64 ] have driven OV models towards remarkable levels of robustness with numer-ous emerging approaches tackling OV in image semantic segmentation [ 5, 20 , 47 , 83 ], object detection [ 3 , 98 ], and recently universal segmentation [ 89 ]. Differently, OV for 3D scene understanding (OV3D) is limited in the data availabil-ity for training a purely fundamental 3D VLM. Alternatively, the community achieves OV3D by distilling zero-shot knowl-edge from recent VLMs [ 5, 64 ] and by mapping point cloud features to a queryable CLIP space. In 3D semantic seg-19391 Table 1. Comparison of Vision Foundation Models. Although all utilize the same Vision Transformer (ViT) backbone, they greatly differ in their training paradigms, including data, image resolutions, and training objectives, which lead to diverse representation biases. Model Training Dataset Dataset Size Architecture Objective ViT [17] ImageNet-1k/21k 1.2M/14.2M ViT-B/L/G Supervised classification DINOv2 [59] LVD-142M 142M ViT-L/14 Discriminative self-supervised learning CLIP [64] WebImageText 400M ViT-L/14 Image-text contrastive learning Stable Diffusion [66] LAION 5B UNet Image-Text/Image Generation mentation, ConceptFusion [ 33 ] fuses VLM representations from multiple views into 3D points. Some methods [ 76 ]extends OV to 3D instance semantic segmentation based on CLIP [ 64 ] or SAM [ 38 ] to align the 3D space with language space while forcing instance-mask constraint. However, the recent OV3D methods heavily rely on the zero-shot knowl-edge of the 2D VLMs without investigating the reliability of the projected 2D feature representation. In this work, we move forward and explore how to aggregate knowledge from various 2D foundation models. 
+
+Knowledge distillation (KD) [ 27 , 60 ] aims at training com-pact student models with the supervision from more pow-erful and larger teacher models [ 43 ]. Introduced by the first work [ 27 ], the student model is trained to mimic the prediction behavior of the teacher model and has been exten-sively explored in subsequent works [ 1 , 45 , 67 , 88 , 92 , 94 ], which has been applied successfully in a wide range of tasks going from supervised-training [ 54 , 78 , 82 ], to network com-pression [ 7 , 63 , 73 ] and to domain adaptation [ 26 , 28 , 95 ]. Recently, following the explosion of Visual-Language Mod-els like CLIP [ 64 ] and ALIGN [ 34 ], KD has been introduced to efficiently transfer knowledge between different modali-ties [ 23 , 43 , 50 ], and recently to bridge the gap between the text and 3D point cloud modalities [ 9, 15 , 32 , 62 , 85 , 87 , 91 ]. Recently, AM-RADIO [ 65 ] describes a general methodol-ogy for distilling multiple distinct foundation models into one, but still focus on only 2D domain. We primarily fo-cus on studying and tackling the ambiguity of the distilled representations between image and point cloud modalities. 
+
+Uncertainty estimation has been widely investigated in var-ious tasks [ 24 , 29 , 35 , 36 , 40 , 42 , 55 , 58 ] which is capable of addressing the problem of quantifying the uncertainty of predictions by model. Uncertainty Estimation can be broadly classified into: (i) aleatoric estimation [ 35 , 57 , 80 ]that usually dues to the underlying uncertainty in the mea-surement which utilizes the extra network to be trained from scratch to approximate a heteroscedastic distribution by max-imizing the likelihood of the system, and (ii) epistemic es-timation [ 19 , 22 , 40 ] that induces the uncertainty by the model parameters in low-data regimes as parameter estima-tion becomes noisy, respectively. In 3D point clouds, un-certainty estimation finds applications in incremental learn-ing [ 86 ], semantic segmentation [ 12 ], and domain adapta-tion [ 71 , 72 , 81 ]. Unlike previous works, we seek a deter-ministic uncertainty estimation for supervising 3D model 
+
+> a) input c) ground truth b) prediction d) 2D view-images prediction
+
+Figure 2. Preliminary study on image embedding ambiguity. VLM embeddings show inconsistent segmentations across multi-view images ( e.g. cabinet ). The guidance with ambiguous embeddings may be detrimental for supervising a 3D model training. training under uncertainty awareness for the ambiguity be-tween 2D image and 3D point modalities. 
+
+# 3. Methodology 
+
+In this section, we first describe the preliminary open-vocabulary 3D scene understanding task in Sec. 3.1. Then we elucidate inconsistent results across multi-view posed images to demonstrate the necessity of uncertainty-aware training to alleviate such issues and embrace various 2D foun-dation models in Sec. 3.2. Our Cross-Modal and Uncertainty-Aware Agglomeration ( CUA-O3D ) method will be depicted in Sec. 3.3, including Distillation agglomeration and Deter-ministic uncertainty estimation. 
+
+3.1. Open-Vocabulary 3D Scene Understanding 
+
+In standard 3D semantic segmentation, the training set Ttrain 
+
+includes point clouds and dense point-level annotations. Each point cloud X = pi ∈ R3, i ∈ [0 , N − 1] , consists of 
+
+N points pi with corresponding point-level annotations Y.These annotations are assigned from a predefined set of class indices K = [1 , . . . , K ], where each index corresponds to a specific class name in the vocabulary V = [ v1, . . . , v k].Given Ttrain and K, the objective is to learn a deep neural network correctly assigning a label from K to each point 
+
+pi ∈ X . In contrast, open-vocabulary 3D semantic segmen-tation (OV3D) aims to segment X using an arbitrary vocab-ulary V. Recent approaches achieve this with a pre-trained VLM [ 62 , 76 ]. The VLM provides this common embedding space through two distinct encoders, namely, a vision en-coder f 2D : I → Z and a text encoder f txt : V → Z. The common practice is to train a 3D vision encoder θ3D to align to f 2D embeddings, bridging the modality gap and defining 
+
+θ3D : X → Z. After training, f txt encodes V, and class 19392 predictions are computed via similarity matching between 3D point cloud and textual vocabulary embeddings. 
+
+3.2. Preliminary Observation 
+
+We first conduct a simple qualitative study to analyze how embedding ambiguity affects f 2D predictions before and after projection to the point cloud space based on commonly used Lseg [ 5 ]. We analyze the consistency of the predictions for the same object appearing in multi-view images. Given a pre-trained vision-language model f 2D and multi-view images I, we query f 2D with known vocabularies V and report the qualitative results over multiple ScanNetV2 [ 13 ]view-images in Fig. 2. We notice that predictions are con-sistent for the classes wall , floor , and door while showing inconsistency over the class cabinet . After projection to the 3D point cloud space ( left ), the projected prediction in-herits this ambiguity, resulting in further detrimental 3D model distillation. Regarding the incorporation of various 2D foundation models shown in Fig. 1, how to harmonize the heterogeneous characteristics also matters. This simple study highlights the need for a reliable uncertainty measure capturing embedding ambiguity that we hope to shed new light on the future works on this task. 
+
+3.3. Cross-Modal Agglomeration 
+
+We provide an overview of our CUA-O3D in Fig. 3. Our approach leverages a 3D encoder backbone θ3D to transform the input point cloud X into a 3D sparse point cloud features 
+
+F 3D . Concurrently, we use several pre-trained vision en-coders f 2Di , such as CLIP, DINOv2, and Stable Diffusion, to map multi-view images I to dense image features separately, which are then projected to yield sparse image features F 2Di .Then, we construct three projection layers with a simple MLP to map F 3Di with each 2D model through the cor-responding distillation loss. Meanwhile, the 3D model is designed to output independently deterministic uncertainty-aware observation scalar σi to adaptively weigh the feature supervisions. After training, we use θ3D for the main task of open-vocabulary 3D semantic segmentation via matching with text embeddings F txt [ 76 ] and drop the uncertainty module. 
+
+Distillation agglomeration. The distillation phase aims to align the point embeddings F 3D to image embeddings F 2D
+
+obtained from each frozen pre-trained visual encoder f 2Di .This is a common practice in recent OV3D approaches [ 76 ], which leads to a shared embedding space between image, text, and point cloud modalities. Given a point cloud X
+
+paired with multi-view posed images I, we learn 3D sparse features F 3D by employing the well-established Minkowsk-iNet [ 11 ] as a 3D sparse convolutional encoder θ3D . The encoder θ3D outputs a sparse set of point-wise feature vec-tors F 3D = θ3D (X ), where each feature is associated with an input point pi ∈ X . Similarly, we distill the multi-view image features from I using each frozen vision encoder f 2Di
+
+separately, where {f 2Di ∈ f 2D |f 2DLseg , f 2DDIN Ov 2, f 2DSD }. The output of f 2D is a set of feature vectors F 2Di = f 2Di (I)
+
+where each feature vector in F 2D is associated to an input pixel u. After projection in the homogeneous coordinates space, we redefine F 2Di as a set of point-wise image fea-tures, corresponding to each f 2Di . We define the matches between each point p and pixel u by using the correspond-ing homogeneous coordinates ˜p and ˜u, respectively. Once matches are established, we enforce the alignment between the predicted F 3Di and F 2Di . Following [ 62 ] and training 
+
+θ3D to minimize the distillation loss Ldistill , our indepen-dent distillation losses are defined as, Lseg, Lcos lseg = 1 − F 3D 
+
+> 1
+
+· F 2D
+
+> 1
+
+‖F 3D 
+
+> 1
+
+‖2 · ‖ F 2D 
+
+> 1
+
+‖2
+
+(1) DINOv2, Ll1 = 1
+
+n
+
+> n
+
+∑
+
+> i=1
+
+|F 3D 
+
+> 2
+
+− F 2D 
+
+> 2
+
+| (2) StableDiffusion, Lcos sd = 1 − F 3D 
+
+> 3
+
+· F 2D
+
+> 3
+
+‖F 3D 
+
+> 3
+
+‖2 · ‖ F 2D 
+
+> 3
+
+‖2
+
+(3) which corresponds to minimizing the distance between each 
+
+F 3Di and F 2Di , and leading to final distillation loss as, 
+
+Ldistill = Lcos lseg + Ll1 + Lcos sd , (4) where we will study the distillation loss choice in our sup-plementary materials. To further alleviate the impact from Stable Diffusion F 2D
+
+> 3
+
+which contains sharp values in the projected feature embed-dings, we then adopt a de-mean operation to re-center the feature scales, reducing the impact from anomaly points while still allowing points with small scale to guide the 3D model training: 
+
+F 2D 
+
+> 3
+
+= F 2D 
+
+> 3
+
+− μF 2D 
+
+> 3
+
+(5) where μF 2D 
+
+> 3
+
+is the mean of F 2D 
+
+> 3
+
+along channel dimension. 
+
+Deterministic uncertainty estimation. As we analyzed be-fore that different 2D foundation models encapsulate unique characteristics and one single 2D model induces inherent inconsistency from multi-view posed image which neces-sitates appropriate measures to tackle. We then propose a simple yet effective deterministic uncertainty-aware obser-vation scalar prediction to quantify embedding ambiguity within each cross-modal distillation, that learns the adap-tive weights of various 2D feature supervisions under the cross-modal training. Specifically, we devise the 3D model θ3D with three in-dependent noise scalar predictions σi w.r.t each 2D model 
+
+f 2Di . The output from the probabilistic model with weight 
+
+W being analogous to the regression task can be modeled as gaussian likelihood as: 
+
+p(y|f W(x)) = N (f W(x), σ 2), (6) 19393            
+
+> 
+>  
+> 
+>      
+
+
+
+> 
+> 
+
+#   
+
+> 
+> 
+
+#   
+
+   
+
+ 
+
+
+
+ 
+
+
+
+ 
+
+> 
+
+Figure 3. Overview of CUA-O3D. We first utilize Lseg, DINOv2 and Stable Diffusion model to extract multi-view posed image embeddings and then use multi-view 3D projection to obtain the projected 3D features F 2Di to supervise the 3D model training. Three MLP layers are established to map with each 2D model supervisions independently, while a specific noisy scalar prediction σi through a deterministic uncertainty estimation will be learned and adopted to adaptively weight the corresponding distillation loss L.here we assume the 2D foundation models follow similar modeling as demonstrated in Fig. 1, and our dense align-ment training can be regarded as continuous model output. Combining all three 2D models we used, we then define the multiple model outputs as: 
+
+p(y1, ..., y K |f W(x)) = 
+
+> K
+
+∏
+
+> i=1
+
+p(yi|f W(x)) , (7) where index i corresponds to the mapping for each 2D model, {f 2DLseg , f 2DDIN Ov 2, f 2DSD }. Based on the maximum likelihood modeling and taking the regression task as an example, the log-likelihood of the model can then be opti-mized, 
+
+log p(y|f W(x)) ∝ − 12σ2 || y − f W(x)|| 2 − log σ, (8) where σ denotes the model’s observation noise scalar, be-ing responsible for capturing the inherent uncertainty within 2D feature supervisions, which is mainly caused by het-erogeneous and noisy feature embeddings from various 2D foundation models. Assuming that we have three outputs corresponding to Lseg, DINOv2, and Stable Diffusion, each following gaussian-like distribution, we then have: 
+
+p(y1, y 2, y 3|f W(x)) = 
+
+> 3
+
+∏
+
+> i=1
+
+p(yi|f W(x)) =
+
+> 3
+
+∏
+
+> i=1
+
+N (yi; f W(x), σ 2 
+
+> i
+
+),
+
+(9) and then, we formulate our training objective 
+
+Ldistill (W , σ 1, σ 2, σ 3) for multiple mappings: 
+
+Ldistill = − log p(y1, y 2, y 3|f W(x)) 
+
+∝ 12σ21
+
+Lcos lseg + 12σ22
+
+Ll1 + 12σ23
+
+Lcos sd + log σ1σ2σ3,
+
+(10) which leads to our overall training objective: L = Ldistill .To the best of our knowledge, this is the first work to explore deterministic uncertainty-aware modeling for ag-glomerating multiple 2D foundation models into a single unified 3D model, aiming toward the development of a po-tential foundational 3D model. In the last term of Eq. 10, each supervision signal from a 2D model contributes to learning adaptive weighting during training. Specifically, the uncertainty parameter σi, which characterizes the noise level associated with the i-th 2D model f 2Di , dynamically ad-justs the contribution of the corresponding loss term Li. As 
+
+σi increases—indicating higher uncertainty—the effective weight of Li decreases, thereby down-weighting less reliable supervision. Meanwhile, each σi is implicitly regularized to prevent excessive growth, ensuring that all supervision sources contribute meaningfully to the optimization. We visualize the evolution of σi throughout training in the sup-plementary material. To further ensure stable optimization, we add a small constant (set to 1.0) to each σi to prevent the loss from becoming negative during training. 
+
+log σi → log(1 .0 + σi). (11) 
+
+# 4. Experiments 
+
+We run extensive experiments over a wide set of tasks, going from open-vocabulary segmentation and cross-domain gen-eralization to the evaluation with fine-grained class vocab-ularies. This section is organized as follows. Sec. 4.1- 4.2 provide the dataset and implementation details of CUA-O3D used in our experiments. Sec. 4.3 and Sec. 4.4 illus-trate the potential when embracing various 2D foundation models and evaluate the open-vocabulary 3D semantic seg-mentation, compared with related methods. Sec. 4.5 reports cross-domain generalization under common and fine-grained 19394 class evaluation while sec 4.6 presents the downstream per-formance after distillation. The final Sec. 4.7 ablates and analyzes the improvements of each proposed components. 
+
+4.1. Datasets ScanNetV2 [ 13 , 69 ] is a large-scale annotated indoor dataset. It includes over 2.5 million camera views within more than 
+
+1.5k RGB-D scans, collected across 707 diverse indoor en-vironments such as offices and living rooms. The dataset is enriched with annotations, including 3D camera poses and point-level semantic segmentation. It is officially split into 
+
+1201 training and 312 validation scans sampled from 706 dif-ferent scenes, and 100 scans test set with hidden ground truth. ScanNetV2 annotations cover 40 semantic classes, while the official 3D semantic segmentation benchmark focuses on a subset of 20 classes. 
+
+Matterport3D [6] is another large-scale RGB-D dataset collected for 3D scene understanding in indoor settings, con-taining 90 buildings with multiple rooms on different floors captured using a Matterport Pro Camera. It provides 10 .8k
+
+panoramic views within 90 real, building-scale scenes pro-cessed from 194 .4k RGB-D images. Each scene represents a residential building with multiple rooms and is annotated with camera poses and point-level semantic segmentation. The official 3D semantic segmentation benchmark evaluates performance across 21 semantic classes. 
+
+4.2. Implementation Details 
+
+We implement our method in the PyTorch framework [ 61 ]and employ experiments on a single NVIDIA A100 GPU for ScanNetV2 and Matterport3D, respectively. We follow [ 62 ] and use MinkUNet18A [ 11 ] as our 3D backbone start-ing from randomly initialized weights, and Lseg [ 5] as our pre-trained VLM. During our training, we adopt Adam op-timizer [ 37 ] with an initial learning rate of 1e − 4 and an exponential decay to train our pipeline for 50 epochs. For the teacher model parameter update, we set the momentum coefficient β to 0.99 and γ to 1. Besides, we employ the voxel size of 2cm and batch size of 2 for both the ScanNetV2 and Matterport3D experiments. Due to the GPU memory limitation, we uniformly sample 20 k point features to train the model and input only the 3D point position without RGB information to the MinkowskiNet. We utilize random hori-zontal flip and elastic distortion as data augmentations over point clouds while following BP-Net [ 30 ] to apply color, jitter, and hue feature transformations over 2D feature em-beddings. 
+
+4.3. Qualitative Comparisons 
+
+To demonstrate the motivation of various 2D foundation mod-els agglomeration, we investigate the results using K-Means 
+
+to cluster the projected feature embeddings from different 2D models and our distilled features as shown in Fig. 4. As Table 2. Open-vocabulary 3D semantic segmentation results. We compare our CUA-O3D with recent fully supervised ( Fully-sup. )and zero-shot ( Zero-shot ) baselines. Our method demonstrates competitive performance on both ScanNetV2 and Matterport3D. †
+
+denotes results from origin paper based on Lseg.                                                                                                   
+
+> Type Method ScanNetV2 Matterport3D
+> mIoU mAcc mIoU mAcc
+> Fully-sup.
+> TangentConv [77] 40.9 --46.8 TextureNet [31] 54.8 --63.0 ScanComplete [14] 56.6 --44.9 DCM-Net [75] 65.8 --66.2 Mix3D [56] 73.6 ---SupCon [96] 69.2 77.7 53.1 63.4 LGround [69] 73.2 --67.2 MinkowskiNet [11] 69.2 77.7 53.1 63.4
+> Upper-bound MinkowskiNet reimple [11] 68.96 77.41 54.12 65.57
+> Zero-shot
+> MSeg Voting [41] 45.6 54.4 33.4 -PLA [16] 17.7 33.5 --CLIP2Scene [9] 25.1 ---CNS [10] 26.8 ---CLIP-FO3D [90] 30.2 49.1 --RegionPLC [85] 43.8 65.6 --DMA-text only [44] 50.5 63.7 39.8 49.5 OpenScene-3D †[62] 52.9 63.2 41.9 51.2 OpenScene-2D3D †[62] 54.2 66.6 43.4 53.5 OpenScene reimple -3D [62] 51.6 63.1 40.5 48.8 OpenScene reimple -2D3D [62] 52.2 65.4 41.5 50.6 (Ours ) CUA-O3D (3D) 54.1 64.1 41.3 49.5 (Ours ) CUA-O3D (2D3D) 55.3 65.6 42.2 50.9
+
+can be observed that different 2D model performs heteroge-neous yet complementary results. Likewise, the table from the top-left sample in Fig. 4 displays various clustering re-sults, leading to our agglomerated model being able to output more accurate and consistent clusters. Meanwhile, we also utilize UMAP [ 70 ] to better illustrate the intrinsic charac-teristics when adopting a specific 2D model to employ the 3D model distillation, since the output feature embeddings from various dimensions of DINOv2 and Stable Diffusion are not elaborated for direct matching with text embeddings. As shown on the right side of Fig. 4, DINOv2 indicates smoother and more consistent results though Lseg has been trained to align with the text encoder before within dense supervision. Stable Difusion presents intriguing geometric characteristics, all of which are capable of agglomerating potential foundation 3D models using distillation. 
+
+4.4. Open-Vocabulary 3D Semantic Segmentation 
+
+To showcase that our method CUA-O3D can boost the perfor-mances of the open-vocabulary 3D semantic segmentation model, we compare our method with existing works within two types of settings, including fully supervised ( Fully-sup. ) and zero-shot. From Table 2, our method surpasses the recent work OpenScene reimple [ 62 ] with +2 .5% mIoU under 3D-distill and +3 .1% mIoU under 2D3D-ensemble on ScanNetV2 val set , and +0 .8% mIoU under 3D-distill and +0 .7% mIoU under 2D3D-ensemble on Matterport3D 
+
+val set , respectively. This further proves our method not only distills heterogeneous yet complementary knowledge 19395             
+
+>       
+>            
+
+Figure 4. Left side: K M eans is tapped to cluster the projected 3D feature embeddings based on Lseg. DINOv2, Stable Diffusion and our final distilled feauture predicted by the 3D model. Right side: UMAP [ 70 ] is applied to project high-dimension feature into low-dimension one to visualize the structural characteristics. White rectangle highlights the apparent heterogeneous yet complementary results. Table 3. Cross-dataset evaluation. We evaluate the cross-dataset generalization capability of CUA-O3D. We perform this experi-ment when training on ScanNetV2 and evaluating on Matterport3D (ScanNetV2 → Matterport3D), and vice versa .ScanNetV2 ( train ) →Matterport3D ( eval )
+
+Method mIoU mAcc 
+
+OpenScene [62] 36.0 48.0 (Ours ) CUA-O3D 37.4 (+1.4) 49.2 (+1.2) Matterport3D ( train )→ScanNetV2 ( eval )OpenScene [62] 36.5 44.0 (Ours ) CUA-O3D 38.6 (+2.1) 46.6 (+2.6) into the 3D model but also reconciles with 2D noisy su-pervisions. This is achieved by the proposed deterministic uncertainty estimation which adaptively captures inherent noise and then weights the corresponding distillation. Super-vised by various 2D foundation models, like Lseg, DINOv2, and Stable Diffusion, the 3D model learns to align with the open-vocabulary features together with spatial and ge-ometric awareness. Some open-vocabulary 3D semantic segmentation visualizations are shown in Fig. 5. Additional experiments with AMRADIO [ 65 ] can be referred to our supplementary material. 
+
+4.5. Cross-Dataset Generalization 
+
+We study the generalization capability of our CUA-O3D to unseen datasets without further fine-tuning ( i.e ., zero-shot). This is achieved by evaluating the cross-dataset performance when training and evaluating different datasets. We use Scan-NetV2 and Matterport3D as training and evaluation datasets respectively, and analyze the cross-dataset results when train-ing on ScanNetV2 and evaluating on Matterport3D, and vice versa . Table 3 and Table 4 report the cross-dataset results and with different granularities, respectively.    
+
+> Input GT OpenScene Ours ScanNet Matterport
+
+Figure 5. Open-vocabulary 3D semantic segmentation comparisons in terms of ScanNetV2 and Matterport3D. Our approach displays superior performance over the OpenScene, which is regarded as our baseline . Best view zoom in and out .We notice that our method improves the cross-dataset performance in both directions. As reported in Table 3, CUA-O3D consistently outperforms OpenScene in both di-rections with +1 .4% mIoU improvements on ScanNetV2 19396 Table 4. Comparison on cross-dataset generalization. Both CUA-O3D and OpenScene are trained on ScanNet, and zero-shot tested on the Matterport3D dataset. ‡ denotes the pure 3D results obtained from the official released model. K = 21 is derived from the original Matterport3D benchmark, while K = 40, 80, 160, is K most common categories from the NYU label set provided in the benchmark. 
+
+Method Matterport21 Matterport40 Matterport80 Matterport160 
+
+mIoU mAcc mIoU mAcc mIoU mAcc mIoU mAcc OpenScene ‡ [62] 36.0 48.0 21.1 27.5 10.8 13.9 6.0 8.1 (Ours ) CUA-O3D (2D3D) 37.4 49.2 23.3 30.2 12.2 16.3 6.1 8.4 
+
+Table 5. Experimental results on ScanNetV2 and Matterport3D in terms of val on linear probing evaluation. Upperbound-full sup. denotes the fully-supervised upperbounding results while Baseline init. means initialize the model from our baseline model and then perform linear probing evaluation. Type Method ScanNetV2 Matterport3D                                    
+
+> mIoU mAcc mIoU mAcc Upperbound-fully sup. MinkowskiNet [11] 68.9 77.4 54.1 65.5 Baseline init. MinkowskiNet [11] 54.4 64.7 36.1 43.0 Concat 3-heads concat 62.1 72.7 45.8 55.3 Separate 3-heads average 61.7 72.0 45.4 55.0 Single-head Lseg-head 59.9 71.5 --DINOv2-head 61.7 72.2 --StableDiffusion-head 61.4 72.1 --
+
+→ Matterport3D and +2 .1% mIoU improvements on Mat-terport3D → ScanNetV2. Interestingly, we notice that our approach also provides consistent superiority across differ-ent granularities in Table 4, ranging among K = 21, 40, 60, and 160 common categories in terms of zero-shot evaluation on ScanNetV2 → Matterport3D. 
+
+4.6. Linear Probing 
+
+In this section, we exploit how the trained 3D model will perform after agglomerating various 2D models. We then conduct experiments that employ linear probe learning based on the 3D model after distilling from various 2D models. Specifically, we construct a simple MLP layer on top of the frozen 3D model backbone and train the linear layer only fol-lowing the fully-supervised manner. As shown in Table 5, the method concatenates all three mapping layers corresponding to Lseg, DINOv2, and Stable Diffusion, and then maps the concatenated features to close set label spaces, we can see this way can achieve the best performances, 62.1% mIoU and 45.8% mIoU on ScanNetV2 and Matterport3D val after tuned on train . Note that this obtains 7.7% mIoU improve-ment over the model initialized from our baseline model. We can also observe that simply mapping the DINOv2 layer from the 3D model attains very competitive segmentation performance while mapping the Lseg layer only which has been trained before to align with the text encoder realizes an inferior one. These further insights that we shall seek more suitable 2D model selections to help develop potential foundational 3D models, whereas DINOv2 presents strong generalizability and flexibility, which is consistent with the observation [18, 51]. Table 6. Ablation: Contribution of each component by gradually adding into the final training, based on zero-shot segmentation .Baseline Lseg +DIN Ov 2 + SD +U nc +AutoW +DeM ean mIoU ↑ mAcc ↑                            
+
+> 51.4 62.3
+> 51.7 63.3
+> 51.4 62.4
+> 52.7 62.6
+> 53.5 64.2
+> N AN N AN
+> 54.1 64.1
+
+4.7. Ablative Studies 
+
+In this section, we study the improvements from each pro-posed component. As shown in Table 6, we begin by grad-ually adding each component to the 3D model training and find that only combining with Lseg and DINOv2 leads to marginal open-vocabulary 3D semantic segmentation which can be conjectured that DINOv2 has not been aligned with language space before though it excels at spatial perception ability. Then, the performance is boosted by 1.3% mIoU when introducing Stable Diffusion supervision, while further improved by 2.1% mIoU and 1.9% mAcc via our proposed deterministic estimation to help the model adaptively harmo-nize the heterogeneous knowledge from various 2D models. Interestingly, if we apply auto-weighting to enable the model to learn by itself, the model training falls into collapse, which we surmise it is due to the minimal optimization objective and the model quickly gets into a trivial solution. Over-all, CUA-O3D can improve the 3D model only from 51.4% mIoU and 62.3% mAcc to 54.1% mIoU and 64.1% mAcc, which further demonstrates the effectiveness of our method. 
+
+# 5. Conclusions 
+
+In this paper, we first investigate the cross-modal agglom-eration from various 2D foundation models into one 3D model, in pursuit of a potential foundational 3D model. To resolve the heterogeneous bias and inherent noise from 2D feature supervisions, we then propose a deterministic uncer-tainty estimation to capture 2D model-specific uncertainties across diverse semantic and geometric sensitivities, which is then leveraged to weight the corresponding distillation loss adaptively. In this way, the trained 3D model performs competitive open-vocabulary segmentation while achieving robust cross-domain alignment and strong spatial perception ability, which hopes to shed new light on the community. 19397 Acknowledgments This work was supported by the MUR PNRR project FAIR (PE00000013) funded by the NextGenerationEU and the EU Horizon project ELIAS (No. 101120237). We acknowledge the CINECA award under the ISCRA initiative for the availability of high-performance computing resources and support. 
+
+# References 
+
+[1] Sungsoo Ahn, Shell Xu Hu, Andreas Damianou, Neil D Lawrence, and Zhenwen Dai. Variational information distil-lation for knowledge transfer. In CVPR , pages 9163–9171, 2019. 3 [2] Vijay Badrinarayanan, Alex Kendall, and Roberto Cipolla. Segnet: A deep convolutional encoder-decoder architecture for image segmentation. TPAMI , 39(12):2481–2495, 2017. 2 [3] H. Bangalath, M. Maaz, M. Khattak, S. Khan, and F. Shahbaz Khan. Bridging the gap between object and image-level representations for open-vocabulary detection. NeurIPS , 2022. 2[4] J. Behley, M. Garbade, A. Milioto, J. Quenzel, S. Behnke, C. Stachniss, and J. Gall. SemanticKITTI: A Dataset for Semantic Scene Understanding of LiDAR Sequences. In 
+
+ICCV , 2019. 1 [5] L. Boyi, W. Kilian, B. Serge, K. Vladlen, and R. Rene. Language-driven semantic segmentation. In ICLR , 2022. 1, 2, 4, 6 [6] A. Chang, A. Dai, T. Funkhouser, M. Halber, M. Niebner, M. Savva, S. Song, A. Zeng, and Y. Zhang. Matterport3d: Learning from rgb-d data in indoor environments. In 3DV ,2017. 2, 6 [7] Guobin Chen, Wongun Choi, Xiang Yu, Tony Han, and Man-mohan Chandraker. Learning efficient object detection mod-els with knowledge distillation. NeurIPS , 30, 2017. 3 [8] L.-C. Chen, G. Papandreou, I. Kokkinos, K. Murphy, and A.:. Yuille. Deeplab: Semantic image segmentation with deep convolutional nets, atrous convolution, and fully connected crfs. TPAMI , 2017. 2 [9] Runnan Chen, Youquan Liu, Lingdong Kong, Xinge Zhu, Yuexin Ma, Yikang Li, Yuenan Hou, Yu Qiao, and Wenping Wang. Clip2scene: Towards label-efficient 3d scene under-standing by clip. In CVPR , pages 7020–7030, 2023. 3, 6 [10] Runnan Chen, Youquan Liu, Lingdong Kong, Nenglun Chen, Xinge Zhu, Yuexin Ma, Tongliang Liu, and Wenping Wang. Towards label-free scene understanding by vision foundation models. In NeurIPS , 2024. 6 [11] C. Choy, J. Gwak, and S. Savarese. 4d spatio-temporal con-vnets: Minkowski convolutional neural networks. In ICCV ,2019. 4, 6, 8 [12] T. Cortinhal, G. Tzelepis, and E. Erdal Aksoy. Salsanext: Fast, uncertainty-aware semantic segmentation of lidar point clouds. In ISVC , 2020. 3 [13] A. Dai, A. Chang, M. Savva, M. Halber, T. Funkhouser, and M. Nießner. Scannet: Richly-annotated 3d reconstructions of indoor scenes. In CVPR , 2017. 1, 2, 4, 6 [14] A. Dai, D. Ritchie, M. Bokeloh, S. Reed, J. Sturm, and M. Nießner. Scancomplete: Large-scale scene completion and semantic segmentation for 3d scans. In CVPR , 2018. 6 [15] Runyu Ding, Jihan Yang, Chuhui Xue, Wenqing Zhang, Song Bai, and Xiaojuan Qi. Pla: Language-driven open-vocabulary 3d scene understanding. In CVPR , 2023. 1, 3 [16] R. Ding, J. Yang, C. Xue, W. Zhang, S. Bai, and X. Qi. Pla: Language-driven open-vocabulary 3d scene understanding. In CVPR , 2023. 6 [17] Alexey Dosovitskiy. An image is worth 16x16 words: Trans-formers for image recognition at scale. arXiv preprint arXiv:2010.11929 , 2020. 3 [18] Mohamed El Banani, Amit Raj, Kevis-Kokitsi Maninis, Ab-hishek Kar, Yuanzhen Li, Michael Rubinstein, Deqing Sun, Leonidas Guibas, Justin Johnson, and Varun Jampani. Prob-ing the 3d awareness of visual foundation models. In CVPR ,pages 21795–21806, 2024. 2, 8 [19] Y. Gal and Z. Ghahramani. Dropout as a bayesian approxi-mation: Representing model uncertainty in deep learning. In 
+
+ICLR , 2016. 3 [20] G. Ghiasi, X. Gu, Y. Cui, and T.-Y. Lin. Scaling open-vocabulary image segmentation with image-level labels. In 
+
+ECCV , 2022. 1, 2 [21] Benjamin Graham, Martin Engelcke, and Laurens Van Der Maaten. 3d semantic segmentation with submanifold sparse convolutional networks. In CVPR , pages 9224–9232, 2018. 1 [22] A. Graves. Practical variational inference for neural networks. 
+
+NeurIPS , 2011. 3 [23] Xiuye Gu, Tsung-Yi Lin, Weicheng Kuo, and Yin Cui. Open-vocabulary detection via vision and language knowledge dis-tillation. arXiv preprint arXiv:2104.13921 , 2021. 1, 3 [24] H. Guo, H. Wang, and Q. Ji. Uncertainty-guided probabilistic transformer for complex action recognition. In CVPR , 2022. 3[25] Huy Ha and Shuran Song. Semantic abstraction: Open-world 3D scene understanding from 2D vision-language models. In 
+
+CORL , 2022. 1 [26] Tong He, Chunhua Shen, Zhi Tian, Dong Gong, Changming Sun, and Youliang Yan. Knowledge adaptation for efficient semantic segmentation. In CVPR , pages 578–587, 2019. 3 [27] G. Hinton, O. Vinyals, and J. Dean. Distilling the knowledge in a neural network. arXiv , 2015. 3 [28] Yunzhong Hou and Liang Zheng. Visualizing adapted knowl-edge in domain transfer. In CVPR , pages 13824–13833, 2021. 3[29] P. Hu, S. Sclaroff, and K. Saenko. Uncertainty-aware learning for zero-shot semantic segmentation. NeurIPS , 2020. 3 [30] Wenbo Hu, Hengshuang Zhao, Li Jiang, Jiaya Jia, and Tien-Tsin Wong. Bidirectional projection network for cross dimen-sion scene understanding. In CVPR , 2021. 6 [31] J. Huang, H. Zhang, L. Yi, T. Funkhouser, M. Nießner, and L. Guibas. Texturenet: Consistent local parametrizations for learning from high-resolution signals on meshes. In CVPR ,2019. 6 [32] Tianyu Huang, Bowen Dong, Yunhan Yang, Xiaoshui Huang, Rynson WH Lau, Wanli Ouyang, and Wangmeng Zuo. Clip2point: Transfer clip to point cloud classification with image-depth pre-training. In ICCV , pages 22157–22167, 2023. 3 19398 [33] Krishna Murthy Jatavallabhula, Alihusein Kuwajerwala, Qiao Gu, Mohd Omama, Tao Chen, Shuang Li, Ganesh Iyer, Soroush Saryazdi, Nikhil Keetha, Ayush Tewari, Joshua B. Tenenbaum, Celso Miguel de Melo, Madhava Krishna, Liam Paull, Florian Shkurti, and Antonio Torralba. Conceptfusion: Open-set multimodal 3d mapping. Robotics: Science and Systems (RSS) , 2023. 1, 3 [34] C. Jia, Y. Yang, Y. Xia, Y.-T. Chen, Z. Parekh, H. Pham, Q. Le, Y.-H. Sung, Z. Li, and T. Duerig. Scaling up visual and vision-language representation learning with noisy text supervision. In ICML , 2021. 1, 2, 3 [35] A. Kendall and Y. Gal. What uncertainties do we need in bayesian deep learning for computer vision? NeurIPS , 2017. 3[36] Alex Kendall, Yarin Gal, and Roberto Cipolla. Multi-task learning using uncertainty to weigh losses for scene geometry and semantics. In CVPR , pages 7482–7491, 2018. 3 [37] D. Kingma and J. Ba. Adam: A method for stochastic opti-mization. ICLR , 2015. 6 [38] A. Kirillov, E. Mintun, N. Ravi, H. Mao, C. Rolland, L. Gustafson, T. Xiao, S. Whitehead, A. Berg, W.Y. Lo, P. Dollar, and R. Girshick. Segment anything. In ICCV , 2023. 3 [39] Dohwan Ko, Ji Soo Lee, Miso Choi, Jaewon Chu, Jihwan Park, and Hyunwoo J Kim. Open-vocabulary video question answering: A new benchmark for evaluating the generaliz-ability of video question answering models. In ICCV , 2023. 1[40] B. Lakshminarayanan, A. Pritzel, and C. Blundell. Simple and scalable predictive uncertainty estimation using deep ensembles. NeurIPS , 2017. 3 [41] J. Lambert, Z. Liu, O. Sener, J. Hays, and V. Koltun. Mseg: A composite dataset for multi-domain semantic segmentation. In CVPR , 2020. 6 [42] M.H. Laves, S. Ihler, J. Fast, L. Kahrs, and T. Ortmaier. Well-calibrated regression uncertainty in medical imaging with deep learning. In MIDL , 2020. 3 [43] J. Li, D. Li, C. Xiong, and S. Hoi. Blip: Bootstrapping language-image pre-training for unified vision-language un-derstanding and generation. In ICML , 2022. 3 [44] Ruihuang Li, Zhengqiang Zhang, Chenhang He, Zhiyuan Ma, Vishal M Patel, and Lei Zhang. Dense multimodal alignment for open-vocabulary 3d scene understanding. In ECCV , 2024. 6[45] Xuewei Li, Songyuan Li, Bourahla Omar, Fei Wu, and Xi Li. Reskd: Residual-guided knowledge distillation. TIP , 30: 4735–4746, 2021. 3 [46] Y. Li and J. Ibanez-Guzman. Lidar for autonomous driving: The principles, challenges, and trends for automotive lidar and perception systems. IEEE Signal Process. Mag. , 2020. 1 [47] F. Liang, B. Wu, X. Dai, K. Li, Y. Zhao, H. Zhang, P. Zhang, P. Vajda, and D. Marculescu. Open-vocabulary semantic segmentation with mask-adapted clip. In CVPR , 2023. 2 [48] Xuexun Liu, Xu Xiaoxu, Jong Li, Qiudan Zhang, Xu Wang, Nicu Sebe, Ma Lin, et al. Less: Label-efficient and single-stage referring 3d instance segmentation. In NeurIPS .NeurIPS, 2024. 2 [49] Jonathan Long, Evan Shelhamer, and Trevor Darrell. Fully convolutional networks for semantic segmentation. In CVPR ,pages 3431–3440, 2015. 2 [50] Zongyang Ma, Guan Luo, Jin Gao, Liang Li, Yuxin Chen, Shaoru Wang, Congxuan Zhang, and Weiming Hu. Open-vocabulary one-stage detection with hierarchical visual-language knowledge distillation. In CVPR , pages 14074– 14083, 2022. 3 [51] Yunze Man, Shuhong Zheng, Zhipeng Bao, Martial Hebert, Liang-Yan Gui, and Yu-Xiong Wang. Lexicon3d: Probing visual foundation models for complex 3d scene understanding. In NeurIPS , 2024. 2, 8 [52] G Mei, L. Riz, Y. Wang, and F. Poiesi. Geometrically-driven aggregation for zero-shot 3d point cloud understanding. In 
+
+CVPR , 2024. 1 [53] G. Mei, L. Riz, Y. Wang, and F. Poiesi. Vocabulary-free 3d instance segmentation with vision and language assistant. In 
+
+3DV , 2025. 1 [54] S.I. Mirzadeh, M. Farajtabar, A. Li, N. Levine, A. Matsukawa, and H. Ghasemzadeh. Improved knowledge distillation via teacher assistant. In AAAI , 2020. 3 [55] Jishnu Mukhoti, Andreas Kirsch, Joost van Amersfoort, Philip HS Torr, and Yarin Gal. Deep deterministic uncer-tainty: A new simple baseline. In CVPR , pages 24384–24394, 2023. 3 [56] A. Nekrasov, J. Schult, O. Litany, B. Leibe, and F. Engelmann. Mix3d: Out-of-context data augmentation for 3d scenes. In 
+
+3DV , 2021. 6 [57] D. Nix and A. Weigend. Estimating the mean and variance of the target probability distribution. In ICCV , 1994. 3 [58] S.J. Oh, K. Murphy, J. Pan, J. Roth, F. Schroff, and A. Gal-lagher. Modeling uncertainty with hedged instance embed-ding. ICLR , 2018. 3 [59] Maxime Oquab, Timoth ´ee Darcet, Th ´eo Moutakanni, Huy Vo, Marc Szafraniec, Vasil Khalidov, Pierre Fernandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, et al. Dinov2: Learning robust visual features without supervision. arXiv preprint arXiv:2304.07193 , 2023. 2, 3 [60] Wonpyo Park, Dongju Kim, Yan Lu, and Minsu Cho. Rela-tional knowledge distillation. In CVPR , pages 3967–3976, 2019. 3 [61] Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor Killeen, Zem-ing Lin, Natalia Gimelshein, Luca Antiga, et al. Pytorch: An imperative style, high-performance deep learning library. 
+
+NeurIPS , 32, 2019. 6 [62] S. Peng, K. Genova, C. Jiang, A. Tagliasacchi, M. Pollefeys, T. Funkhouser, et al. Openscene: 3d scene understanding with open vocabularies. In CVPR , 2023. 1, 3, 4, 6, 7, 8 [63] Antonio Polino, Razvan Pascanu, and Dan Alistarh. Model compression via distillation and quantization. arXiv preprint arXiv:1802.05668 , 2018. 3 [64] A. Radford, J. Kim, C. Hallacy, et al. Learning transferable visual models from natural language supervision. In ICML ,2021. 1, 2, 3 [65] Mike Ranzinger, Greg Heinrich, Jan Kautz, and Pavlo Molchanov. Am-radio: Agglomerative vision foundation 19399 model reduce all domains into one. In CVPR , pages 12490– 12500, 2024. 3, 7 [66] Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bj ¨orn Ommer. High-resolution image synthesis with latent diffusion models. In CVPR , pages 10684– 10695, 2022. 2, 3 [67] Adriana Romero, Nicolas Ballas, Samira Ebrahimi Kahou, Antoine Chassang, Carlo Gatta, and Yoshua Bengio. Fitnets: Hints for thin deep nets. arXiv preprint arXiv:1412.6550 ,2014. 3 [68] Olaf Ronneberger, Philipp Fischer, and Thomas Brox. U-net: Convolutional networks for biomedical image segmentation. In MICCAI , pages 234–241. Springer, 2015. 2 [69] D. Rozenberszki, O. Litany, and A. Dai. Language-grounded indoor 3d semantic segmentation in the wild. In ECCV , 2022. 6[70] Tim Sainburg, Leland McInnes, and Timothy Q. Gentner. Parametric umap: learning embeddings with deep neural networks for representation and semi-supervised learning. 
+
+ArXiv e-prints , 2020. 6, 7 [71] C. Saltori, E. Krivosheev, S. Lathuili ´ere, N. Sebe, F. Galasso, G. Fiameni, E. Ricci, and F. Poiesi. Gipso: Geometrically informed propagation for online adaptation in 3d lidar seg-mentation. In ECCV , 2022. 3 [72] C. Saltori, F. Galasso, G. Fiameni, N. Sebe, F. Poiesi, and E. Ricci. Compositional semantic mix for domain adaptation in point cloud segmentation. TPAMI , 2023. 3 [73] Bharat Bhusan Sau and Vineeth N Balasubramanian. Deep model compression: Distilling knowledge from noisy teach-ers. arXiv preprint arXiv:1610.09650 , 2016. 3 [74] Christoph Schuhmann, Romain Beaumont, Richard Vencu, Cade Gordon, Ross Wightman, Mehdi Cherti, Theo Coombes, Aarush Katta, Clayton Mullis, Mitchell Wortsman, et al. Laion-5b: An open large-scale dataset for training next gener-ation image-text models. NeurIPS , 35:25278–25294, 2022. 1[75] J. Schult, F. Engelmann, T. Kontogianni, and B. Leibe. Dualconvmesh-net: Joint geodesic and euclidean convolu-tions on 3d meshes. In CVPR , 2020. 6 [76] A. Takmaz, E. Fedele, R. W. Sumner, M. Pollefeys, F. Tombari, and F. Engelmann. OpenMask3D: Open-Vocabulary 3D Instance Segmentation. In NeurIPS , 2023. 3, 4 [77] M. Tatarchenko, J. Park, V. Koltun, and Q. Zhou. Tangent convolutions for dense prediction in 3d. In CVPR , 2018. 6 [78] Hugo Touvron, Matthieu Cord, Matthijs Douze, Francisco Massa, Alexandre Sablayrolles, and Herv ´e J ´egou. Training data-efficient image transformers & distillation through atten-tion. In ICML , pages 10347–10357. PMLR, 2021. 3 [79] Thang Vu, Kookhoi Kim, Tung M Luu, Thanh Nguyen, and Chang D Yoo. Softgroup for 3d instance segmentation on point clouds. In CVPR , pages 2708–2717, 2022. 1 [80] X. Wang and L. Aitchison. Bayesian ood detection with aleatoric uncertainty and outlier exposure. AABI , 2021. 3 [81] Y. Wang, X. Chen, Y. You, L. Li, B. Hariharan, M. Campbell, K. Weinberger, and W.L. Chao. Train in germany, test in the usa: Making 3d object detectors generalize. In CVPR , 2020. 3[82] G. Wu and S. Gong. Peer collaborative learning for online knowledge distillation. In AAAI , 2021. 3 [83] M. Xu, Z. Zhang, F. Wei, H. Hu, and X. Bai. Side adapter net-work for open-vocabulary semantic segmentation. In CVPR ,2023. 2 [84] Xiaoxu Xu, Yitian Yuan, Jinlong Li, Qiudan Zhang, Zequn Jie, Lin Ma, Hao Tang, Nicu Sebe, and Xu Wang. 3d weakly supervised semantic segmentation with 2d vision-language guidance. In ECCV , pages 87–104. Springer, 2024. 1, 2 [85] Jihan Yang, Runyu Ding, Zhe Wang, and Xiaojuan Qi. Regionplc: Regional point-language contrastive learning for open-world 3d scene understanding. arXiv preprint arXiv:2304.00962 , 2023. 3, 6 [86] Y. Yang, M. Hayat, Z. Jin, C. Ren, and Y. Lei. Geometry and uncertainty-aware 3d point cloud class-incremental semantic segmentation. In CVPR , 2023. 3 [87] Yuan Yao, Yuanhan Zhang, Zhenfei Yin, Jiebo Luo, Wanli Ouyang, and Xiaoshui Huang. 3d point cloud pre-training with knowledge distillation from 2d images. arXiv preprint arXiv:2212.08974 , 2022. 3 [88] Junho Yim, Donggyu Joo, Jihoon Bae, and Junmo Kim. A gift from knowledge distillation: Fast optimization, network minimization and transfer learning. In CVPR , pages 4133– 4141, 2017. 3 [89] H. Zhang, F. Li, X. Zou, S. Liu, C. Li, J. Yang, and L. Zhang. A simple framework for open-vocabulary segmentation and detection. In ICCV , 2023. 2 [90] Junbo Zhang, Runpei Dong, and Kaisheng Ma. Clip-fo3d: Learning free open-world 3d scene representations from 2d dense clip. In ICCV , pages 2048–2059, 2023. 6 [91] Renrui Zhang, Ziyu Guo, Wei Zhang, Kunchang Li, Xupeng Miao, Bin Cui, Yu Qiao, Peng Gao, and Hongsheng Li. Point-clip: Point cloud understanding by clip. In CVPR , pages 8552–8562, 2022. 3 [92] Borui Zhao, Quan Cui, Renjie Song, Yiyu Qiu, and Jiajun Liang. Decoupled knowledge distillation. In CVPR , pages 11953–11962, 2022. 3 [93] Hengshuang Zhao, Jianping Shi, Xiaojuan Qi, Xiaogang Wang, and Jiaya Jia. Pyramid scene parsing network. In 
+
+CVPR , pages 2881–2890, 2017. 2 [94] Hanbin Zhao, Yongjian Fu, Mintong Kang, Qi Tian, Fei Wu, and Xi Li. Mgsvf: Multi-grained slow vs. fast framework for few-shot class-incremental learning. TPAMI , 2020. 3 [95] Sicheng Zhao, Guangzhi Wang, Shanghang Zhang, Yang Gu, Yaxian Li, Zhichao Song, Pengfei Xu, Runbo Hu, Hua Chai, and Kurt Keutzer. Multi-source distilling domain adaptation. In AAAI , 2020. 3 [96] Mingkai Zheng, Fei Wang, Shan You, Chen Qian, Changshui Zhang, Xiaogang Wang, and Chang Xu. Weakly supervised contrastive learning. In ICCV , pages 10042–10051, 2021. 6 [97] Yiwu Zhong, Jianwei Yang, Pengchuan Zhang, Chunyuan Li, Noel Codella, Liunian Harold Li, Luowei Zhou, Xiyang Dai, Lu Yuan, Yin Li, et al. Regionclip: Region-based language-image pretraining. In CVPR , pages 16793–16803, 2022. 1 [98] X. Zhou, R. Girdhar, A. Joulin, P. Kr ¨ahenb ¨uhl, and I. Misra. Detecting twenty-thousand classes using image-level supervi-sion. In ECCV , 2022. 2 19400
