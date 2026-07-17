@@ -25,3 +25,65 @@ subscriptions:
     stage: A
     diff_threshold_pct: 15
   keyword_recall_mode: or
+  intent_profiles:
+    - tag: open-vocab-d
+      description: 每天检索最近7天内发布或更新的开放词汇三维场景理解相关论文，优先关注最近48小时的新论文。重点覆盖：开放词汇三维语义分割、语义场建模、多视角特征一致性、2D→3D投影、层级聚合、部件语义推理等。
+      enabled: true
+      paper_sources:
+        - arxiv
+      keywords:
+        - keyword: open vocabulary 3d semantic segmentation
+          keyword_cn: 开放词汇三维语义分割
+          query: open vocabulary 3d semantic segmentation
+        - keyword: 3D Gaussian Splatting semantic
+          keyword_cn: 3D高斯泼溅语义场
+          query: 3D Gaussian Splatting semantic field open vocabulary
+        - keyword: multi-view feature aggregation point cloud
+          keyword_cn: 多视角特征聚合点云
+          query: multi-view semantic feature consistency aggregation point cloud
+        - keyword: 2D to 3D label transfer
+          keyword_cn: 2D转3D标签迁移
+          query: 2D mask to 3D point voxel Gaussian superpoint assignment
+        - keyword: superpoint hierarchical graph
+          keyword_cn: 超点层级图聚合
+          query: superpoint hierarchical graph aggregation dynamic granularity
+        - keyword: open vocabulary 3d retrieval
+          keyword_cn: 开放词汇三维检索
+          query: open vocabulary 3d region retrieval scene understanding
+      intent_queries:
+        - query: robust visibility aware multi view semantic feature aggregation and 2D to 3D semantic lifting
+          query_cn: 具有可见性感知的鲁棒多视角语义特征聚合与二维到三维语义投影方法
+          enabled: true
+          source: manual
+          note: ''
+        - query: latest methods for open vocabulary 3D scene segmentation using point clouds, NeRF, or 3D Gaussian splatting
+          query_cn: 基于点云、NeRF或三维高斯泼溅的最新开放词汇三维场景分割方法
+          enabled: true
+          source: manual
+          note: ''
+        - query: open vocabulary 3d semantic segmentation with multi view consistency
+          query_cn: 开放词汇三维语义分割多视角一致性
+          enabled: true
+          source: manual
+          note: ''
+        - query: 2D CLIP projection to 3D Gaussian or superpoint for open vocabulary scene understanding
+          query_cn: 2D CLIP投影到3D高斯或超点的开放词汇场景理解
+          enabled: true
+          source: manual
+          note: ''
+      updated_at: '2026-07-17T07:55:47.367Z'
+source_backends:
+  arxiv:
+    papers_table: arxiv_papers
+    use_vector_rpc: true
+    vector_rpc: match_arxiv_papers
+    vector_rpc_exact: match_arxiv_papers_exact
+    use_bm25_rpc: true
+    bm25_rpc: match_arxiv_papers_bm25
+    sync_table: arxiv_sync_status
+    sync_success_value: success
+    schema: public
+    kind: supabase
+    enabled: true
+    url: https://lyucdwgefyfbmaiopjbk.supabase.co
+    anon_key: sb_publishable_lX-oi64Uxyd7SIVv3_w2Uw_MTOojeKq
