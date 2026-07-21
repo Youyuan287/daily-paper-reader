@@ -1,0 +1,267 @@
+Title: RayOcc: Occlusion-Aware Ray Occupancy Estimation via Gaussian Mixture Intensity
+
+URL Source: https://arxiv.org/pdf/2607.17660v1
+
+Published Time: Tue, 21 Jul 2026 01:54:19 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# RayOcc: Occlusion-Aware Ray Occupancy Estimation via Gaussian Mixture Intensity 
+
+Junho Kim and Seongwon Lee †
+
+Abstract — Camera-only 3D semantic occupancy prediction aims to infer voxel-wise scene semantics from multi-view images, yet remains fundamentally challenging due to depth ambiguity and occlusion. Along a single camera ray, multiple spatially separated surfaces may coexist, making occupancy inherently a multi-label existence problem rather than a single-depth estimation task. However, most existing approaches favor a single dominant depth hypothesis per ray, limiting their ability to model volumetric scenes under complex occlusion. To address this limitation, we introduce RayOcc, an occlusion-aware ray occupancy framework that reformulates ray modeling as multi-label existence prediction. Instead of predicting a categori-cal depth distribution, RayOcc estimates a non-normalized Gaussian mixture intensity along each ray and converts it into interval-wise occupancy probabilities via a Poisson event formulation, allowing multiple occupied hypotheses to coex-ist without enforcing mutual competition across depth. The predicted mixture components are interpreted as occupancy hypotheses to initialize sparse 3D Gaussian primitives, which are refined and rasterized for semantic occupancy prediction. Experiments on the nuScenes benchmark show that RayOcc achieves state-of-the-art overall IoU and mIoU among the compared Gaussian-based occupancy methods. 
+
+I. INTRODUCTION Understanding the full 3D structure of dynamic urban scenes from camera observations is a fundamental problem in autonomous driving [1], [2], [3], [4]. Among recent scene representations, 3D semantic occupancy prediction [5], [6], [7], [8], [9], [10], [11], [12], [13] has emerged as a unified and expressive formulation. Instead of detecting objects or estimating a bird’s-eye-view (BEV) map, occupancy predic-tion aims to recover voxel-wise semantic labels over the entire volumetric space. This representation explicitly models occupied regions, free space, and thin structures, enabling holistic scene reasoning for planning and interaction. Despite its conceptual elegance, camera-only 3D seman-tic occupancy prediction remains intrinsically challenging. Unlike LiDAR-based systems [14], [15], [16], [17], [18], [19], [20] that directly observe sparse 3D points, vision-based pipelines must infer geometry purely from multi-view images. This inference remains challenging due to depth ambiguity and occlusion. In particular, along a single camera ray, multiple spatially separated surfaces, such as a foreground vehicle, a thin fence behind it, and distant background structures, can project onto the same pixel. Consequently, ray-level occupancy supervision is inherently               
+
+> J. Kim, and S. Lee are with the School of Electrical Engineering, Kookmin University, Seoul 02707, South Korea,
+
+{jhk00,sungonce }@kookmin.ac.kr . 
+
+> †denotes Corresponding Author.
+
+Fig. 1: Motivation of RayOcc. RayOcc predicts Mixture Gaussian ray occupancy to initialize multiple Gaussians per ray, improving robustness to occlusion and yielding cleaner Gaussian-to-voxel occupancy predictions than prior single-depth initialization. multi-label, as multiple disjoint depth intervals along a single ray can correspond to occupied regions. This property distinguishes 3D occupancy prediction from classical depth estimation [21], [22], [23], [4]. Many depth-based lifting methods assume a single dominant surface per ray and model depth using a mutually exclusive categorical distribution. In contrast, volumetric occupancy does not require selecting a single surface location. Instead, it requires determining the independent existence of occupied regions throughout 3D space. However, most existing camera-based occupancy methods inherit ray modeling strategies originally designed for depth prediction. Specifically, many lifting-based approaches [4], [24], [2], [25] discretize depth into bins and predict asoftmax-normalized categorical distribution per pixel. Such normalization enforces conservation of probability mass along the ray, implicitly coupling depth intervals through competition. As a result, multiple occupied regions must compete for representational capacity, often leading to sup-pressed thin structures or fragmented geometry under occlu-sion. This mismatch is not merely an implementation artifact but a formulation-level issue. When normalized probabili-ties are distributed across depth bins, the representation is constrained to favor a dominant hypothesis. Yet volumetric arXiv:2607.17660v1 [cs.CV] 20 Jul 2026 occupancy supervision does not impose such mutual exclu-sivity, since occupied intervals correspond to independent existence events rather than competing outcomes. To address this limitation, we propose RayOcc, an occlusion-aware ray occupancy framework that reformulates ray reasoning from depth selection to occupancy existence modeling. Rather than predicting a categorical depth distribu-tion, RayOcc estimates a non-normalized Gaussian mixture intensity along each ray, allowing multiple occupancy hy-potheses to coexist without collapsing into a single dominant peak. We interpret occupancy within each depth interval as an event occurrence and convert the integrated mixture inten-sity into interval-wise existence probabilities via a Poisson event formulation. This design removes the normalization constraint and allows multiple occupied intervals to accu-mulate evidence independently, better aligning ray modeling with the multi-label nature of volumetric occupancy. We interpret each mixture component as a candidate occu-pancy hypothesis along the ray, and convert its amplitude into an activation probability for instantiating a corresponding 3D Gaussian primitive. This adaptive component-wise sampling allows each ray to initialize a variable number of Gaussians, enabling multi-surface representation under depth ambiguity while retaining a sparse primitive-based representation. The initialized primitives are subsequently refined and rasterized to produce voxel-wise semantic occupancy predictions. Experiments on the nuScenes [26] benchmark show that RayOcc improves overall occupancy accuracy and Gaussian initialization quality at a moderate additional computational cost. Our contributions are summarized as follows:  
+
+> •
+
+We propose a Mixture Intensity Network that predicts non-normalized Gaussian mixture intensity along each ray and maps integrated intensity to interval-wise exis-tence probabilities for multi-label occupancy modeling.  
+
+> •
+
+We introduce adaptive component-wise sampling that converts mixture amplitudes into activation probabili-ties, enabling a variable number of Gaussian primitives to be initialized per ray.  
+
+> •
+
+RayOcc achieves state-of-the-art performance on nuScenes, with improved Gaussian initialization quality at a moderate additional computational cost. II. R ELATED WORK 
+
+A. 3D Semantic Occupancy Prediction 
+
+Camera-only 3D semantic occupancy prediction aims to infer dense voxel-wise semantics from multi-view images and has been actively studied as a scalable alternative to LiDAR-based perception. Early camera-based methods rely on dense voxel representations [7], [8], [11], which are expressive but computationally expensive due to the dense modeling of large empty regions. Planar representations such as BEVFormer [27] and TPVFormer [28] project multi-view image features onto structured 2D grids for more efficient scene understanding. BEV features [29] provide an efficient bird’s-eye-view representation but lack vertical structure, whereas TPV features partially recover 3D structure through multi-plane representations. Sparse representations have therefore been explored to reduce spatial redundancy. Point-based methods [30], [31] provide efficiency but lack spatial extent. Gaussian-based representations [32] improve expressiveness by model-ing spatially continuous primitives, but their effective-ness depends on accurate Gaussian initialization. Gaus-sianFormer [33] initializes Gaussian primitives randomly, whereas GaussianFormer-2 [23] and VG3T [34] initialize a single primitive per pixel, implicitly restricting each ray to a single dominant depth hypothesis. In contrast, our RayOcc models ray-wise occupancy as multi-label existence and initializes multiple Gaussians per ray from mixture-based occupancy hypotheses. 
+
+B. Ray-based Density and Occupancy Modeling 
+
+Ray-based lifting is widely used in camera-only percep-tion. Lift-Splat-Shoot-style approaches [4], [24], [2], [25] discretize depth into bins and predict a softmax-normalized categorical depth distribution to aggregate image features along camera rays. This formulation is restrictive for se-mantic occupancy prediction, where multiple depth intervals along a ray may be occupied. The resulting softmax normal-ization introduces competition across depth bins, which is not well aligned with multi-label volumetric occupancy. Volume rendering in NeRF [35], [36] converts density along a ray into opacity and transmittance for photometric image synthesis. RayOcc uses a related exponential mapping, but for a different purpose, converting integrated mixture intensity into existence probabilities for supervised ray-level occupancy prediction. Unlike rendering weights that are coupled through transmittance, RayOcc predicts interval-wise occupancy probabilities without enforcing visibility-based competition along the ray. 
+
+C. Mixture Density Networks 
+
+Mixture Density Networks (MDNs) [37] model condi-tional distributions using mixtures of parametric densities and are commonly used to represent multi-modal continuous predictions. Mixture formulations have been applied in vision tasks such as stereo disparity estimation [38] and sparse-input novel view synthesis [39]. In contrast, ray-level semantic occupancy is not a contin-uous regression target but a multi-label existence prediction problem over depth. Along a camera ray, multiple depth intervals may be occupied simultaneously. Standard MDN formulations normalize mixture weights, coupling compo-nents through a fixed total probability mass. This coupling is not well aligned with occupancy supervision, where disjoint occupied intervals should not compete. RayOcc instead pre-dicts a non-normalized mixture intensity along each ray and maps it to bin-wise existence probabilities, allowing multiple occupancy hypotheses to coexist. III. P ROPOSED APPROACH 
+
+In this section, we first introduce RayOcc’s Occlusion-Aware Ray Occupancy Estimation via Gaussian Mixture Fig. 2: Overview of RayOcc. Multi-view images are encoded into per-ray features and concatenated with ray encoding. A Mixture Intensity Network predicts ray-wise mixture parameters, which are converted into multi-label ray occupancy probabilities via Poisson probability modeling. The predicted mixture weights are used for adaptive sampling to initialize a compact set of semantic 3D Gaussians, which are refined and rasterized to produce the final 3D semantic occupancy grid. Intensity Network framework. Then, we present the details of the RayOcc model architecture. 
+
+A. Problem Setup and Overview 
+
+Vision-centric 3D semantic occupancy prediction aims to recover the geometric structure and semantic labels of a 3D scene from multi-view images. Formally, given a set of multi-view images I = {Ii}Ni=1 , where N denotes the number of input views. The objective is to predict a voxel-wise semantic occupancy grid O ∈ RC×X×Y ×Z , where 
+
+{X, Y, Z } represents the spatial resolution of the 3D voxel space and C is the number of predefined semantic classes. Instead of directly constructing a dense 3D feature volume for all voxels, we adopt a sparse and continuous scene representation based on 3D Gaussian primitives. Specifically, we represent the scene as a set of M Gaussians G =
+
+{gm}Mm , gm = ( pm, sm, qm, α m, fm), where pm ∈ R3
+
+denotes the 3D mean of the Gaussian, sm ∈ R3 as scale, 
+
+qm ∈ R4 is a rotation represented as a quaternion, αm ∈
+
+[0 , 1] as an opacity, and fm ∈ RC a semantic vector. 
+
+B. Ray Occupancy Modeling via Gaussian Mixture Intensity 
+
+Given N multi-view images I, we extract per-view feature maps Fn ∈ RC×H×W using a pretrained Visual Geometry Grounded Transformer (VGGT) backbone [40]. Following VG3T [34], we adapt VGGT to the nuScenes by removing camera tokens and retaining only visual tokens for dense prediction. VGGT refines these tokens through in-frame and cross-frame attention to aggregate contextual information from both within the same view and across views, yield-ing multi-view-aware tokens. The refined visual tokens are then projected to spatial feature maps Fn through a DPT head [41], which are fed to our Mixture Intensity Networks for ray occupancy estimation. For each feature map pixel, we form a camera ray r with origin or ∈ R3 and direction 
+
+ur ∈ R3, and obtain a per-ray feature vector fr ∈ F. With origin or and direction vector ur , we encode ray as Pl¨ ucker coordinate er and concatenate to the per-ray feature fr to inject geometric context: 
+
+hr = [ fr , er ]. (1) We discretize the depth range [dmin , d max ] into S bins with edges {di}Si=0 . Unlike categorical depth distributions that apply softmax across bins enforcing mutual exclusivity, we model ray occupancy as a non-normalized event intensity along depth. For each ray r, a Mixture Intensity Network 
+
+fmix predicts the parameters of K Gaussian components 
+
+{ar,k , μ r,k , σ r,k }Kk=1 .
+
+ar , μ r , σ r = fmix (hr ), (2) where ar,k ≥ 0 is a non-negative amplitude, μr,k ∈
+
+[dmin , d max ] is the component mean, and σr,k > 0 is the component standard deviation. We define the continuous ray-wise intensity function: 
+
+λr (d) = 
+
+> K
+
+X
+
+> k=1
+
+ar,k N (d; μr,k , σ 2
+
+> r,k
+
+). (3) Unlike a categorical depth distribution, λr is not constrained by P 
+
+> k
+
+ar,k = 1 , allowing multiple occupancy hypotheses to receive high intensity along a single ray. We interpret occupancy within each depth bin as an event occurrence and convert intensity into the probability that at least one occupancy event exists in that bin. The integrated intensity of bin i is 
+
+Λr,i =
+
+Z di
+
+> di−1
+
+λr (t) dt ≈ λr (ci)∆ i, ci = di−1 + di
+
+2 . (4) Assuming a Poisson event model, the probability of at least one event in bin i becomes 
+
+Pr( Nr,i ≥ 1) = 1 − Pr( Nr,i = 0) , (5) 
+
+pr,i = 1 − exp( −Λr,i ). (6) The resulting αray = {pr,i }Si=1 forms a multi-label ray occupancy distribution, where multiple depth bins can si-multaneously have high probability. This matches semantic occupancy supervision, in which a ray may intersect multiple semantic surfaces. TABLE I: 3D semantic occupancy prediction results on nuScenes benchmark.                                                                                                                                                                                                           
+
+> Method IoU mIoU
+> ■ barrier
+> ■ bicycle
+> ■ bus
+> ■ car
+> ■ const. veh.
+> ■ motorcycle
+> ■ pedestrian
+> ■ traffic cone
+> ■ trailer
+> ■ truck
+> ■ drive. suf.
+> ■ other flat
+> ■ sidewalk
+> ■ terrain
+> ■ manmade
+> ■ vegetation MonoScene [5] 23.96 7.31 4.03 0.35 8.00 8.04 2.90 0.28 1.16 0.67 4.01 4.35 27.72 5.20 15.13 11.29 9.03 14.86 Atlas [42] 28.66 15.00 10.64 5.68 19.66 24.94 8.90 8.84 6.47 3.28 10.42 16.21 34.86 15.46 21.89 20.95 11.21 20.54 BEVFormer [27] 30.50 16.75 14.22 6.58 23.46 28.28 8.66 10.77 6.64 4.05 11.20 17.78 37.28 18.00 22.88 22.17 13.80 22.21 TPVFormer [28] 11.51 11.66 16.14 7.17 22.63 17.13 8.83 11.39 10.46 8.23 9.43 17.02 8.07 13.64 13.85 10.34 4.90 7.37 TPVFormer* [28] 30.86 17.10 15.96 5.31 23.86 27.32 9.79 8.74 7.09 5.20 10.97 19.22 38.87 21.25 24.26 23.15 11.73 20.81 OccFormer [12] 31.39 19.03 18.65 10.41 23.92 30.29 10.31 14.19 13.59 10.13 12.49 20.77 38.78 19.79 24.19 22.21 13.48 21.35 SurroundOcc [11] 31.49 20.30 20.59 11.68 28.06 30.86 10.70 15.14 14.09 12.06 14.38 22.26 37.29 23.70 24.49 22.77 14.89 21.86 GaussianFormer [33] 29.83 19.10 19.52 11.26 26.11 29.78 10.47 13.83 12.58 8.67 12.74 21.57 39.63 23.28 24.46 22.99 9.59 19.12 GaussianFormer-2 [23] 30.56 20.02 20.15 12.99 27.61 30.23 11.19 15.31 12.64 9.63 13.31 22.26 39.68 23.47 25.62 23.20 12.25 20.73 VG3T [34] 34.06 21.74 19.95 13.63 28.69 29.52 12.69 16.02 13.77 10.64 15.75 23.02 41.74 26.26 27.52 26.44 16.51 25.75 Ours 34.84 22.03 20.31 13.32 29.98 29.79 15.31 14.72 13.25 10.55 15.47 23.53 42.67 27.02 28.51 26.96 15.69 25.44 * means supervised by dense occupancy annotations as opposed to the original LiDAR segmentation labels. The best and second-best performances are represented by bold and underline respectively.
+
+C. Adaptive Component-Wise Sampling 
+
+Given the predicted mixture components, we construct an initial set of 3D Gaussian positions by interpreting each mixture component as an independent occupancy hypothesis. We convert the non-negative amplitude ar,k into a component activation probability 
+
+qr,k = 1 − exp( −βa r,k ), (7) where β controls the expected number of selected hypotheses per ray. We then sample a binary gate zr,k ∼ Bernoulli( qr,k ).This allows each ray to instantiate a variable number of Gaussians, enabling multi-hypothesis depth modeling. Let 
+
+{k′ ∈ { 1, . . . , K } | zr,k = 1 } denote the index set of selected components for ray r. For each selected component k′, we lift its mean depth to a 3D Gaussian position pr,k ′ using known camera ray geometry: 
+
+pr,k ′ = or + μr,k ′ ur , (8) where or and ur are the ray origin and direction, re-spectively, and μr,k ′ is the mean depth of the selected mixture component. We then apply a lightweight grid-based subsampling operator to remove redundant Gaussians and build a compact sparse Gaussian latent set G, which serves as input to the subsequent refinement and Gaussian rasterization stage. 
+
+D. Refinement and Rasterization 
+
+Given the initialized Gaussian latent set G =
+
+{(pm, fm)}Mm=1 , we further refine the Gaussian attributes and aggregate them into a 3D Semantic Occupancy. We adopt a 3D sparse convolutional refinement network 
+
+Φ( ·) to incorporate local 3D context among neighboring Gaussians and to predict residual updates to their position and estimate other gaussian attributes. For each Gaussian gm,we predict a residual mean offset ∆pm, scale sm, quaternion 
+
+qm, and opacity αm:
+
+∆pm, sm, qm, α m, fm = Φ( fm), (9) and complete set of Gaussian by updating the center as 
+
+G = ( pm + ∆ pm, sm, qm, α m, fm). (10) After refinement, we obtain the final Gaussian set G. The voxel-wise semantic occupancy prediction ˆO ∈ RC×X×Y ×Z
+
+is then inferred via a probabilistic Gaussian splatting opera-tor: ˆO = Prob( G), (11) where Prob( ·) follows the probabilistic superposition formu-lation in GaussianFormer-2 [23]. 
+
+E. Loss 
+
+We train RayOcc end-to-end with a weighted sum of an occupancy loss and an auxiliary ray supervision loss: 
+
+Ltotal = λocc Locc + λray Lray , (12) where λocc and λray are scalar weights. 
+
+Occupancy Loss. Due to the imbalance in occupancy grids, we adopt a class-balanced loss that explicitly empha-sizes non-empty voxels while still optimizing region-level overlap. Specifically, we combine a weighted voxel-wise cross-entropy term with the Lov´ asz-Softmax loss: 
+
+Locc = Lce + Llov . (13) 
+
+Ray Distribution Loss. To supervise the predicted ray-wise bin occupancy αray , we derive binary ground-truth labels along each camera ray from the dense occupancy annotations. Given the camera calibration, each pixel cor-responds to a ray with origin or and unit direction ur . We uniformly discretize the depth range [dmin , d max ] into S bins and sample one 3D reference point per bin at the bin center 
+
+di:
+
+xr,i = or + di ur , i = 1 , . . . , S. (14) We then query each reference point xr,i into the occupancy grid and assign a binary label yr,i ∈ {0, 1} indicating whether the corresponding voxel is non-empty. The resulting 
+
+yr,i provides multi-label supervision over depth bins, allow-ing multiple occupied intervals along a single ray. To address the severe class imbalance between empty and occupied bins, we supervise the predicted per-ray bin occupancy αray using the ground-truth ray labels yr,i with a combination of binary cross-entropy (BCE) and Dice loss: 
+
+Lray = Lbce + Ldice . (15) IV. E XPERIMENTS 
+
+A. Datasets 
+
+We conduct experiments on the nuScenes [26] dataset, a large-scale public benchmark for autonomous driving that contains 1000 driving scenes collected in Boston and Sin-gapore. The official split comprises 700/150/150 scenes for training, validation, and testing, respectively. Each scene lasts 20 seconds and includes synchronized multi-view RGB images captured by 6 surrounding cameras, with keyframes annotated at 2 Hz. For 3D semantic occupancy prediction, we use the dense 3D semantic occupancy annotations provided by Sur-roundOcc [11] for both training and evaluation. The voxel grid covers [−50 , 50] meters along the x and y axes and 
+
+[−5, 3] meters along the z axis, with a resolution of 200 ×
+
+200 × 16 , corresponding to a voxel size of 0.5 m. Each voxel is assigned one of 18 labels, including 16 semantic classes, 1 empty class, and 1 unknown class. 
+
+B. Evaluation Metrics 
+
+We evaluate 3D semantic occupancy prediction using mean Intersection-over-Union (mIoU) and Intersection-over-Union (IoU): 
+
+mIoU = 1
+
+|C ′|
+
+X
+
+> i∈C ′
+
+T P i
+
+T P i + F P i + F N i
+
+, (16) 
+
+IoU = T P ̸=c0
+
+T P ̸=c0 + F P ̸ =c0 + F N ̸ =c0
+
+, (17) where C′ denotes the set of non-empty semantic classes, 
+
+c0 is the empty class, and T P , F P , and F N denote the numbers of true positive, false positive, and false negative voxels, respectively. 
+
+C. Implementation Details 
+
+We set the input image resolution to 900 ×1600 and apply data augmentations, including random horizontal flipping and photometric distortion. We employ a pretrained VGGT backbone [40]; each 900 ×1600 image is resized to 294 ×518 
+
+before being fed into the backbone to extract image features. For ray occupancy estimation, we discretize the depth range 
+
+[1 , 71] meters into S = 128 bins and set the number of mixture components in the Mixture Intensity Networks to 
+
+K = 3 . For adaptive component-wise sampling, we set the Poisson activation parameter to β = 1 and use stochastic Bernoulli sampling during training, while applying a deter-ministic thresholding at inference. We further apply grid-based subsampling with a 0.5 m cell size to remove redundant Gaussians. We optimize the model using AdamW [43] with a weight decay of 0.01. The learning rate is warmed up in the first 500 iterations to a maximum of 1 × 10 −4 and TABLE II: Gaussian Sampling Methods Comparison.                  
+
+> Method Gaussian Sampling Position Perc. (%) ↑Dist. (m) ↓
+> GaussianFormer [33] Random 16.41 3.07 GaussianFormer-2 [23] Categorical 28.85 1.24 VG3T [34] Depth 51.22 0.97 RayOcc (ours) Component-wise 61.07 0.70
+
+TABLE III: Efficiency Comparison with Gaussian Represe-nation Methods.                               
+
+> Method Number of Gaussians ↓Latency (ms) ↓Memory (MB) ↓mIoU IoU GaussianFormer [33] 144000 372 6229 19.10 29.83 GaussianFormer-2 [23] 25600 513 3063 20.02 30.56 VG3T [34] 13661* 223 1975 21.74 34.06 RayOcc (ours) 19251* 243 2620 22.03 34.84
+> * denotes average number of Gaussians per scene. The best and second-best performances denoted by bold and underline.
+
+then decayed with a cosine annealing schedule. We train the model for 20 epochs in bfloat16 precision and use FlashAttention [44] to accelerate attention computation. All experiments are conducted with a batch size of 4 on NVIDIA L40s GPUs. 
+
+D. Main Results 
+
+We compare RayOcc with recent camera-only 3D se-mantic occupancy methods on the nuScenes [26] valida-tion set. Table I reports the quantitative results. RayOcc achieves the best overall IoU and mIoU among the compared Gaussian-based methods, reaching 34.84 IoU and 22.03 mIoU. Compared with VG3T [34], RayOcc improves IoU from 34.06 to 34.84 and mIoU from 21.74 to 22.03. Com-pared with GaussianFormer-2 [23], RayOcc improves IoU from 30.56 to 34.84 and mIoU from 20.02 to 22.03. We observe consistent gains on large background categories that dominate scene geometry. In particular, RayOcc improves over VG3T [34], demonstrating stronger modeling of static layout under camera-only geometry ambiguity. RayOcc also yields competitive performance on foreground objects and improves several challenging categories such as bus and construction vehicle, while remaining comparable on other dynamic and small classes. Overall, these results validate that RayOcc’s occlusion-aware ray occupancy modeling provides more reliable geometry prediction by improved IoU. 
+
+E. Ablation Study 
+
+We analyze RayOcc by comparing against representative Gaussian-based occupancy methods and by ablating the Gaussian sampling strategy. 
+
+Sampling Methods Comparison. Table II evaluates the quality of Gaussian initialization using two position metrics. 
+
+Perc. measures the percentage of Gaussians placed inside occupied voxels, and Dist. measures the average L1 distance to the nearest occupied voxel center. GaussianFormer [33] initializes Gaussian centers ran-domly in 3D space and relies on 4 iterative refinement Fig. 3: Qualitative results of our method and VG3T on SurroundOcc dataset. to gradually move primitives toward occupied regions, which can waste representational capacity in early stages. GaussianFormer-2 [23] predicts a per-ray categorical depth distribution by training ray logits including an explicit empty logit with occupancy supervision, and then applies a soft-max over depth to obtain a normalized distribution. During Gaussian initialization, it samples a single depth bin per ray from this categorical distribution, introducing mutual competition across depth bins and restricting each ray to a single hypothesis. VG3T [34] performs depth regression to obtain a per-pixel depth estimate and initializes Gaussians at the regressed depths, which also yields one dominant hypothesis per ray. Compared with categorical depth sampling in GaussianFormer-2 [23], RayOcc increases Perc. from 28.85% to 61.07% and reduces Dist. from 1.24 m to 0.70 m, indicating more accurate and compact initialization. Compared with VG3T [34], RayOcc improves Perc. by 9.85 percentage points and reduces Dist. by 0.27 m. These results indicate that component-wise multi-hypothesis initialization places Gaussian primitives closer to occupied regions than prior Gaussian initialization strategies. 
+
+Efficiency Comparison. Table III reports the number of Gaussians, latency, memory usage, and occupancy accu-racy. Compared with GaussianFormer-2 [23], RayOcc im-proves IoU from 30.56 to 34.84 and mIoU from 20.02 to 22.03, while reducing latency from 513 ms to 243 ms and memory usage from 3063 MB to 2620 MB. Compared with VG3T [34], RayOcc improves IoU from 34.06 to 34.84 and mIoU from 21.74 to 22.03, while increasing the average TABLE IV: Ablation Study on RayOcc’s Adaptive Sampling                                      
+
+> Sampling mIoU IoU Average Number of Gaussians ↓Position Perc. (%) ↑Dist. (m) ↓
+> Bernoulli 21.92 35.08 23136 53.55 0.85
+> τ= 0 .522.01 34.90 19822 59.83 0.72
+> τ= 0 .722.02 34.87 19681 60.41 0.71
+> τ= 0 .822.03 34.84 19251 61.07 0.70
+> τ= 0 .922.03 34.76 18679 62.38 0.68
+
+number of Gaussians from 13,661 to 19,251. This reflects the intended trade-off of the proposed multi-hypothesis initialization. RayOcc allocates additional prim-itives to multiple plausible depth hypotheses rather than committing each ray to a single dominant hypothesis. These additional primitives improve Gaussian initialization quality and overall occupancy accuracy, at the cost of moderate increases in Gaussian count, latency, and memory compared with VG3T. 
+
+Gaussian Sampling Strategy. We further study how the component activation rule affects both initialization qual-ity and downstream occupancy prediction. In Table IV, 
+
+τ denotes the deterministic activation threshold applied to component weights at inference, which directly controls the number of instantiated Gaussians per scene. As τ increases, low-confidence components are progressively filtered out, leading to fewer Gaussians and consistently improved po-sition quality. Importantly, occupancy accuracy remains largely stable over a wide range of thresholds (0.7–0.9), indicating that RayOcc is not overly sensitive to the exact choice of τ .Fig. 4: Qualitative comparison of predicted occupancy between our method with GaussianFormer-2 and VG3T. We use τ = 0.8 by default since it offers a favorable balance, it maintains the best mIoU while achieving higher IoU than τ = 0 .9 with only a modest increase in Gaussian count. When τ is set too low, the model instantiates more primitives, which can increase false positives and degrade position metrics. When τ is too high, aggressive pruning may under-cover thin structures or distant surfaces and slightly reduce IoU. Finally, we report stochastic Bernoulli activation during training as a contrast to deterministic thresholding. Stochastic activation encourages exploration of multiple hypotheses and provides gradients to the activation parameters, but it also introduces sampling variance and tends to generate more Gaussians. For evaluation, we therefore adopt deterministic thresholding to obtain stable primitive counts and repro-ducible predictions. 
+
+F. Visualization 
+
+Figure 3 visualizes the predicted 3D Gaussians and the resulting semantic occupancy for VG3T [34] and our Ray-Occ. Overall, RayOcc produces cleaner and more spatially consistent occupancy, particularly in regions affected by occlusion. For instance, in the first row RayOcc recovers the truck more coherently even when it is adjacent to fence-like structures, whereas VG3T tends to spill primitives into the fence region. RayOcc also yields clearer ground layout and less fragmented occupancy around object boundaries, reduc-ing spurious predictions near thin structures. We attribute these improvements to our occlusion-aware ray occupancy formulation, which supports multiple depth hypotheses along a single line of sight and thus avoids over-committing to a single dominant depth estimate under severe ray-depth ambiguity. Consequently, RayOcc allocates primitives more effectively to geometrically plausible surfaces, improving coverage in occluded scenes and producing higher-quality semantic occupancy outputs. These qualitative observations are consistent with the quantitative gains in Table I. Figure 4 further provides a qualitative comparison of pre-dicted occupancy among RayOcc, GaussianFormer-2 [23], and VG3T [34]. Compared with GaussianFormer-2, RayOcc places more primitives in geometry occupied places, leading to less noisy occupancy and sharper reconstruction of pla-nar structures such as building facades and road surfaces. Compared with VG3T, RayOcc better preserves partially occluded objects and maintains more complete geometry behind occluders, reflecting the benefit of multi-label ray occupancy modeling. Together, these visualizations high-light that RayOcc improves both the initialization of sparse Gaussians and the resulting dense occupancy prediction, especially in challenging scenes with heavy occlusion. V. CONCLUSIONS We presented RayOcc for addressing the mismatch be-tween single-depth ray lifting and multi-label volumetric occupancy supervision in camera-only 3D semantic occu-pancy prediction. RayOcc models each ray with a non-normalized Gaussian mixture intensity and maps integrated intensity to interval-wise existence probabilities, allowing multiple occupancy hypotheses to coexist along a ray. The predicted mixture components are further converted into sparse 3D Gaussian primitives through adaptive component-wise sampling, improving Gaussian initialization under depth ambiguity. Experiments on nuScenes show improved overall occupancy accuracy and initialization quality. ACKNOWLEDGMENT This work was supported by the National Research Foun-dation of Korea (NRF) grant funded by the Korea gov-ernment (MSIT) (No. RS-2026-25497410). This work was also supported by the National Research Foundation of Korea (NRF) grant funded by the Korea government (MSIT) (No. RS-2026-25522067). This work was also supported by the Institute of Information & Communications Technology Planning & Evaluation (IITP) grant funded by the Korea government (MSIT) (No. RS-2025-02219317, AI Star Fel-lowship, Kookmin University). REFERENCES [1] Y. Hu, J. Yang, L. Chen, K. Li, C. Sima, X. Zhu, S. Chai, S. Du, T. Lin, W. Wang, and et al., “Goal-Oriented Autonomous Driving,” arXiv preprint arXiv:2212.10156, 2022. [2] Y. Li, Z. Ge, G. Yu, J. Yang, Z. Wang, Y. Shi, J. Sun, and Z. Li, “Bevdepth: Acquisition of reliable depth for multi-view 3d object detection,” 2022. [Online]. Available: https://arxiv.org/abs/2206.10092 [3] X. Chen, H. Ma, J. Wan, B. Li, and T. Xia, “Multi-View 3D Object Detection Network for Autonomous Driving,” in CVPR , 2017, pp. 1907–1915. [4] J. Philion and S. Fidler, “Lift, Splat, Shoot: Encoding Images from Arbitrary Camera Rigs by Implicitly Unprojecting to 3D,” in ECCV ,2020. [5] A.-Q. Cao and R. de Charette, “Monoscene: Monocular 3D Semantic Scene Completion,” in CVPR , 2022, pp. 3991–4001. [6] H. Jiang, T. Cheng, N. Gao, H. Zhang, W. Liu, and X. Wang, “Sym-phonize 3D Semantic Scene Completion with Contextual Instance Queries,” arXiv preprint arXiv:2306.15670, 2023. [7] Y. Li, Z. Yu, C. Choy, C. Xiao, J. M. Alvarez, S. Fidler, C. Feng, and A. Anandkumar, “VoxFormer: Sparse Voxel Transformer for Camera-Based 3D Semantic Scene Completion,” in CVPR , 2023, pp. 9087– 9098. [8] Z. Li, Z. Yu, D. Austin, M. Fang, S. Lan, J. Kautz, and J. M. Alvarez, “FB-Occ: 3D Occupancy Prediction Based on Forward-Backward View Transformation,” arXiv preprint arXiv:2307.01492, 2023. [9] Y. Huang, W. Zheng, B. Zhang, J. Zhou, and J. Lu, “SelfOcc: Self-Supervised Vision-Based 3D Occupancy Prediction,” in CVPR , 2024. [10] W. Tong, C. Sima, T. Wang, L. Chen, S. Wu, H. Deng, Y. Gu, L. Lu, P. Luo, D. Lin, and et al., “Scene as Occupancy,” in ICCV , 2023, pp. 8406–8415. [11] Y. Wei, L. Zhao, W. Zheng, Z. Zhu, J. Zhou, and J. Lu, “SurroundOcc: Multi-Camera 3D Occupancy Prediction for Autonomous Driving,” in 
+
+ICCV , 2023, pp. 21 729–21 740. [12] Y. Zhang, Z. Zhu, and D. Du, “OccFormer: Dual-Path Transformer for Vision-Based 3D Semantic Occupancy Prediction,” arXiv preprint arXiv:2304.05316, 2023. [13] Z. Yu, C. Shu, J. Deng, K. Lu, Z. Liu, J. Yu, D. Yang, H. Li, and Y. Chen, “FlashOcc: Fast and Memory-Efficient Occupancy Predic-tion via Channel-to-Height Plugin,” arXiv preprint arXiv:2311.12058, 2023. [14] C. R. Qi, L. Yi, H. Su, and L. J. Guibas, “Pointnet++: Deep hierarchical feature learning on point sets in a metric space,” 2017. [Online]. Available: https://arxiv.org/abs/1706.02413 [15] C. R. Qi, H. Su, K. Mo, and L. J. Guibas, “Pointnet: Deep learning on point sets for 3d classification and segmentation,” 2017. [Online]. Available: https://arxiv.org/abs/1612.00593 [16] A. H. Lang, S. Vora, H. Caesar, L. Zhou, J. Yang, and O. Beijbom, “Pointpillars: Fast encoders for object detection from point clouds,” 2019. [Online]. Available: https://arxiv.org/abs/1812.05784 [17] Y. Zhou and O. Tuzel, “VoxelNet: End-to-End Learning for Point Cloud Based 3D Object Detection,” in CVPR , 2018, pp. 4490–4499. [18] T. Liang, H. Xie, K. Yu, Z. Xia, Z. Lin, Y. Wang, T. Tang, B. Wang, and Z. Tang, “BEVFusion: A Simple and Robust Lidar-Camera Fusion Framework,” NIPS , vol. 35, pp. 10 421–10 434, 2022. [19] Z. Liu, H. Tang, A. Amini, X. Yang, H. Mao, D. L. Rus, and S. Han, “BEVFusion: Multi-Task Multi-Sensor Fusion with Unified Bird’s-Eye View Representation,” in ICRA , 2023, pp. 2774–2781. [20] D. Ye, Z. Zhou, W. Chen, Y. Xie, Y. Wang, P. Wang, and H. Foroosh, “LidarMultiNet: Towards a Unified Multi-Task Network for Lidar Perception,” in AAAI , 2023, pp. 3231–3240. [21] C. Godard, O. Mac Aodha, and G. J. Brostow, “Unsupervised monoc-ular depth estimation with left-right consistency,” in CVPR , 2017. [22] L. Yang, B. Kang, Z. Huang, Z. Zhao, X. Xu, J. Feng, and H. Zhao, “Depth anything v2,” arXiv:2406.09414 , 2024. [23] Y. Huang, A. Thammatadatrakoon, W. Zheng, Y. Zhang, D. Du, and J. Lu, “Gaussianformer-2: Probabilistic gaussian superposition for efficient 3d occupancy prediction,” arXiv preprint arXiv:2412.04384 ,2024. [24] J. Huang, G. Huang, Z. Zhu, and D. Du, “Bevdet: High-Performance Multi-Camera 3D Object Detection in Bird-Eye-View,” arXiv preprint arXiv:2112.11790, 2021. [25] S.-W. Lu, Y.-H. Tsai, and Y.-T. Chen, “Toward real-world bev per-ception: Depth uncertainty estimation via gaussian splatting,” in Pro-ceedings of the Computer Vision and Pattern Recognition Conference (CVPR) , June 2025, pp. 17 124–17 133. [26] H. Caesar, V. Bankiti, A. H. Lang, S. Vora, V. E. Liong, Q. Xu, A. Krishnan, Y. Pan, G. Baldan, and O. Beijbom, “nuScenes: A Multimodal Dataset for Autonomous Driving,” in CVPR , 2020. [27] Z. Li, W. Wang, H. Li, E. Xie, C. Sima, T. Lu, Q. Yu, and J. Dai, “BEVFormer: Learning Bird’s-Eye-View Representation from Multi-Camera Images via Spatiotemporal Transformers,” arXiv preprint arXiv:2203.17270, 2022. [28] Y. Huang, W. Zheng, Y. Zhang, J. Zhou, and J. Lu, “Tri-Perspective View for Vision-Based 3D Semantic Occupancy Prediction,” in CVPR ,2023, pp. 9223–9232. [29] S. Woo, M. Park, Y. Lee, S. Lee, and E. Kim, “Location-aware transformer network for bird’s eye view semantic segmentation,” IEEE Transactions on Intelligent Vehicles , 2024. [30] Y. Shi, T. Cheng, Q. Zhang, W. Liu, and X. Wang, “Occupancy as Set of Points,” in ECCV , 2024. [31] J. Wang, Z. Liu, Q. Meng, L. Yan, K. Wang, J. Yang, W. Liu, Q. Hou, and M. Cheng, “Opus: Occupancy Prediction Using a Sparse Set,” in 
+
+NIPS , 2024. [32] M. Kong, J. Lee, S. Lee, and E. Kim, “Rethinking pose refinement in 3d gaussian splatting under pose prior and geometric uncertainty,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2026, pp. 25 958–25 968. [33] Y. Huang, W. Zheng, Y. Zhang, J. Zhou, and J. Lu, “Gaussianformer: Scene as gaussians for vision-based 3d semantic occupancy predic-tion,” arXiv preprint arXiv:2405.17429 , 2024. [34] J. Kim and S. Lee, “Vg3t: Visual geometry grounded gaussian trans-former,” IEEE International Conference on Robotics and Automation (ICRA) , 2026. [35] B. Mildenhall, P. P. Srinivasan, M. Tancik, J. T. Barron, R. Ramamoor-thi, and R. Ng, “Nerf: Representing scenes as neural radiance fields for view synthesis,” in ECCV , 2020. [36] M. Kong, S. Lee, and E. Kim, “Roomnerf: Representing empty room as neural radiance fields for view synthesis.” in BMVC , 2023, pp. 825–827. [37] C. M. Bishop, “Mixture density networks,” 1994. [38] F. Tosi, Y. Liao, C. Schmitt, and A. Geiger, “Smd-nets: Stereo mixture density networks,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2021, pp. 8942–8952. [39] S. Seo, D. Han, Y. Chang, and N. Kwak, “Mixnerf: Modeling a ray with mixture density for novel view synthesis from sparse inputs,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2023, pp. 20 659–20 668. [40] J. Wang, M. Chen, N. Karaev, A. Vedaldi, C. Rupprecht, and D. Novotny, “Vggt: Visual geometry grounded transformer,” 2025. [Online]. Available: https://arxiv.org/abs/2503.11651 [41] R. Ranftl, A. Bochkovskiy, and V. Koltun, “Vision transformers for dense prediction,” 2021. [Online]. Available: https://arxiv.org/abs/2103.13413 [42] Z. Murez, T. V. As, J. Bartolozzi, A. Sinha, V. Badrinarayanan, and A. Rabinovich, “Atlas: End-to-End 3D Scene Reconstruction from Posed Images,” in ECCV , 2020, pp. 414–431. [43] I. Loshchilov and F. Hutter, “Decoupled Weight Decay Regulariza-tion,” arXiv preprint arXiv:1711.05101, 2017. [44] T. Dao, “Flashattention-2: Faster attention with better parallelism and work partitioning,” 2023. [Online]. Available: https://arxiv.org/abs/2307.08691

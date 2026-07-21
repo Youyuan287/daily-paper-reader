@@ -6,39 +6,38 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-20
-- 运行时间：2026-07-20 21:14:50 UTC
+- 最新运行日期：2026-07-21
+- 运行时间：2026-07-21 20:41:20 UTC
 - 运行状态：成功
-- 本次总论文数：5
-- 精读区：2
-- 速读区：3
+- 本次总论文数：6
+- 精读区：1
+- 速读区：5
 
 ### 今日简报（AI）
-今天推荐5篇论文，聚焦开放词汇3D场景理解与视觉-语言模型应用，精读两篇高分工作值得关注。
-
-最值得看的是《Training-Free Open-Vocabulary 3D Point-Cloud Segmentation》和《Vision-Language-Motion Maps》，分别解决无需训练即可分割新类别、以及构建可查询的运动属性地图问题。
-
-建议优先精读这两篇，再速读《Confidence Scores in Open-Vocabulary Detection》了解检测置信度的尺度与语义偏差，为后续实验规避陷阱。
-- 详情：[/202607/20/README](/202607/20/README)
+今日共收录6篇论文，其中精读1篇、速读5篇，聚焦3D场景理解与智能导航。最值得关注的是SaaF（9.0分），提出场景特定模糊感知的3D语言场用于交互式物体检索；其次可关注CDIS（7.0分）的跨维度类别无关实例分割方法。建议优先精读SaaF以理解如何将语言与3D空间精准对齐，速读CDIS与RayOcc拓展实例分割与占用估计思路。
+- 详情：[/202607/21/README](/202607/21/README)
 
 ### 精读区论文标签
-1. [Training-Free Open-Vocabulary 3D Point-Cloud Segmentation on the Generalized Few-Shot Benchmark](/202607/20/2607.15331v1-training-free-open-vocabulary-3d-point-cloud-segmentation-on-the-generalized-few-shot-benchmark)  
-   标签：评分：10.0/10、query:open-vocab-d
-   evidence：使用冻结视觉语言模型的免训练开放词汇3D点云分割
-2. [Vision-Language-Motion Maps: An Open-Vocabulary, Uncertainty-Aware, Queryable Motion Attribute for 3D Scene Maps](/202607/20/2607.16173v1-vision-language-motion-maps-an-open-vocabulary-uncertainty-aware-queryable-motion-attribute-for-3d-scene-maps)  
-   标签：评分：8.0/10、query:open-vocab-d
-   evidence：开放词汇3D场景地图，支持自然语言查询运动属性
+1. [SaaF: Scene-Specific Ambiguity-Aware 3D Language Fields towards Interactive Real-World Object Retrieval](/202607/21/2607.16309v1-saaf-scene-specific-ambiguity-aware-3d-language-fields-towards-interactive-real-world-object-retrieval)  
+   标签：评分：9.0/10、query:open-vocab-d
+   evidence：基于高斯泼溅的3D语言场用于开放词汇物体检索
 
 ### 速读区论文标签
-1. [Confidence Scores in Open-Vocabulary Detection Are a Biased Mixture of Scale and Semantics](/202607/20/2607.10993v1-confidence-scores-in-open-vocabulary-detection-are-a-biased-mixture-of-scale-and-semantics)  
+1. [CDIS: Cross-Dimensional Class-Agnostic 3D Instance Segmentation via 2D Mask Tracking and 3D-2D Projection Merging](/202607/21/2607.17778v1-cdis-cross-dimensional-class-agnostic-3d-instance-segmentation-via-2d-mask-tracking-and-3d-2d-projection-merging)  
    标签：评分：7.0/10、query:open-vocab-d
-   evidence：开放词汇检测置信度偏差分析，为改进开放词汇3D分割提供了见解
-2. [ViCo3D: Empowering LiDAR-based Collaborative 3D Object Detection with Vision Foundation Models](/202607/20/2607.12959v1-vico3d-empowering-lidar-based-collaborative-3d-object-detection-with-vision-foundation-models)  
+   evidence：二维掩码跟踪与三维超点关联实现零样本实例分割
+2. [VTM-Nav: Hierarchical Visual-Topological Memory for Cross-Episode Object-Goal Navigation](/202607/21/2607.14514v1-vtm-nav-hierarchical-visual-topological-memory-for-cross-episode-object-goal-navigation)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：利用视觉基础模型增强LiDAR BEV表示，方法可迁移至开放词汇分割
-3. [AspectCLIP: Optimizing CLIP Representation Space via Aspect-Guided Consistency Regularization](/202607/20/2607.13805v2-aspectclip-optimizing-clip-representation-space-via-aspect-guided-consistency-regularization)  
+   evidence：基于VLM的开放词汇导航与场景记忆
+3. [RayOcc: Occlusion-Aware Ray Occupancy Estimation via Gaussian Mixture Intensity](/202607/21/2607.17660v1-rayocc-occlusion-aware-ray-occupancy-estimation-via-gaussian-mixture-intensity)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：通过方面引导一致性优化CLIP表示，改进CLIP用于下游开放词汇任务
+   evidence：基于高斯混合强度的3D占据估计与遮挡感知
+4. [MuViSeg: Multi-View Segment Correspondences from Dense Geometry Priors](/202607/21/2607.17938v1-muviseg-multi-view-segment-correspondences-from-dense-geometry-priors)  
+   标签：评分：6.0/10、query:open-vocab-d
+   evidence：利用密集几何先验和三维基础模型特征建立多视角片段对应
+5. [VGOcc: Learning Visual-Geometric Gaussians for Vision-Centric 3D Driving Occupancy Prediction](/202607/21/2607.18078v1-vgocc-learning-visual-geometric-gaussians-for-vision-centric-3d-driving-occupancy-prediction)  
+   标签：评分：6.0/10、query:open-vocab-d
+   evidence：学习视觉-几何高斯用于语义3D占用预测
 
 
 <div class="dpr-home-promo-card">
