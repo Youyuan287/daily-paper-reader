@@ -1,0 +1,54 @@
+{
+  "label": "2026-07-22",
+  "date": "2026-07-22",
+  "generated_at": "2026-07-22T20:02:35",
+  "count": 3,
+  "papers": [
+    {
+      "paper_id": "202607/22/2607.18801v1-zerosplat-generalized-referring-segmentation-in-3d-gaussian-splatting",
+      "section": "deep",
+      "title_en": "ZeroSplat: Generalized Referring Segmentation in 3D Gaussian Splatting",
+      "authors": "Jiayu Ding, Meilu Song, Xiaoyi Zhang, Hongbo Jin, Yichen Jin, Xiangtian Si",
+      "date": "2026-07-21",
+      "pdf": "https://arxiv.org/pdf/2607.18801v1",
+      "score": "9.0",
+      "evidence": "开放词汇的3D高斯泼溅指代分割",
+      "tldr": "现有3DGS参照分割方法仅支持单目标查询，且缺乏点级理解、计算开销大。为此提出通用化GR3DGS任务及两个新基准。ZeroSplat通过多视图几何约束将2D VLM先验提升到3D，无需训练和额外特征存储。实验在泛化和单目标场景均超越SOTA，实现高效分割。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "Recent advancements in 3D Gaussian Splatting (3DGS) have enabled language-guided scene understanding. However, existing Referring 3D Gaussian Splatting (R3DGS) methods are fundamentally restricted to single-target queries. To reflect the ambiguity of real-world instructions, we introduce the Generalized Referring 3D Gaussian Splatting Segmentation (GR3DGS) task, which requires dynamically segmenting an arbitrary number of targets (0, 1, or $N$). To facilitate comprehensive evaluation of this new task, we construct two new benchmarks: GR-LERF and GR-ScanNet. Crucially, existing R3DGS paradigms exhibit fundamental technical bottlenecks that severely limit their performance on the GR3DGS task: they lack intrinsic 3D point-level understanding by operating merely on 2D rendered pixels, and they incur prohibitive computational overhead by requiring per-scene optimization to embed heavy semantic features. To dismantle these bottlenecks, we propose ZeroSplat, a novel training-free and zero-feature framework. ZeroSplat lifts 2D Vision-Language Model (VLM) priors into 3D space through robust multi-view geometric constraints. This strategy enables intrinsic point-level understanding without incurring any additional feature storage. Extensive experiments demonstrate that ZeroSplat significantly outperforms state-of-the-art methods across generalized and single-target scenarios while maintaining exceptional efficiency. Project Page: https://inkmind-ai.github.io/ZeroSplat",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    },
+    {
+      "paper_id": "202607/22/2607.19115v1-cr-refiner-an-object-centric-optimal-transport-reranker-for-edit-conditioned-3d-scene-retrieval",
+      "section": "deep",
+      "title_en": "CR-Refiner: An Object-Centric Optimal Transport Reranker for Edit-Conditioned 3D Scene Retrieval",
+      "authors": "Hao Wu, Jinjing Zhu, Nanyu Wu, Qianyi Cai, Heyi Lin, Hao Wang, Hui Xiong",
+      "date": "2026-07-21",
+      "pdf": "https://arxiv.org/pdf/2607.19115v1",
+      "score": "8.0",
+      "evidence": "基于编辑条件的3D场景检索，使用大语言模型解析自然语言编辑为结构化查询，无训练重排序器实现开放词汇检索。",
+      "tldr": "现有3D场景检索方法难以处理编辑条件查询。本文提出CR-Refiner，一种无训练重排序器，通过冻结LLM解析编辑、不平衡最优传输匹配单实体查询与候选场景、轴条件结构先验增强几何与空间编辑、LLM验证器精排前三候选，并发布3D-CER基准。在三个不同基检索器上，CR-Refiner一致提升硬子集R@1和mAP@10。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "Edit-conditioned 3D scene retrieval pairs a reference 3D room with a natural-language modification and retrieves rooms from a corpus that satisfy the edit. Three lines of prior work each fall short on this task. 2D composed image retrieval reasons over pixel-level edits and has no primitive for 3D object sets. 3D foundation encoders embed individual objects but cannot compose at the scene level. 3D scene-grounding methods localize references inside a static scene rather than rank modified rooms across a corpus. We present CR-Refiner, a training-free reranker that wraps any base retriever's top-K candidates with three components. A frozen LLM parses the edit into a structured query entity, and each candidate is scored by an unbalanced optimal-transport problem over a 1xG cost matrix coupling category, style, material, and geometry. The unbalanced solver lets the single-entity query drop mass on irrelevant objects, modelling the asymmetry directly. An axis-conditional structural prior adds size-keyword cues for geometric edits and subject-anchor direction cues for spatial edits. An LLM verifier refines the top three candidates with continuous confidence. Because no benchmark evaluates compositional matching over 3D object sets, we additionally release 3D-CER, 4,963 edit-conditioned queries over a 23,381-room indoor corpus across five edit axes, with multi-positive ground truth, CIRR-style hard subsets, and zero-target adversarials. Across three qualitatively distinct base retrievers, CR-Refiner consistently improves hard-subset R@1 and mAP@10 on every edit axis.",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    },
+    {
+      "paper_id": "202607/22/2607.16128v1-toward-semantic-communication-for-real-time-mobile-3d-reconstruction",
+      "section": "quick",
+      "title_en": "Toward Semantic Communication for Real-time Mobile 3D Reconstruction",
+      "authors": "Fangzhou Zhao, Yao Sun, Xuesong Liu, Runze Cheng, Shang Kai, Yi Sun",
+      "date": "2026-07-17",
+      "pdf": "https://arxiv.org/pdf/2607.16128v1",
+      "score": "6.0",
+      "evidence": "通过语义通信解决实时3D重建中的多视图一致性问题",
+      "tldr": "实时移动3D重建对通信失真敏感。现有语义通信缺少几何估计的可靠性信息。本文提出语义通信框架，输出重构图像和像素级置信度图，并利用置信度引导RANSAC姿态初始化和光束法平差。实验表明，在保持图像质量的同时，显著提升位姿估计精度和3D结构一致性，增强了抗噪鲁棒性。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "Real-time mobile 3D reconstruction is fundamental to many emerging applications such as autonomous navigation and digital twin construction, where a moving platform continuously captures an image stream and transmit to a computing server for scene understanding. Unlike offline reconstruction, camera poses and scene geometry are estimated on-the-fly during acquisition, making multi-view consistency a real-time requirement and rendering geometric estimation highly sensitive to communication-induced distortions. Semantic communication (SemCom) transmits compact semantic information, offering a promising way to preserve task-critical data over unreliable links. However, existing designs are optimized at the image or single-view level and without providing explicit reliability information for geometric estimation, limiting their applicability to real-time mobile 3D reconstruction. In this context, we propose a SemCom framework for real-time mobile 3D reconstruction. The framework includes a semantic transceiver that outputs a reconstructed image alongside a pixel-wise confidence map, quantifying the reliability of each region. We further introduce a confidence-guided geometric estimation method, incorporating confidence into RANSAC-based pose initialization and bundle adjustment to reduce the influence of unreliable regions and enhance robustness under noisy channels. Simulations show that, compared to existing SemCom and traditional seperate source and channel coding, our framework maintains high image quality while significantly improving pose estimation accuracy and 3D structural consistency.",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    }
+  ],
+  "errors": []
+}
