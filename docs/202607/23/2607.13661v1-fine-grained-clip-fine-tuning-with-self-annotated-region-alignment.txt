@@ -1,0 +1,461 @@
+Title: Fine-grained CLIP fine-tuning with self-annotated region alignment
+
+URL Source: https://arxiv.org/pdf/2607.13661v1
+
+Published Time: Thu, 16 Jul 2026 01:13:46 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# FINE -GRAINED CLIP FINE -TUNING WITH SELF -ANNOTATED REGION ALIGNMENT 
+
+Chenyang Zhao 1,2 , Wei Lin 1, Antoni B. Chan 1, and Janet H. Hsiao 21Department of Computer Science, City University of Hong Kong 
+
+> 2
+
+Division of Social Science, Hong Kong University of Science & Technology 
+
+# ABSTRACT 
+
+Contrastive Language-Image Pre-training (CLIP) has been shown to have limitations in its fine-grained dense feature representation, due to its pre-training focusing on matching the whole image to a text description. Considering the large data and computational burden in pre-training a vision-language model from scratch, a series of works aim to enhance the fine-grained ability of CLIP through a fine-tuning scheme. However, existing works suffer from a variety of limitations: additional region annotations are usually required, which limits the semantic diversity due to the predefined categories and leads to a large effort to process the training data; and they usually sacrifice CLIP’s original ability for global visual representation. To bypass these limitations, we propose SFF-CLIP (Self-annotated Fine-grained Fine-tuning for CLIP), which only uses image-text pairs as input to boost the fine-grained representation ability in the CLIP fine-tuning, while maintaining the global visual-semantic consistency. Concretely, a run-time region-phrase alignment scheme is designed, which obtains concept phrases from the input sentence, and aligns them with corresponding extracted region-based features using text-specific heat maps. Extensive experiments demonstrate that SFF-CLIP leads to significant performance improvements on fine-grained dense feature representation, as well as maintaining the performance of the original CLIP on image-level tasks. Code will be released later. 
+
+Keywords CLIP · self-annotation · Fine-grained alignment · Fine-tuning 
+
+# 1 Introduction 
+
+Contrastive Language-Image Pre-training (CLIP) [ 1] aligns global image and text embeddings within a unified latent space by adopting a dual-encoder architecture and conducting matching on large-scale, noisy image-text pairs. It has become a foundational vision-language model (VLM) for representation learning, and achieves remarkable success on image-level tasks [2, 3, 4], such as image classification and image-text retrieval. However, CLIP exhibits notable limitations in comprehending fine-grained details, such as poor region recognition when using its dense features, due to the pre-training focusing on matching the whole image (via the [cls ] token) to a text description. Thus, the model struggles to extract meaningful region-level representations from its dense visual features for grounding textual concepts. This shortcoming limits the performance of CLIP on the downstream tasks that require region-aware ability. For example, in dense prediction tasks, e.g., object detection and segmentation, the CLIP model is usually utilized as a classifier [ 5 , 6] or the teacher in distillation [ 7 , 8] to process cropped object patches to obtain region features. Some works [ 9 , 10 , 11 ] adopt the frozen CLIP model as the backbone to produce spatial feature maps, but they all choose the CNN-based CLIP, which can preserve more position information than the vision transformer (ViT-based) architecture. Since the resource demand for pretraining a fine-grained VLM is staggering, such as billions of data samples [ 12 , 13 , 14 ], a series of recent works have focused on advancing the vision-language alignment of local image regions via fine-tuning of CLIP. Considering the impressive generalization capabilities of CLIP models, particularly the powerful ViT-based variants, the fine-grained fine-tuning of CLIP is carried out to enable applications on dense prediction tasks, such arXiv:2607.13661v1 [cs.CV] 15 Jul 2026 Fine-grained CLIP fine-tuning with self-annotated region alignment Image  Region Concepts      
+
+> Region Proposal
+> I
+> (a) RegionCLIP (b) CLIPSelf (c) FineCLIP (e) SFF -CLIP (Ours)
+> CLIP
+> matching
+
+V  
+
+> Region
+> Pooling
+> Concept Pool
+> Random Patches
+> / Region Proposal
+> Cropped Images Region
+> Description
+> Region -Text matching Self -Distillation
+> T
+
+L 
+
+> II
+
+V V 
+
+> Region
+> Pooling
+> Image
+> Region Proposal
+> Cropped
+> Images
+> Self -Distillation
+> II
+
+V V
+
+> Region
+> Pooling
+> Image
+> LVLM
+> T
+
+L
+
+> Init.
+> Image
+
+V L   
+
+> IT
+> Caption
+> T
+> parsing
+> Text -specific
+> heat maps
+> Region visual embedding Text embedding
+
+V Vision Encoder  L Text Encoder  Frozen 
+
+> Init.
+> (d) CLIM
+> Pseudo Regions
+
+V
+
+> T1
+
+L      
+
+> Captions
+> Region -based pseudo -labeling Mosaicking images as
+> pseudo regions Region -based distillation Region -based distillation +
+> pseudo -labeling
+> Map -based
+> I1I2
+> I3I4
+> Region -Text matching Region -Text matching Region -Text matching
+
+Figure 1: Comparison of different fine-grained alignment methods for CLIP. The required preparations for region annotation are marked with bold red texts. Our method eliminates the constraints of pre-defined category limitation, and the large effort required for generating region proposals and their corresponding descriptions. as open-vocabulary object detection and image segmentation. Since no region-text annotations are provided in the image-text pair training data, the previous fine-tuning works enhance the fine-grained alignment via: 1) region-based pseudo-labeling , 2) region-based distillation , 3) mosaicking images as pseudo regions , or the combination thereof. In the first category, [ 15 , 16 , 17 ] generate region proposals by coarsely cropping patches or adopting RPN [ 18 ], and then use CLIP or other powerful VLMs to retrieve region labels from a pool of concepts ( e.g ., Fig. 1a). However, the range of concepts is limited by the number of pre-defined categories, which could hinder downstream applications like open-vocabulary object detection. The recent work FineCLIP [ 19 ] (Fig. 1c) adopts large VLMs like BLIP2 [ 20 ]to generate detailed sentences to describe region proposals. However, carefully preparing the region annotations in these methods inevitably costs significant extra time and space, which cannot be neglected when increasing the scale of training data. For the 2nd category, CLIPSelf [ 21 ] (Fig. 1b) and FineCLIP [ 19 ] (Fig. 1c) use distillation to transfer the global features of the cropped regions (either random or proposals) to extracted dense features – however, to obtain superior distillation performance, preprocessing of the generated region proposals by a well-trained detector is still required. Mosaic augmentation is adopted to make pseudo regions in [ 22 , 23 ] ( e.g ., Fig. 1d), which produces finer matching than image-level while still coarser than region alignment. Moreover, most of these methods sacrifice, and some even ignore [ 21 , 23 , 22 , 17 ], the global representation ability of CLIP when training focuses on region knowledge, which causes severe performance damage on image-level tasks. In this work, we propose SFF-CLIP, a novel self-annotated fine-grained fine-tuning method for CLIP, which aims to boost the region awareness of CLIP while maintaining the global visual-semantic consistency, without requiring extra preparation of region proposals or their annotations. As with the original CLIP pre-training, image-text pairs are taken as inputs for fine-tuning. We propose a self-annotated fine-grained alignment scheme, where we first extract phrases from the input sentence and generate the corresponding region importance on the image based on text-specific heat maps. The heat maps are used to aggregate region features for each phrase, and then the region-phrase feature pairs are aligned by the matching loss, whose weight is based on the degree of phrase matching. To help maintain the whole image representation ability of the original CLIP, the contrastive learning objective for image-text pairs is included in the loss function through weighted momentum term. As a result, our SFF-CLIP locally and globally aligns the visual and semantic features in the same representation space. Through comprehensive experiments, we show that SFF-CLIP significantly improves the fine-grained understanding of CLIP, surpasses previous state-of-the-arts on both the dense prediction benchmarks, including open-vocabulary object detection and segmentation, while also maintaining the global representation of the original model in the image-level task. We summarize our contributions as follows: 1. We propose SFF-CLIP, a self-annotated fine-grained alignment strategy for finetuning CLIP, which uses a run-time scheme that generates region knowledge from input image-text pairs to achieve better fine-grained understanding. 2. SFF-CLIP eliminates the need for extra region-based training data, such as pre-defined categories, or generating region proposals and their corresponding descriptions. 3. SFF-CLIP successfully maintains the global representation capability of CLIP while improving the region awareness. 4. Extensive experiments on dense prediction and image-level tasks show that the proposed SFF-CLIP consistently outperforms previous methods. 2Fine-grained CLIP fine-tuning with self-annotated region alignment 
+
+# 2 Related Work 
+
+2.1 Fine-grained understanding in VLMs 
+
+Although CLIP [ 1] and subsequent VLMs [ 24 , 25 , 26 ] exhibit strong representation capabilities and exceptional generalizability, the image-level training, which matches an image as a whole to a text description, has been shown to be deficient in fine-grained understanding and alignment between image regions and text [ 16 , 15 , 27 , 21 ]. This shortcoming limits their applications on tasks that require region-aware abilities, e.g ., dense prediction tasks. To mitigate this issue, some works build strong fine-grained VLMs by pre-training with patch-token embedding alignment [ 14 ], or region-caption matching [ 12 ] utilizing well-trained open-vocabulary detectors for assistance. FG-CLIP [ 13 ] constructs a comprehensive dataset with billions of region-specific annotations for region-aware training for CLIP. Due to the heavy cost of using large-scale data, some recent works propose to enhance the fine-grained representation by fine-tuning CLIP with region-based pseudo-labeling or region-based distillation. RegionCLIP [ 16 ]adopts RPN [ 18 ] object proposals, while PTP [ 15 ] coarsely crops patches, and then they both use CLIP as a classifier to obtain region labels from a large pre-defined pool of concepts. DenseVLM [ 17 ] uses a powerful VLM to retrieve categories (from a category set) for randomly cropped regions. The recent work FineCLIP [ 19 ] adopts large VLMs like BLIP2 [ 20 ] to generate detailed sentences to describe region proposals. However, the semantic diversity is limited for those works with pre-defined categories or concepts, and these methods inevitably cost significant extra time and space to preprocess the region annotations, which cannot be neglected when increasing the training data. CLIPSelf [ 21 ]and ATAS [ 22 ] facilitate the transfer of the global features of regions to dense feature extraction by self-distillation – CLIPSelf obtains the region proposals through the object detector, and ATAS uses mosaic augmentation to construct pseudo regions as in CLIM [ 23 ]. The distillation-based methods only focus on the image encoder training and ignore the text encoder. Furthermore, among these methods, [ 17 , 21 , 22 , 23 ] are also ignore the global image-text matching ability of CLIP. Our paper proposes a self-annotated fine-grained fine-tuning framework for boosting the region-aware ability of CLIP that only uses image-text pairs as input and does not use external models . Our approach circumvents the resource-consuming preparation of the region annotations and the limitation of pre-defined visual categories, while successfully preserving the global representation ability of CLIP. 
+
+2.2 Open-vocabulary dense prediction 
+
+Open-vocabulary dense prediction aims to identify visual regions of arbitrary categories as described by the text, and primarily comprises open-vocabulary object detection [ 7 , 28 , 29 ] and image segmentation [ 30 , 31 , 6]. Recent open-vocabulary approaches have leveraged the strong representation and generalizability displayed by powerful pre-trained VLMs, which are exploited to identify novel objects. Due to CLIP lacking precise local vision-language alignment, CLIP is usually adopted as a classifier [ 5 , 6] or the teacher in distillation [ 7, 8 ] to process cropped region proposals. Several works [ 9, 10 , 11 , 28 , 30 ] adopt frozen CLIP encoders as backbone in the detectors to generate visual features, but most of them select the CNN-based CLIP, which can preserve more position information than the vision transformer (ViT-based) architecture. Although recent studies [ 16 , 19 , 21 , 17 , 23 ] fine-tuning CLIP for fine-grained understanding, they are constrained by the limitations when generating dense annotations as mentioned above. 
+
+2.3 Visual explanation of VLMs 
+
+Visual explanation methods [ 32 , 33 , 34 , 35 , 36 ] in computer vision have been developed for visually interpreting a specific prediction of the model by generating a heat map that indicates the spatial feature importance. Recently, works [ 37 , 38 , 39 , 40 ] have proposed visual explanations for the Transformer architecture. In our designed run-time self-annotation scheme for region-phrase pairs, we produce text-specific heat maps using Grad-ECLIP [ 40 ] as reference, which is a state-of-the-art visual explanation method for VLMs, such as CLIP. The heat map generation process is high-speed and can be easily plug-in the training of proposed fine-grained alignment. 
+
+# 3 Method 
+
+The aim of SFF-CLIP is to realize region-language alignment while maintaining image-level representation in the fine-tuning of CLIP, but without the requirements of generating dense data annotations, including pre-defined categories, region proposals, or region descriptions. To achieve this, the vision-language alignment at region and image levels are unified in our training method, employing our proposed run-time self-annotated fine-grained alignment and CLIP’s original global contrastive learning. The framework of our proposed SFF-CLIP is shown in Fig. 2, where the model 3Fine-grained CLIP fine-tuning with self-annotated region alignment Weighted   
+
+> Aggregation
+> Fine -grained Matching
+> Text -specific Heat Maps
+> Parsing
+> Dense Feature
+> Image
+> Embedding
+> “a dog in a black
+> car waiting for
+> traffic lights”
+> 𝐹 𝑑 𝐹 𝐼
+> 𝐹 𝑟
+> 𝐹 𝑇 𝐹 𝑝
+> Self -annotated fine -grained alignment
+> update
+> Image
+> Encoder
+> Text Encoder
+> weight
+> momentum model update
+> Global Contrastive Learning
+> “dog ”
+> “black car ”
+> “traffic lights”
+
+Figure 2: Overview of the proposed SFF-CLIP. Multiple phrases or words representing objects (e.g., “dog”, “black car” and “traffic lights”) are separated out by parsing the input caption. By generating text-specific activation maps, object-specific region feature embeddings ( Fr ) are obtained through weighted aggregation of the image dense feature (Fd). Then the image region features ( Fr ) and the corresponding phrase features ( Fp) are aligned in the training scheme, together with the global contrastive learning. has the same architecture as the original CLIP. We first present brief preliminaries about CLIP (§3.1), then introduce fine-grained alignment (§3.2) and global alignment (§3.3) in detail. 
+
+3.1 Preliminaries 
+
+CLIP learns visual and language representations from large-scale web-curated image-text pairs. It consists of an image encoder I (·) and a text encoder T (·), which are jointly trained to extract image and text feature embeddings in a unified representation space. Given image-text pair (I, T ), the matching score between their extracted image features 
+
+FI ∈ RD and text features FT ∈ RD (both row vectors) is: 
+
+S(FI , F T ) = cos( FI , F T ) = FI F T   
+
+> T
+> ∥FI∥∥ FT∥
+
+. (1) The model is trained using contrastive learning on the matching scores, regarding the ground-truth image-text pairs as positive samples and other mismatched pairs as negatives. For ViT-based encoders, the image feature is FI = LP (xcls ),where LP denotes linear projections, and xcls is the feature vector from the [cls ] token. Thus, except for the class token, all the final layer features of the other tokens (image patch tokens) are not used during contrastive learning of CLIP. Since only the class token feature is explicitly optimized during training, the local patch features exhibit weak representation ability for localized matching of semantic content. 
+
+3.2 Self-annotated fine-grained alignment 
+
+To realize fine-grained alignment, we propose a matching loss based on extracting the dense feature map from the image and performing fine-grained feature matching of regions to the corresponding text phrase. We dynamically generate self-annotated region-phrase pairs from the input image-text pairs during the training process, which we denote as run-time self-annotation, instead of off-line preparation with detectors or pre-defined categories. Note that our run-time self-annotation is based on the concepts learned by the original CLIP, which makes it more flexible than using pre-defined detectors, since it is not limited to a pre-defined pool of visual categories. 
+
+3.2.1 Image dense feature 
+
+Following [ 41 , 21 ] we extract a dense feature map of the input image from a ViT-based encoder by slightly modifying the last transformer layer to keep the projection and norm layers, and discard the self-attention. This modification is experimentally shown to be capable of preserving more spatial detailed features in the output token embeddings [ 41 ]. Specifically, in the last transformer layer, with the input x = ( xcls , x 1, ..., x h×w) comprising a [cls ] embedding and 
+
+h × w spatial token embeddings, the layer’s output is obtained as vi = LP (xi), where vi ∈ RC represent the value 
+
+embeddings at spatial location i, with C as their channel dimension. Then, the [cls ] embedding is removed and the final spatial token embeddings are reshaped into an h × w dense feature map Fd, from which we extract fine-grained representations for specific image regions. 4Fine-grained CLIP fine-tuning with self-annotated region alignment 
+
+3.2.2 Run-time region-phrase self-annotation 
+
+We propose a run-time scheme to automatically obtain region-phrase pairs from the input image-text pairs. Note that our method does not require any manually annotated or model-generated region proposals or their corresponding label annotations. It is also completely encapsulated – it does not require any external vision models (e.g., other VLMs). 
+
+Phrase extraction. For the caption T in each image-text pair (I, T ), we use the Natural Language Toolkit (NLTK) [ 42 ]to parse and extract the phrases that contain object concepts, by setting the separation and selection rules as “adjective + noun”. For the example in Fig. 2, the parsing results are “dog”, “black car”, and “traffic lights” with the input text “a dog in a black car waiting for traffic lights”. Then, for these extracted words or phrases {pt}nt=1 , where n is the number of extracted phrases, textual descriptions are generated using prompt-template strategy [ 1]: “This is a photo of the pt.” These descriptions are sent to the text encoder, resulting in a set of phrase embeddings {Fpt }t.
+
+Text-specific heat map. The region embedding Frt corresponding to each phrase embedding Fpt is calculated using a text-specific heat maps based on explainable AI (XAI) methods. These heat maps have been proposed to visually explain a specific prediction of the model by showing the spatial feature importance with a heat map. The local regions with relatively high values are interpreted as being important for generating the current output [ 33 , 40 , 36 ]. Referring to Grad-ECLIP [ 40 ], a high-speed and easy plug-in gradient-based heat map method designed for ViT-based VLMs, we calculate the spatial importance heat map corresponding to each extracted phrase. Specifically, the phrase embeddings 
+
+Fpt are used to calculate the cosine similarities with the image embedding FI , and each similarity cos( FI , F pt ) is regarded as a target to be interpreted. Following [ 40 ], the gradient ( gc) for each similarity w.r.t. the output of the last layer is used as channel weights to aggregate the feature maps v, and a loosened attention map technique is adopted to calculate the spatial weight ui = Φ(cos( qcls , k i)) , where Φ( ·) is min-max normalization. Finally, the heat map for a specific phrase pt is: 
+
+Hti = P 
+
+> c
+
+gc · ui · vi, (2) where P 
+
+> c
+
+is the channel-sum operator. As shown in Fig. 2, the heat map Ht can localize the corresponding concept by revealing the important spatial locations for matching with the specific phrase. The heat maps are adopted as weights for aggregating the image dense feature Fd, resulting in the region embedding for the phrase: Frt = P 
+
+> hw
+
+Ht · Fd,where P 
+
+> hw
+
+is the sum operator over spatial coordinates. To investigate the influence of the XAI method used for fine-grained alignment, we conduct an ablation study with several other high-speed Transformer-applicable visual explanation approaches in the Supplemental, which demonstrates that the Grad-ECLIP is the most effective. 
+
+3.2.3 Fine-grained matching 
+
+Given the region-phrase embeddings, the positive pairs are made to be similar, while the negative pairs are separated, via the loss function: 
+
+Lf g = − X
+
+> t
+
+wt
+
+h
+
+(1 − S(Frt , F pt )) 2 log S(Frt , F pt )+ P  
+
+> t′̸=t
+
+S(Frt , F pt′ )2 log(1 − S(Frt , F pt′ )) 
+
+i
+
+, (3) where S represents the cosine similarity function, and t, t′ means the t-th and t′-th phrase in the same batch. A phrase-matching weight wt is applied on the loss term for each region-phrase pair in order to diminish the potential impact of misaligned pairs, e.g., for extracted nouns that have no visual content in the image. Specifically, we adopt the highest response value on the phrase’s heat map, i.e., wt = max( Ht), to evaluate the degree of matching between the phrase and the image. For example, in Figure 3, “dinner” and “Tuesday” are extracted as nouns in the caption, while they are not visually matched with any of the image contents, and this can be reflected by the values on the heat map. In practice, we set the maximum number of phrases in each sentence to N = 5 . When the actual number of concepts n is smaller than N , then blank phrases are added with weight wt = 0 .
+
+3.3 Global contrastive learning with momentum 
+
+In standard CLIP training, the input batch of image-text pairs {(Ib, T b)}Bb=1 is passed to the image/text encoders and the model outputs the corresponding global image/text embeddings {(FIb , F Tb )}Bb=1 . The cosine similarity S(FI , F T )
+
+between image embedding FI and text embedding FT is calculated as in Eq. 1, then the constrastive loss is applied to learn the global representations by maximizing the cosine similarities of the corresponding image and text embeddings, while minimizing the cosine similarities of other non-paired ones from both image and text sides, which is defined as: 
+
+LI2Tb = − log exp (S(FIb ,F Tb )/τ ) 
+
+> PBb′=1 exp
+
+(S(FIb ,F Tb′ )/τ ) , L T 2Ib = − log exp (S(FTb ,F Ib )/τ ) 
+
+> PBb′=1 exp
+
+(S(FTb ,F Ib′ )/τ ) , (4) 5Fine-grained CLIP fine-tuning with self-annotated region alignment Beer  and  bananas  are prepared for  dinner  on Tuesday .
+
+beer : 0.1147  bananas: 0.2092  dinner : 0.0356  Tuesday: 0.0167 
+
+Figure 3: An example of phrase alignment weight wt, which is defined as the maximum value on the corresponding text-specific heat map. In this image-text pair, “beer” and “banana” are better matched with the image regions, as indicated by their higher weights wt than “dinner” and “Tuesday”. where τ is the trainable temperature parameter. To better maintain the image-level representation ability of the pre-trained CLIP while enhancing its fine-grained alignment, we adopt a momentum CLIP model ˆM , which is initialized with the original CLIP model and then updated by the current trained model M with a low momentum rate α = 0 .005 after each epoch, i.e ., ˆM ← (1 − α) ˆM + αM .The updated model ˆM is used to extract image and text embeddings {( ˆFIb , ˆFTb )}Bb=1 , and weights are computed for each image-text pair, which measures how well they match:                               
+
+> wIb=γexp (S( ˆFIb,ˆFTb)/τ )
+> PBb′=1 exp
+> 
+> S( ˆFIb,ˆFTb′)/τ
+> + (1 −γ),wTb=γexp (S( ˆFTb,ˆFIb)/τ )
+> PBb′=1 exp
+> 
+> S( ˆFTb,ˆFIb′)/τ
+> + (1 −γ),(5)
+
+where parameter γ controls the influence of match, which is set to 0.4 by default in the experiments. The contrastive loss then applies the weights to the loss terms in (4) to focus on preserving the well-matched image-text pairs, 
+
+Lcontrastive = 12B
+
+> B
+
+X
+
+> b=1
+
+ wIb LI2Tb + wTb LT 2Ib
+
+ . (6) The final loss for training is obtained by by adding the fine-grained matching loss to the contrastive learning loss, 
+
+L = Lf g + Lcontrastive .
+
+# 4 Experiments 
+
+We evaluate the proposed SFF-CLIP on both improving of fine-grained representation via zero-shot region classification, down-stream tasks of open-vocabulary detection and segmentation, and on maintaining of image-level representation via image-text retrieval task. We compare with the primary fine-grained fine-tuning methods, including RegionCLIP[ 16 ], CLIPSelf[ 21 ], FineCLIP[ 19 ], DenseVLM[ 17 ], and CLIM[ 17 ]. Moreover, we also compare with fine-tuning CLIP using only the global contrastive loss, i.e ., without the fine-grained matching, which is a baseline for continuation of image-level training of CLIP (denoted as “CLIP-g”). Finally, we carry out the ablation studies. 
+
+4.1 Implementation details 
+
+For fairness, we re-trained all compared fine-grained fine-tuning methods, by initializing with the same pre-trained model and fine-tuning with the same training data, using the same input image size, which is the same as the CLIP pre-training, 224x224 for ViT-B/16 and 336x336 for ViT-L/14 by default. Following previous works [ 21 , 19 ], the experiments are conducted based on the pre-trained models from EVA-CLIP [ 43 ]. Since some related works [ 16 , 21 , 19 ]that require region annotations open-sourced their region information files based on MS COCO train2017 set [ 44 ], we conduct the fine-tuning on the same images with the captions provided by [ 19 ]. We mainly report the comparison results with other works on ViT-B/16, with the comparisons on ViT-L/14 provided in the Supplemental. Two RTX 6000 Ada are used, and for our method, we use batch size 128, learning rate 1e-5, and weight decay of 0.1; for other methods, we use the training parameters provided in their codes. 
+
+4.2 Comparisons on fine-grained representation Zero-shot region classification. To evaluate the dense representation ability, we use the mean accuracy (mAcc) of classifying region boxes and panoptic masks for “things” annotated in the ADE20K panoptic [ 45 ] val set and COCO panoptic [ 44 ] val2017 set. To extract region-level features, RoI or mask pooling are used to extract the region box or mask embeddings from the image dense feature maps. The classification is then performed by selecting the highest score when matching with the text embeddings of the classes. 6Fine-grained CLIP fine-tuning with self-annotated region alignment Table 1: Comparison of fine-grained dense representations via zero-shot classification on the ADE20K panoptic [ 45 ]val set and COCO panoptic [ 44 ] val2017 set. We report the Top-1 and Top-5 mean accuracy on both object bounding boxes and panoptic masks. The gray row is the baseline CLIP before fine-grained alignment fine-tuning. Note that DenseVLM ⋆ represents the results reported by the original paper [ 17 ] for input 224x224, and † represents the results testing with open-sourced fine-grained models pre-trained by large-scale data, shown in the brackets. Our method does not require preparation of region proposals (R.P.), region labels (R.L.), or predefined categories (P.C.) on the training data. ADE20k MS COCO Boxes Masks Boxes Masks Method Model R.P. R.L. P.C. Top1 Top5 Top1 Top5 Top1 Top5 Top1 Top5 FG-CLIP † (1.6B) ViT-B/16 √ √ × 30.3 57.4 28.6 56.7 61.2 83.1 49.7 75.5 CLIP ViT-B/16 × × × 18.6 40.6 25.5 43.1 41.4 63.6 30.6 53.8 CLIP-g ViT-B/16 × × × 20.1 41.5 26.9 44.1 44.7 65.8 33.4 55.6 RegionCLIP ViT-B/16 √ √ √ 27.9 54.4 34.2 54.3 59.4 80.9 47.4 73.2 FineCLIP ViT-B/16 √ √ × 27.0 53.2 33.1 53.0 57.7 80.3 48.0 73.2 DenseVLM ViT-B/16 × × √ 18.5 45.2 25.7 47.4 34.9 55.8 31.8 47.2 DenseVLM ⋆ ViT-B/16 × × √ - - - - 60.1 79.9 49.4 62.4 CLIPSelf ViT-B/16 √ × × 27.9 55.3 33.6 53.2 60.9 81.0 49.0 73.2 CLIM ViT-B/16 × × × 25.7 49.6 30.9 49.8 53.4 73.9 45.3 58.4 SFF-CLIP(Ours) ViT-B/16 × × × 29.4 55.4 34.3 54.5 62.2 80.8 52.1 73.6 
+
+CLIP ViT-L/14 - - - 31.2 56.8 41.2 62.2 58.1 78.9 49.8 72.6 CLIP-g ViT-L/14 × × × 33.0 59.2 44.2 64.5 60.3 80.9 54.3 71.2 SFF-CLIP(Ours) ViT-L/14 × × × 36.9 66.7 51.0 70.8 75.2 91.3 67.3 79.4 
+
+The results are shown in Tab. 1. Compared with the CLIP base model, CLIP-g can slightly increase the zero-shot classification performance, due to additional iterations of image-level training. However, SFF-CLIP, which uses both the global contrastive learning and fine-grained matching, obtains significant improvements in accuracy on region classification, for both boxes and masks and for both ViT-B/16 and ViT-L/14 architectures. Compared with other region-aware fine-tuning methods, our proposed SFF-CLIP also achieves outstanding performances. In contrast to other methods that require pre-preparing region proposals [ 16 , 19 , 21 ] and region labels [ 16 , 19 ], or using pre-defined categories [ 16 , 17 ], our method can be flexibly applied with just image-text pairs as training data, which is the same data source as the original CLIP pre-training, resulting in better performance. Furthermore, in contrast to the mosaicking-based CLIM [ 23 ], our region-phrase pairs from self-annotation provide more effective fine-grained supervision than mosaicking images as pseudo regions, as evidenced by SFF-CLIP outperforming CLIM on all metrics. These superior performances shows the effectiveness of our self-annotated fine-grained alignment approach, which even exceeds these methods that need to carefully prepare region annotations, and achieve comparable performances with the FG-CLIP [13], which is a fine-grained model trained with large-scale region annotated data (1.6B). 
+
+Open-vocabulary object detection. Following the previous related works [ 21 , 19 , 17 ], we build open-vocabulary object detectors based on the F-ViT [ 21 ] architecture, which is a two-stage detector using a frozen CLIP-based ViT as the backbone. In our experiment, each fine-grained fine-tuned CLIP encoder from the various methods is adopted to initialize the backbone. The OVD models are then trained on the OV-COCO benchmark [ 46 ], and we use AdamW optimizer with batch size of 64, learning rate of 1e-4, and weight decay of 0.1. For evaluation, we report box AP (average precision) at IoU (Intersection over Union) of base, novel and all categories as with previous works [ 16 , 9, 10 , 27 , 21 ]. The results are presented in Tab. 2. F-ViT is the baseline that initializes the detector backbone with the original pre-trained CLIP. With the ViT-B/16 backbone, adopting just CLIP-g results in similar performance to the baseline CLIP. In contrast, SFF-CLIP significantly improves the OVD results, especially on the novel categories (over 9% ). Since the base categories have explicit annotated bounding boxes and labels during OVD training, the performance on the unseen novel categories better illustrates the fine-grained understanding ability brought by the CLIP encoder. Finally, we conduct experiments with ViT-L/14 and further improve the OVD performance on the novel categories by a large extent. We also provide comparisons with related works using ViT-L/14 in the Supplemental, as well as the OVD results with the LVIS benchmark [ 47 ]. Compared with the existing OVD methods, which mostly rely on a ResNet-based encoder or modified ViT encoder and require pre-training on large-scale prepared data with extra region information, our method achieves superior or comparable performance by fine-grained training on the easily-obtained image-text pairs. 
+
+Open-vocabulary semantic segmentation. We next explore the performance of applying fine-grained fine-tuned models to open-vocabulary semantic segmentation. Following the previous works [ 21 , 19 , 17 ], we adopt the CatSeg [ 53 ] as the segmentation architecture, which uses the dense image feature from CLIP ViT as the backbone, with the 7Fine-grained CLIP fine-tuning with self-annotated region alignment Table 2: Results for open-vocabulary object detection on MS COCO val set. F-ViT is the two-stage detector baseline built on the frozen original CLIP ViT, and “ +”means the ViT backbone is initialized with a fine-tuned model based on the corresponding method. Method Backbone AP novel  
+
+> 50
+
+AP base  
+
+> 50
+
+AP all 
+
+> 50
+
+OV-RCNN [48] ResNet50 17.5 41.0 34.9 Detic [49] ResNet50 27.8 51.1 45.0 VLDet [50] ResNet50 32.0 50.6 45.8 F-VLM [9] ResNet50 28.0 - 39.6 CORA [10] ResNet50 35.1 35.5 35.4 SPARC [14] ViT-B/16 - - 39.4 FG-CLIP [13] ViT-B/16 35.1 51.7 47.7 SigLIP2 [12] ViT-B/16 - - 42.8 RO-ViT [27] ViT-B/16 30.2 - 41.5 RO-ViT [27] ViT-L/16 33.0 - 47.7 F-ViT ViT-B/16 19.4 43.3 37.0 +CLIP-g ViT-B/16 20.1 43.8 37.6 +RegionCLIP ViT-B/16 27.6 44.3 39.9 +DenseVLM ViT-B/16 17.1 42.8 36.1 +CLIM ViT-B/16 24.1 43.8 38.5 +CLIPSelf ViT-B/16 25.2 42.2 37.7 +FineCLIP ViT-B/16 27.2 46.0 41.1 +SFF-CLIP ViT-B/16 28.8 46.4 41.8 
+
+F-ViT ViT-L/14 28.3 52.5 46.2 +CLIP-g ViT-L/14 29.2 57.5 50.1 +SFF-CLIP ViT-L/14 37.4 57.4 52.1 
+
+Table 3: Results of open-vocabulary semantic seg-mentation on ADE20k-847 [ 45 ], Pascal VOC [ 51 ], and Pascal Context [ 52 ]. CatSeg is the segmentation baseline with the original CLIP ViT-B/16 as the back-bone, and “ +” means the ViT backbone is initialized with the fine-tuned model based on the corresponding method. VOC-20 PC-59 Method mIoU pACC mIoU pACC CatSeg 63.2 88.9 44.2 71.4 +CLIP-g 73.8 92.1 50.1 74.4 +RegionCLIP 78.4 93.9 54.9 76.2 +DenseVLM 75.8 93.3 54.5 77.3 +CLIM 70.8 90.1 49.3 72.9 +CLIPSelf 75.1 92.3 51.6 75.6 +FineCLIP 73.0 92.0 50.1 74.5 +SFF-CLIP 79.7 94.2 56.9 78.5 
+
+PC-459 A-847 Method mIoU pACC mIoU pACC CatSeg 8.7 38.2 5.8 25.0 +CLIP-g 8.6 37.0 6.4 30.3 +RegionCLIP 15.9 62.8 10.0 49.5 +DenseVLM 13.4 47.4 9.0 35.6 +CLIM 12.0 55.2 7.3 42.8 +CLIPSelf 13.0 49.2 9.3 34.7 +FineCLIP 9.3 37.9 6.7 28.7 +SFF-CLIP 16.3 65.3 10.2 58.4 “car” 
+
+“traffic light” 
+
+“apple” 
+
+“orange” 
+
+car 
+
+tree     
+
+> CLIP -gSFF -CLIP (ours) RegionCLIP FineCLIP CLIPSelf DenseVLM CLIP CLIM
+
+Figure 4: Visualization of the fine-grained representations using similarity maps between the image dense feature and the text features for different objects (“car” and “tree”). CLIP models fine-tuned by all compared methods using the same input image resolution 384x384. After replacing the backbone of CatSeg with the original CLIP model, and each region-aware model, the following segmentation experiments are conducted with training on COCO stuff [ 54 ], and evaluation on ADE20k [ 45 ], PASCAL VOC [ 51 ], and PASCAL Context [ 52 ] dataset using mean IoU (mIoU), and pixel Accuracy (pACC). As shown in Tab. 3, SFF-CLIP comprehensively improves the performance of CatSeg on various datasets across different evaluation metrics, and surpasses the enhancements provided by RegionCLIP, CLIPSelf, DenseVLM, FineCLIP, and CLIM. Overall, the significant improvements on both OVD and OVS demonstrate that our method effectively boosts the fine-grained understanding ability of the CLIP model in downstream tasks. 
+
+Qualitative comparison by visualization. In Fig. 4, we provide an example visualization to qualitatively compare the fine-grained understanding ability of models under different alignment methods. Cosine similarities are calculated between the embeddings on each position of the image’s dense features and the text features for “car” and “tree”, and visualized as similarity maps. Without fine-grained alignment, the similarity maps of vanilla CLIP and CLIP-g exhibit weak localization ability (i.e., region-specific attention), where many irrelevant locations have high similarities with the object text. For SFF-CLIP, the text can be matched with the specific regions more accurately than other methods. In particular many of the spurious matches to the background have been removed compared to other methods, which 8Fine-grained CLIP fine-tuning with self-annotated region alignment Table 4: Comparison of image-level representation by a zero-shot retrieval task using Flicker30k. The gray row is the baseline CLIP before fine-grained fine-tuning, and † represents the results from fine-grained models pre-trained by large-scale data, shown in the brackets. Flickr30k text-to-image image-to-text Method Model R@1 R@5 R@10 R@1 R@5 R@10 FG-CLIP † (1.6B) ViT-B/16 74.7 92.2 95.6 88.6 98.1 99.3 SPARC † (3.2B) ViT-B/16 72.0 91.2 94.9 84.4 97.6 98.7 SigLIP2 † (10B) ViT-B/16 80.7 - - 93.0 - -CLIP ViT-B/16 73.6 90.9 94.8 88.6 97.1 99.1 CLIP-g ViT-B/16 76.9 93.0 95.9 90.8 98.8 99.4 
+
+RegionCLIP ViT-B/16 70.1 90.2 94.3 81.1 94.8 97.0 FineCLIP ViT-B/16 67.0 88.5 93.6 79.7 96.3 97.9 DenseVLM ViT-B/16 32.4 56.7 67.4 17.8 34.0 45.9 CLIPSelf ViT-B/16 52.3 78.5 86.0 49.9 77.2 85.4 CLIM ViT-B/16 71.2 90.3 94.4 84.1 97.3 98.5 SFF-CLIP(Ours) ViT-B/16 77.4 93.1 95.9 90.8 98.5 99.3 CLIP ViT-L/14 78.8 94.0 96.8 90.4 98.8 99.4 CLIP-g ViT-L/14 82.8 95.9 97.9 93.7 99.2 99.8 SFF-CLIP(Ours) ViT-L/14 82.6 95.9 97.8 94.0 99.3 99.8 
+
+Table 5: Ablation study of phrase matching weight wt.Method Boxes Masks CLIP - 41.4 30.6 SFF-CLIP w/o wt 39.5 28.5 w/ wt 57.8 50.1 
+
+Table 6: Ablation study of the mo-mentum model ˆM .Method T2I I2T CLIP-g w/o ˆM 76.2 90.5 CLIP-g w/ ˆM 76.9 90.8 SSF-CLIP w/o ˆM 74.9 88.8 SSF-CLIP w/ ˆM 77.4 90.8 
+
+Table 7: Ablation study of number of ex-tracted phrase n.Method N T/epoch Boxes Masks CLIP-g 0 51min 44.7 33.4 SFF-CLIP 1 53min 60.7 49.3 3 58min 61.8 51.7 5 1h 62.2 52.1 
+
+demonstrates the effectiveness of our proposed method to significantly improve the fine-grained representation ability of CLIP model. 
+
+4.3 Evaluation of image-level representation 
+
+The previous works rarely considered how their fine-tuning affects the whole image-text matching, which is the original ability of a vision-language model (VLM). However, preserving the original image-level representation is important in order to support multiple tasks from the same feature backbone model. To explore if there are any negative effects to image-level representation when improving fine-grained representations, we conduct an image-text retrieval evaluation with the Flickr30k [ 55 ] validation set, and report the recall accuracy of image-to-text and text-to-image on Top @{1, 5, 10 } matching. As seen in Tab. 4, with just realizing image-level contrastive learning, the baseline CLIP-g can keep or improve the performance of the original CLIP by continuing the training on the new image-text pairs data from MS COCO. Our SFF-CLIP successfully preserves the image-level retrieval performance, which is comparable to or even better than CLIP-g. In contrast, other region alignment methods all cause degradation to the image-text retrieval performances compared with the CLIP-g. In particular, CLIPSelf and DenseVLM have largely reduced their abilities of global image-level representation. Finally, the similar results between SFF-CLIP and CLIP-g with ViT-L/14 further demonstrate the effectiveness of our method in maintaining the global representation and stable image-level matching. 
+
+4.4 Ablation Studies 
+
+In this section, we conduct the ablation studies showing the influence of various components in our fine-grained fine-tuning method. 
+
+Phrase matching wt. To show the function of the phrase-matching weight wt in the fine-grained matching loss (Eq. 3), we conduct an ablation study with and without the weight on zero-shot classification performance, as the Top-1 accuracy presented in Tab. 5. Without wt, the fine-grained alignment model degrades significantly, with results even worse than the original CLIP. This demonstrates that many phrases extracted from the caption are not matched well with the image, and could cause large disturbances to the region-phrase alignment. Therefore, after introducing the weights to represent the degree of matching for each phrase into the loss, the model can better focus on the learning of well-aligned samples during the fine-tuning, and produce significant performance improvements. 9Fine-grained CLIP fine-tuning with self-annotated region alignment R@1 o    
+
+> Number of samples Number of samples
+> R@1 o
+> Number of samples Number of samples Number of samples Number of samples
+> Top -1 accuracy of
+> classification (boxes)
+> Top -1 accuracy of
+> classification (masks)
+> R@1 of T2I retrieval
+> R@1 of I2T retrieval
+
+Figure 5: Ablation study on training data in three different scales. 
+
+Momentum model for image-level representation. We conduct an ablation study to investigate the function of using momentum model to generate image and text matching weights in the contrastive learning (Eq. 6). From the text-to-image (T2I) and image-to-text (I2T) results shown in Tab. 6, the image-text retrieval evaluation results are well kept when adopting the momentum model, but decrease when using the pure contrastive loss without the weights from the momentum model. 
+
+Maximum number of phrases. Since the text-specific heat maps can be calculated in batch for one phrase in each sentence, the number of loops in obtaining all heat maps is the same as the maximum number of phrases N .Therefore, we conduct the ablation study with N = {0, 1, 3, 5} to observe the influence on the fine-grained alignment’s effectiveness and training efficiency. From Tab. 7, the zero-shot classification Top-1 accuracy is similar when N = 3 
+
+and N = 5 , which is better than N = 1 , while much higher than no region-phrase matching (CLIP-g). Thus, N = 3 , 5
+
+can basically cover the effective concepts in the training data. For the training efficiency, due to the high speed of the adopted heat-map generation method, the influence of N on the training time cost is not large. 
+
+Training data scale. To investigate the impact of data scale on model performance, we randomly sample three trainsets from CC3M [ 2] with different sizes: 100K, 1M, and 3M samples. We fine-tune the CLIP model with our SSF-CLIP, and compare with CLIP-g, CLIM and CLIPSelf, where CLIPSelf uses image patches instead of preparing region proposals. We report the Top-1 accuracy of zero-shot classification with boxes or masks for fine-grained understanding evaluation and the Top-1 recall rate of T2I and I2T retrieval results for image-level representation evaluation. In Figure 5, we present the performance curves on the four evaluations as the number of samples scales up. In terms of the fine-grained understanding, SSF-CLIP surpasses other methods, and the performance continues to grow as the dataset size increases, which shows promising scalability. For the image-level representation, SSF-CLIP maintains similar retrieval performances as CLIP-g, while in contrast, CLIPSelf and CLIM become worse when the training data increases. 
+
+# 5 Conclusion 
+
+In this paper, we propose SFF-CLIP (Self-annotated Fine-grained Fine-tuning for CLIP), a novel framework designed to advance the fine-grained representation ability while maintaining the global visual-semantic consistency. Our framework only requires image-text pairs as inputs, avoiding the process of generating region proposals and region annotations (eithetasksnually or via detectors) required by previous works. We propose fine-grained matching with the help of a run-time region-phrase annotation and alignment scheme, which extracts concept phrases from the input sentence and dynamically matches them with image dense features with the help of text-specific heat maps. A momentum model is adopted to support the preservation of CLIP’s original image-level representation ability. We validate the fine-grained dense representation of SFF-CLIP on zero-shot classification task, and down-stream dense prediction tasks, producing consistently significant performance improvements to the baseline model, as well as superior results compared to state-of-the-art works. Meanwhile, the performance on image-level tasks is preserved from the original CLIP model. Training with just image-text pairs, SFF-CLIP provides a flexible and effective solution for improving fine-grained dense representations of vision-language models like CLIP, while also eliminating the requirements of extra training data annotations, such as region proposals and region annotations, as well as dependence on pre-defined categories. 10 Fine-grained CLIP fine-tuning with self-annotated region alignment 
+
+# Acknowledgments 
+
+This was was supported in part by...... 
+
+# A Comparisons on ViT-L/14 
+
+We compare with related fine-grained fine-tuning methods, including RegionCLIP [ 16 ], CLIPSelf [ 21 ], FineCLIP [ 19 ], DenseVLM [ 17 ], and CLIM [ 23 ], on ViT-L/14. For fairness, all compared methods are reproduced with their open-sourced codes to fine-tune the CLIP pre-trained model based on the MS COCO train 2017 set [ 44 ] with the same input image size of 336x336. Table 8: Comparison of fine-grained dense representations via zero-shot classification on the ADE20K panoptic [ 45 ] val set and COCO panoptic [ 44 ] val2017 set. We report the Top-1 and Top-5 mean accuracy on both object bounding boxes and panoptic masks. The gray row is the baseline CLIP before fine-grained alignment fine-tuning. Our method does not require preparation of region proposals (R.P.), region labels (R.L.), or predefined categories (P.C.) on the training data. ADE20k MS COCO Boxes Masks Boxes Masks Method Model R.P. R.L. P.C. Top1 Top5 Top1 Top5 Top1 Top5 Top1 Top5 CLIP ViT-L/14 - - - 31.2 56.8 41.2 62.2 58.1 78.9 49.8 72.6 CLIP-g ViT-L/14 × × × 33.0 59.2 44.2 64.5 60.3 80.9 54.3 71.2 RegionCLIP ViT-L/14 √ √ √ 30.7 57.0 42.9 66.3 66.1 88.0 56.4 76.8 FineCLIP ViT-L/14 √ √ × 32.0 58.6 46.1 67.8 68.2 87.8 60.5 77.0 CLIPSelf ViT-L/14 √ × × 36.1 66.4 49.6 70.1 72.0 90.1 65.3 78.3 CLIM ViT-L/14 × × × 30.4 55.6 41.7 63.8 60.2 81.5 58.6 74.0 SFF-CLIP(Ours) ViT-L/14 × × × 36.9 66.7 51.0 70.8 75.2 91.3 67.3 79.4 A.1 Results of zero-shot region classification 
+
+We compare the fine-grained dense representation on ViT-L/14 with related fine-grained fine-tuning methods using the mean accuraccy (mACC) of classifying region boxes and panoptic masks for “things”. The results on ADE20K panoptic [ 45 ] val set and COCO panoptic [ 44 ] val2017 set are shown in Tab. 8. Compared to other region-aware fine-tuning methods that require pre-preparing extra region information, our proposed SFF-CLIP achieves superior performance with the ViT-L/14 architecture, further demonstrating the effectiveness of our self-annotated fine-grained alignment on advancing the region-aware representation ability of CLIP. 
+
+A.2 Results of OVD with OV-COCO benchmark 
+
+We provide the results of OVD performance on MS COCO val set with ViT-L/14 in Tab. 9. SFF-CLIP significantly improves the OVD results on the unseen novel categories (9.1%), while surpassing other fine-grained fine-tuning methods. Table 9: Results for open-vocabulary object detection on MS COCO val set. F-ViT is the two-stage detector baseline built on the frozen original CLIP ViT, and “ +” means the ViT backbone is initialized with a fine-tuned model based on the corresponding method. Method Backbone AP novel  
+
+> 50
+
+AP base  
+
+> 50
+
+AP all 
+
+> 50
+
+F-ViT ViT-L/14 28.3 52.5 46.2 +CLIP-g ViT-L/14 29.2 57.5 50.1 +RegionCLIP ViT-L/14 36.9 52.8 48.7 +FineCLIP ViT-L/14 37.2 54.3 49.8 +CLIPSelf ViT-L/14 30.0 53.8 47.4 +SFF-CLIP(Ours) ViT-L/14 37.4 57.4 52.1 A.3 Results of image-text retrieval 
+
+Moreover, the comparison results on the image-text retrieval task shown in Tab. 10 also indicate that our SSF-CLIP can successfully maintain the global representation and stable image-level matching with ViT-L/14. In contrast, other 11 Fine-grained CLIP fine-tuning with self-annotated region alignment fine-grained fine-tuning methods all cause degradation of image-text retrieval performances, especially the region-based distillation method CLIPSelf. Table 10: Comparison of image-level representation by a zero-shot retrieval task using Flicker30k [ 55 ]. The gray row is the baseline CLIP before fine-grained fine-tuning, and † represents the results from fine-grained models pre-trained by large-scale data, shown in the brackets. Flickr30k text-to-image image-to-text Method Model R@1 R@5 R@10 R@1 R@5 R@10 CLIP ViT-L/14 78.8 94.0 96.8 90.4 98.8 99.4 CLIP-g ViT-L/14 82.8 95.9 97.9 93.7 99.2 99.8 RegionCLIP ViT-L/14 75.8 92.5 95.9 85.8 96.9 98.8 FineCLIP ViT-L/14 70.9 90.3 94.4 80.4 96.5 98.8 CLIPSelf ViT-L/14 15.8 35.8 47.7 6.0 16.5 23.0 CLIM ViT-L/14 73.7 92.2 95.4 87.5 97.5 99.0 SFF-CLIP(Ours) ViT-L/14 82.6 95.9 97.8 94.0 99.3 99.8 
+
+# B OVD results on OV-LVIS benchmark 
+
+We build open-vocabulary object detectors based on F-ViT architecture using the fine-grained fine-tuned CLIP ViTs as backbones, and train the models for 48 epochs on the OV-LVIS [ 47 ] benchmark with the input image size of 224x224 for ViT-B/16. The evaluation results are shown in the Tab. 11 with AP for base categories (AP c, AP f ), rare categories (AP r ), and all categories (AP) as comparison indicators. SSF-CLIP surpasses all other fine-grained fine-tuning methods on all categories, especially on the rare categories, which better illustrates the fine-grained understanding ability brought by the CLIP encoder. Table 11: Results for open-vocabulary object detection on OV-LVIS val set. F-ViT is the two-stage detector baseline built on the frozen original CLIP ViT, and “ +” means the ViT backbone is initialized with a fine-tuned model based on the corresponding method. Method Backbone AP AP r AP c AP f
+
+F-ViT ViT-B/16 9.5 3.1 6.6 15.7 +CLIP-g ViT-B/16 10.7 5.1 7.4 16.1 +RegionCLIP ViT-B/16 10.4 5.8 7.2 16.1 +CLIPSelf ViT-B/16 9.0 3.6 5.8 14.9 +FineCLIP ViT-B/16 10.2 4.2 7.0 16.4 +SFF-CLIP(Ours) ViT-B/16 11.1 7.5 7.6 16.7 
+
+# C Ablation study on different XAI methods 
+
+In Sec. 3.2, we calculate the text-specific heat maps region-phrase self-annotation based on explainable AI (XAI) methods, and specifically adopt Grad-ECLIP [ 40 ] as reference. To investigate the influence of the XAI method used for fine-grained alignment, we conduct an ablation study with other applicable visual explanation approaches that satisfy a high-speed and easy plug-in, including Grad-CAM [ 33 ] and MaskCLIP [ 41 ]. The Vision Transformer self-attention cannot be used since it is not text-specific. The comparison of zero-shot classification performances in Table 12 shows that with the heat maps from these two methods, the phrase-region alignment also obtains obvious performance improvements compared with just using global loss (CLIP-g), but there is still a gap compared with using Grad-ECLIP, which demonstrates that Grad-ECLIP is the most effective. 
+
+# D Ablation study on input image sizes 
+
+To explore the impact of input image size on SSF-CLIP, we conduct the fine-grained alignment training and evaluation with four different image resolutions, including 224 , 336 , 480 , 512 , on both region-level zero-shot classification and image-level retrieval. The results are shown in Table 13. As the resolution of input image is increased gradually from 
+
+224 to 512 , the performance on region-level task is improved due to that more visual details can be provided with larger images. On the other hand, the performance on the image-text retrieval task is declined as the image becomes larger, when more number of patches leads to a increase of the complexity for the [cls ] token to integrate the global feature. 12 Fine-grained CLIP fine-tuning with self-annotated region alignment Table 12: Ablation study of using different visual explanation heat maps in SSF-CLIP. Boxes Masks Method Explanation Map Top1 Top5 Top1 Top5 CLIP - 41.4 63.6 30.6 53.8 CLIP-g - 42.9 64.8 32.9 56.4 SSF-CLIP Grad-CAM 54.2 74.7 46.5 69.8 MaskCLIP 54.3 75.5 47.4 70.9 Grad-ECLIP 57.8 78.6 50.1 72.9 
+
+Table 13: Ablation study on input image sizes. zero-shot classification image-text retrieval Image Boxes Masks text-to-image image-to-text Size Top1 Top5 Top1 Top5 R@1 R@5 R@1 R@5 224 62.2 80.8 52.1 73.6 77.4 93.1 90.8 98.5 336 63.3 82.1 53.7 74.5 76.1 91.8 88.8 98.5 480 65.5 86.2 59.1 81.1 70.5 88.9 85.5 96.3 512 66.2 86.8 65.0 81.4 66.6 86.6 81.5 95.2 
+
+# E Visualization 
+
+We present more visualizations of cosine similarity maps between text embeddings and the dense feature maps generated by different fine-grained alignment methods. The comparisons are shown in Figure 6. 
+
+# F Baselines 
+
+We use the following publicly available source code: 1. CLIPSelf [21] & RegionCLIP [16]: https://github.com/wusize/CLIPSelf 2. CLIM [23]: https://github.com/wusize/CLIM 3. FineCLIP [19]: https://github.com/Timsty1/FineCLIP 4. DenseVLM [17]: https://github.com/HVision-NKU/DenseVLM 
+
+# G Broader impact 
+
+Our work contribute to introduce SSF-CLIP, which boosts the fine-grained understanding ability of CLIP while maintains the global representation with eliminating the constrains from region annotation preparation. With the growing adoption of transformer as a unified architecture for both vision and language tasks, it is of great significant to enable the great generalization ability of CLIP ViT encoders in both image-level and dense prediction tasks. We are the first to utilize the XAI to produce self-annotated supervision. Eliminating the requirements of cumbersome region data preparation, the method is expected to support larger scale of data and promote improvements of models with further development. To ensure a positive social impact, we conduct experiments using academic open-source datasets that do not involve personal privacy issues. 
+
+# H Limitation 
+
+The SSF-CLIP is built upon an effective visual explanation (XAI) method for CLIP, the Grad-ECLIP [ 40 ]. The self-annotated region-phrase alignment will be influenced by the performance of heat maps generated by the adopted XAI method, as shown in §C. Therefore, the generalization of our idea that utilizes XAI to boost the model itself can be limited by the development of corresponding XAI technique. On the other side, the further progress made in XAI area may push our approach to have a wider range of applications. Since our work provides a flexible and low-cost way to supplement or replace the manually labeling process, SSF-CLIP has the potential to further enhance other pretrained models, which would be explored in our future work. 13 Fine-grained CLIP fine-tuning with self-annotated region alignment CLIP  CLIP -g RegionCLIP  CLIPSelf  DenseVLM 
+
+“car” 
+
+“traffic light” 
+
+“wine glass” 
+
+“light” 
+
+“apple” 
+
+“orange” 
+
+“banana” 
+
+“dog” 
+
+FineCLIP  SFF -CLIP CLIM 
+
+Figure 6: Visualization of cosine similarity maps between text embeddings and the dense feature maps generated by CLIP, CLIP-g, RegionCLIP [16], CLIM [23], CLIPSelf [21], DenseVLM [17], FineCLIP [19] and our SSF-CLIP. 
+
+# References 
+
+[1] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural language supervision. In International conference on machine learning , pages 8748–8763. PmLR, 2021. [2] Soravit Changpinyo, Piyush Sharma, Nan Ding, and Radu Soricut. Conceptual 12m: Pushing web-scale image-text pre-training to recognize long-tail visual concepts. In CVPR , pages 3558–3568, 2021. [3] Junbum Cha, Kyungjae Lee, Sungrae Park, and Sanghyuk Chun. Domain generalization by mutual-information regularization with pre-trained models. In European conference on computer vision , pages 440–457. Springer, 2022. [4] Huaishao Luo, Lei Ji, Ming Zhong, Yang Chen, Wen Lei, Nan Duan, and Tianrui Li. Clip4clip: An empirical study of clip for end to end video clip retrieval and captioning. Neurocomputing , 508:293–304, 2022. [5] Mengde Xu, Zheng Zhang, Fangyun Wei, Yutong Lin, Yue Cao, Han Hu, and Xiang Bai. A simple baseline for zeroshot semantic segmentation with pre-trained vision-language model. ECCV , 2022. [6] Feng Liang, Bichen Wu, Xiaoliang Dai, Kunpeng Li, Yinan Zhao, Hang Zhang, Peizhao Zhang, Peter Vajda, and Diana Marculescu. Open-vocabulary semantic segmentation with mask-adapted clip. In CVPR , pages 7061–7070, 2023. [7] Xiuye Gu, Tsung-Yi Lin, Weicheng Kuo, and Yin Cui. Open-vocabulary object detection via vision and language knowledge distillation. ICLR , 2022. 14 Fine-grained CLIP fine-tuning with self-annotated region alignment [8] Yu Du, Fangyun Wei, Zihe Zhang, Miaojing Shi, Yue Gao, and Guoqi Li. Learning to prompt for open-vocabulary object detection with vision-language model. In CVPR , pages 14084–14093, 2022. [9] Weicheng Kuo, Yin Cui, Xiuye Gu, AJ Piergiovanni, and Anelia Angelova. F-vlm: Open-vocabulary object detection upon frozen vision and language models. In ICLR , 2023. [10] Xiaoshi Wu, Feng Zhu, Rui Zhao, and Hongsheng Li. Cora: Adapting clip for open-vocabulary detection with region prompting and anchor pre-matching. In CVPR , pages 7031–7040, 2023. [11] Qihang Yu, Ju He, Xueqing Deng, Xiaohui Shen, and Liang-Chieh Chen. Convolutions die hard: Open-vocabulary segmentation with single frozen convolutional clip. NeurIPS , 36, 2024. [12] Michael Tschannen et al. Siglip 2: Multilingual vision-language encoders with improved semantic understanding, localization, and dense features. arXiv preprint arXiv:2502.14786 , 2025. [13] Chunyu Xie et al. Fg-clip: Fine-grained visual and textual alignment. In ICML , 2025. [14] Ioana Bica et al. Improving fine-grained understanding in image-text pre-training. In ICML , 2024. [15] Jinpeng Wang, Pan Zhou, Mike Zheng Shou, and Shuicheng Yan. Position-guided text prompt for vision-language pre-training. In CVPR , pages 23242–23251, 2023. [16] Yiwu Zhong, Jianwei Yang, Pengchuan Zhang, Chunyuan Li, Noel Codella, Liunian Harold Li, Luowei Zhou, Xiyang Dai, Lu Yuan, Yin Li, et al. Regionclip: Region-based language-image pretraining. In CVPR , pages 16793–16803, 2022. [17] Yunheng Li, Yuxuan Li, Quansheng Zeng, Wenhai Wang, Qibin Hou, and Ming-Ming Cheng. Densevlm: A retrieval and decoupled alignment framework for open-vocabulary dense prediction. In ICCV , 2025. [18] Shaoqing Ren, Kaiming He, Ross Girshick, and Jian Sun. Faster r-cnn: Towards real-time object detection with region proposal networks. NeurIPS , 28, 2015. [19] Dong Jing, Xiaolong He, Yutian Luo, Nanyi Fei, Wei Wei, Huiwen Zhao, Zhiwu Lu, et al. Fineclip: Self-distilled region-based clip for better fine-grained understanding. Advances in Neural Information Processing Systems ,37:27896–27918, 2024. [20] Junnan Li, Dongxu Li, Silvio Savarese, and Steven Hoi. Blip-2: Bootstrapping language-image pre-training with frozen image encoders and large language models. In International conference on machine learning , pages 19730–19742. PMLR, 2023. [21] Size Wu, Wenwei Zhang, Lumin Xu, Sheng Jin, Xiangtai Li, Wentao Liu, and Chen Change Loy. Clipself: Vision transformer distills itself for open-vocabulary dense prediction. arXiv preprint arXiv:2310.01403 , 2023. [22] Juan Yeo et al. Atas: Any-to-any self-distillation for enhanced open-vocabulary dense prediction. In ICCV , 2025. [23] Size Wu et al. Clim: Contrastive language-image mosaic for region representation. In AAAI , volume 38, pages 6117–6125, 2024. [24] Kaiyang Zhou, Jingkang Yang, Chen Change Loy, and Ziwei Liu. Learning to prompt for vision-language models. 
+
+IJCV , 130(9):2337–2348, 2022. [25] Jiahui Yu, Zirui Wang, Vijay Vasudevan, Legg Yeung, Mojtaba Seyedhosseini, and Yonghui Wu. Coca: Contrastive captioners are image-text foundation models. arXiv:2205.01917 , 2022. [26] Junnan Li, Dongxu Li, Caiming Xiong, and Steven Hoi. Blip: Bootstrapping language-image pre-training for unified vision-language understanding and generation. In ICML , 2022. [27] Dahun Kim, Anelia Angelova, and Weicheng Kuo. Region-aware pretraining for open-vocabulary object detection with vision transformers. In CVPR , 2023. [28] Weicheng Kuo, Yin Cui, Xiuye Gu, AJ Piergiovanni, and Anelia Angelova. Open-vocabulary object detection upon frozen vision and language models. In The Eleventh International Conference on Learning Representations ,2023. [29] Matthias Minderer, Alexey Gritsenko, Austin Stone, Maxim Neumann, Dirk Weissenborn, Alexey Dosovitskiy, Aravindh Mahendran, Anurag Arnab, Mostafa Dehghani, Zhuoran Shen, et al. Simple open-vocabulary object detection. In European conference on computer vision , pages 728–755. Springer, 2022. [30] Golnaz Ghiasi, Xiuye Gu, Yin Cui, and Tsung-Yi Lin. Scaling open-vocabulary image segmentation with image-level labels. In European conference on computer vision , pages 540–557. Springer, 2022. [31] Yunheng Li, Zhong-Yu Li, Quan-Sheng Zeng, Qibin Hou, and Ming-Ming Cheng. Cascade-clip: Cascaded vision-language embeddings alignment for zero-shot semantic segmentation. In International Conference on Machine Learning , pages 28243–28258. PMLR, 2024. 15 Fine-grained CLIP fine-tuning with self-annotated region alignment [32] Matthew D Zeiler and Rob Fergus. Visualizing and understanding convolutional networks. In ECCV , pages 818–833, 2014. [33] Ramprasaath R Selvaraju, Michael Cogswell, Abhishek Das, Ramakrishna Vedantam, Devi Parikh, and Dhruv Batra. Grad-cam: Visual explanations from deep networks via gradient-based localization. In ICCV , pages 618–626, 2017. [34] Marco Tulio Ribeiro, Sameer Singh, and Carlos Guestrin. " why should i trust you?" explaining the predictions of any classifier. In ACM SIGKDD , 2016. [35] Vitali Petsiuk, Abir Das, and Kate Saenko. Rise: Randomized input sampling for explanation of black-box models. 
+
+arXiv:1806.07421 , 2018. [36] Chenyang Zhao and Antoni B Chan. Odam: Gradient-based instance-specific visual explanations for object detection. In ICLR , 2023. [37] Yao Qiang, Deng Pan, Chengyin Li, Xin Li, Rhongho Jang, and Dongxiao Zhu. Attcat: Explaining transformers via attentive class activation tokens. NeurIPS , 2022. [38] Weiyan Xie, Xiao-Hui Li, Caleb Chen Cao, and Nevin L Zhang. Vit-cx: Causal explanation of vision transformers. pages 1569–1577, 2023. [39] Lu Yu and Wei Xiang. X-pruner: explainable pruning for vision transformers. In CVPR , pages 24355–24363, 2023. [40] Chenyang Zhao, Kun Wang, Xingyu Zeng, Rui Zhao, and Antoni B Chan. Gradient-based visual explanation for transformer-based clip. In ICML , pages 61072–61091. PMLR, 2024. [41] Chong Zhou, Chen Change Loy, and Bo Dai. Extract free dense labels from clip. In ECCV , pages 696–712. Springer, 2022. [42] Steven Bird, Ewan Klein, and Edward Loper. Natural language processing with Python: analyzing text with the natural language toolkit . O’Reilly Media, Inc., 2009. [43] Quan Sun, Yuxin Fang, Ledell Wu, Xinlong Wang, and Yue Cao. Eva-clip: Improved training techniques for clip at scale. preprint arXiv:2303.15389 , 2023. [44] Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr Dollár, and C Lawrence Zitnick. Microsoft coco: Common objects in context. In European conference on computer vision ,pages 740–755. Springer, 2014. [45] Bolei Zhou, Hang Zhao, Xavier Puig, Sanja Fidler, Adela Barriuso, and Antonio Torralba. Scene parsing through ade20k dataset. In CVPR , 2017. [46] Xinlei Chen, Hao Fang, Tsung-Yi Lin, Ramakrishna Vedantam, Saurabh Gupta, Piotr Dollár, and C Lawrence Zitnick. Microsoft coco captions: Data collection and evaluation server. arXiv preprint arXiv:1504.00325 , 2015. [47] Agrim Gupta, Piotr Dollar, and Ross Girshick. Lvis: A dataset for large vocabulary instance segmentation. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 5356–5364, 2019. [48] Alireza Zareian, Kevin Dela Rosa, Derek Hao Hu, and Shih-Fu Chang. Open-vocabulary object detection using captions. In CVPR , pages 14393–14402, 2021. [49] Xingyi Zhou, Rohit Girdhar, Armand Joulin, Philipp Krähenbühl, and Ishan Misra. Detecting twenty-thousand classes using image-level supervision. In ECCV , 2022. [50] Chuang Lin, Peize Sun, Yi Jiang, Ping Luo, Lizhen Qu, Gholamreza Haffari, Zehuan Yuan, and Jianfei Cai. Learning object-language alignments for open-vocabulary object detection. arXiv preprint arXiv:2211.14843 ,2022. [51] M. Everingham, L. Van Gool, C. K. I. Williams, J. Winn, and A. Zisserman. The PASCAL Visual Object Classes Challenge 2012 (VOC2012) Results. http://www.pascal-network.org/challenges/VOC/voc2012/workshop/index.html, 2012. [52] Roozbeh Mottaghi, Xianjie Chen, Xiaobai Liu, Nam-Gyu Cho, Seong-Whan Lee, Sanja Fidler, Raquel Urtasun, and Alan Yuille. The role of context for object detection and semantic segmentation in the wild. In CVPR , pages 891–898, 2014. [53] Seokju Cho, Heeseong Shin, Sunghwan Hong, Anurag Arnab, Paul Hongsuck Seo, and Seungryong Kim. Cat-seg: Cost aggregation for open-vocabulary semantic segmentation. In CVPR , pages 4113–4123, 2024. [54] Holger Caesar, Jasper Uijlings, and Vittorio Ferrari. Coco-stuff: Thing and stuff classes in context. In CVPR ,pages 1209–1218, 2018. 16 Fine-grained CLIP fine-tuning with self-annotated region alignment [55] Bryan A Plummer, Liwei Wang, Chris M Cervantes, Juan C Caicedo, Julia Hockenmaier, and Svetlana Lazebnik. Flickr30k entities: Collecting region-to-phrase correspondences for richer image-to-sentence models. In ICCV ,2015. 17

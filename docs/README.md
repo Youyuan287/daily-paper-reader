@@ -6,29 +6,35 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-22
-- 运行时间：2026-07-22 20:02:27 UTC
+- 最新运行日期：2026-07-23
+- 运行时间：2026-07-23 20:24:11 UTC
 - 运行状态：成功
-- 本次总论文数：3
-- 精读区：2
-- 速读区：1
+- 本次总论文数：5
+- 精读区：1
+- 速读区：4
 
 ### 今日简报（AI）
-今日推荐3篇论文，精读2篇、速读1篇，聚焦3D场景理解与检索。最值得关注的是高分论文《ZeroSplat》提出的3D高斯泼溅通用指代分割方法，以及《CR-Refiner》的编辑条件场景检索重排序技术。建议普通读者优先精读这两篇，掌握3D场景中对象级交互与检索的最新思路。
-- 详情：[/202607/22/README](/202607/22/README)
+今日精选5篇3D视觉论文，精读聚焦3D高斯泼溅编辑新方法，速读涵盖几何-光度等变、拓扑重建与形状检索。最值得关注精读论文《Look Before You Edit》，通过注意力引导相机放置实现高质量编辑。普通读者可重点了解注意力机制如何提升多视角一致性。
+- 详情：[/202607/23/README](/202607/23/README)
 
 ### 精读区论文标签
-1. [ZeroSplat: Generalized Referring Segmentation in 3D Gaussian Splatting](/202607/22/2607.18801v1-zerosplat-generalized-referring-segmentation-in-3d-gaussian-splatting)  
-   标签：评分：9.0/10、query:open-vocab-d
-   evidence：开放词汇的3D高斯泼溅指代分割
-2. [CR-Refiner: An Object-Centric Optimal Transport Reranker for Edit-Conditioned 3D Scene Retrieval](/202607/22/2607.19115v1-cr-refiner-an-object-centric-optimal-transport-reranker-for-edit-conditioned-3d-scene-retrieval)  
+1. [Look Before You Edit: Attention-Guided Camera Placement and Multi-View Alignment for 3D Gaussian Splatting Editing](/202607/23/2607.19777v1-look-before-you-edit-attention-guided-camera-placement-and-multi-view-alignment-for-3d-gaussian-splatting-editing)  
    标签：评分：8.0/10、query:open-vocab-d
-   evidence：基于编辑条件的3D场景检索，使用大语言模型解析自然语言编辑为结构化查询，无训练重排序器实现开放词汇检索。
+   evidence：文本驱动的三维高斯泼溅编辑与多视图对齐
 
 ### 速读区论文标签
-1. [Toward Semantic Communication for Real-time Mobile 3D Reconstruction](/202607/22/2607.16128v1-toward-semantic-communication-for-real-time-mobile-3d-reconstruction)  
+1. [E3DGS: Unified Geometric-Photometric Equivariance for 3D Gaussian Splatting via Color-as-Geometry Embedding](/202607/23/2607.15536v1-e3dgs-unified-geometric-photometric-equivariance-for-3d-gaussian-splatting-via-color-as-geometry-embedding)  
+   标签：评分：7.0/10、query:open-vocab-d
+   evidence：SE(3)等变三维高斯溅射框架统一几何与外观学习
+2. [TopoGS: Planar Reconstruction via Topology-aware 3D Gaussian Splatting](/202607/23/2607.16838v1-topogs-planar-reconstruction-via-topology-aware-3d-gaussian-splatting)  
+   标签：评分：7.0/10、query:open-vocab-d
+   evidence：拓扑感知的3D高斯泼溅
+3. [GATE-3D: Geometry-Aware Test-time Adaptive Reranking for Open-Set 3D Shape Retrieval](/202607/23/2607.19111v1-gate-3d-geometry-aware-test-time-adaptive-reranking-for-open-set-3d-shape-retrieval)  
+   标签：评分：7.0/10、query:open-vocab-d
+   evidence：开放集三维形状检索与几何感知重排序
+4. [Fine-grained CLIP fine-tuning with self-annotated region alignment](/202607/23/2607.13661v1-fine-grained-clip-fine-tuning-with-self-annotated-region-alignment)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：通过语义通信解决实时3D重建中的多视图一致性问题
+   evidence：通过区域对齐微调CLIP，增强细粒度特征，可用于后续2D→3D开放词汇投影
 
 
 <div class="dpr-home-promo-card">
