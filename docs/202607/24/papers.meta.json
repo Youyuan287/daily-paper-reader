@@ -1,0 +1,69 @@
+{
+  "label": "2026-07-24",
+  "date": "2026-07-24",
+  "generated_at": "2026-07-24T20:56:55",
+  "count": 4,
+  "papers": [
+    {
+      "paper_id": "202607/24/2607.14966v1-u-shaped-multi-granularity-learning-for-vision-language-models",
+      "section": "quick",
+      "title_en": "U-shaped Multi-granularity Learning for Vision-Language Models",
+      "authors": "Biao Chen, Yunqian Yu, Xiangxu Zhao, Zhongshu Chen, Mengmeng Jing, Lin Zuo",
+      "date": "2026-07-16",
+      "pdf": "https://arxiv.org/pdf/2607.14966v1",
+      "score": "7.0",
+      "evidence": "多粒度提示学习方法解决视觉语言模型的粒度困境，可应用于分割等密集预测任务",
+      "tldr": "视觉语言模型的提示学习面临粒度困境，全局提示缺乏细粒度语义，局部提示忽略上下文关联。受U-Net启发，提出UPrompt，一种U形多粒度提示学习框架，通过粗到细级联增强传播全局上下文细化局部细节，细到粗层次监督保证语义一致性。在17个基准上验证，MSCOCO上rSum超MAMET和VPKE分别达4.1和7.3，基础到新类泛化超CoCoA-Mix 5.09%，且中等粒度匹配PSRC仅需1/3成本。有效解决粒度问题，实现高效跨任务泛化。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "The prompt learning paradigm for vision-language models is effective yet faces a granularity dilemma: global prompts lack fine-grained semantic awareness, while local prompts ignore contextual associations, limiting cross-task generalization. This dilemma exists in dense prediction tasks. Inspired by U-Net, which unifies multi-level representations across granularities, we propose UPrompt, a U-shaped multi-granularity prompt learning framework for vision-language models. Similar to how U-Net integrates fine and coarse features through symmetric encoder-decoder pathways with cross-level connections, UPrompt constructs parallel multi-granularity representations in both visual and textual modalities, where coarse-to-fine cascaded enhancement propagates global context to refine local details, while fine-to-coarse hierarchical supervision ensures semantic consistency across scales. Extensive experiments on 17 benchmarks validate our effectiveness. UPrompt outperforms MAMET and VPKE by 4.1 and 7.3 rSum on MSCOCO, surpasses CoCoA-Mix by 5.09% in base-to-novel generalization, while maintaining competitive performance with minimal overhead (coarse-grained) and matching PSRC with 1/3 cost (medium-grained).",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    },
+    {
+      "paper_id": "202607/24/2607.21371v1-dinode-continuous-vision-text-alignment-for-open-vocabulary-semantic-segmentation",
+      "section": "quick",
+      "title_en": "DINOde: Continuous Vision-Text Alignment for Open-Vocabulary Semantic Segmentation",
+      "authors": "Sung-Hoon Yoon, Hoyong Kwon, Changgyoon Oh, Kuk-Jin Yoon",
+      "date": "2026-07-23",
+      "pdf": "https://arxiv.org/pdf/2607.21371v1",
+      "score": "7.0",
+      "evidence": "通过连续视觉-文本对齐实现开放词汇语义分割",
+      "tldr": "针对DINO缺乏文本对齐的问题，提出DINOde框架，通过语义文本流和全局上下文流将CLIP文本嵌入连续演化至DINO视觉流形，并引入速度切向投影保持超球几何。在多个开放词汇语义分割基准上达到最优性能。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "Open-vocabulary semantic segmentation (OVSS) leverages textual semantics to segment objects beyond predefined categories. While the self-supervised model DINOv3 provides strong structured visual representations, its lack of native textual alignment hinders its direct application to OVSS. To bridge this gap, we propose DINOde, an ODE-based framework that continuously aligns CLIP text embeddings with the DINO visual manifold. Our approach employs two complementary components: (i) Semantic Text Flow (STF), which evolves text embeddings toward the DINO manifold through a continuous ODE trajectory, and (ii) Global Context Flow (GCF), which progressively refines the holistic image representation carried by DINO's CLS token. To preserve the hyperspherical geometry of the feature space during this evolution, we further introduce Velocity Tangent Projection, which constrains the learned velocity field to the tangent space. By modeling alignment as a continuous trajectory, DINOde avoids the manifold entanglement inherent in discrete MLP projections and yields more robust cross-modal alignment. Extensive experiments demonstrate that DINOde consistently outperforms existing methods and achieves state-of-the-art performance across multiple OVSS benchmarks. The code is available at https://github.com/yoon307/DINOde.",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    },
+    {
+      "paper_id": "202607/24/2607.14481v1-immediate-3d-gaussian-splat-reconstruction-of-unordered-input-with-global-consistency",
+      "section": "quick",
+      "title_en": "Immediate 3D Gaussian Splat Reconstruction of Unordered Input with Global Consistency",
+      "authors": "Andreas Meuleman, Linus Franke, Boris Zhestiankin, Camille Montemagni, George Drettakis",
+      "date": "2026-07-16",
+      "pdf": "https://arxiv.org/pdf/2607.14481v1",
+      "score": "6.0",
+      "evidence": "即时3D高斯泼溅重建方法，支持无序输入和全局一致性",
+      "tldr": "3D高斯泼溅（3DGS）已成为场景重建与实时渲染首选。然而现有方法要求有序输入或需全部图像后才能处理，无法兼顾即时性与无序拍摄。本文提出首个即时反馈方案，通过视觉地点识别和协同可见图快速匹配，结合聚类回环和渐进层次实现全局一致重建。在多个数据集上取得良好视觉质量，支持上千张无序图像。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "3D Gaussian Splatting (3DGS) has become the method of choice for reconstructing and real-time rendering of captured scenes. To capture a scene with good visual quality, continuous image sequences are usually combined with out-of-order shots for better scene coverage. Structure from motion can reconstruct such captures, but only after they are all available and often with high computational cost. Incremental reconstruction methods -- often derived from SLAM solutions -- provide immediate feedback, but cannot handle the out-of-order capture we require. We provide the first immediate feedback solution for such radiance field capture that provides global consistency. We first introduce a method for fast matching in out-of-order sequences, by repurposing visual place recognition models and a covisibility graph, and provide an efficient way to find highly connected keyframes, improving quality even for ordered sequences. We show how these steps -- together with GPU optimization and careful Gaussian primitive placement -- provide fast local reconstruction, in our challenging radiance field reconstruction case. We then introduce a novel cluster-based method, again using the covisibility graph, to provide efficient loop closure that does not require sequential input. Finally, to handle large scenes in our context, we introduce a progressive hierarchy that allows our method to scale to large environments, without compromising efficiency. Our results show we provide immediate feedback 3DGS reconstruction with good visual quality in several datasets, with up to thousands of input images.",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    },
+    {
+      "paper_id": "202607/24/2607.21595v1-3d-aware-vlms-with-implicit-and-explicit-geometries",
+      "section": "quick",
+      "title_en": "3D-Aware VLMs with Implicit and Explicit Geometries",
+      "authors": "Wenhao Li, Xueying Jiang, Quanhao Qian, Deli Zhao, Ran Xu, Shijian Lu, Gongjie Zhang",
+      "date": "2026-07-23",
+      "pdf": "https://arxiv.org/pdf/2607.21595v1",
+      "score": "6.0",
+      "evidence": "融合隐式和显式3D几何的视觉语言模型，可增强开放词汇场景理解",
+      "tldr": "现有视觉语言模型在处理3D任务时缺乏细粒度空间理解。为此提出VLM-IE3D框架，从RGB视频中学习隐式和显式3D几何：隐式几何令牌捕获高层几何先验，显式几何令牌编码详细几何结构，并通过3D感知适配器与2D视觉特征融合。在3D视频检测、视觉定位、密集字幕和空间推理等任务上取得一致优越性能。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "Despite rapid progress, most existing vision-language models (VLMs) built from 2D visual inputs often struggle when handling various 3D tasks that require fine-grained spatial understanding and reasoning. To bridge this gap, we present VLM-IE3D, a unified framework that enhances the 3D spatial awareness of VLMs by equipping them with both implicit and explicit 3D geometries learned from RGB videos. Our VLM-IE3D introduces Implicit Geometry Tokens (IGTs) that capture high-level geometric priors from input videos, as well as complementary Explicit Geometry Tokens (EGTs) that encode detailed geometric structures from reconstructed 3D attributes. On top of that, VLM-IE3D comes with a 3D-aware adapter that effectively fuses the two types of geometric representations with 2D visual cues. This RGB-only design injects strong 3D inductive biases for fine-grained spatial understanding and reasoning without requiring any additional 3D inputs. Extensive experiments show that VLM-IE3D achieves superior performance consistently across various 3D tasks including 3D video detection, 3D visual grounding, 3D dense captioning, and spatial reasoning. Code and models are available at https://github.com/Vegetebird/VLM-IE3D.",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    }
+  ],
+  "errors": []
+}

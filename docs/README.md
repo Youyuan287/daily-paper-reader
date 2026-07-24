@@ -6,35 +6,33 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-23
-- 运行时间：2026-07-23 20:24:11 UTC
+- 最新运行日期：2026-07-24
+- 运行时间：2026-07-24 20:56:47 UTC
 - 运行状态：成功
-- 本次总论文数：5
-- 精读区：1
+- 本次总论文数：4
+- 精读区：0
 - 速读区：4
 
 ### 今日简报（AI）
-今日精选5篇3D视觉论文，精读聚焦3D高斯泼溅编辑新方法，速读涵盖几何-光度等变、拓扑重建与形状检索。最值得关注精读论文《Look Before You Edit》，通过注意力引导相机放置实现高质量编辑。普通读者可重点了解注意力机制如何提升多视角一致性。
-- 详情：[/202607/23/README](/202607/23/README)
+今日整理4篇速读论文，重点包括视觉-语言多粒度学习和开放词汇语义分割。最值得关注的是《U-shaped Multi-granularity Learning》和《DINOde》，均获得7.0分，前者提出U形多粒度学习框架，后者在连续文本对齐上表现突出。建议优先阅读这两篇，把握多模态对齐与开放词汇分割的最新进展。
+- 详情：[/202607/24/README](/202607/24/README)
 
 ### 精读区论文标签
-1. [Look Before You Edit: Attention-Guided Camera Placement and Multi-View Alignment for 3D Gaussian Splatting Editing](/202607/23/2607.19777v1-look-before-you-edit-attention-guided-camera-placement-and-multi-view-alignment-for-3d-gaussian-splatting-editing)  
-   标签：评分：8.0/10、query:open-vocab-d
-   evidence：文本驱动的三维高斯泼溅编辑与多视图对齐
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [E3DGS: Unified Geometric-Photometric Equivariance for 3D Gaussian Splatting via Color-as-Geometry Embedding](/202607/23/2607.15536v1-e3dgs-unified-geometric-photometric-equivariance-for-3d-gaussian-splatting-via-color-as-geometry-embedding)  
+1. [U-shaped Multi-granularity Learning for Vision-Language Models](/202607/24/2607.14966v1-u-shaped-multi-granularity-learning-for-vision-language-models)  
    标签：评分：7.0/10、query:open-vocab-d
-   evidence：SE(3)等变三维高斯溅射框架统一几何与外观学习
-2. [TopoGS: Planar Reconstruction via Topology-aware 3D Gaussian Splatting](/202607/23/2607.16838v1-topogs-planar-reconstruction-via-topology-aware-3d-gaussian-splatting)  
+   evidence：多粒度提示学习方法解决视觉语言模型的粒度困境，可应用于分割等密集预测任务
+2. [DINOde: Continuous Vision-Text Alignment for Open-Vocabulary Semantic Segmentation](/202607/24/2607.21371v1-dinode-continuous-vision-text-alignment-for-open-vocabulary-semantic-segmentation)  
    标签：评分：7.0/10、query:open-vocab-d
-   evidence：拓扑感知的3D高斯泼溅
-3. [GATE-3D: Geometry-Aware Test-time Adaptive Reranking for Open-Set 3D Shape Retrieval](/202607/23/2607.19111v1-gate-3d-geometry-aware-test-time-adaptive-reranking-for-open-set-3d-shape-retrieval)  
-   标签：评分：7.0/10、query:open-vocab-d
-   evidence：开放集三维形状检索与几何感知重排序
-4. [Fine-grained CLIP fine-tuning with self-annotated region alignment](/202607/23/2607.13661v1-fine-grained-clip-fine-tuning-with-self-annotated-region-alignment)  
+   evidence：通过连续视觉-文本对齐实现开放词汇语义分割
+3. [Immediate 3D Gaussian Splat Reconstruction of Unordered Input with Global Consistency](/202607/24/2607.14481v1-immediate-3d-gaussian-splat-reconstruction-of-unordered-input-with-global-consistency)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：通过区域对齐微调CLIP，增强细粒度特征，可用于后续2D→3D开放词汇投影
+   evidence：即时3D高斯泼溅重建方法，支持无序输入和全局一致性
+4. [3D-Aware VLMs with Implicit and Explicit Geometries](/202607/24/2607.21595v1-3d-aware-vlms-with-implicit-and-explicit-geometries)  
+   标签：评分：6.0/10、query:open-vocab-d
+   evidence：融合隐式和显式3D几何的视觉语言模型，可增强开放词汇场景理解
 
 
 <div class="dpr-home-promo-card">
