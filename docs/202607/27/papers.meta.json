@@ -1,0 +1,54 @@
+{
+  "label": "2026-07-27",
+  "date": "2026-07-27",
+  "generated_at": "2026-07-27T20:12:38",
+  "count": 3,
+  "papers": [
+    {
+      "paper_id": "202607/27/2607.17718v2-pc-seg-progressive-cross-view-consistency-for-3d-oct-segmentation-from-sparse-2d-annotations",
+      "section": "quick",
+      "title_en": "PC-Seg: Progressive Cross-View Consistency for 3D OCT Segmentation from Sparse 2D Annotations",
+      "authors": "Tsubasa Konno, Takahiro Ninomiya, Yukun Zhou, Koichi Ito, Siegfried K. Wagner, Yiqun Lin, Pearse A. Keane, Toru Nakazawa, Takafumi Aoki",
+      "date": "2026-07-20",
+      "pdf": "https://arxiv.org/pdf/2607.17718v2",
+      "score": "6.0",
+      "evidence": "渐进式跨视图一致性用于稀疏二维标注的三维分割",
+      "tldr": "OCT体积分割依赖密集标注，半监督方法常忽略3D空间信息。PC-Seg通过渐进式跨视角一致性，利用单一2D模型从稀疏2D标注学习3D分割，生成伪标签并蒸馏到3D模型，再通过2D与3D模型协同训练互相精化。在MSHC和Duke DME数据集上，仅用0.7%标注数据即达到全监督精度，优于现有半监督和视网膜层分割方法。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "Volumetric segmentation of optical coherence tomography (OCT) images is essential for diagnosing ocular diseases but requires labor-intensive voxel-wise annotations. While semi-supervised learning (SSL) can reduce annotation costs, most existing methods process data slice by slice and fail to exploit the inherent 3D spatial context. We propose PC-Seg, a progressive cross-view consistency framework that learns high-accuracy 3D segmentation models from sparse 2D annotations. Unlike conventional multi-view approaches, PC-Seg uses a single 2D model to learn cross-view consistency from standard B-scans and orthogonal slices, thereby generating reliable volumetric pseudo-labels. These pseudo-labels are then distilled into a 3D model, followed by a co-training stage in which the 2D and 3D models mutually refine each other through ensemble pseudo-labeling. Experiments on the MSHC and Duke DME datasets demonstrate that PC-Seg achieves accuracy comparable to fully supervised learning while using labels for only about 0.7% of the training data, outperforming state-of-the-art semi-supervised and retinal layer segmentation methods. Our code is publicly available at https://github.com/gsisaoki/pc-seg-official.",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    },
+    {
+      "paper_id": "202607/27/2607.21896v1-learning-adaptive-semantic-gaussian-allocation-for-3d-occupancy",
+      "section": "quick",
+      "title_en": "Learning Adaptive Semantic Gaussian Allocation for 3D Occupancy",
+      "authors": "Kanglin Ning, Yiran Zhao, Wenrui Li, Houde Quan, Qifan Li, Xingtao Wang, Xiaopeng Fan",
+      "date": "2026-07-24",
+      "pdf": "https://arxiv.org/pdf/2607.21896v1",
+      "score": "6.0",
+      "evidence": "自适应语义高斯分配用于三维占用预测",
+      "tldr": "语义3D高斯表示在占据预测中面临分配瓶颈：简单区域冗余而困难区域支持不足。现有方法仅优化初始化和形状，未解决有限高斯数量下的选择问题。本文提出SAGFormer，利用高斯属性和局部几何语义特征对候选高斯评分，显式选择固定数量的最优集。在nuScenes和KITTI-360上，该方法提升了占据预测精度，减少了语义混合，并使高斯分布更一致，证明了显式容量分配对高斯优化的补充价值。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "Semantic 3D Gaussians provide a compact representation for 3D semantic occupancy prediction by rendering semantic primitives into a voxel volume under voxel-wise supervision. Recent methods have improved the modeling ability and efficiency of this representation through more flexible primitive shapes, geometry-guided initialization, and progressive densification. However, these advances mainly determine how primitives are represented, initialized, or added, and do not explicitly address how to select the most useful Gaussians when their total number must be limited to control memory and computation. This imbalance creates an allocation bottleneck: redundant Gaussians remain in simple regions, while difficult regions receive insufficient semantic support. We propose the Semantic Gaussian Allocation Transformer (SAGFormer), which uses Gaussian attributes and local geometric-semantic features to score candidates and select a fixed final Gaussian set. Experiments on nuScenes-SurroundOcc and SSCBench-KITTI-360 show that SAGFormer improves occupancy prediction under the evaluated protocols and yields more semantically consistent and better-utilized Gaussian representations. Under similar final counts and raw coverage, it reduces semantic mixing, strengthens class-consistent voxel support, and produces fewer unused Gaussians. The results indicate that explicit capacity allocation is a useful complement to Gaussian refinement for semantic occupancy prediction.",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    },
+    {
+      "paper_id": "202607/27/2607.22355v1-siphy-single-image-physical-property-reasoning",
+      "section": "quick",
+      "title_en": "SiPhy: Single-Image Physical Property Reasoning",
+      "authors": "Hoang Le, Joonwoo Kwon, Elkhan Ismayilzada, Yufei Zhang, Zijun Cui",
+      "date": "2026-07-24",
+      "pdf": "https://arxiv.org/pdf/2607.22355v1",
+      "score": "6.0",
+      "evidence": "将CLIP特征投影到3D伪体素点",
+      "tldr": "从单张图像推断物理属性（如质量、刚度）对仿真与具身AI重要，但现有方法多依赖多视图或物理监督。本文提出SiPhy统一框架，融合3D视觉线索、深度与语言知识，通过采样伪体素点、提取CLIP特征并映射至VLM材料候选，采用部分对比聚合和重量感知细化。在ABO-500等基准上，SiPhy单图像性能超越多视图方法，质量MnRE提升93%，密度MAE降低35.5%，杨氏模量误差降低23.5%。该方法可作为单视图物理理解的数据标注引擎。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "Inferring physical properties such as mass, stiffness, and elasticity from a single image is essential for simulation and embodied AI, yet most existing approaches rely on multi-view reconstruction or physics-based supervision. We introduce SiPhy, a unified framework for single-image physical property reasoning that aligns 3D-aware visual cues, depth with language-based material knowledge. From one RGB image, SiPhy samples pseudo-voxel points, extracts CLIP features, and grounds them to material candidates proposed by a VLM. A part-based contrastive aggregator enforces region consistency, while a heaviness-aware refinement improves thickness and volume estimation for dense objects. Across ABO-500, MVImgNet-100, and PhysXNet-100, SiPhy achieves state-of-the-art single-image performance, surpassing multi-view reconstruction methods by improving mass MnRE by up to 93% (vs. PUGS), reducing density MAE by 35.5% (vs. NeRF2Physics), and lowering Young's modulus error by 23.5%. We further validate SiPhy on real hand-object interaction datasets, demonstrating its potential as a data annotation engine for physical understanding from single-view imagery.",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    }
+  ],
+  "errors": []
+}

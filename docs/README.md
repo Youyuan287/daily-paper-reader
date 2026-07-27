@@ -6,26 +6,30 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-26
-- 运行时间：2026-07-26 21:02:50 UTC
+- 最新运行日期：2026-07-27
+- 运行时间：2026-07-27 20:12:31 UTC
 - 运行状态：成功
-- 本次总论文数：1
+- 本次总论文数：3
 - 精读区：0
-- 速读区：1
+- 速读区：3
 
 ### 今日简报（AI）
-今天速读了1篇探索将大型视图合成模型用于多视图全景分割的论文。
-该研究（评分7.0）旨在利用视图合成能力提升多视图分割的泛化性，值得关注其跨任务迁移思路。
-下一步可重点调研其模型架构，并思考如何将视图合成先验应用于自己的分割场景。
-- 详情：[/202607/26/README](/202607/26/README)
+今日阅读3篇6分论文，涵盖3D OCT稀疏标注分割、3D占用预测及单图像物理属性推理。重点关注PC-Seg的渐进跨视图一致性方法和SiPhy的物理属性推理思路。建议优先了解PC-Seg如何利用少量标注实现高质量分割，或探索SiPhy从单图推理材质、光照等属性的技术。
+- 详情：[/202607/27/README](/202607/27/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Extending a Large View Synthesis Model for Multi-view Panoptic Segmentation](/202607/26/2607.19765v1-extending-a-large-view-synthesis-model-for-multi-view-panoptic-segmentation)  
-   标签：评分：7.0/10、query:open-vocab-d
-   evidence：扩展视图合成模型至多视图全景分割，利用跨视图注意力
+1. [PC-Seg: Progressive Cross-View Consistency for 3D OCT Segmentation from Sparse 2D Annotations](/202607/27/2607.17718v2-pc-seg-progressive-cross-view-consistency-for-3d-oct-segmentation-from-sparse-2d-annotations)  
+   标签：评分：6.0/10、query:open-vocab-d
+   evidence：渐进式跨视图一致性用于稀疏二维标注的三维分割
+2. [Learning Adaptive Semantic Gaussian Allocation for 3D Occupancy](/202607/27/2607.21896v1-learning-adaptive-semantic-gaussian-allocation-for-3d-occupancy)  
+   标签：评分：6.0/10、query:open-vocab-d
+   evidence：自适应语义高斯分配用于三维占用预测
+3. [SiPhy: Single-Image Physical Property Reasoning](/202607/27/2607.22355v1-siphy-single-image-physical-property-reasoning)  
+   标签：评分：6.0/10、query:open-vocab-d
+   evidence：将CLIP特征投影到3D伪体素点
 
 
 <div class="dpr-home-promo-card">

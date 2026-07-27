@@ -1,0 +1,502 @@
+Title: Learning Adaptive Semantic Gaussian Allocation for 3D Occupancy
+
+URL Source: https://arxiv.org/pdf/2607.21896v1
+
+Published Time: Mon, 27 Jul 2026 00:18:31 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# Learning Adaptive Semantic Gaussian Allocation for 3D Occupancy 
+
+## Kanglin Ning, Yiran Zhao, Wenrui Li, Houde Quan, Qifan Li, Xingtao Wang, Xiaopeng Fan ∗
+
+Harbin Institute of Technology The Suzhou Research Institute of HIT The PengChengLab 
+
+Abstract 
+
+Semantic 3D Gaussians provide a compact representation for 3D semantic occupancy prediction by rendering semantic primitives into a voxel volume under voxel-wise supervision. Recent methods have improved the modeling ability and effi-ciency of this representation through more flexible primitive shapes, geometry-guided initialization, and progressive den-sification. However, these advances mainly determine how primitives are represented, initialized, or added, and do not explicitly address how to select the most useful Gaussians when their total number must be limited to control memory and computation. This imbalance creates an allocation bot-tleneck: redundant Gaussians remain in simple regions, while difficult regions receive insufficient semantic support. We pro-pose the Semantic Gaussian Allocation Transformer (SAG-Former), which uses Gaussian attributes and local geometric-semantic features to score candidates and select a fixed final Gaussian set. Experiments on nuScenes-SurroundOcc and SSCBench-KITTI-360 show that SAGFormer improves oc-cupancy prediction under the evaluated protocols and yields more semantically consistent and better-utilized Gaussian rep-resentations. Under similar final counts and raw coverage, it reduces semantic mixing, strengthens class-consistent voxel support, and produces fewer unused Gaussians. The results in-dicate that explicit capacity allocation is a useful complement to Gaussian refinement for semantic occupancy prediction. 
+
+## Introduction 
+
+3D occupancy prediction estimates the geometry and seman-tic labels of the surrounding space, including both visible and occluded regions (Wei et al. 2023; Tian et al. 2023). Dense voxel grids provide a direct scene representation, but their memory and computation increase rapidly with spatial range and resolution (Li et al. 2023). Semantic Gaussian methods provide a sparse alternative. They represent a scene with se-mantic primitives and render these primitives into a voxel occupancy volume (Huang et al. 2024b; Zhao et al. 2025). Recent work improves sparse primitive representations along three main directions. SplatSSC uses depth cues to construct a compact initial Gaussian set (Qian et al. 2026). QuadricFormer replaces ellipsoidal Gaussians with more flexible superquadrics and applies count-preserving prun-ing and splitting (Zuo et al. 2025). PG-Occ progressively adds Gaussian queries to recover missing details for open-vocabulary occupancy (Yan and Xu 2026). These methods 
+
+> ∗
+
+Corresponding author. Copyright © 2027, Association for the Advancement of Artificial Intelligence (www.aaai.org). All rights reserved. 
+
+Figure 1: Semantic Gaussian allocation. Under a fixed Gaus-sian budget, SAGFormer uses intrinsic and local geometric-semantic cues to select candidates from a shared pool, reduc-ing redundant, semantically mixed, and erroneous Gaussians. focus on how primitives are represented, initialized, or pro-gressively added. In contrast, we study which candidates should be kept when the final Gaussian budget is fixed. A compact Gaussian representation does not necessarily imply an effective allocation. Simple regions may contain several Gaussians with similar spatial support, whereas thin structures and class boundaries may receive insufficient se-mantically reliable support. Consequently, high geometric coverage can coexist with repeated Gaussians and semantic mixing. We refer to this mismatch as an allocation bottleneck .Rendering-oriented allocation is embedded in the photomet-ric Gaussian generator rather than applied to an existing 3D Gaussian set (Kim et al. 2026; Wan et al. 2026). Transferring it to occupancy therefore requires redesigning the allocation unit, semantic heads, and supervision. Semantic occupancy instead requires consistent geometry and class predictions at discrete voxels. Candidate selection for this task should therefore account for semantic uncertainty, local density, ge-ometric overlap, and redundancy. To address this problem, we propose the Semantic Gaus-sian Allocation Transformer (SAGFormer). It encodes each Gaussian using its attributes and local geometric-semantic context, models relations among Gaussians, and generates keep, clone, split, and suppress candidates. These candi-date operations are standard. The main contribution is an arXiv:2607.21896v1 [cs.CV] 24 Jul 2026 Table 1: Comparison with closely related methods. They improve primitive shape, initialization, or progressive densification. SAGFormer studies candidate selection under a fixed final budget.                   
+
+> Method Main goal When primitives change Main signal Count rule Task SplatSSC (Qian et al. 2026) Compact initial set Initialization Image and depth features Sparse initial set Monocular SSC QuadricFormer (Zuo et al. 2025) Flexible primitive shape After initial training Superquadric scale Prune and split; count unchanged Closed-set occupancy PG-Occ (Yan and Xu 2026) Recover fine details Progressive layers Rendered and reference depth Adds queries at each layer Open-vocabulary occupancy F4Splat/SplatWeaver (Kim et al. 2026; Wan et al. 2026) Generate rendering GS Image-aligned generation Photometric cues Scale threshold / pixel-wise count Novel-view synthesis SAGFormer (ours) Select useful candidates Post-initialization Geometry, local density, and semantic consistency Per-sample global Top-KB
+> Closed-set occupancy
+
+occupancy-oriented scoring and selection process that places all candidates in a shared pool. Global Top-KB selection then keeps a fixed number of candidates for each sample. We fur-ther analyze redundancy, semantic mixing, class-consistent voxel support, and Gaussian usage to characterize the result-ing allocation. The main contributions of this work are summarized as follows: 
+
+• We formulate semantic Gaussian allocation as acandidate-selection problem under a fixed final budget. Our analysis shows that high raw coverage can coexist with repeated Gaussians, mixed semantic support, and weak support for occupied voxels. 
+
+• We propose SAGFormer, which combines occupancy-related features, relations among Gaussians, standard can-didate operations, and global Top-KB selection. The hard selection enforces the final Gaussian count for each sam-ple. 
+
+• We evaluate SAGFormer on two semantic occupancy benchmarks. Matched comparisons and allocation mea-sures demonstrate improvements in both occupancy ac-curacy and the use of the Gaussian budget. 
+
+## Related Work 
+
+3D Occupancy Prediction 
+
+Semantic occupancy prediction recovers scene geometry and class labels. MonoScene predicts a complete 3D scene from one image (Cao and de Charette 2021). Camera-based driv-ing methods use sparse voxel queries, multi-view features, and occupancy supervision from LiDAR or multiple frames (Li et al. 2023; Wei et al. 2023; Tian et al. 2023). LiDAR and multi-modal methods use efficient 3D networks, object detection, or semantic and depth cues (Roldao, de Charette, and Verroust-Blondet 2020; Yang et al. 2024; Duan et al. 2025). These methods are effective. However, the cost of a dense voxel grid grows with the scene range and resolution. This motivates sparse scene representations. 
+
+Semantic Gaussian-based Occupancy Prediction 
+
+Sparse semantic Gaussians provide a compact alternative to dense voxel grids. GaussianFormer refines a fixed set of Gaussians before voxel decoding (Huang et al. 2024b). GaussianFormer-2 uses a probabilistic mixture and a data-based initialization to place fewer Gaussians in empty space (Huang et al. 2024a). Multi-modal methods combine LiDAR geometry and image semantics through better initialization, attention, feature fusion, or geometry completion (Zhao et al. 2025; Doruk and Ates 2026; Lv et al. 2026). Other methods improve relations among Gaussians, temporal information, visual and geometric alignment, collaborative prediction, or dual-Gaussian models (Song et al. 2025; Yan, Pei, and Shen 2025, 2026; Zhou, Luo, and Chen 2026; Shi et al. 2026; Chen, Huang, and Bagchi 2026). Recent methods improve semantic Gaussian representa-tions through depth-guided sparse initialization in SplatSSC (Qian et al. 2026), count-preserving superquadric pruning and splitting in QuadricFormer (Zuo et al. 2025), or progres-sive query addition in regions with missing depth evidence in PG-Occ (Yan and Xu 2026). SAGFormer does not intro-duce a new primitive shape or a new depth initializer. It also does not add a fixed group of queries at each layer. It creates several candidates from each input Gaussian and lets all can-didates compete for one fixed final budget. The score uses semantic uncertainty and local geometric-semantic context. 
+
+Gaussian Allocation and Candidate Selection 
+
+Learned Gaussian allocation has mainly been studied for novel-view synthesis. Generative Densification upsamples coarse Gaussian features, whereas F4Splat allocates a global budget from spatial complexity and view overlap and SplatWeaver predicts local counts (Nam et al. 2024; Kim et al. 2026; Wan et al. 2026). These methods embed alloca-tion in image-aligned photometric generation, while others adjust Gaussian placement using image gradients, detections, or reconstruction features (Zhang et al. 2024; Ye et al. 2024; Jiang et al. 2025; Moreau et al. 2025). Semantic 3DGS methods use semantic and shape cues for pruning and densification (He et al. 2025), semantic gradi-ents for boundary splitting (Zhang et al. 2025), or selective prediction to remove repeated Gaussians (Sheng et al. 2025); they target rendering, segmentation, or compact reconstruc-tion. Unlike motion-specific mixture-of-experts routing (Jin et al. 2026), SAGFormer scores candidates derived from ini-tialized semantic primitives using voxel-occupancy evidence and globally selects the final Top-KB set before decoding. Table 1 summarizes the differences. 
+
+## Method 
+
+Problem and Overview 
+
+Given multi-modal inputs, the model starts with initial-ized Gaussian set G0 = {G 0 
+
+> i
+
+}Ni=1 . Each Gaussian is G0 
+
+> i
+
+=
+
+{μi, si, ri, α i, fi, pi}, where the entries denote its center, scale vector, rotation, opacity, feature, and semantic logits, re-spectively. To address the allocation bottleneck, SAGFormer expands this initial set into a shared candidate pool and ranks the candidates under a normalized budget B, with the goal of reducing redundant allocation and strengthening semanti-cally reliable voxel support. The selected set ˆG is then used for voxel decoding. The budget B controls the allowable growth relative to the initial size N . Training uses a differentiable soft expected count, whereas inference materializes a fixed-size set through hard Top-K selection. We define the exact selection rule and its soft training counterpart below. “Final #G” always refers to the number of Gaussians after hard selection, not the soft count used for training. Figure 2 shows the full model. Image and point-cloud fea-tures first initialize semantic Gaussians. SAGFormer then builds allocation features and models relations among Gaus-sians. Finally, it generates keep, clone, split, and suppress candidates. These operations retain reliable support, add nearby support, divide a large or mixed region, or reduce a Gaussian’s effect. Global selection decides which candi-dates enter the decoder. 
+
+Adaptive Semantic Gaussian Allocation 
+
+Given G0, SAGFormer has three steps: feature encoding, can-didate generation and scoring, and global Top-KB selection. 
+
+Allocation-aware Gaussian encoding. For each primitive 
+
+G0 
+
+> i
+
+, we combine its geometric feature gi, semantic feature 
+
+mi, and local context cues ci into an allocation feature: 
+
+ei = MLP enc ([ gi, mi, ci]) . (1) The geometric feature contains the normalized center, scale, rotation, and opacity, while the semantic feature contains logits, confidence, and entropy. The four-dimensional local context is computed as follows. Let Ni contain at most the 
+
+Knbr = 8 nearest Gaussians within radius R = 2 m , let 
+
+ni = max( |N i|, 1) , and define qℓ = Softmax( pℓ) for every 
+
+ℓ ∈ { i} ∪ N i. For compactness, let ⟨xij ⟩i = n−1
+
+> i
+
+P 
+
+> j∈N i
+
+xij 
+
+denote a neighborhood average and δij = ∥μj − μi∥2/R the normalized distance. The context is 
+
+ci = [ ccnt  
+
+> i
+
+, c dst  
+
+> i
+
+, c geo  
+
+> i
+
+, c sem  
+
+> i
+
+],
+
+[ccnt  
+
+> i
+
+, c dst  
+
+> i
+
+] = 
+
+ |N i|
+
+Knbr 
+
+, ⟨δij ⟩i
+
+
+
+,
+
+[cgeo  
+
+> i
+
+, c sem  
+
+> i
+
+] = ⟨ηij ⟩i, ⟨q⊤ 
+
+> i
+
+qj ⟩i
+
+ .
+
+(2) where the scale-normalized geometric overlap is 
+
+ηij = exp − 12
+
+> 3
+
+X
+
+> d=1
+
+(μ(d) 
+
+> j
+
+− μ(d) 
+
+> i
+
+)2
+
+(s(d) 
+
+> i
+
+)2 + ( s(d) 
+
+> j
+
+)2 + ϵ
+
+!
+
+. (3) The semantic feature is constructed from the predicted logits 
+
+pi. We denote the softmax distribution by qi, its maximum class probability by κi, and its class-wise entropy contribu-tions by hi:
+
+mi = [ qi, κi, hi],
+
+qi = Softmax( pi),
+
+κi = max  
+
+> c
+
+qi,c ,
+
+hi = −qi ⊙ log( qi + ϵ).
+
+(4) Here, ϵ is a small constant for numerical stability. The four entries of ci encode local neighbor count, mean distance, geometric overlap, and semantic consistency. They are stop-gradient statistics computed only from predicted Gaussian states, without voxel supervision or ground-truth labels. For 
+
+C semantic classes, their computation costs O(N K nbr C)
+
+and is linear in N for fixed Knbr and C. A Transformer encoder then models interactions among the allocation fea-tures: 
+
+{zi}Ni=1 = TransEnc( {[ei, f i]}Ni=1 ). (5) 
+
+Candidate generation and scoring. For each Gaussian G0 
+
+> i
+
+,a small router predicts weights for the keep, clone, split, and suppress generators: 
+
+πi = Softmax(MLP op (zi)) = [ πpre i , π clo i , π spl i , π att i ].
+
+(6) The superscripts pre , clo , spl , and att denote keep, clone, split, and suppress, respectively, matching Fig. 2. Let P col-lect all generated candidates, with e indexing the generator and k a candidate from that generator. Ranking and hard selection are jointly defined by 
+
+score( Gi,e,k ) = πei αi,e,k ,KB = ⌊(1 + B)N ⌋,
+
+ˆG = TopK KB (P; score) .
+
+(7) During training, all candidates contribute to occupancy de-coding through continuous gate weights, enabling end-to-end optimization. Inference uses the same gate-weighted opacity score and only converts the weighted pool into a fixed-size set. Candidates compete individually, so Top-KB may retain one or both outputs of a clone or split generator. 
+
+Candidate generators and soft count. Each generator takes 
+
+zi and predicts parameters for its candidates. The keep gen-erator outputs one residual-refined version of G0 
+
+> i
+
+to preserve stable support. The clone and split generators additionally create child Gaussians. For a generic child, they predict a center offset oi, an unconstrained scale parameter ˜ηi,an opacity residual ∆αi, and residuals ∆fi and ∆pi. We convert the scale and opacity updates to valid ranges with 
+
+βi = softplus( ˜ ηi) + ϵ and α′ 
+
+> i
+
+= σ(logit( αi) + ∆ αi). The resulting child is 
+
+G′ 
+
+> i
+
+= {μi + oi, βi ⊙ si, ri, α ′
+
+> i
+
+,
+
+fi + ∆ fi, pi + ∆ pi}. (8) Thus, a child shifts the center, positively rescales the Gaus-sian, preserves its rotation, and updates opacity, feature, and semantic logits. Clone outputs G0 
+
+> i
+
+together with one Figure 2: Overall framework of SAGFormer. Multi-modal features initialize semantic Gaussians. The allocation module uses intrinsic attributes and local geometric-semantic context to generate candidates and select the final set before voxel decoding. instance of G′
+
+> i
+
+; their scores remain separate, allowing ei-ther or both to survive selection. Split outputs two indepen-dently parameterized instances, G′ 
+
+> i, 1
+
+and G′
+
+> i, 2
+
+, to represent a large or semantically mixed region. Suppress produces one candidate with unchanged center, scale, rotation, fea-ture, and semantic logits, but replaces its opacity by γiαi,where γi = σ(MLP att (zi)) ∈ (0 , 1) . It therefore reduces a Gaussian’s contribution without moving or relabeling it. Keep and suppress each produce one candidate, whereas clone and split each produce two. The normalized soft count first expands over all four branches and then simplifies be-cause the routing weights sum to one: 
+
+¯Cπ = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+
+
+πpre i + 2 πclo i + 2 πspl i + πatt i
+
+
+
+= 1 + 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+
+
+πclo i + πspl i
+
+
+
+∈ [1 , 2] .
+
+(9) The base term accounts for one candidate per Gaussian, while clone and split contribute the expected extras. We use 1+ B as an upper soft target during training and penalize only excess counts. At inference, all generated candidates are globally ranked by score( Gi,e,k ), and the KB highest-scoring Gaus-sians form ˆG, enforcing the exact physical budget. 
+
+Training Loss and Count Limit 
+
+SAGFormer uses four losses for occupancy prediction, se-mantic confidence, occupied-voxel recovery, and budget con-trol. The occupancy loss combines cross-entropy and Lovasz-Softmax, with λlov weighting the latter: 
+
+Locc = Lce + λlov Llov . (10) We use normalized entropy to make each candidate’s seman-tic prediction less uncertain. Let ˆN be the number of candi-dates in the weighted training pool, let C be the number of semantic classes, and let ρi = Softmax( pi):
+
+Lent = − 1ˆN log C
+
+> ˆN
+
+X
+
+> i=1
+> C
+
+X
+
+> c=1
+
+ρi,c log( ρi,c + ϵ). (11) This entropy term does not directly optimize the support measures in our analysis; those measures are computed only after inference from the ground-truth labels of covered vox-els. To reduce false-empty predictions, let Vocc be the set of occupied ground-truth voxels and ˆpemp  
+
+> v
+
+the predicted empty probability at voxel v. We define the recovery loss as 
+
+Lrec = − 1
+
+|V occ |
+
+X
+
+> v∈V occ
+
+log(1 − ˆpemp  
+
+> v
+
++ ϵ). (12) This loss acts on predicted empty probability rather than di-rectly optimizing the post-hoc coverage measure. The budget loss penalizes a soft count above the target: 
+
+Lbud = max(0 , ¯Cπ − (1 + B)) . (13) The overall objective combines the four terms, with λent ,
+
+λrec , and λbud controlling their relative weights: 
+
+L = Locc + λent Lent + λrec Lrec + λbud Lbud . (14) During training, these losses are computed from the weighted candidate pool and its occupancy prediction. Hard Top-KB
+
+selection is used at inference. Table 2: Overall benchmark comparison on nuScenes-SurroundOcc. C/L denote camera/LiDAR, and 1/M denote single-/multi-sweep LiDAR. ∗ uses one raw LiDAR sweep at inference with temporally aggregated training supervision; †
+
+marks reported results, ‡ our reproduction, and – unavailable results. Full class-wise results are provided in Supplemen-tary Sec. B.                                                                    
+
+> Method Mod. Frames IoU ↑mIoU ↑
+> GaussianFormer C129.83 19.10 GaussianFormer-2 C131.74 20.82 GaussianFormer ‡(16.6K) C129.60 19.10 + SAGFormer allocation (16.6K) C133.04 23.67 GaussianFormer3D †C+L M (10) 43.3 27.1 GaussianFormer3D ‡C+L 136.7 22.4 GaussianOcc3D †C+L M–28.9 DAOcc †C+L M (10) 45.0 30.5 DAOcc ‡C+L 140.1 25.6 SDG-Fusion †C+L M45.2 31.7 SDG-Fusion ‡C+L 141.1 26.4 Gau-Occ †C+L 1∗44.3 32.7 SAGFormer w/o Semantic Cues C+L 139 .47 ±0.45 27 .68 ±0.12
+> SAGFormer C+L 141 .74 ±0.11 28 .47 ±0.06
+> SAGFormer C+L 1∗51 .79 ±0.12 33 .16 ±0.04
+
+Table 3: Overall benchmark comparison on SSCBench-KITTI-360. C/L denote camera/LiDAR. ∗ uses one raw Li-DAR sweep at inference with temporally aggregated training supervision; † marks reported results, and – unavailable re-sults. Full class-wise results are provided in Supplementary Sec. B.                                               
+
+> Method Mod. Frames IoU ↑mIoU ↑
+> MonoScene C137.87 12.31 VoxFormer C138.76 11.91 GaussianFormer C135.38 12.92 GaussianFormer-2 C138.37 13.90 LMSCNet L147.53 13.65 GaussianFormer3D C+L 10 54.5 21.3 Gau-Occ †C+L 1∗58.9 25.8 SAGFormer w/o Semantic Cues C+L 156 .44 ±0.08 23 .76 ±0.03
+> SAGFormer C+L 157 .40 ±0.15 24 .20 ±0.03
+> SAGFormer C+L 1∗60 .10 ±0.09 26 .80 ±0.02
+
+## Experiments 
+
+Experimental Setup 
+
+Datasets. We select nuScenes-SurroundOcc (Caesar et al. 2020; Wei et al. 2023) and SSCBench-KITTI-360 (Liao, Xie, and Geiger 2022; Li et al. 2024) as complementary bench-marks for testing SAGFormer across different view config-urations and scene distributions. We use the official train-ing/validation splits, spatial ranges, voxel resolutions, and semantic categories from prior occupancy work. nuScenes uses six surround-view images and LiDAR points in the LiDAR coordinate system, whereas KITTI-360 follows the SSCBench protocol with the left-view image and the corre-sponding LiDAR sweep. 
+
+Evaluation Metrics. We report occupancy IoU, semantic mIoU, and class-wise IoU. We also measure how well the final Gaussians are allocated. Raw Cov. measures the fraction of occupied voxels covered by a Gaussian. Let Vi = {vj ∈Vocc | dij < τ d} be the occupied GT voxels covered by Gaussian i, and let Pi and ˆci denote their majority-label fraction and majority class. With Nvalid = |{ i : |V i| > 0}| 
+
+and Iρ = {i : |V i| > 0, P i ≥ ρ}, we compute 
+
+Unused = 1
+
+N
+
+X
+
+> i
+
+⊮[|V i| = 0] ,
+
+Mix -G = 1
+
+Nvalid 
+
+X
+
+> i:|V i|>0
+
+⊮[Pi < ρ ],
+
+Sem -Sup = 1
+
+|V occ |
+
+X 
+
+> vj∈V occ
+
+⊮[∃i ∈ I ρ : vj ∈ V i, ˆci = yj ].Pvalid averages Pi over valid Gaussians, while Ppen . =(1 −Unused) Pvalid additionally penalizes unused Gaussians. These GT-support measures are used only for post-hoc eval-uation and are never provided to the allocation module. We use ρ = 0 .6 and τd = 3 ; Supplementary Secs. A and C provide the full definitions and threshold tests. 
+
+Implementation Details. All methods use matched en-coders, splits, voxelization, augmentation, and evaluation scripts. SAGFormer is trained for 20 epochs on nuScenes and 30 epochs on KITTI-360, and results are averaged over seeds 42, 37, and 91. Complete architecture, optimization, software, and hardware details are provided in Supplemen-tary Sec. A. 
+
+SAGFormer Configuration. SAGFormer uses two Trans-former blocks and the default budget B = 0 .6. At inference, it collects all candidates, ranks them by gate-weighted opac-ity, and keeps the top KB = ⌊(1 + B)N ⌋. All occupancy and efficiency results use this final set. Supplementary Sec. A gives the loss weights and full configuration. 
+
+Comparison Protocol. Our main comparison uses raw single-frame inference and matched baselines. SAGFormer w/o Semantic Cues uses the same initial set, allocation ar-chitecture, candidate generators, training protocol, and limit 
+
+KB . It only removes semantic logits, confidence, and en-tropy. The completion-enhanced 1∗ setting follows the doc-umented Gau-Occ training schedule (Lv et al. 2026). We report it as an additional result because its public imple-mentation is unavailable. Allocation measures include only methods whose final Gaussian outputs can be inspected. Sup-plementary Sec. A gives the full protocol. 
+
+Benchmark Comparison under Matched and Complementary Protocols 
+
+Tables 2 and 3 compare SAGFormer with other meth-ods using matched inputs. On nuScenes with raw single-frame input, SAGFormer obtains 41 .74 ±0.11% IoU and 
+
+28 .47 ±0.06% mIoU. It improves over the matched learned-allocation baseline without semantic features by 2.27 IoU and 
+
+0.79 mIoU. The two variants use the same initial Gaussian set, allocation architecture, candidate generators, training protocol, and final limit KB . The gain therefore comes from Table 4: Allocation and GT-support measures on nuScenes-SurroundOcc. Final #G is the average number of output Gaussians; for budgeted variants, it is measured after Top-KB selection. FG, BG, and Macro are unweighted class-purity averages. ‡The generator-matched control uses the same keep, clone, split, and suppress candidate families as SAGFormer, but receives no geometric, semantic, or coverage cues and applies no explicit Top-KB budget constraint.                                                                
+
+> Method Allocation diagnostics GT-support purity mIoU ↑Final #G Raw Cov. ↑Unused ↓Mix-G ↓Sem-Sup ↑FG ↑BG ↑Macro ↑
+> GaussianFormer 19.10 25.6K 0.9988 0.5259 0.4133 0.5012 0.167 0.461 0.295 GaussianFormer3D †27.10 25.6K 0.8967 0.1535 0.3169 0.6311 0.227 0.477 0.336 SAGFormer w/o Allocation 27.00 10.38K 0.9108 0.0867 0.3031 0.6411 0.207 0.484 0.328 Generator-matched control ‡27.43 16.5K 0.9104 0.0854 0.2963 0.6412 0.199 0.488 0.308 SAGFormer 28.47 16.6K 0.9103 0.0785 0.2752 0.6627 0.234 0.488 0.345
+
+Figure 3: Allocation diagnostics on nuScenes-SurroundOcc: (a) method-level Mix-G versus Sem-Sup and (b) candidate-family trajectories for Sem-Sup, Mix-G, and unused ratio. Only methods whose final Gaussian outputs can be inspected are included. occupancy-specific semantic features, not from using more Gaussians. In a 16.6K camera-only GaussianFormer con-trol, SAGFormer improves IoU/mIoU from 29 .60 /19 .10% to 
+
+33 .04 /23 .67% (+3 .44 / + 4 .57 ), supporting transfer beyond the multimodal host (Supplementary Secs. A–B). Under the raw multimodal protocol, SAGFormer also improves over our reproduced GaussianFormer3D and SDG-Fusion results. On KITTI-360, it reaches 57 .40 ±0.15% IoU and 24 .20 ±0.03% 
+
+mIoU. In the completion-enhanced 1∗ setting, SAGFormer obtains 51 .79 ±0.12% IoU and 33 .16 ±0.04% mIoU on nuScenes. It obtains 60 .10 ±0.09% IoU and 26 .80 ±0.02% 
+
+mIoU on KITTI-360. These are additional results and are separate from the main raw single-frame comparison. Sup-plementary Sec. B gives the full class-wise results and the source of each result. 
+
+Allocation Bottleneck Diagnosis 
+
+We first test whether the Gaussians are poorly allocated, not only whether occupancy accuracy is low. Table 4 measures three problems under the same voxel-to-Gaussian assign-ment rule. The unused ratio measures redundant Gaussians. Mix-G measures Gaussians that support mixed classes. Sem-Sup measures class-consistent support for occupied voxels. Figure 3 shows these results. GaussianFormer reaches al-most full raw coverage, but 52 .59% of its Gaussians are unused. It also has the highest Mix-G ( 0.4133 ) and lowest Sem-Sup ( 0.5012 ). Thus, high raw coverage can hide redun-dant Gaussians and weak semantic support. Compared with the cue-free, budget-unconstrained generator-matched con-trol, SAGFormer has almost the same raw coverage and final count. It reduces Mix-G from 0.2963 to 0.2752 , increases Sem-Sup from 0.6412 to 0.6627 , and reduces the unused ratio from 0.0854 to 0.0785 .SAGFormer also improves category-balanced GT-support Macro Avg. from 0.328 to 0.345 and foreground GT-support purity from 0.207 to 0.234 . Full class-wise purity, distance-wise quality, and τd sensitivity in Supplementary Sec. C show consistent gains without relying on extra raw coverage. Over-all, the diagnostics connect occupancy gains to reduced re-dundancy and semantic mixing with stronger class-consistent support. 
+
+Ablation Studies 
+
+Table 5 compares allocation policies with the same initial set, backbone, decoder, training objectives, and 16.6K final budget. Matched QuadricFormer-, F4Splat-, and PG-Occ-style adaptations reach 27 .56% –28 .03% mIoU. SAGFormer reaches 28 .47% , exceeding the strongest PG-Occ-style con-trol by 0.44 mIoU and 0.70 IoU while raising Ppen . from 
+
+0.6553 to 0.6593 . Random allocation gives only a small gain, and replacing the Transformer with an MLP reduces mIoU to 28 .01% . These results support gains from the full occupancy-specific allocation policy beyond output capacity and direct transfers of existing allocation rules. Table 6 tests each type of candidate. Clone candidates im-prove Sem-Sup from 0.6411 to 0.6443 , while split candidates reduce Mix-G to 0.2913 . Using both gives 0.6545 Sem-Sup and 0.2844 Mix-G. Adding suppress candidates gives the best mIoU, Sem-Sup, Mix-G, and unused ratio. Thus, the candidate types play different and useful roles. Table 7 shows that both auxiliary losses are useful. Using Table 5: Comparison of matched Gaussian allocation policies on nuScenes-SurroundOcc. QuadricFormer-, F4Splat-, and PG-Occ-style policies retain their defining allocation rules but use our initial Gaussian set, occupancy backbone, de-coder, training objectives, and input modality; every variant passes exactly 16.6K final Gaussians to the decoder. ⋆The capacity-matched w/o Allocation variant here therefore uses a different setting from its counterparts in Tables 2, 4, and 9.                                                                                  
+
+> Variant IoU ↑mIoU ↑Mean Cov. Pvalid ↑Ppen .↑Unused ↓
+> w/o Allocation ⋆40 .4±0.12 27 .33 ±0.06 0.9108 0.7100 0.6484 0.0867 Random Allocation 40 .5±0.13 27 .53 ±0.05 0.9102 0.7101 0.6492 0.0833 QuadricFormer-style (Zuo et al. 2025) 40 .5±0.11 27 .56 ±0.05 0.9103 0.7112 0.6497 0.0823 F4Splat-style (Kim et al. 2026) 40 .9±0.12 27 .89 ±0.06 0.9102 0.7123 0.6503 0.0809 PG-Occ-style (Yan and Xu 2026) 41 .0±0.12 28 .03 ±0.05 0.9103 0.7134 0.6553 0.0792 MLP Controller 41 .0±0.11 28 .01 ±0.04 0.9101 0.7132 0.6544 0.0799 Transformer Controller 41 .7±0.11 28 .47 ±0.06 0.9103 0.7155 0.6593 0.0785
+
+Table 6: Candidate-family ablation using the nuScenes-SurroundOcc diagnostics in Table 4.                                                         
+
+> Variant Clone Split Att. mIoU ↑Sem-Sup ↑Mix-G ↓Unused ↓
+> Preserve only –––27 .00 ±0.06 0.6411 0.3031 0.0867 + Clone ✓––27 .71 ±0.04 0.6443 0.2988 0.0809 + Split –✓–27 .69 ±0.04 0.6482 0.2913 0.0813 + Clone + Split ✓✓–28 .05 ±0.05 0.6545 0.2844 0.0799 Full ✓✓✓28 .47 ±0.06 0.6627 0.2752 0.0785
+
+Table 7: Ablation on auxiliary objectives. Lent is the semantic-entropy regularizer and Lrec the occupied-voxel recovery loss. 
+
+Variant Lent Lrec IoU ↑ mIoU ↑
+
+Occupancy loss only – – 41 .1 ± 0.12 28 .12 ± 0.05 
+
++ Entropy regularizer ✓ – 41 .3 ± 0.11 28 .23 ± 0.06 
+
++ Occupied-voxel recovery – ✓ 41 .4 ± 0.12 28 .21 ± 0.05 
+
+Full objective ✓ ✓ 41 .7 ± 0.11 28 .47 ± 0.06 
+
+Table 8: Budget sensitivity and the gap between soft routing and final selection on nuScenes-SurroundOcc. Final #G is averaged over frames. Soft count ratio is the validation mean of ¯Cπ in Eq. (9). Selection drop compares soft routing with the final Top-KB set. Results are mean ± std. where available. 
+
+Final-count evaluation Final-selection check 
+
+B
+
+Final #G IoU ↑ mIoU ↑
+
+Soft count ratio Selection drop 0.2 12.46K 40.90 27.69 1.23 0.321 0.4 14.53K 41 .20 ± 0.12 28 .24 ± 0.05 1.41 0.132 0.6 16.6K 41 .74 ± 0.11 28 .47 ± 0.06 1.63 0.031 0.8 18.68K 41 .80 ± 0.12 28 .35 ± 0.06 1.82 0.023 1.0 20.05K 41.60 28.31 1.98 0.022 
+
+them together gives the best result.Table 8 studies the count limit and the gap between soft routing and final Top-KB
+
+selection. The default B = 0 .6 keeps about 1.6N Gaussians and gives the best mIoU. The soft count ratio stays close to 
+
+1 + B for all budgets. The mIoU drop after final selection is Table 9: Efficiency on nuScenes-SurroundOcc. Final #G is the average number of Gaussians selected after Top-KB ;memory is in MB and FPS is measured on the same hardware.                                       
+
+> Method Frames Final #G Memory FPS IoU ↑mIoU ↑
+> GaussianFormer 125.6K 4733 429.83 19.10 GaussianFormer3D 125.6K 6043 236.70 22.40 SAGFormer w/o Allocation 110.38K 2189 440.30 27.00 SAGFormer 116.6K 2456 441.74 28.47 SAGFormer-M 1∗21.1K 3542 251.79 33.16
+
+0.031 at B = 0 .6 and no more than 0.023 for larger budgets. This small drop shows that the final Top-KB set behaves much like the soft candidate pool. Supplementary Sec. D reports purity, coverage, and usage measures. It also shows a small selection gap near the default budget on KITTI-360. 
+
+Efficiency and Boundary Analysis 
+
+Table 9 reports reproducible efficiency comparisons on the same hardware. Adaptive allocation slightly increases mem-ory over the non-allocation variant but improves mIoU from 
+
+27 .00% to 28 .47% ; compared with GaussianFormer and GaussianFormer3D, SAGFormer uses fewer or comparable primitives with higher accuracy and lower measured mem-ory. Complete qualitative comparisons are provided in Supple-mentary Sec. E. 
+
+## Limitations and Responsible Use 
+
+SAGFormer is evaluated in calibrated camera-LiDAR set-tings with supervised occupancy. Relative to the cue-free, budget-unconstrained generator-matched control, macro IoU increases by 1.74 for static structure ( 29 .36% to 31 .10% ) but only 0.06 for dynamic foreground ( 26 .36% to 26 .42% ), so current evidence does not establish dynamic-object gains under sparse single-frame observations. SAGFormer com-plements geometric completion and temporal reasoning; de-ployment requires uncertainty handling and validation under distribution shifts, adverse weather, sensor degradation, and rare traffic scenarios. 
+
+## Conclusion 
+
+We studied how to allocate a limited number of Gaussians for 3D semantic occupancy prediction. Our analysis finds three main problems: redundant Gaussians, Gaussians that mix several classes, and weak class-consistent support for occupied voxels. SAGFormer uses intrinsic attributes and local geometric-semantic context to decide which Gaussians to keep, clone, split, or suppress. Experiments on nuScenes-SurroundOcc and SSCBench-KITTI-360 show better occu-pancy prediction and better use of the Gaussian budget. These results suggest that explicit Gaussian allocation is useful alongside Gaussian refinement and geometry completion. 
+
+## References 
+
+Caesar, H.; Bankiti, V.; Lang, A. H.; Vora, S.; Liong, V. E.; Xu, Q.; Krishnan, A.; Pan, Y.; Baldan, G.; and Beijbom, O. 2020. nuScenes: A Multimodal Dataset for Autonomous Driving. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 11621– 11631. Cao, A.-Q.; and de Charette, R. 2021. MonoScene: Monoc-ular 3D Semantic Scene Completion. arXiv:2112.00726. Chen, C.; Huang, H.; and Bagchi, S. 2026. Vision-Only Gaussian Splatting for Collaborative Semantic Occupancy Prediction. In Proceedings of the AAAI Conference on Arti-ficial Intelligence , volume 40, 2796–2804. Doruk, A. E.; and Ates, H. F. 2026. GaussianOcc3D: A Gaussian-Based Adaptive Multi-modal 3D Occupancy Pre-diction. arXiv:2601.22729. Duan, Z.; Dang, C.; Hu, X.; An, P.; Ding, J.; Zhan, J.; Xu, Y.; and Ma, J. 2025. SDGOCC: Semantic and Depth-Guided Bird’s-Eye View Transformation for 3D Multimodal Occu-pancy Prediction. arXiv:2507.17083. He, J.; Li, C.; Wang, S.; and Kwong, S. 2025. Joint Se-mantic and Rendering Enhancements in 3D Gaussian Mod-eling with Anisotropic Local Encoding. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 28354–28363. Huang, Y.; Thammatadatrakoon, A.; Zheng, W.; Zhang, Y.; Du, D.; and Lu, J. 2024a. GaussianFormer-2: Probabilistic Gaussian Superposition for Efficient 3D Occupancy Predic-tion. arXiv:2412.04384. Huang, Y.; Zheng, W.; Zhang, Y.; Zhou, J.; and Lu, J. 2024b. GaussianFormer: Scene as Gaussians for Vision-Based 3D Semantic Occupancy Prediction. arXiv:2405.17429. Jiang, L.; Mao, Y.; Xu, L.; Lu, T.; Ren, K.; Jin, Y.; Xu, X.; Yu, M.; Pang, J.; Zhao, F.; Lin, D.; and Dai, B. 2025. AnySplat: Feed-forward 3D Gaussian Splatting from Un-constrained Views. arXiv:2505.23716. Jin, I.-H.; Mun, H.; Kim, J.; Yun, K.; and Kong, K. 2026. On the Design of Mixture-of-Experts for Dynamic Gaussian Splatting. arXiv:2607.08250. Kim, I.; Kim, C.; Bae, M.; Joo, M.; and Kim, H. J. 2026. F4Splat: Feed-Forward Predictive Densification for Feed-Forward 3D Gaussian Splatting. arXiv:2603.21304. Li, Y.; Li, S.; Liu, X.; Gong, M.; Li, K.; Chen, N.; Wang, Z.; Li, Z.; Jiang, T.; Yu, F.; Wang, Y.; Zhao, H.; Yu, Z.; and Feng, C. 2024. SSCBench: Monocular 3D Semantic Scene Completion Benchmark in Street Views. In Proceedings of the IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) .Li, Y.; Yu, Z.; Choy, C.; Xiao, C.; Alvarez, J. M.; Fidler, S.; Feng, C.; and Anandkumar, A. 2023. VoxFormer: Sparse Voxel Transformer for Camera-based 3D Semantic Scene Completion. arXiv:2302.12251. Liao, Y.; Xie, J.; and Geiger, A. 2022. KITTI-360: A Novel Dataset and Benchmarks for Urban Scene Understanding in 2D and 3D. IEEE Transactions on Pattern Analysis and Machine Intelligence .Lv, C.; Li, Y.; Yang, H.; and Wang, Y. 2026. Gau-Occ: Geometry-Completed Gaussians for Multi-Modal 3D Occu-pancy Prediction. arXiv:2603.22852. Moreau, A.; Shaw, R.; Nazarczuk, M.; Shin, J.; Tanay, T.; Zhang, Z.; Xu, S.; and Pérez-Pellitero, E. 2025. Off The Grid: Detection of Primitives for Feed-Forward 3D Gaussian Splatting. arXiv:2512.15508. Nam, S.; Sun, X.; Kang, G.; Lee, Y.; Oh, S.; and Park, E. 2024. Generative Densification: Learning to Densify Gaus-sians for High-Fidelity Generalizable 3D Reconstruction. arXiv:2412.06234. Qian, R.; Cao, H.; Deng, T.; Yuan, S.; and Xie, L. 2026. SplatSSC: Decoupled Depth-Guided Gaussian Splatting for Semantic Scene Completion. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 40, 8520–8528. Roldao, L.; de Charette, R.; and Verroust-Blondet, A. 2020. LMSCNet: Lightweight Multiscale 3D Semantic Comple-tion. In 2020 International Conference on 3D Vision (3DV) .Sheng, Y.; Deng, J.; Zhang, X.; Zhang, Y.; Hua, B.; Zhang, Y.; and Ji, J. 2025. SpatialSplat: Efficient Semantic 3D from Sparse Unposed Images. arXiv:2505.23044. Shi, Y.; Zhu, Y.; Cai, H.; Han, S.; Jeong, J.; Ansari, A.; and Porikli, F. 2026. Odg: Occupancy prediction using dual gaus-sians. Advances in Neural Information Processing Systems ,38: 32104–32125. Song, K.; Wu, Y.; Siu, C.; and Xiong, H. 2025. GraphGSOcc: Semantic and Geometric Graph Transformer for 3D Gaussian Splating-based Occupancy Prediction. arXiv:2506.14825. Tian, X.; Jiang, T.; Yun, L.; Mao, Y.; Yang, H.; Wang, Y.; Wang, Y.; and Zhao, H. 2023. Occ3D: A Large-Scale 3D Occupancy Prediction Benchmark for Autonomous Driving. arXiv:2304.14365. Wan, Y.; Li, F.; Shao, M.; and Zuo, W. 2026. SplatWeaver: Learning to Allocate Gaussian Primitives for Generalizable Novel View Synthesis. arXiv:2605.07287. Wei, Y.; Zhao, L.; Zheng, W.; Zhu, Z.; Zhou, J.; and Lu, J. 2023. SurroundOcc: Multi-Camera 3D Occupancy Predic-tion for Autonomous Driving. arXiv:2303.09551. Yan, C.; and Xu, D. 2026. Progressive Gaussian Transformer with Anisotropy-aware Sampling for Open Vocabulary Oc-cupancy Prediction. In The Fourteenth International Con-ference on Learning Representations .Yan, X.; Pei, M.; and Shen, S. 2025. ST-GS: Vision-Based 3D Semantic Occupancy Prediction with Spatial-Temporal Gaussian Splatting. arXiv:2509.16552. Yan, X.; Pei, M.; and Shen, S. 2026. VG3S: Visual Geom-etry Grounded Gaussian Splatting for Semantic Occupancy Prediction. arXiv preprint arXiv:2603.06210 .Yang, Z.; Dong, Y.; Wang, J.; Wang, H.; Ma, L.; Cui, Z.; Liu, Q.; Pei, H.; Zhang, K.; and Zhang, C. 2024. DAOcc: 3D Object Detection Assisted Multi-Sensor Fusion for 3D Occupancy Prediction. arXiv:2409.19972. Ye, Z.; Li, W.; Liu, S.; Qiao, P.; and Dou, Y. 2024. Ab-sGS: Recovering Fine Details for 3D Gaussian Splatting. arXiv:2404.10484. Zhang, J.; Jiang, J.; Chen, Y.; Jiang, K.; and Liu, X. 2025. COB-GS: Clear Object Boundaries in 3DGS Segmentation Based on Boundary-Adaptive Gaussian Splitting. In Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 19335–19344. Zhang, Z.; Hu, W.; Lao, Y.; He, T.; and Zhao, H. 2024. Pixel-GS: Density Control with Pixel-aware Gradient for 3D Gaussian Splatting. arXiv:2403.15530. Zhao, L.; Wei, S.; Hays, J.; and Gan, L. 2025. GaussianFormer3D: Multi-Modal Gaussian-based Seman-tic Occupancy Prediction with 3D Deformable Attention. arXiv:2505.10685. Zhou, C.; Luo, Y.; and Chen, C. 2026. Generalizing Visual Geometry Priors to Sparse Gaussian Occupancy Prediction. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 28578–28587. Zuo, S.; Zheng, W.; Han, X.; Yang, L.; Pan, Y.; and Lu, J. 2025. QuadricFormer: Scene as Superquadrics for 3D Semantic Occupancy Prediction. In Advances in Neural In-formation Processing Systems .
