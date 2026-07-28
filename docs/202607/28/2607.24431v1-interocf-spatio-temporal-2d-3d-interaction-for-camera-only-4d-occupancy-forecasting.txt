@@ -1,0 +1,476 @@
+Title: InterOCF: Spatio-Temporal 2D-3D Interaction for Camera-Only 4D Occupancy Forecasting
+
+URL Source: https://arxiv.org/pdf/2607.24431v1
+
+Published Time: Tue, 28 Jul 2026 02:22:35 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+> 1
+
+# InterOCF: Spatio-Temporal 2D-3D Interaction for Camera-Only 4D Occupancy Forecasting 
+
+Qi Zhang 1, Xinquan Yu 1, Kaiyi Zhang 1, Hui Huang* 1
+
+Abstract —Camera-only 4D occupancy forecasting enables au-tonomous vehicles to predict future 3D semantic scenes solely from historical multi-view images, which is critical for driv-ing safety. Even though current methods have achieved good performance, the strong spatial-temporal modeling between the input multi-view frames is still underexplored, which limits the performance of those methods in future 4D forecasting. To address this gap, we introduce a novel framework, InterOCF, for 4D occupancy forecasting that jointly models temporal dynamics in both 3D voxel-based representations and multi-view segmentation sequences, while explicitly incorporating feature interaction between the 2D and 3D branches. Our framework incorporates three core components: 1) A 3D Spatio-Temporal (3DST) module that learns volumetric dynamics from historical voxel states to predict future voxel states; 2) A 2D Spatio-Temporal (2DST) module employing an auxiliary multi-view temporal segmentation forecasting task to enhance temporal semantic dynamics; 3) A Spatio-Temporal Interaction Modeling (STIM) module that enables feature interaction between 2D and 3D representations. Experiments on the nuScenes, Lyft-Level5, and nuScenes-Occupancy datasets show that InterOCF consistently outperforms existing baseline approaches. 
+
+Index Terms —Autonomous driving, Camera-only perception, 4D Occupancy forecasting. 
+
+I. I NTRODUCTION 
+
+3D occupancy prediction estimates the 3D semantics of each voxel in the entire scene from input multi-view images, which plays a crucial role in autonomous driving [1–5]. For a better understanding of the dynamic world and providing clues of the future 3D scenes, Camera-only 4D occupancy forecasting (OCF) is further introduced [6–12]. Despite the strong performance achieved by recent methods [6, 7, 11, 12], most of them for 4D occupancy forecasting pre-dominantly adhere to a pure 3D paradigm, as shown in the top part of Fig. 1. This paradigm typically takes current and past multi-view images as input to directly predict future occupancy states and the corresponding backward flow. However, this paradigm suffers from several inherent limitations: (1) Multi-view images are lifted and fused into 3D space only once, after which the image-domain representations are discarded, leading to the loss of rich view-specific cues such as high-resolution appearance details; (2) conducting temporal roll-out directly in the sparse 3D occupancy space is inefficient and unstable, making long-term forecasting particularly vulnerable to error accumulation; (3) existing methods fail to explicitly model the mutual interaction between 2D multi-view representations and            
+
+> 1College of Computer Science and Software Engineering, Shenzhen University, Shenzhen, China. Email: qi.zhang.opt@gmail.com, 2410103016@szu.edu.cn, zhangky1999@gmail.com, hhzhiyan@gmail.com *Corresponding author.
+
+Fig. 1: Overview of previous vision-based approaches for 4D occupancy forcasting. Previous vision-based methods for 4D occupancy forecasting typically follow a pure 3D paradigm: they directly map current and past multi-view im-ages to future occupancy predictions. In contrast, our method establishes a 2D-3D interactive paradigm. We simultaneously perform spatio-temporal modeling in both the 2D multi-view image segmentation and 3D occupancy representation spaces, and crucially, we explicitly model and leverage the interaction between them. 3D occupancy dynamics, which is crucial for robust spatio-temporal reasoning in complex driving scenarios. To address these limitations, we propose a 2D–3D inter-active forecasting method, termed InterOCF, which jointly performs spatio-temporal modeling in both the 2D multi-view image space and the 3D occupancy space, as illustrated in the bottom part of Fig. 1, and explicitly enables information exchange via dedicated interaction mechanisms between the two branches. The complete architecture of our InterOCF is illustrated in Fig. 2. Specifically, we propose a 3D Spatio-Temporal (3DST) module to capture spatio-temporal dependencies in volumetric representations. The module performs temporal modeling on low-resolution volumetric features, where enlarged receptive fields enable more effective capture of global motion pat-terns in a computation-friendly manner, and subsequently incorporates high-resolution contextual features to preserve fine-grained geometric details. Furthermore, we introduce a 2D Spatio-Temporal (2DST) module with an auxiliary task that predicts future multi-view image segmentation sequences from historical image features. The segmentation supervision arXiv:2607.24431v1 [cs.CV] 27 Jul 2026 2
+
+Fig. 2: The overall pipeline of our method: First, we extract multi-camera image features from the past and current frames. The bottom 2D branch processes image features through the 2DST module and utilizes a segmentation head to predict future semantic segmentation maps. The upper 3D branch projects image features into 3D space to obtain past voxel sequences. Meanwhile, the fused features from the 2DST and the context features from the 3DST interact through the STIM Module to enhance feature representation. provides rich semantic cues and temporal regularization, com-plementing the geometric reasoning in 3D space. The semantic segmentation labels are automatically annotated using Seg-ment Anything (SAM) [13]. Finally, we introduce the Spatio-Temporal Interaction Modeling (STIM) module to bridge the 2D and 3D representations. The STIM module facilitates bidirectional feature exchange between multi-scale 3D voxels and the 2D branch, enabling cross-modal interaction across these representations. This design enables explicit interaction between the 2D and 3D branches, allowing the model to leverage complementary information from both image space and 3D volume representations. Such cross-modal fusion im-proves both spatial structure awareness and temporal dynamics modeling, leading to more robust and accurate 4D occupancy predictions. The contributions of the paper are summarized as follows:  
+
+> •
+
+We propose a 3D spatio-temporal (3DST) module that captures global motion patterns via temporal modeling on low-resolution volumes, while incorporating high-resolution features to preserve fine-grained spatial details.  
+
+> •
+
+We introduce a 2D spatio-temporal (2DST) module with an auxiliary future multi-view segmentation task, pro-viding additional semantic and temporal supervision to improve scene understanding.  
+
+> •
+
+We design a spatio-temporal interaction modeling (STIM) module to bridge 2D and 3D representations, enabling bidirectional feature exchange between multi-view image features and multi-scale voxel representations.  
+
+> •
+
+Our InterOCF achieves superior performance across mul-tiple benchmarks, including nuScenes, Lyft-Level5, and nuScenes-Occupancy. II. R ELATED WORK 
+
+Camera-Only 3D Occupancy Prediction. Camera-Only 3D occupancy prediction [1, 2, 14–21] has attracted consid-erable attention in autonomous driving for its capability to generate dense 3D environmental representations that surpass traditional bounding box-based methods. Recent advances further extend this paradigm towards more generalized and open-world settings. For instance, OccAny [20] explores gen-eralized unconstrained urban 3D occupancy, aiming to im-prove model robustness across diverse and complex real-world scenarios. Meanwhile, Progressive Gaussian Transformer [21] introduces an anisotropy-aware Gaussian representation for open-vocabulary occupancy prediction, enabling more flex-ible semantic understanding beyond predefined categories. To alleviate the heavy reliance on dense 3D annotations, several methods have explored leveraging 2D information as alternative supervision signals. Specifically, Vampire [22] regulates intermediate 3D volume features by incorporating rendered camera-view depth and semantic cues during train-ing. Extending this direction, RenderOcc [23] and SelfOcc [24] adopt more radical strategies that rely exclusively on 2D supervision, completely eliminating the need for 3D la-bels to reduce annotation costs and complexity. However, these approaches primarily exploit 2D information from a supervisory perspective, which limits its full potential. In contrast, our approach emphasizes joint 2D and 3D spatio-temporal modeling with explicit cross-branch interaction. This design enables a comprehensive exchange of complementary information, leading to more robust and temporally consistent occupancy predictions. 
+
+Camera-Only 4D Occupancy Forecasting Cam4DOcc [6] introduces the first benchmark to standardize the evaluation protocol for Camera-Only 4D occupancy forecasting, and pro-3
+
+poses OCFNet, an end-to-end network for dense 4D occupancy state forecasting. Drive-OccWorld [12] proposed an efficient semantic and motion conditional normalization to enhance the historical BEV feature and conducted temporal cross-attention on it for better temporal modeling. OccProphet [7] proposed a novel tripling operation to decompose the voxel features into scene, height, and BEV components separately, enabling lightweight spatio-temporal feature interaction and significantly reducing the computational cost. EfficientOCF [11] decouple spatiotemporal representation, where BEV oc-cupancy with height values is utilized for spatial decoupling and instance-aware refinement in consecutive frames is de-signed for temporal decoupling. Existing approaches perform 4D spatio-temporal modeling exclusively on the occupancy branch, which limits their ability to exploit rich view-specific and appearance-aware cues and results in insufficient tem-poral consistency across modalities. To address this gap, we introduce a novel framework that jointly models tempo-ral dynamics in both voxel-based representations and multi-view image segmentation sequences, enabling complementary spatio-temporal feature learning and more effective cross-domain information exchange. 
+
+Spatio-Temporal Modeling in Video Prediction Spatio-temporal modeling has been extensively studied in 2D video prediction tasks [25–30]. Existing approaches explore this problem from various perspectives, including architectural design and semantic modeling. For example, MAU [31] in-troduces an efficient attention-based fusion module to ag-gregate temporal information across multiple levels, thereby enlarging the temporal receptive field. MotionRNN [32] pro-poses a MotionGRU unit that decomposes object motion into transient variations and long-term motion trends for more accurate prediction. SADM [33] further observes that differ-ent semantic regions exhibit distinct dynamic patterns and proposes a semantic-aware dynamic model to ensure both geometric and semantic consistency. More recent works focus on incorporating inductive biases and improving temporal representation learning. PastNet [34] highlights the importance of physical priors and introduces spectral convolution in the Fourier domain along with a discrete spatio-temporal (DST) module to better capture temporal dynamics. DFDNet [35] filters out high-frequency transient noise before modeling temporal dependencies, leading to more stable predictions. Meanwhile, recent advances extend spatio-temporal modeling beyond conventional video prediction towards more com-plex reasoning and control-oriented paradigms. Progressive Online Video Understanding with Evidence-Aligned Timing and Transparent Decisions [36] focuses on online video un-derstanding, emphasizing causally consistent reasoning and precise response timing aligned with evidence accumulation in streaming videos. ViPRA [37] further bridges video prediction and control by learning motion-centric latent actions along-side future visual observations, enabling continuous action generation without explicit action annotations. In contrast to prior works that primarily focus on 2D video modeling, our approach investigates spatio-temporal modeling in multi-view camera streams and explicitly explores their interaction with corresponding 3D volumetric feature sequences. This joint modeling paradigm enables richer temporal reasoning across both image and 3D space, which is crucial for accurate and consistent 4D occupancy prediction. 
+
+III. M ETHOD 
+
+A. Model Architecture 
+
+As illustrated in Fig. 2, our proposed model takes past and current multi-view images {It}0 
+
+> t=−m
+
+as input, where the superscript t denotes the timestamp (with t = 0 corresponding to the current frame), and m > 0 represents the length of the historical sequence. First, an image backbone (e.g., ResNet [38]) extracts image features {F t 
+
+> 2D
+
+}0 
+
+> t=−m
+
+for each timestamp. These features are then fed into both the 2D branch and the 3D branch, respectively. In the 2D branch, the image features {Ft 
+
+> 2D
+
+}0 
+
+> t=−m
+
+are fed into a 2D Spatio-Temporal (2DST) module to predict image features for the current and future time steps, denoted as {Ft 
+
+> 2D
+
+}nt=0 (n > 0 represents the length of the future sequence). The resulting features are subsequently processed by a segmentation head to produce multi-view semantic segmentation maps. In the 3D branch, we adopt LSS [39] to lift the 2D image features {Ft 
+
+> 2D
+
+}0
+
+> t=−m
+
+into the 3D space, resulting in a sequence of voxel features 
+
+{Ft 
+
+> 3D
+
+}0
+
+> t=−m
+
+. These voxel features are subsequently fed into a novel 3D Spatio-Temporal (3DST) module, which models temporal dynamics in the volumetric domain and produces voxel features {Ft 
+
+> 3D
+
+}nt=0 for both the current and future time steps. Meanwhile, our proposed Spatio-Temporal Interaction Modeling (STIM) facilitates cross-domain interaction by in-tegrating the fused features { ¯Fv }Vv=1 from the 2DST module, where V denotes the number of views, with the contextual features Fctx enc produced by the 3DST module. Finally, the 2D-3D interacted and aggregated future voxel features are decoded by either an occupancy head or a flow head to generate the corresponding outputs. 
+
+B. 2D Spatio-Temporal Module (2DST) 
+
+As illustrated in Fig. 3, we propose a 2D Spatio-Temporal (2DST) module that introduces an auxiliary future segmen-tation prediction task based on historical multi-view image features {Ft 
+
+> 2D
+
+}0
+
+> t=−m
+
+. The segmentation supervision provides rich semantic cues and serves as a temporal regularizer, com-plementing the geometric reasoning in the 3D branch. Given the boundary-level overlap between adjacent views, we restrict interaction to neighboring cameras and introduce a Masked Inter-view Attention (MIA ) mechanism. Let Ft,v  
+
+> 2D
+
+∈ RC×h×w
+
+denote the feature of view v at time t. We first compress each feature map along the width dimension to obtain a column-wise representation: 
+
+˜Ft,v  
+
+> 2D
+
+= Pool w(Ft,v  
+
+> 2D
+
+) ∈ RC×h×1. (1) Based on these pooled features, masked cross-view attention is performed so that each view interacts only with itself and its adjacent views: 
+
+ˆFt,v  
+
+> 2D
+
+= Attention 
+
+ ˜Ft,v  
+
+> 2D
+
+, { ˜Ft,u  
+
+> 2D
+
+}u∈N (v)
+
+
+
+∈ RC×h×1. (2) where N (v) denotes the neighboring views of view v. The attention mask restricts information exchange to adjacent 4
+
+Fig. 3: Our 2DST module takes a sequence of historical multi-view image features as input and predicts future multi-view image features, enabling the forecasting of future multi-view semantic segmentation through explicit temporal modeling. cameras, leveraging their overlapping fields of view to enable more relevant cross-view interactions. The refined column-wise representation ˆFt,v  
+
+> 2D
+
+is broadcast along the spatial dimen-sion to match the original image representation and injected back via a residual connection. The resulting features are sub-sequently upsampled and reshaped by merging the temporal and channel dimensions, and fed into a lightweight backbone (e.g., ResNet-18) to produce fused representations { ¯Fv 
+
+> 2D
+
+}Vv=1 ,where ¯Fv 
+
+> 2D
+
+∈ RC×h×w denotes the fused feature of view v.These fused features are subsequently utilized by the Spatio-Temporal Interaction Module (STIM) (Sec. III-D) for cross-domain feature interaction. In parallel, they are further ex-panded along the channel dimension and reshaped to recover the future temporal dimension. A 3D transposed convolution network then progressively upsamples the features while pre-serving spatio-temporal correlations, followed by a 3D convo-lutional refinement module to enhance temporal consistency. Finally, the network produces the predicted future multi-view image features {Ft 
+
+> 2D
+
+}nt=0 .By jointly modeling cross-view interactions and tempo-ral dynamics, the 2DST module captures semantic evolu-tion across multi-view observations while maintaining spatial consistency between cameras. Compared with independently processing each view, the proposed masked inter-view inter-action enables efficient information exchange among adjacent cameras without introducing excessive computational over-head. Moreover, the auxiliary future segmentation prediction task provides explicit semantic supervision that complements the geometric reasoning of the 3D voxel branch, leading to more robust spatio-temporal representations for 4D occupancy forecasting. 
+
+C. 3D Spatio-Temporal Module (3DST) 
+
+We propose a novel 3D Spatio-Temporal (3DST) module 
+
+that learns volumetric dynamics from historical voxel states to predict future voxel states (see Fig. 4). This module mod-els motion in a low-resolution space while leveraging high-resolution contextual features to preserve fine-grained spatial details. The input to the 3DST module is a sequence of historical voxel features obtained from the Lifting Module, denoted as {Ft 
+
+> 3D
+
+}0
+
+> t=−m
+
+, where Ft 
+
+> 3D
+
+∈ RC×H×W ×D .In the low-resolution branch, we employ a ResNet3D-based voxel encoder ϕ(·) to extract multi-scale features and align them to half the spatial resolution, yielding downsampled voxel representations: 
+
+{ ˜Ft 
+
+> 3D
+
+}0 
+
+> t=−m
+
+= ϕ({Ft 
+
+> 3D
+
+}0
+
+> t=−m
+
+), (3) where ˜Ft 
+
+> 3D
+
+∈ RC× H     
+
+> 2×W
+> 2×D
+> 2
+
+. To model the temporal dynam-ics, the resulting low-resolution voxel sequence is processed by a Pre-LSTM module. It operates autoregressively within a sliding window of size T (where T = m + 1 is the number of input frames), using the T input frames to predict the next future frame in each step, thereby generating the sequence of future downsampled voxel states: 
+
+{ ˜Ft 
+
+> 3D
+
+}nt=0 = LSTM pre 
+
+
+
+{ ˜Ft 
+
+> 3D
+
+}0
+
+> t=−m
+
+
+
+. (4) In the high-resolution branch, to compensate for the loss of fine-grained spatial details in the low-resolution branch caused by downsampling and temporal propagation, we introduce a context branch that extracts high-resolution spatial context from the original voxel sequences {Ft 
+
+> 3D
+
+}0
+
+> t=−m
+
+. Specifically, the input voxel features {Ft 
+
+> 3D
+
+}0 
+
+> t=−m
+
+are first reshaped by stacking the temporal and channel dimensions, and then pro-cessed by a context encoder ψ(·) based on ResNet3D [38] to produce contextual representations: 
+
+Fctx enc = ψ  Reshape  {Ft 
+
+> 3D
+
+}0
+
+> t=−m
+
+ ∈ RC×H×W ×D . (5) To incorporate fine-grained information, the encoded contex-tual feature Fctx enc is first fed into the STIM module (Sec. III-D) to interact with the fused features { ¯Fv 
+
+> 2D
+
+}Vv=1 from the 2DST branch (Sec. III-B), producing a refined contextual repre-sentation ˆFctx enc . The refined feature is temporally repeated and spatially downsampled to match the resolution of the future voxel features { ˜Ft 
+
+> 3D
+
+}nt=0 , and is then concatenated with them and fed into a Post-LSTM to jointly enhance temporal coherence and spatial details: 
+
+{ ˆFt 
+
+> 3D
+
+}nt=0 = LSTM post 
+
+h 
+
+{ ˜Ft 
+
+> 3D
+
+}nt=0 , ˆFctx enc 
+
+i 
+
+, (6) where [·, ·] denotes channel-wise concatenation and ˆF t 
+
+> 3D
+
+∈
+
+RC× H     
+
+> 2×W
+> 2×D
+> 2
+
+. The refined features { ˆFt 
+
+> 3D
+
+}nt=0 are finally upsampled to the original resolution and concatenated with the contextual features Fctx enc in a frame-wise manner, followed by a 3D convolutional decoder to produce the future voxel predictions {Ft 
+
+> 3D
+
+}nt=0 .By performing temporal modeling on low-resolution voxel representations and progressively incorporating high-resolution contextual information, the proposed 3DST module benefits from enlarged receptive fields in the low-resolution branch to capture global motion patterns, while preserving fine-grained spatial structures in the high-resolution branch, thereby enabling robust and computationally efficient multi-frame future voxel prediction. 5
+
+Fig. 4: Our 3DST module takes historical voxel features as input, aiming to capture the temporal dynamics. By modeling the evolution of voxel representations, it effectively encodes motion patterns and spatio-temporal context, and further ex-trapolates them to predict future voxel features. 
+
+D. Spatio-Temporal Interaction Modeling 
+
+We propose the Spatio-Temporal Interaction Modeling (STIM) module to bridge 2D and 3D feature representa-tions. As illustrated in Fig. 5, STIM takes the contextual feature Fctx enc from the 3DST module and the fused multi-view feature { ¯Fv }Vv=1 from the 2DST module as inputs. First, the contextual feature Fctx enc ∈ RC×H×W ×D is progressively downsampled twice to construct a two-level feature hierarchy: 
+
+˜F(1) = D1(Fctx enc ) ∈ RC× H     
+
+> 2×W
+> 2×D
+> 2
+
+,
+
+˜F(2) = D2( ˜F(1) ) ∈ RC× H     
+
+> 4×W
+> 4×D
+> 4
+
+. (7) Here, D1(·) and D2(·) denote 3D downsampling operators that enlarge the receptive field while reducing spatial reso-lution. Interaction starts from the lowest-resolution contextual feature. The feature ˜F(2) first interacts with the fused multi-view features through a cross-attention operation, where the contextual feature serves as the query and the fused image features provide the keys and values: 
+
+ˆF(2) = Attn 
+
+ ˜F(2) , Flatten  { ¯Fv }Vv=1 
+
+
+
+∈ RC× H     
+
+> 4×W
+> 4×D
+> 4
+
+.
+
+(8) 
+
+Fig. 5: Our STIM module takes the context feature from 3DST and the fused feature from 2DST as inputs, and performs cross-attention interactions between multi-scale context fea-tures and the fused feature. The resulting feature is then upsampled and merged with the higher-resolution contextual feature ˜F(1) through a residual connection: 
+
+H = ˜F(1) + UP 
+
+ ˆF(2) 
+
+, (9) where UP (·) denotes the upsampling operation and H ∈
+
+RC× H     
+
+> 2×W
+> 2×D
+> 2
+
+. The updated feature H further interacts with the fused multi-view features via another cross-attention op-eration. The output is then upsampled and added back to the original contextual feature to obtain the refined representation: 
+
+ˆFctx enc = Fctx enc + UP  Attn  H, Flatten  { ¯Fv }Vv=1 
+
+ . (10) This bottom-up interaction strategy enables multi-scale cross-modal fusion by progressively integrating complemen-tary information from both modalities. Specifically, low-resolution global context is gradually enriched with detailed appearance cues from the 2D branch, while the high-resolution spatial structure is effectively preserved. Such a design fa-cilitates a coarse-to-fine refinement process, leading to more accurate and structurally consistent representations. IV. E XPERIMENTS AND RESULTS 
+
+A. Experiment Settings 
+
+Datasets. Our experiments are conducted on nuScenes [40], nuScenes-Occupancy [41], and Lyft-Level5 [42] datasets, fol-lowing the setting of Cam4DOcc. For nuScenes and nuScenes-Occupancy, 700 scenes are selected from the total 850 anno-tated scenes for training, while the remaining scenes are used for evaluation. Similarly, 130 out of 180 annotated scenes from Lyft-Level5 are used for training, with the rest reserved for testing. This results in 23,930 training sequences and 5,119 evaluation sequences for nuScenes and nuScenes-Occupancy, and 15,720 training sequences and 5,880 evaluation sequences for Lyft-Level5. Each sequence contains 7 frames in total, comprising 3 observation frames (two past frames and the 6
+
+current frame) and 4 future frames for occupancy forecasting. The occupancy prediction region spans [−51 .2 m , 51 .2 m] in the horizontal plane and [−5 m , 3 m] along the vertical axis. A voxel size of 0.2 m is adopted, leading to a volumetric grid resolution of (512 , 512 , 40) . Due to differences in annotation frequencies across datasets, evaluation results are reported at 2 Hz for nuScenes and nuScenes-Occupancy, and at 5 Hz for Lyft-Level5. 
+
+Evaluation Protocol and Metrics. We follow the Cam4DOcc benchmark to assess camera-only occupancy fore-casting under three task settings with increasing annotation granularity. (1) Inflated general movable object (GMO) fore-casting: regions enclosed by annotated 3D bounding boxes in nuScenes and Lyft-Level5 are treated as GMO, while all remaining voxels are assigned to the background category. (2) Fine-grained GMO forecasting: the category definition remains identical to task (1), but coarse bounding-box anno-tations are replaced by voxel-level occupancy labels provided by nuScenes-Occupancy. (3) Fine-grained GMO and general static object (GSO) forecasting: both movable and static object categories are annotated with fine-grained voxel-wise labels. Since Lyft-Level5 does not provide fine-grained occupancy annotations, only task (1) is evaluated on this dataset. For all tasks, intersection-over-union (IoU) is used as the evaluation metric, including IoU for the current frame ( IoU c), averaged IoU over future frames (IoU f ), and IoU over the entire prediction horizon ( Io eUf ). The evaluation strictly follows the protocol defined in Cam4DOcc. 
+
+Implementation and Training Details. Following Oc-cProphet [7], our method adopts a ResNet-34 backbone [38] enhanced with deformable convolutions [43] as the image encoder, while retaining the same FPN and lifting module. The input image resolution is downsampled to 448 × 896 .Multi-view 2D semantic segmentation labels are automatically generated using the Segment Anything Model (SAM) [13], thereby eliminating the need for manual annotation; further details can be found in OccNeRF [44]. All ablation studies are conducted on the Lyft-Level5 dataset [42], and all experiments are run using 8 NVIDIA RTX 6000 Ada GPUs. We first trained the model without the STIM module for 24 epochs using the Adam optimizer with a batch size of 8 and a learning rate of 
+
+3×10 −4. Afterward, the STIM module was introduced, and the entire network was further trained for an additional 6 epochs with a reduced learning rate of 3×10 −5. Cross-entropy loss is employed for 2D segmentation and 3D occupancy prediction with weights of 0.05 and 0.5, respectively, while a smooth L1 loss with a weight of 0.5 is applied for flow prediction. 
+
+B. Main Results 
+
+Evaluation on forecasting inflated GMO. We conduct comprehensive comparisons with OpenOccupancy-C [41], SPC [45–47], PowerBEV-3D [10], EfficientOCF [11], Oc-cProphet [7] and the OCFNet baseline [6] on nuScenes [40] and Lyft-Level5 [42] benchmarks. As shown in Table I, our method achieves the best performance across both datasets and all metrics. On nuScenes , InterOCF improves the previous best Oc-cProphet from 26.94 to 28.73 in IoU f and from 29.15 to TABLE I: Performance on forecasting inflated GMO.                                                            
+
+> nuScenes Lyft-Level5 Method IoU cIoU f(2s) Io eUfIoU cIoU f(0.8s) Io eUf
+> OpenOccupancy-C 12.17 11.45 11.74 14.01 13.53 13.71 SPC 1.27 --1.42 --PowerBEV-3D 23.08 21.25 21.86 26.19 24.47 25.06 BEVDet4D 31.60 24.87 26.87 ---OCFNet 31.30 26.82 27.98 36.41 33.56 34.60 EfficientOCF 34.13 26.05 28.71 41.24 35.07 39.28 OccProphet 34.36 26.94 29.15 43.38 37.92 40.11 InterOCF (ours) 34.72 28.73 30.05 43.72 39.57 40.55
+
+30.05 in Io eUf . Compared with the strong OCFNet baseline (26.82 IoU f , 27.98 Io eUf ), it brings gains of +1.91 IoU f and +2.07 Io eUf . When compared with EfficientOCF (26.05 IoU f ,28.71 Io eUf ), our method achieves further improvements of +2.68 IoU f and +1.34 Io eUf , validating the effectiveness of our spatio-temporal interaction modeling. On Lyft-Level5, InterOCF also achieves the best results with 43.72 IoU c, 39.57 IoU f , and 40.55 Io eUf . Compared with OCFNet (33.56 IoU f , 34.60 Io eUf ), our method achieves gains of +5.99 IoU f and +5.95 Io eUf . When compared with EfficientOCF (35.07 IoU f , 39.28 Io eUf ), InterOCF shows improvements of +4.50 IoU f and +1.27 Io eUf , outperforming OccProphet by +1.65, +1.65, and +0.44, respectively. These results demonstrate that our method effectively captures the motion patterns of coarse-grained moving objects, showcasing strong forecasting capability and generalization ability. 
+
+Evaluation on forecasting fine-grained GMO. We fur-ther compare our method with the above approaches on the nuScenes-Occupancy [41] benchmark. As shown in Table II, InterOCF achieves the best performance across all evaluation metrics. Specifically, our method obtains 15.71 IoU c, 11.63 
+
+IoU f , and 12.12 Io eUf , outperforming all competing methods. In particular, it improves upon the previous best OccProphet by +0.33 IoU c, +0.94 IoU f , and +0.14 Io eUf . When comparing with EfficientOCF (12.31 IoU c, 9.67 IoU f , 10.66 Io eUf ), InterOCF shows significant improvements of +3.40 IoU c,+1.96 IoU f , and +1.46 Io eUf . Compared to OCFNet (11.45 
+
+IoU c, 9.68 IoU f , 10.10 Io eUf ), our method demonstrates even larger gains of +4.26 IoU c, +1.95 IoU f , and +2.02 Io eUf .
+
+These results demonstrate the effectiveness of our method in capturing fine-grained dynamic motion and producing more accurate future occupancy predictions. 
+
+Evaluation on forecasting fine-grained GMO and fine-grained GSO. Our proposed framework establishes strong performance on the challenging task of fine-grained future scene forecasting, significantly outperforming existing meth-ods in predicting both General Moving Objects (GMO) and General Static Occupancy (GSO). The quantitative results, summarized in Table III, demonstrate our method’s compre-hensive superiority. Our method achieves the highest scores across all critical evaluation metrics: it attains a mean IoU c of 19.57 (with a decomposition of 14.24 for GMO and 24.90 for GSO), an IoU f (2 s) of 17.97 (10.26 for GMO and 25.67 for GSO), and a Io eUf of 10.85 specifically for GMO forecasting. For fine-grained GMO forecasting, our method outperforms 7
+
+TABLE II: Performance on forecasting fine-grained GMO.                           
+
+> nuScenes-Occupancy Method IoU cIoU f(2s) Io eUf
+> OpenOccupancy-C [41] 10.82 8.02 8.53 SPC [45–47] 5.85 1.08 1.12 PowerBEV-3D [10] 5.91 5.25 5.49 OCFNet (Cam4DOcc) [6] 11.45 9.68 10.10 EfficientOCF [11] 12.31 9.67 10.66 OccProphet [7] 15.38 10.69 11.98 InterOCF (ours) 15.71 11.63 12.12
+
+TABLE III: Performance on forecasting fine-grained GMO and fine-grained GSO.                                        
+
+> IoU cIoU f(2s) Io eUf
+> Method GMO GSO mean GMO GSO mean GMO OpenOccupancy-C [41] 9.62 17.21 13.42 7.41 17.30 12.36 7.86 SPC [45–47] 5.85 3.29 4.57 1.08 1.40 1.24 1.12 PowerBEV-3D [10] 5.91 --5.25 --5.49 OCFNet (Cam4DOcc) [6] 11.02 17.79 14.41 9.20 17.83 13.52 9.66 EfficientOCF [11] 13.52 24.11 18.82 9.13 19.21 14.17 9.82 OccProphet [7] 13.71 24.42 19.06 9.34 24.56 16.95 10.33 InterOCF (ours) 14.24 24.90 19.57 10.26 25.67 17.97 10.85
+
+EfficientOCF by +0.72 IoU c, +1.13 IoU f (2 s), and +1.03 
+
+Io eUf , and exceeds OCFNet by +3.22 IoU c, +1.06 IoU f (2 s),and +1.19 Io eUf . For fine-grained static occupancy predic-tion, our method surpasses EfficientOCF by +0.79 IoU c and +6.46 IoU f (2 s), and outperforms OCFNet by +7.11 IoU c and +7.84 IoU f (2 s). Notably, the performance gain in Io eUf for GMO—a key metric for evaluating the forecasting of dynamic agents—represents a substantial improvement of 5.1% over the previous leading method, OccProphet [7], a marked 12.4% increase over OCFNet [6], and 10.5% improvement over EfficientOCF. 
+
+These results demonstrate our method’s strong capability in capturing fine-grained static scene details and dynamic object behaviors, effectively modeling complex spatio-temporal de-pendencies in autonomous driving scenarios, and leading to more accurate and reliable predictions. C. Ablation Study 
+
+Module Ablations. We conduct ablation studies to evaluate the contributions of key components in our method frame-work, with results summarized in Table IV. Starting from the baseline model, we use only a single linear layer to predict future states (Row 1, 37.65 IoU f ), introducing the full 3DST module improves the performance to 38.04, yielding a gain of +0.39. When removing the PostLSTM from 3DST, the per-formance drops to 37.83, indicating that temporal refinement plays a non-negligible role in modeling motion consistency. Building upon 3DST, incorporating the full 2DST module further boosts the performance to 39.09, achieving a significant TABLE IV: Ablation study on method modules. 
+
+3DST 2DST STIM IoU f ↑
+
+Config. Full PostLSTM Full MIA (0.8s) Baseline – – – – – 37.65 +3DST ✓ ✓ – – – 38.04 (+0.39) w/o Post ✓ × – – – 37.83 (-0.21) +2DST ✓ ✓ ✓ ✓ – 39.09 (+1.05) w/o MIA ✓ ✓ ✓ × – 38.44 (-0.65) +STIM ✓ ✓ ✓ ✓ ✓ 39.57 (+0.48) 
+
+gain of +1.05 over the 3DST-only configuration. However, removing the masked inter-view attention (MIA) results in a decrease to 38.44 (-0.65), demonstrating the effectiveness of inter-view interaction for enhancing spatial alignment and feature aggregation. Finally, integrating the proposed STIM module brings additional improvement, achieving the best performance of 39.57 IoU f (+0.48). This consistent gain verifies that STIM effectively facilitates cross-domain spatio-temporal feature interaction, leading to more accurate future occupancy prediction. 
+
+Ablation on Frame Count for 2D Prediction. We conduct an ablation study on the temporal horizon length of the 2D semantic-temporal (2DST) module’s multi-view segmentation predictions. The number of predicted frames in the 2D branch influences how much temporal context is available for 3D temporal prior aggregation. We evaluate our full method on the Lyft-Level5 dataset [42] using the forward intersection-over-union IoU f as the evaluation metric. As shown in Table V, performance systematically improves as the 2D prediction length increases. With a single predicted frame, the model achieves 38.92 IoU f . Extending to 3 frames yields 39.23 IoU f , representing a 0.31-point improvement. The best performance of 39.57 IoU f is attained when the 2D prediction horizon matches the output length of the 3D semantic-temporal module (5 frames). This trend reveals that richer 2D temporal priors directly benefit 4D occupancy forecasting. Shorter horizons provide limited motion context, constraining the 3D module’s ability to reason about scene dy-namics. The performance plateau with 5 frames suggests that matching the temporal extents of 2D and 3D branches enables optimal cross-modal feature alignment, allowing comprehen-sive spatiotemporal information flow from 2D predictions to guide 4D occupancy evolution. This configuration ensures that sufficient short-term motion cues are captured in 2D space before being propagated to 3D, validating our design choice of synchronized temporal dimensions across modules. 
+
+Ablation on temporal model. To select the most suitable sequence modeling architecture for our task, we conduct comprehensive experiments comparing several classical and well-established sequence modeling architectures, including ConvLSTM [48] (here uniformly referred to as LSTM), Transformer [49], and GRU [50] variants. These architectures represent distinct paradigms for sequential data modeling, enabling a rigorous assessment of their suitability for future occupancy forecasting. 8
+
+Fig. 6: Qualitative results of OccProphet and our InterOCF in the future 2 seconds. The moving objects gradually transitions to white in color along the direction of motion. Red dashed rectangles represent that the results of our InterOCF are more consistent with the ground truth than those of OccProphet. TABLE V: Ablation on frame count.     
+
+> Frame IoU f
+> 138.92 339.23 539.57
+
+TABLE VI: Ablation on temporal model.     
+
+> Method IoU f
+> GRU 37.51 Transformer 38.77 LSTM 39.57
+
+Based on the comparative results in Table VI, LSTM achieves the highest IoU f of 39.57, surpassing Transformer (38.77) and GRU (37.51) by +0.80 and +2.06, respectively. While the Transformer is theoretically capable of modeling long-range dependencies through global attention, its perfor-mance is slightly inferior in this specific setting. We hypothe-size that the observed performance gap may be attributed to the relatively short temporal horizon of the forecasting task and the limited training scale, which can hinder attention-based models from learning robust temporal representations. In contrast, LSTM introduces a recurrent inductive bias that is well-suited for modeling short- to mid-term temporal dynamics in driving scenes. Its gated memory mechanism facilitates selec-tive propagation of relevant spatio-temporal context, which is beneficial for accurate future occupancy prediction. Based on these observations, we adopt LSTM as the default temporal modeling module in our framework. 
+
+D. Visualization 
+
+Qualitative Comparison with Baselines. Fig. 6 presents qualitative comparisons between our InterOCF and Oc-cProphet [7]. Given multi-view camera images as input, we visualize the predicted future occupancy and compare it with the ground truth. Moving objects gradually transition to white along their motion trajectories. As highlighted in the red boxes, our method produces predictions that are more consistent with the ground truth, particularly in regions containing dynamic objects. In the first scene, our method accurately captures both mov-ing objects within the red bounding boxes and correctly infers their motion directions. Notably, the larger object is predicted to turn. In contrast, OccProphet misses the smaller object and incorrectly predicts the larger one as moving straight ahead, failing to capture its turning behavior. In the second scene, the ground truth shows that stationary vehicles along the roadside are parked longitudinally. OccProphet incorrectly predicts them as laterally parked, whereas our predictions better reflect realistic vehicle layouts. In the third scene, which involves long-range and sparse objects, OccProphet tends to miss or distort distant vehicles. In comparison, our method better preserves geometric consistency and produces predictions that are more aligned with the ground truth. These results demonstrate the effectiveness of our spatio-temporal modeling strategy, enabling more reliable motion reasoning and more accurate future occupancy prediction. 
+
+Qualitative Comparison of Using STIM vs. Not Using STIM. To further validate the effectiveness of our interaction modeling, we present qualitative ablation results of the STIM module in Fig. 7. In the first scene, the model equipped with STIM produces predictions that are closer to the ground truth, as highlighted in the red boxes. In contrast, the model with-out STIM exhibits noticeable noise and artifacts, indicating that our interaction modeling improves robustness and noise resistance. In the second scene, the predictions with STIM are more physically plausible compared to those without STIM, 9
+
+Fig. 7: Qualitative results of using the STIM or not. The moving objects gradually transitions to white in color along the direction of motion. Red dashed rectangles represent that the results with the STIM are more consistent with the ground truth than those without the STIM. TABLE VII: Comparison of model complexity. N p: Total number of parameters. Mem.: Occupied GPU memory during training.                                
+
+> Method Np(M) ↓Mem. (G) ↓FLOPs (G) ↓FPS ↑IoU f↑
+> Cam4DOcc 370 57 6434 1.7 33.56 EfficientOCF 393 >46 -3.7 35.07 OccProphet 82 24 1985 4.5 37.92 InterOCF (Ours) 112 22 2436 4.3 39.57
+
+avoiding unrealistic trajectory collisions. This demonstrates that, by leveraging cross-modal interactions, our approach yields more reliable and coherent predictions. 
+
+E. Comparison of Model complexity 
+
+We further compare the computational complexity of our proposed InterOCF with several representative methods. As shown in Table VII, InterOCF achieves a favorable trade-off between forecasting accuracy and computational efficiency. Compared with OccProphet, InterOCF improves IoU f from 37.92 to 39.57 (+1.65) while reducing GPU memory con-sumption from 24 G to 22 G. Meanwhile, the inference speed remains comparable (4.5 vs. 4.3 FPS), indicating that the mod-erate increase in parameters and FLOPs is effectively trans-lated into tangible performance gains. Compared with earlier heavy 3D methods such as Cam4DOcc (6434 G FLOPs, 57 G memory), InterOCF significantly reduces redundant voxel-level computation. This efficiency mainly arises from our hierarchical design, where global motion patterns are modeled in a compact low-resolution voxel space, while fine-grained structural details are preserved through high-resolution feature refinement. As a result, InterOCF achieves higher forecasting accuracy with substantially lower memory consumption and competitive runtime efficiency, making it more practical for real-world deployment. V. D ISCUSSION AND CONCLUSION 
+
+In this work, we study the problem of camera-only 4D oc-cupancy forecasting, which aims to predict future 3D semantic scenes from historical multi-view images for autonomous driv-ing. To address the insufficient spatio-temporal modeling in existing methods, we propose a novel framework, InterOCF ,that jointly models temporal dynamics in both 3D voxel representations and multi-view segmentation sequences while enabling explicit interaction between the 2D and 3D branches. InterOCF consists of three key components: the 3D Spatio-Temporal (3DST) module for modeling volumetric dynamics from historical voxel states, the 2D Spatio-Temporal (2DST) 
+
+module that introduces an auxiliary multi-view temporal segmentation forecasting task to enhance semantic temporal modeling, and the Spatio-Temporal Interaction Modeling (STIM) module that facilitates feature interaction between the 2D and 3D representations. Extensive experiments on the nuScenes, Lyft-Level5, and nuScenes-Occupancy datasets demonstrate that InterOCF consistently outperforms existing baselines, validating the effectiveness of jointly modeling spatio-temporal dynamics in both 2D and 3D domains, as well as their interactions, for accurate 4D occupancy forecasting. ACKNOWLEDGEMENTS 
+
+This work was supported in parts by NSFC (62202312), Guangdong Basic and Applied Basic Research Foundation (2023B1515120026), Shenzhen Science and Technology Program (KQTD 20210811090044003, RCJC20200714114435012), and Scientific Foundation for Youth Scholars and Scientific Development Funds of Shenzhen University. REFERENCES 
+
+[1] W. Tong, C. Sima, T. Wang, L. Chen, S. Wu, H. Deng, Y. Gu, L. Lu, P. Luo, D. Lin et al. , “Scene as occu-pancy,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 8406–8415. [2] Q. Ma, X. Tan, Y. Qu, L. Ma, Z. Zhang, and Y. Xie, “Cotr: Compact occupancy transformer for vision-based 3d occupancy prediction,” in Proceedings of the 10 
+
+IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 19 936–19 945. [3] Y. Zhang, Z. Zhu, and D. Du, “Occformer: Dual-path transformer for vision-based 3d semantic occupancy pre-diction,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 9433–9443. [4] X. Tian, T. Jiang, L. Yun, Y. Mao, H. Yang, Y. Wang, Y. Wang, and H. Zhao, “Occ3d: A large-scale 3d oc-cupancy prediction benchmark for autonomous driving,” 
+
+Advances in Neural Information Processing Systems ,vol. 36, pp. 64 318–64 330, 2023. [5] Y. Huang, W. Zheng, Y. Zhang, J. Zhou, and J. Lu, “Tri-perspective view for vision-based 3d semantic occupancy prediction,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2023, pp. 9223–9232. [6] J. Ma, X. Chen, J. Huang, J. Xu, Z. Luo, J. Xu, W. Gu, R. Ai, and H. Wang, “Cam4docc: Benchmark for camera-only 4d occupancy forecasting in autonomous driving applications,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2024, pp. 21 486–21 495. [7] J. Chen, H. Xu, Y. Wang, and L.-P. Chau, “Occprophet: Pushing efficiency frontier of camera-only 4d occupancy forecasting with observer-forecaster-refiner framework,” 
+
+Proceedings of the International Conference on Learning Representations , 2025. [8] A. Hu, Z. Murez, N. Mohan, S. Dudas, J. Hawke, V. Badrinarayanan, R. Cipolla, and A. Kendall, “Fiery: Future instance prediction in bird’s-eye view from sur-round monocular cameras,” in 2021 IEEE/CVF Interna-tional Conference on Computer Vision (ICCV) , 2021, pp. 15 253–15 262. [9] A. K. Akan and F. G¨ uney, “Stretchbev: Stretching future instance prediction spatially and temporally,” in Com-puter Vision – ECCV 2022 , S. Avidan, G. Brostow, M. Ciss´ e, G. M. Farinella, and T. Hassner, Eds. Cham: Springer Nature Switzerland, 2022, pp. 444–460. [10] P. Li, S. Ding, X. Chen, N. Hanselmann, M. Cordts, and J. Gall, “Powerbev: A powerful yet lightweight framework for instance prediction in bird’s-eye view,” in Proceedings of the Thirty-Second International Joint Conference on Artificial Intelligence, IJCAI-23 , E. Elkind, Ed. International Joint Conferences on Artificial Intelligence Organization, 8 2023, pp. 1080–1088, main Track. [Online]. Available: https: //doi.org/10.24963/ijcai.2023/120 [11] J. Xu, X. Chen, J. Ma, J. Huang, J. Xu, Y. Wang, and L. Pei, “Spatiotemporal Decoupling for Efficient Vision-Based Occupancy Forecasting,” in Proc. of the IEEE/CVF Conf. on Computer Vision and Pattern Recog-nition (CVPR) , 2025. [12] Y. Yang, J. Mei, Y. Ma, S. Du, W. Chen, Y. Qian, Y. Feng, and Y. Liu, “Driving in the occupancy world: Vision-centric 4d occupancy forecasting and planning via world models for autonomous driving,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 39, no. 9, 2025, pp. 9327–9335. [13] A. Kirillov, E. Mintun, N. Ravi, H. Mao, C. Rolland, L. Gustafson, T. Xiao, S. Whitehead, A. C. Berg, W.-Y. Lo et al. , “Segment anything,” in Proceedings of the IEEE/CVF international conference on computer vision ,2023, pp. 4015–4026. [14] P. Tang, Z. Wang, G. Wang, J. Zheng, X. Ren, B. Feng, and C. Ma, “Sparseocc: Rethinking sparse latent repre-sentation for vision-based semantic occupancy predic-tion,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 15 035–15 044. [15] L. Zhao, X. Xu, Z. Wang, Y. Zhang, B. Zhang, W. Zheng, D. Du, J. Zhou, and J. Lu, “Lowrankocc: tensor de-composition and low-rank recovery for vision-based 3d semantic occupancy prediction,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 9806–9815. [16] W. Ouyang, X. Song, B. Feng, and Z. Xu, “Octocc: High-resolution 3d occupancy prediction with octree,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 38, no. 5, 2024, pp. 4369–4377. [17] Z. Zhang, B. Gao, J. Ye, H. Jin, L. Jiang, and W. Yang, “Clip prior-guided 3d open-vocabulary occupancy pre-diction,” Pattern Recognition , vol. 162, p. 111347, 2025. [18] B. Zhu, Z. Wang, and H. Li, “nucraft: Crafting high resolution 3d semantic occupancy for unified 3d scene understanding,” in European Conference on Computer Vision . Springer, 2024, pp. 125–141. [19] Y. Lu, X. Zhu, T. Wang, and Y. Ma, “Octreeocc: Efficient and multi-granularity occupancy prediction using octree queries,” Advances in Neural Information Processing Systems , vol. 37, pp. 79 618–79 641, 2024. [20] A.-Q. Cao and T.-H. Vu, “Occany: Generalized uncon-strained urban 3d occupancy,” in CVPR , 2026. [21] C. Yan and D. Xu, “Progressive gaussian transformer with anisotropy-aware sampling for open vocabulary occupancy prediction,” ICLR , 2026. [22] J. Xu, L. Peng, H. Cheng, L. Xia, Q. Zhou, D. Deng, W. Qian, W. Wang, and D. Cai, “Regulating intermediate 3d features for vision-centric autonomous driving,” in 
+
+Proceedings of the AAAI Conference on Artificial Intel-ligence , vol. 38, no. 6, 2024, pp. 6306–6314. [23] M. Pan, J. Liu, R. Zhang, P. Huang, X. Li, H. Xie, B. Wang, L. Liu, and S. Zhang, “Renderocc: Vision-centric 3d occupancy prediction with 2d rendering su-pervision,” in 2024 IEEE International Conference on Robotics and Automation (ICRA) , 2024, pp. 12 404– 12 411. [24] Y. Huang, W. Zheng, B. Zhang, J. Zhou, and J. Lu, “Selfocc: Self-supervised vision-based 3d occupancy pre-diction,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 19 946–19 956. [25] V. L. Guen and N. Thome, “Disentangling physical dynamics from unknown factors for unsupervised video prediction,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2020, pp. 11 474–11 484. 11 
+
+[26] Y. Wang, J. Wu, M. Long, and J. B. Tenenbaum, “Proba-bilistic video prediction from noisy data with a posterior confidence,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2020, pp. 10 830–10 839. [27] W. Yu, W. Chen, S. Yin, S. Easterbrook, and A. Garg, “Modular action concept grounding in semantic video prediction,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2022, pp. 3605–3614. [28] R. Girdhar and K. Grauman, “Anticipative video trans-former,” in Proceedings of the IEEE/CVF international conference on computer vision , 2021, pp. 13 505–13 515. [29] H. Liu, Z. Chi, Y. Yu, Y. Wang, J. Chen, and J. Tang, “Meta-auxiliary learning for future depth prediction in videos,” in Proceedings of the IEEE/CVF Winter Con-ference on Applications of Computer Vision , 2023, pp. 5756–5765. [30] S. Benaim, A. Ephrat, O. Lang, I. Mosseri, W. T. Free-man, M. Rubinstein, M. Irani, and T. Dekel, “Speednet: Learning the speediness in videos,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2020, pp. 9922–9931. [31] Z. Chang, X. Zhang, S. Wang, S. Ma, Y. Ye, X. Xin-guang, and W. Gao, “Mau: A motion-aware unit for video prediction and beyond,” Advances in Neural Information Processing Systems , vol. 34, pp. 26 950–26 962, 2021. [32] H. Wu, Z. Yao, J. Wang, and M. Long, “Motionrnn: A flexible model for video prediction with spacetime-varying motions,” in Proceedings of the IEEE/CVF con-ference on computer vision and pattern recognition ,2021, pp. 15 435–15 444. [33] X. Bei, Y. Yang, and S. Soatto, “Learning semantic-aware dynamics for video prediction,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2021, pp. 902–912. [34] H. Wu, F. Xu, C. Chen, X.-S. Hua, X. Luo, and H. Wang, “Pastnet: Introducing physical inductive biases for spatio-temporal video prediction,” in Proceedings of the 32nd ACM International Conference on Multimedia , 2024, pp. 2917–2926. [35] L. Gan, J. Lai, J. Ju, L. Gao, and Y. Bin, “Dfdnet: Disentangling and filtering dynamics for enhanced video prediction,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 39, no. 3, 2025, pp. 3059– 3067. [36] K. Zhang, Z. Yang, M. Han, H. Hao, Y. Zhuge, C. Li, Z. Li, X. Chang et al. , “Progressive online video under-standing with evidence-aligned timing and transparent decisions,” in The Fourteenth International Conference on Learning Representations .[37] S. Routray, H. Pan, U. Jain, S. Bahl, and D. Pathak, “Vipra: Video prediction for robot actions,” NeurIPS ,2025. [38] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image recognition,” in Proceedings of the IEEE conference on computer vision and pattern recog-nition , 2016, pp. 770–778. [39] J. Philion and S. Fidler, “Lift, splat, shoot: Encoding images from arbitrary camera rigs by implicitly unpro-jecting to 3d,” in Computer Vision–ECCV 2020: 16th Eu-ropean Conference, Glasgow, UK, August 23–28, 2020, Proceedings, Part XIV 16 . Springer, 2020, pp. 194–210. [40] H. Caesar, V. Bankiti, A. H. Lang, S. Vora, V. E. Liong, Q. Xu, A. Krishnan, Y. Pan, G. Baldan, and O. Bei-jbom, “nuscenes: A multimodal dataset for autonomous driving,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2020. [41] X. Wang, Z. Zhu, W. Xu, Y. Zhang, Y. Wei, X. Chi, Y. Ye, D. Du, J. Lu, and X. Wang, “Openoccupancy: A large scale benchmark for surrounding semantic oc-cupancy perception,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 17 850–17 859. [42] J. Houston, G. Zuidhof, L. Bergamini, Y. Ye, L. Chen, A. Jain, S. Omari, V. Iglovikov, and P. Ondruska, “One thousand and one hours: Self-driving motion prediction dataset,” in Conference on Robot Learning . PMLR, 2021, pp. 409–418. [43] J. Dai, H. Qi, Y. Xiong, Y. Li, G. Zhang, H. Hu, and Y. Wei, “Deformable convolutional networks,” in 
+
+Proceedings of the IEEE international conference on computer vision , 2017, pp. 764–773. [44] C. Zhang, J. Yan, Y. Wei, J. Li, L. Liu, Y. Tang, Y. Duan, and J. Lu, “Occnerf: Self-supervised multi-camera oc-cupancy prediction with neural radiance fields,” CoRR ,2023. [45] Y. Wei, L. Zhao, W. Zheng, Z. Zhu, Y. Rao, G. Huang, J. Lu, and J. Zhou, “Surrounddepth: Entangling sur-rounding views for self-supervised multi-camera depth estimation,” in Conference on robot learning . PMLR, 2023, pp. 539–549. [46] Z. Luo, J. Ma, Z. Zhou, and G. Xiong, “Pcpnet: An efficient and semantic-enhanced transformer network for point cloud prediction,” IEEE Robotics and Automation Letters , vol. 8, no. 7, pp. 4267–4274, 2023. [47] X. Zhu, H. Zhou, T. Wang, F. Hong, Y. Ma, W. Li, H. Li, and D. Lin, “Cylindrical and asymmetrical 3d convo-lution networks for lidar segmentation,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2021, pp. 9939–9948. [48] X. Shi, Z. Chen, H. Wang, D.-Y. Yeung, W.-K. Wong, and W.-c. Woo, “Convolutional lstm network: A machine learning approach for precipitation nowcasting,” Ad-vances in neural information processing systems , vol. 28, 2015. [49] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, Ł. Kaiser, and I. Polosukhin, “Attention is all you need,” Advances in neural informa-tion processing systems , vol. 30, 2017. [50] K. Cho, B. Van Merri¨ enboer, C ¸ . Gulc ¸ehre, D. Bahdanau, F. Bougares, H. Schwenk, and Y. Bengio, “Learning phrase representations using rnn encoder–decoder for sta-tistical machine translation,” in Proceedings of the 2014 conference on empirical methods in natural language 12 
+
+processing (EMNLP) , 2014, pp. 1724–1734.

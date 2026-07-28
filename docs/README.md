@@ -6,30 +6,24 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-27
-- 运行时间：2026-07-27 20:12:31 UTC
+- 最新运行日期：2026-07-28
+- 运行时间：2026-07-28 21:39:17 UTC
 - 运行状态：成功
-- 本次总论文数：3
+- 本次总论文数：1
 - 精读区：0
-- 速读区：3
+- 速读区：1
 
 ### 今日简报（AI）
-今日阅读3篇6分论文，涵盖3D OCT稀疏标注分割、3D占用预测及单图像物理属性推理。重点关注PC-Seg的渐进跨视图一致性方法和SiPhy的物理属性推理思路。建议优先了解PC-Seg如何利用少量标注实现高质量分割，或探索SiPhy从单图推理材质、光照等属性的技术。
-- 详情：[/202607/27/README](/202607/27/README)
+今日速读1篇论文《InterOCF》，聚焦相机仅4D占用预测的时空2D-3D交互方法。值得关注的方向是仅用视觉传感器实现4D占用预测，无需雷达或激光雷达。建议关注该方案在自动驾驶感知中的实用潜力，后续可深入对比不同2D-3D融合方案。
+- 详情：[/202607/28/README](/202607/28/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [PC-Seg: Progressive Cross-View Consistency for 3D OCT Segmentation from Sparse 2D Annotations](/202607/27/2607.17718v2-pc-seg-progressive-cross-view-consistency-for-3d-oct-segmentation-from-sparse-2d-annotations)  
+1. [InterOCF: Spatio-Temporal 2D-3D Interaction for Camera-Only 4D Occupancy Forecasting](/202607/28/2607.24431v1-interocf-spatio-temporal-2d-3d-interaction-for-camera-only-4d-occupancy-forecasting)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：渐进式跨视图一致性用于稀疏二维标注的三维分割
-2. [Learning Adaptive Semantic Gaussian Allocation for 3D Occupancy](/202607/27/2607.21896v1-learning-adaptive-semantic-gaussian-allocation-for-3d-occupancy)  
-   标签：评分：6.0/10、query:open-vocab-d
-   evidence：自适应语义高斯分配用于三维占用预测
-3. [SiPhy: Single-Image Physical Property Reasoning](/202607/27/2607.22355v1-siphy-single-image-physical-property-reasoning)  
-   标签：评分：6.0/10、query:open-vocab-d
-   evidence：将CLIP特征投影到3D伪体素点
+   evidence：时空2D-3D交互用于4D占用；多视图语义特征聚合
 
 
 <div class="dpr-home-promo-card">
