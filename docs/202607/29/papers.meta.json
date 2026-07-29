@@ -1,0 +1,54 @@
+{
+  "label": "2026-07-29",
+  "date": "2026-07-29",
+  "generated_at": "2026-07-29T21:41:11",
+  "count": 3,
+  "papers": [
+    {
+      "paper_id": "202607/29/2607.25106v1-imprint-image-conditioned-query-enrichment-for-long-tail-object-goal-navigation",
+      "section": "quick",
+      "title_en": "IMPRINT: Image-Conditioned Query Enrichment for Long-Tail Object Goal Navigation",
+      "authors": "Jelin Raphael Akkara, Filippo Ziliotto, Luciano Serafini, Lamberto Ballan, Tommaso Campari",
+      "date": "2026-07-27",
+      "pdf": "https://arxiv.org/pdf/2607.25106v1",
+      "score": "6.0",
+      "evidence": "2D CLIP图像查询增强用于零样本物体导航，类似于2D到3D投影",
+      "tldr": "针对长尾目标对象导航中文本查询语义特异性不足的问题，提出IMPRINT零样本框架。该框架利用网络图像丰富文本查询，通过视觉语言模型与语义地图匹配生成相似度图，最终聚合实现上下文感知定位。在OVON和HSSD-rare基准上，图像条件查询持续提升目标定位与端到端导航性能，同时揭示了下游检测质量对导航增益的关键瓶颈。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "Embodied AI increasingly relies on queryable semantic maps built from pre-trained vision-language models to enable zero-shot Object Goal Navigation (ObjectNav). However, existing approaches typically depend on text-only queries, which become less reliable as semantic specificity increases toward fine-grained object categories. We introduce IMPRINT, a zero-shot plug-and-play framework that enriches textual object queries with web-sourced images to improve grounding in queryable maps. Retrieved images are encoded using a vision-language model, matched against the semantic map to produce similarity maps, and aggregated to yield context-aware localization. Notably, this requires no training or modification of the underlying navigation policy. To explicitly evaluate long-tail behavior, we present HSSD-rare, a new ObjectNav benchmark built on Habitat Synthetic Scenes and featuring semantically specific subcategories. Across both OVON and HSSD-rare, image-conditioned queries consistently improve object grounding and yield end-to-end navigation gains. Further analysis reveals that translating localization gains to navigation performance depends critically on downstream detection quality, highlighting a key systems bottleneck in long-tail embodied navigation.",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    },
+    {
+      "paper_id": "202607/29/2607.25362v1-panoless-environment-reconstruction-from-partial-reflective-views",
+      "section": "quick",
+      "title_en": "PanoLess: Environment Reconstruction from Partial Reflective Views",
+      "authors": "Ahitagni Das, Ashok Veeraraghavan, Vivek Boominathan",
+      "date": "2026-07-28",
+      "pdf": "https://arxiv.org/pdf/2607.25362v1",
+      "score": "6.0",
+      "evidence": "基于高斯泼溅的反射视图环境重建",
+      "tldr": "从单一侧反射表面捕获的图像中重建周围环境照明图是挑战性的，现有方法依赖360度全景覆盖。PanoLess提出基于高斯泼溅的框架，利用表面对齐的2D高斯泼溅和延迟着色恢复精确法线和反射线索，融合为神经立方体贴图表示，并生成可见性图指示支持区域。在合成和真实数据上，PanoLess实现了高保真、几何一致的重建，优于反射感知基线。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "Reflections from shiny objects and glass facades naturally extend the field of view of a camera, capturing the surrounding environment without the need to pan the camera or acquire a full panorama. We propose PanoLess, a Gaussian-splat-based framework that reconstructs the surrounding environment as a distant illumination map from images captured on only one side of a reflective surface. PanoLess leverages surface-aligned 2D Gaussian splats with deferred shading to recover accurate per-pixel normals and reflection cues, which are fused into a neural cubemap representation of the environment. In addition, PanoLess produces a visibility map that explicitly denotes which regions of the environment are supported by the partial reflective observations. Unlike existing inverse-rendering and reflection-aware Gaussian-splatting approaches, which typically require full 360-degree coverage and struggle under incomplete views, PanoLess enables consistent, physically grounded illumination estimation from partial-view input. We show that PanoLess achieves high-fidelity and geometrically consistent environment reconstruction, outperforming reflection-aware baselines on a new custom synthetic benchmark and publicly available datasets, and demonstrating generalization to real-world reflective captures.",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    },
+    {
+      "paper_id": "202607/29/2607.25912v1-sam3d-guided-object-centric-representation-alignment-for-vision-language-action-models",
+      "section": "quick",
+      "title_en": "SAM3D-Guided Object-Centric Representation Alignment for Vision-Language-Action Models",
+      "authors": "Zonghe Liu, Shanyuan Jie, Xiaoquan Sun, Chen Cao, Zetian Xu, Zongsheng Liu, Jiayu Chen",
+      "date": "2026-07-28",
+      "pdf": "https://arxiv.org/pdf/2607.25912v1",
+      "score": "6.0",
+      "evidence": "使用SAM3D提取3D物体掩码和表示进行对齐",
+      "tldr": "现有VLA模型依赖2D视觉语言骨干，缺乏对目标物体的细粒度3D理解，在遮挡、姿态变化等场景下表现不佳。本文提出基于SAM3D的物体中心表示对齐框架，在训练时利用SAM3D作为冻结的3D教师提取目标物体3D先验，并与π0的中间视觉特征对齐，使策略内化3D信息。在LIBERO和CALVIN模拟实验中分别达到99.1%成功率和平均4.11步长，真实世界长时任务中效果显著。该方法在不增加测试时计算开销的前提下，有效提升了策略的3D感知与泛化能力。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "Vision-Language-Action (VLA) models have shown strong potential for general robot manipulation, but most existing models rely on 2D visual-language backbones and lack fine-grained 3D understanding of target objects, especially under occlusion, pose variation, scale changes, and precise spatial interaction. We propose an object-centric 3D representation alignment framework built upon $π_0$, using SAM3D as a frozen 3D teacher to provide target-object 3D priors during training. Specifically, we localize task-relevant objects with object recognition models, generate corresponding object masks, and use SAM3D to extract dense object-level 3D representations, which are aligned with intermediate visual features of $π_0$. This enables the policy to internalize target-object 3D information while preserving the original RGB-language-to-action inference pipeline without requiring depth, point clouds, masks, SAM3D, or additional 3D modules at test time. Simulation experiments show consistent improvements, achieving 99.1\\% on LIBERO and an average length of 4.11 on CALVIN. Real-world experiments further demonstrate that our method is particularly effective in long-horizon manipulation scenarios where the robot must focus on different target objects across multiple subtasks.",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    }
+  ],
+  "errors": []
+}
