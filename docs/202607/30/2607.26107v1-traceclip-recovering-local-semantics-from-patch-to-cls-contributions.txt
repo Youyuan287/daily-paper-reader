@@ -1,0 +1,353 @@
+Title: TraceCLIP: Recovering Local Semantics from Patch-to-CLS Contributions
+
+URL Source: https://arxiv.org/pdf/2607.26107v1
+
+Published Time: Thu, 30 Jul 2026 00:04:04 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# TraceCLIP: Recovering Local Semantics from Patch-to-CLS Contributions 
+
+## Xinran Liu, Shouqian Shi †, Yutong Chen, Ge Wang, Xin-Wei Yao, Sheng Zhong 
+
+> †
+
+Corresponding author: sqlite@nju.edu.cn 
+
+# Abstract 
+
+Dense vision-language understanding, including object local-ization, region recognition, and open-vocabulary semantic segmentation, requires associating language concepts with spatially grounded visual regions. CLIP provides a strong foundation for these tasks by learning a shared image-text embedding space from large-scale contrastive pre-training. However, its image-level objective aligns text with a CLS-derived global representation, leaving local vision-language correspondence only indirectly constrained. Existing meth-ods either introduce additional supervision, external models, or task-specific adaptation, while training-free approaches mainly recover dense responses from existing patch features without examining where local semantics become most acces-sible within CLIP. We introduce TraceCLIP , a training-free framework that recovers latent patch-level semantic evidence by isolating the patch-specific terms written into the CLS attention output. TraceCLIP further converts contribution-derived semantic responses into a semantic-geodesic topology gate that calibrates final-layer patch affinity for dense feature reconstruction. Diagnostic experiments show that these contri-bution features exhibit strong local semantic discrimination and text-conditioned spatial alignment. On eight zero-shot semantic segmentation benchmarks, TraceCLIP achieves gains of 1.3–4.5 points in average mIoU over the strongest prior training-free methods across both backbones and background settings, without additional training, external vision founda-tion models, or region-level supervision. More broadly, these findings suggest that spatially localized semantics may remain accessible within the internal construction of globally aligned representations. 
+
+# Introduction 
+
+Dense vision-language understanding requires local represen-tations that are both spatially grounded and aligned with lan-guage. Such representations support open-vocabulary object detection, phrase grounding, region recognition, and semantic segmentation Minderer et al. (2022); Li et al. (2022b); Liu et al. (2024); Zhong et al. (2022); Li et al. (2022a); Rao et al. (2022). CLIP provides a strong foundation for these tasks by learning a joint image-text embedding space from large-scale contrastive pre-training Radford et al. (2021). However, in ViT-based CLIP encoders Dosovitskiy et al. (2021), the image represen-tation used for contrastive alignment is derived from the final CLS token. This produces strong global image-text alignment, but leaves patch-level vision-language correspondence only indirectly constrained. Existing approaches transfer CLIP’s global alignment to local prediction through region-level supervision, mask anno-tations, image-level dense adaptation, or task-specific training Gu et al. (2022); Zhong et al. (2022); Li et al. (2022a); Xu et al. (2022); Ghiasi et al. (2022); Zhou, Loy, and Dai (2022); Liang et al. (2023). Although effective, these methods introduce additional optimization, supervision, or external components. Training-free methods instead keep CLIP frozen and improve dense inference through attention redesign, spatial consistency, or affinity-based feature propagation Wang, Mei, and Yuille (2024); Lan et al. (2024); Hajimiri, Ben Ayed, and Dolz (2025). Their primary focus is how to transform existing patch states into better dense responses. A more fundamental question remains less explored: where within CLIP’s computation does local semantic evidence become most directly accessible? This question extends beyond improving a particular dense prediction pipeline. It reflects a broader representation problem in globally aligned models: information useful for local or structured prediction may participate in constructing the global representation. Recovering such information from internal computation provides a complementary direction to additional training or architectural adaptation. We revisit the construction of CLIP’s language-aligned image representation. Within each self-attention block, the CLS attention update is an additive combination of weighted value components written from individual token positions. The patch-specific terms in this update therefore provide a direct trace of how local visual evidence contributes to the CLS pathway. By isolating these patch-to-CLS contributions and reading them out in the CLIP joint embedding space, we obtain patch-level features that can be directly compared with text embeddings. Rather than treating decomposition only as an interpretability tool, we use it as a representation-recovery mechanism that turns the internal terms constructing a global embedding into reusable local representations. Our diagnostic analysis supports this view. Across region classification, text-conditioned localization, and late-block component analysis, patch-to-CLS contribution features are substantially more discriminative and spatially aligned than final patch-token states. The results further show that local semantic evidence is clearly exposed in the attention contri-1arXiv:2607.26107v1 [cs.CV] 28 Jul 2026 bution pathway but becomes less accessible after residual and MLP mixing. These findings indicate that frozen CLIP already contains useful spatially grounded semantic evidence, provided that it is read from the appropriate internal pathway. Based on this observation, we propose TraceCLIP , a training-free framework for recovering dense CLIP features from patch-to-CLS contributions. Direct contribution–text matching provides informative local semantic responses, but independent patch-wise predictions lack the spatial coherence required for dense segmentation. TraceCLIP therefore uses these responses to construct preliminary semantic labels and confidence scores, from which it derives a semantic-geodesic topology gate. The gate calibrates final-layer query-query affin-ity before value aggregation, allowing dense reconstruction to preserve visual correlation while suppressing propagation across confident semantic boundaries. The entire framework keeps both CLIP encoders frozen and requires no additional training, external vision foundation models, or region-level supervision. Our contributions are summarized as follows: 
+
+• We identify a representation gap between final patch states and the patch-specific terms that construct CLIP’s global embedding, showing that the patch-to-CLS contribution pathway provides an explicit internal source of localized vision-language evidence. 
+
+• We provide diagnostic evidence through region classifi-cation, text-conditioned localization, and late-block com-ponent analysis, showing that contribution features are more discriminative and spatially grounded than standard patch-level readouts. 
+
+• We propose TraceCLIP , which converts contribution-derived semantic responses into a semantic-geodesic topology gate for calibrating final-layer patch affinity and reconstructing dense features without training. Experi-ments on eight zero-shot semantic segmentation bench-marks show that TraceCLIP improves average mIoU over the strongest prior training-free methods by 1.3–4.5 points across both evaluated backbones and background settings. 
+
+# Related Work 
+
+## Global-to-Local Transfer in CLIP 
+
+CLIP learns a joint image-text embedding space from image-level contrastive supervision and has become a strong foun-dation for open-vocabulary visual recognition Radford et al. (2021). However, spatially grounded vision-language predic-tion requires localized representations that can be compared with text embeddings at the object, region, mask, or pixel level. A broad body of work therefore studies how to transfer CLIP’s global image-text alignment to local prediction. Representa-tive methods extend CLIP-style vision-language knowledge to open-vocabulary detection, grounding, region recognition, and semantic segmentation by introducing localization-aware training objectives, additional prediction modules, or task-specific adaptation strategies Gu et al. (2022); Zhong et al. (2022); Minderer et al. (2022); Li et al. (2022b); Liu et al. (2024); Li et al. (2022a); Xu et al. (2022); Ghiasi et al. (2022); Rao et al. (2022); Cha, Mun, and Roh (2023); Liang et al. (2023). These methods differ in task formulation and supervision granularity, but they commonly introduce extra learning or adaptation to obtain localized vision-language alignment be-yond the original CLIP training objective. Our work studies a different setting: the CLIP image encoder remains frozen, and local semantic evidence is recovered from its internal compu-tation rather than learned through additional local supervision or adaptation modules. 
+
+## Training-Free Dense Prediction with Frozen CLIP 
+
+A closely related line of work repurposes frozen CLIP for dense vision-language inference without parameter updates. MaskCLIP shows that dense predictions can be extracted from CLIP features in a training-free manner Zhou, Loy, and Dai (2022). ReCo retrieves concept-relevant image collections and co-segments their shared visual regions to transfer CLIP-derived semantic cues to zero-shot segmentation Shin, Xie, and Albanie (2022). Subsequent methods improve frozen-CLIP dense prediction by modifying attention computation, adjust-ing late visual blocks, enforcing local consistency, introducing proxy spatial correspondences, or refining dense responses with semantic feedback Wang, Mei, and Yuille (2024); Lan et al. (2024); Hajimiri, Ben Ayed, and Dolz (2025). These methods demonstrate that frozen CLIP contains useful signals for dense prediction and that its inference-time computation can be adapted without retraining. Their focus is mainly on how to obtain better dense responses from existing patch-level states, attention maps, or affinity structures. However, instead of focusing on how patch-token features should be transformed, we shift the emphasis to where the most effective local semantic evidence resides. We accordingly explore the patch-to-CLS contribution path in detail, maintaining the training-free style while improving dense prediction accuracy. 
+
+## CLIP Representation Analysis 
+
+In ViT-based CLIP, the image representation used for con-trastive learning is derived from the final class token, commonly referred to as the CLS token, while patch tokens interact with it through self-attention Dosovitskiy et al. (2021); Radford et al. (2021). This architecture suggests that patch-level visual evidence may participate in constructing the global image representation aligned with text. Recent work analyzes CLIP image representations through text-based decomposition, where the final image embedding is decomposed into layer-, head-, and patch-level contributions and interpreted with text embeddings Gandelsman, Efros, and Steinhardt (2024). This provides a way to trace how 2local visual evidence contributes to the CLS-derived image representation. Different from using decomposition mainly for post-hoc interpretation of global image-text similarity, we use the patch-to-CLS contribution path as a source of local vision-language features for dense prediction. We further convert contribution responses into a semantic affinity prior, making decomposition part of a training-free dense feature recovery method. 
+
+# Patch-to-CLS Contributions as Local Se-mantic Evidence 
+
+## Patch-to-CLS Contribution Decomposition 
+
+A ViT-based CLIP image encoder represents an image at layer l as Xl = [ xl
+
+> 0
+
+, x l
+
+> 1
+
+, . . . , x lN ], where xl 
+
+> 0
+
+is the CLS token and xli, i ≥ 1, denotes a patch token. Because the multi-head self-attention output is additive over attention heads and source-token positions, the CLS attention update can be decomposed into token-head terms. We therefore isolate the image-patch terms written into the CLS attention output and use them as local vision-language features. For the multi-head self-attention block at layer l, let Al,h 
+
+> 0i
+
+denote the attention coefficient from the CLS token to token 
+
+i in head h, and let W l,h OV denote the corresponding value-to-output transition matrix. We define the CLIP-space readout of the contribution of token i through head h to the CLS attention output as 
+
+Cl,h i = Wproj 
+
+
+
+Al,h  
+
+> 0i
+
+W l,h OV LN( xli)
+
+
+
+, (1) where LN denotes the pre-attention layer normalization and 
+
+Wproj denotes the CLIP visual projection. Eq. 1 maps a token-head term in the CLS attention update into the CLIP joint embedding space. To obtain a patch-level feature, we retain the image-patch terms and aggregate their contributions over attention heads. For i = 1 , . . . , N , we define 
+
+Cli =
+
+> H
+
+X
+
+> h=1
+
+Cl,h i . (2) We refer to Cli as the patch-to-CLS contribution feature of patch i at layer l. Since it represents the component written from patch i into the CLS attention output and is read out in the CLIP joint embedding space, it can be directly compared with text embeddings and used as a local vision-language feature. 
+
+## Probing Local Semantics in Contribution Fea-tures 
+
+We conduct diagnostic experiments on the COCO valida-tion set Lin et al. (2014) to answer three questions: whether patch-to-CLS contributions contain category-discriminative local semantics, whether their responses are spatially aligned with the corresponding objects, and where the gap between contribution features and final patch states arises. (a) CLIP ViT Block at Layer 𝐀 (b) Decomposition within MHSA            
+
+> (c) CLIP-space readout
+> Multi-Head
+> Self-Attention
+> LayerNorm
+> 𝐀 𝐀 = { 𝐀 𝐀
+> 𝐀 ,𝐀 𝐀
+> 𝐀 , …, 𝐀 𝐀
+> 𝐀 }
+> 𝐀 𝐀 𝐀
+> 𝐀 ,𝐀 𝐀 𝐀𓠀
+> 𝐀 ,𝐀 𝐀𒰀 (𝐀 𝐀
+> 𝐀 )
+> ×𝐀 𝐀 𝐀
+> 𝐀 ,𝐀
+> 𝐀 𝐀𓠀
+> 𝐀 ,𝐀 𝐀𒰀 (𝐀 𝐀
+> 𝐀 )
+> 𝐀𒰀 (𝐀 𝐀
+> 𝐀 )
+> 𝐀 𝐀
+> 𝐀
+> 𝐀 =𝐀
+> 𝐀
+> 𝐀 𝐀
+> 𝐀 ,𝐀
+> 𝐀 𝐀
+> 𝐀 ,𝐀
+> 𝐀 𝐀𴐀𝐀𴰀
+> +
+> MLP
+> LayerNorm
+> +
+> 𝐀 𝐀 +𝐀
+> 𝐀 𝐀𓠀
+> 𝐀 ,𝐀 𝐀𒰀 (𝐀 𝐀
+> 𝐀 )
+> 𝐀𒰀 (𝐀 𝐀
+> 𝐀 )
+
+Figure 1: Patch-to-CLS contribution decomposition. Al,h 
+
+> 0i
+
+denotes the attention weight from the CLS token to patch i in head h, W l,h OV is the corresponding value-to-output transition matrix, and Wproj is the CLIP visual projection. The resulting CLIP-space token-head contributions Cl,h i are aggregated over heads to obtain Cli .
+
+Feature sources and probing setup. We compare three representative feature sources. 1) Final patch , obtained by applying CLIP’s visual post-layer normalization and visual projection to the final patch-token states. 2) V (−1) , the value feature from the last self-attention block, merged across heads and projected into the CLIP joint embedding space. 3) C(−k),the patch-to-CLS contribution feature from the k-th visual block from the end. Compared with V (−1) , C(−k) additionally incorporates the attention weight assigned by the CLS query to each patch and therefore represents the patch-specific content written into the CLS attention update. 
+
+Region-level semantic discrimination. We first test whether each feature source supports category discrimination within a localized region. Given a ground-truth box b, we average the features of patches whose centers fall inside the box and compare the pooled feature with category text embeddings: 
+
+rb = 1
+
+|P (b)|
+
+X
+
+> i∈P (b)
+
+fi, s(b, y ) = cos( rb, t y ), (3) where fi is the feature of patch i, ty is the text embedding of category y, and P(b) denotes the corresponding patch set. Ground-truth boxes isolate representation quality from proposal generation and non-maximum suppression. We report the Top-1 category accuracy as Region Acc. 
+
+Text-conditioned spatial alignment. Region classification does not determine whether responses are spatially concen-trated on the target object. We therefore compare each patch feature with the target-category text embedding and report two localization metrics. Pointing Acc. measures whether the highest-response patch lies inside the ground-truth box. In–Out 
+
+3Feature Reg. Acc. Point. Acc. In–Out Gap                                       
+
+> ViT-B/16
+> Final patch 11.3 19.9 -0.042
+> V(−1) 8.4 21.8 0.000
+> C(−4) 7.9 38.4 0.021
+> C(−3) 25.5 60.9 0.132
+> C(−2) 37.0 62.7 0.215
+> C(−1) 43.1 65.7 0.275
+> ViT-L/14
+> Final patch 8.7 14.0 -0.048
+> V(−1) 7.4 26.4 0.005
+> C(−4) 35.8 60.8 0.188
+> C(−3) 32.9 60.9 0.180
+> C(−2) 42.8 64.9 0.257
+> C(−1) 47.1 68.9 0.287
+
+Table 1: Local semantic probing on the COCO validation set. Reg. Acc. and Point. Acc. are reported in percentages. In– Out Gap denotes the inside–outside target-category response difference. 
+
+Gap is the mean target-category response inside the box minus that outside the box, averaged over all evaluated objects. The two metrics respectively measure peak localization and overall object-background separation. Table 1 reveals a clear accessibility gap between contri-bution features and conventional patch-level readouts. Final patch states and V (−1) provide weak region discrimination and localization, whereas near-final contribution features substan-tially improve all three metrics. For ViT-B/16, C(−1) raises Region Acc. and Pointing Acc. from 11.3% and 19.9% to 43.1% and 65.7%, respectively. For ViT-L/14, the correspond-ing improvements are from 8.7% and 14.0% to 47.1% and 68.9%. Performance generally improves toward the final visual blocks, with C(−1) achieving the best result on every metric and both backbones. The gap between V (−1) and C(−1) suggests that CLS attention weighting selects patch evidence that is more strongly aligned with the language-supervised global pathway. The positive In–Out Gap further shows that this evidence is spatially concentrated within target object regions. To qualitatively examine this layer-wise behavior, we visu-alize the text-conditioned responses of contribution features from the last four visual blocks in Fig. 2. Figure 2 confirms the same trend. Earlier contribution features produce diffuse responses, whereas near-final features become more concentrated on the target object, with maximum-response patches moving closer to annotated regions from 
+
+C(−4) to C(−1) .
+
+Late-block component analysis. We next inspect the last transformer block to identify where the gap between contribu-tion features and final patch states emerges. Let Xin denote the block input, U the self-attention output, and Xattn = Xin + U
+
+the attention-updated state. Let M denote the MLP output and 
+
+Xout = Xattn + M the final block output. After CLIP’s post-
+
+Figure 2: Layer-wise text-conditioned response maps of patch-to-CLS contribution features on CLIP ViT-B/16. Green boxes denote ground-truth boxes and white dots denote maximum-response patches.                                              
+
+> Source Reg. Acc. Point. Acc. In–Out Gap
+> ViT-B/16
+> Input 5.2 15.7 -0.013 Attn. output 35.7 48.9 0.091 Attn. + residual 15.1 19.2 -0.043 MLP output 0.4 26.2 0.002 Final output 11.3 19.9 -0.042 Mean-MLP repl. 10.6 18.1 -0.046 Contribution 43.1 65.7 0.275
+> ViT-L/14
+> Input 0.9 12.2 -0.014 Attn. output 37.9 55.5 0.111 Attn. + residual 9.9 13.8 -0.048 MLP output 3.2 26.4 0.013 Final output 8.7 14.0 -0.048 Mean-MLP repl. 8.7 13.6 -0.050 Contribution 47.1 68.9 0.287
+
+Table 2: Late-block component analysis on the COCO valida-tion set. Reg. Acc. and Point. Acc. are reported in percentages. In–Out Gap denotes the inside–outside target-category re-sponse difference. layer normalization and visual projection, Xout corresponds to the Final patch readout. We evaluate the block input, attention output, attention-updated state, MLP output, final output, and patch-to-CLS contribution feature separately. We also use a mean-MLP replacement, in which the MLP output at every patch position is replaced by its spatial mean before residual addition. This removes patch-specific MLP variation while preserving the shared update, allowing us to test whether the degradation is primarily caused by the MLP. Table 2 shows that the final self-attention block actively produces useful local semantic evidence. On ViT-B/16, the attention output improves Region Acc. from 5.2% to 35.7% and Pointing Acc. from 15.7% to 48.9% relative to the block input, with a similar trend on ViT-L/14. However, much of this advantage disappears after residual 4dog 
+
+> tree
+> parterre
+> fence
+> ...
+> CLIP
+> Text
+> Encoder
+> T
+> C
+
+cos   
+
+> (b) Semantic-Geodesic Gate
+> (b)  Semantic-Geodesic Gat e
+> QCLIP
+> Image
+> Encoder
+> G
+> (c) Affinity Calibration
+> (c)  Affinity Calibration
+> V
+> Value Aggregation
+> Upsampling
+> G
+> Q
+> QT
+> A
+> G
+
+× 
+
+> Ã
+> (a) O verview
+> argmax
+> Edge Cost DPL
+
+Figure 3: Overview of TraceCLIP . The frozen CLIP encoders produce text embeddings T , patch-to-CLS contribution features 
+
+C, and final-layer query and value features Q and V . Contribution–text similarities yield preliminary semantic labels L and confidence scores P , from which the semantic-geodesic distance matrix D and topology gate G are constructed. The gate calibrates the query-query affinity A to obtain eA, which aggregates V to reconstruct dense patch features for final segmentation. Head indices are omitted for clarity. The exponent λ, numerical stabilizer ε, and row normalization in affinity calibration are also omitted from the diagram for visual clarity. addition: Region Acc. drops from 35.7% to 15.1% on ViT-B/16 and from 37.9% to 9.9% on ViT-L/14. The weak MLP output and mean-MLP replacement indicate that the degradation is not introduced solely by the final MLP. Instead, local semantics become less directly accessible when the attention update is mixed with the residual patch states. Patch-to-CLS contributions achieve the strongest results, out-performing the complete attention output. This indicates that CLS attention weighting further selects the patch components most relevant to the language-aligned global representation. Thus, local semantics are present in the frozen encoder but are exposed more clearly in the contribution pathway than through the final patch-token interface. This observation motivates TraceCLIP to use contribution features as semantic guidance while retaining final-layer affinity and value features for dense reconstruction. 
+
+# TraceCLIP 
+
+The previous section shows that patch-to-CLS contribution features expose more reliable local semantic evidence than final patch states. Directly using them as segmentation scores, however, ignores the spatial aggregation required by dense pre-diction. TraceCLIP therefore converts contribution responses into a semantic-geodesic topology gate that calibrates final-layer patch affinity. The entire framework is training-free and keeps both CLIP encoders frozen, as illustrated in Fig. 3. 
+
+## Contribution-Based Semantic Prior 
+
+Given an image and candidate category names, the frozen CLIP encoders produce normalized text embeddings and final-layer patch-to-CLS contribution features, which lie in the shared image-text embedding space and can therefore be directly compared. Let C ∈ RN ×d denote the contribution feature matrix, where N is the number of patches and d is the joint embedding dimension. Let T ∈ RK×d denote the text embedding matrix of K candidate classes. The contribution-based response matrix is 
+
+Scon = CT T. (4) For each patch i, we take the class with the largest response as its preliminary semantic label Li. The corresponding softmax probability, computed after applying the logit scale, is used as its confidence score Pi. These preliminary labels and confidence scores provide semantic region and boundary cues for subsequent affinity calibration. 
+
+## Semantic-Geodesic Topology Gate 
+
+Final-layer patch affinity can aggregate spatial information, but it may also propagate features across semantic boundaries. To restrict such propagation, we build a graph over the patch grid using the preliminary labels L and confidence scores 
+
+P . Each patch is a node, and edges are built only between four-neighboring patches. For a neighboring patch pair (i, j ), let mij = 1 if Li̸ = Lj
+
+5and mij = 0 otherwise. We define the boundary confidence as cij = min( Pi, P j ). The edge cost is 
+
+wij = 1 + βm ij cij , (5) where β controls the semantic boundary penalty. Same-label neighbors have the base cost 1, while different-label neigh-bors receive an additional confidence-weighted cost. Thus, confident semantic boundaries become harder to cross. We compute the shortest-path distance Dij between every pair of patches on this graph and collect the distances into 
+
+D ∈ RN ×N . This distance measures how easily information can travel from patch i to patch j through four-neighbor connections. We then convert the distance into a topology gate: 
+
+Gij = exp  −D2 
+
+> ij
+
+/2σ2PNr=1 exp ( −D2 
+
+> ir
+
+/2σ2) . (6) The resulting matrix G ∈ RN ×N is the semantic-geodesic topology gate. The parameter σ controls its effective geodesic range: a larger σ preserves stronger connections over longer geodesic distances, whereas a smaller σ concentrates the gate on geodesically closer patches. Each row of G sums to one. 
+
+## Affinity Calibration and Dense Reconstruction 
+
+We next use the semantic-geodesic topology gate to calibrate final-layer patch affinity. Let Qh and V h denote the final-layer query and value feature matrices in attention head h,respectively, and let dh be the head dimension. Following ClearCLIP Lan et al. (2024), we construct the patch affinity using query-query similarity: 
+
+Ah = softmax row 
+
+ Qh(Qh)T
+
+√dh
+
+
+
+. (7) Here Ah is the final-layer patch affinity matrix in head h.Query-query similarity provides an effective measure of patch-level correlation for dense CLIP inference, but it may still connect visually similar patches across semantic boundaries. We therefore calibrate Ah using the contribution-derived topology gate: 
+
+eAhij = (Ahij + ε)( Gij + ε)λ
+
+PNr=1 (Ahir + ε)( Gir + ε)λ . (8) Here λ controls the calibration strength and ε is a small constant for numerical stability. A patch pair receives a high propagation weight only when it is supported by both final-layer visual affinity and contribution-derived semantic topology. Consequently, cross-boundary propagation is suppressed even when the visual affinity between the patches is high. Finally, the calibrated affinity eAh aggregates the final-layer value features V h in each attention head. The resulting head features are concatenated, passed through the final attention output projection, and then processed by the CLIP visual post-layer normalization and visual projection. The reconstructed patch features are normalized in the image-text embedding space and compared with class text embeddings to obtain dense class scores. The patch-level score maps are upsampled to the image resolution as the final prediction. 
+
+# Experiments 
+
+## Experimental Setup 
+
+Datasets and metrics. We evaluate zero-shot semantic seg-mentation on eight standard benchmarks. The no-background setting includes VOC20 Everingham et al. (2010), Con-text59 Mottaghi et al. (2014), COCO-Stuff Caesar, Uijlings, and Ferrari (2018), Cityscapes Cordts et al. (2016), and ADE20K Zhou et al. (2019); the with-background setting includes VOC21 Everingham et al. (2010), Context60 Mot-taghi et al. (2014), and COCO-Object Lin et al. (2014). We report mIoU on all datasets. 
+
+Backbones and prompts. We evaluate frozen CLIP ViT-B/16 and ViT-L/14 without updating either encoder. For each class, we average normalized text features over the standard OpenAI ImageNet prompt templates. When a category con-tains multiple synonyms, their logits are merged into the corresponding semantic class during post-processing. 
+
+Implementation details. We use sliding-window inference for high-resolution dense prediction. For all datasets except Cityscapes, images are resized with aspect ratio preserved under a maximum resolution of 2048 × 448 ; Cityscapes is evaluated at its original resolution. We use a 448 ×448 window with stride 224 . Patch logits are bilinearly upsampled to the window resolution, averaged over overlapping windows, and finally upsampled to the original image size. The logit scale γ
+
+is set to 50. No training, test-time optimization, or stochastic sampling is used. We use the same hyperparameter protocol for all datasets and backbones. We set β = 1 .0 and λ = 1 .5. For each dataset, 
+
+σ is fixed throughout evaluation, with a scale coefficient of 0.4
+
+used to determine its value. We use ε = 10 −6 as a standard numerical stabilizer. These settings remain unchanged across all experiments and ablations. 
+
+Baselines. We compare with GroupViT Xu et al. (2022), TCL Cha, Mun, and Roh (2023), CLIP Radford et al. (2021), MaskCLIP Zhou, Loy, and Dai (2022), ReCo Shin, Xie, and Albanie (2022), SCLIP Wang, Mei, and Yuille (2024), ClearCLIP Lan et al. (2024), and NACLIP Hajimiri, Ben Ayed, and Dolz (2025) under the same dataset protocol. The reported scores for all baselines except NACLIP follow ClearCLIP Lan et al. (2024), while NACLIP results are taken from Hajimiri, Ben Ayed, and Dolz (2025) under the comparable no-post-processing setting. All TraceCLIP results are obtained from our own implementation without training or external vision models. 6Without Background With Background Method Training-free Encoder VOC20 Ctx59 Stuff City. ADE20K Avg. VOC21 Ctx60 Object Avg.                                                                                                                                                                         
+
+> GroupViT No ViT-S/16 79.7 23.4 15.3 11.1 9.2 27.7 50.4 18.7 27.5 32.2 TCL No ViT-B/16 77.5 30.3 19.6 23.1 14.9 33.1 51.2 24.3 30.4 35.3 CLIP Yes ViT-B/16 41.8 9.2 4.4 5.5 2.1 12.6 16.2 7.7 5.5 9.8 MaskCLIP Yes ViT-B/16 74.9 26.4 16.4 12.6 9.8 28.0 38.8 23.6 20.6 27.7 ReCo Yes ViT-B/16 57.7 22.3 14.8 21.1 11.2 25.4 25.1 19.9 15.7 20.2 SCLIP Yes ViT-B/16 80.4 34.2 22.4 32.2 16.1 37.1 59.1 30.4 30.5 40.0 ClearCLIP Yes ViT-B/16 80.9 35.9 23.9 30.0 16.7 37.5 51.8 32.6 33.0 39.1 NACLIP Yes ViT-B/16 79.7 35.2 23.3 35.5 17.4 38.2 58.9 32.2 33.2 41.4 TraceCLIP Yes ViT-B/16 83.1 36.6 24.6 37.0 17.5 39.8 58.8 34.7 34.5 42.7
+> CLIP Yes ViT-L/14 15.8 4.5 2.4 2.9 1.2 5.4 ––––MaskCLIP Yes ViT-L/14 30.1 12.6 8.9 10.1 6.9 13.7 ––––SCLIP Yes ViT-L/14 60.3 20.5 13.1 17.0 7.1 23.6 44.4 22.3 24.9 30.5 ClearCLIP Yes ViT-L/14 80.0 29.6 19.9 27.9 15.0 34.5 48.7 28.3 29.7 35.5 TraceCLIP Yes ViT-L/14 85.0 33.1 22.6 36.1 18.1 39.0 51.5 31.1 32.7 38.4
+
+Table 3: Zero-shot semantic segmentation results in mIoU on datasets without and with a background category. The two Avg. columns denote the means over VOC20, Context59, COCO-Stuff, Cityscapes, and ADE20K, and over VOC21, Context60, and COCO-Object, respectively. Best results among training-free methods are shown in bold. Dashes indicate results not reported by the corresponding source.                                             
+
+> (a) Dense readout analysis
+> Source VOC20 Ctx59 Stuff City. ADE20K Avg.
+> Final patch 38.1 8.8 4.2 6.9 1.7 11.9
+> C(−3) 33.1 16.6 8.8 16.0 8.0 16.5
+> C(−2) 53.4 17.4 11.3 13.0 6.9 20.4
+> C(−1) 57.0 22.9 14.7 22.6 10.6 25.6 (b) Component ablation
+> Variant Weight Aggregate VAvg. Direct V(−1) readout None No 26.3
+> Ah-weighted VAhYes 37.5
+> G-weighted VGYes 30.1 TraceCLIP eAhYes 39.8
+
+Table 4: Analysis and ablation results with CLIP ViT-B/16 on datasets without a background category, reported in mIoU. In (a), Avg. denotes the mean over VOC20, Context59, COCO-Stuff, Cityscapes, and ADE20K. In (b), all variants are imple-mented and evaluated under the same inference pipeline. Best results in each subtable are shown in bold. 
+
+## Main Results 
+
+Table 3 reports zero-shot semantic segmentation results with and without a background category. With ViT-B/16, Trace-CLIP achieves 39.8 and 42.7 average mIoU in the two settings, outperforming the strongest prior training-free baselines by 1.6 and 1.3 points, respectively. With ViT-L/14, TraceCLIP improves the corresponding averages by 4.5 and 2.9 points. These results show that contribution-derived semantic topol-ogy consistently improves average performance across both backbones and evaluation settings while keeping CLIP fully frozen. 
+
+## Analysis and Ablation 
+
+Dense readout analysis. Table 4(a) evaluates patch-to-CLS contributions as dense semantic readouts. Final patch states achieve only 11.9 average mIoU, whereas C(−3) , C(−2) , and 
+
+C(−1) obtain 16.5, 20.4, and 25.6, respectively. Although the trend is not strictly monotonic on every dataset, C(−1) 
+
+performs best across all five benchmarks and more than doubles the average performance of final patch states. This confirms that near-final contributions expose stronger local semantics. However, their direct-readout result remains below the 39.8 of TraceCLIP, indicating that effective dense prediction also requires spatial feature aggregation. 
+
+Component ablation. Table 4(b) examines the roles of visual affinity and semantic topology. Directly reading V (−1) 
+
+achieves 26.3 average mIoU, while aggregation with query-query affinity Ah improves it to 37.5, showing the importance of visual feature propagation. Using the semantic-geodesic gate G alone obtains 30.1, suggesting that it provides useful region and boundary cues but cannot replace visual affinity. The full TraceCLIP achieves 39.8, outperforming Ah alone by 2.3 points. This verifies that contribution-derived topology complements visual affinity by suppressing propagation across semantic boundaries. 
+
+# Conclusion 
+
+We investigate where local vision-language semantics become most explicitly accessible within frozen CLIP. Our diagnostic results show that patch-to-CLS contribution features provide substantially stronger category-aware and spatially grounded evidence than final patch-token representations. The late-block analysis further indicates that such evidence is clearly exposed in the attention contribution pathway but becomes less directly 7accessible after residual mixing. Based on this observation, we introduce TraceCLIP, which converts contribution-derived semantic responses into a semantic-geodesic topology gate for calibrating final-layer patch affinity and reconstructing dense features. Across eight zero-shot semantic segmenta-tion benchmarks, TraceCLIP improves average mIoU over the strongest prior training-free methods by 1.3–4.5 points across both backbones and background settings, without additional training, external vision foundation models, or region-level supervision. These findings point to a broader representa-tional phenomenon: task-relevant local semantics may remain encoded in the internal construction of a globally aligned representation. Tracing such contribution pathways therefore provides a useful perspective on how semantic information is formed, selected, and obscured within frozen vision-language models. 
+
+# References 
+
+Caesar, H.; Uijlings, J.; and Ferrari, V. 2018. COCO-Stuff: Thing and Stuff Classes in Context. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 1209–1218. Cha, J.; Mun, J.; and Roh, B. 2023. Learning To Generate Text-Grounded Mask for Open-World Semantic Segmen-tation From Only Image-Text Pairs. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 11165–11174. Cordts, M.; Omran, M.; Ramos, S.; Rehfeld, T.; Enzweiler, M.; Benenson, R.; Franke, U.; Roth, S.; and Schiele, B. 2016. The Cityscapes Dataset for Semantic Urban Scene Understanding. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 3213– 3223. Dosovitskiy, A.; Beyer, L.; Kolesnikov, A.; Weissenborn, D.; Zhai, X.; Unterthiner, T.; Dehghani, M.; Minderer, M.; Heigold, G.; Gelly, S.; Uszkoreit, J.; and Houlsby, N. 2021. An Image is Worth 16x16 Words: Transformers for Im-age Recognition at Scale. In International Conference on Learning Representations .Everingham, M.; Van Gool, L.; Williams, C. K. I.; Winn, J.; and Zisserman, A. 2010. The PASCAL Visual Object Classes (VOC) Challenge. International Journal of Computer Vision ,88(2): 303–338. Gandelsman, Y.; Efros, A. A.; and Steinhardt, J. 2024. In-terpreting CLIP’s Image Representation via Text-Based Decomposition. In International Conference on Learning Representations .Ghiasi, G.; Gu, X.; Cui, Y.; and Lin, T.-Y. 2022. Scaling Open-Vocabulary Image Segmentation with Image-Level Labels. In European Conference on Computer Vision , 540–557. Gu, X.; Lin, T.-Y.; Kuo, W.; and Cui, Y. 2022. Open-vocabulary Object Detection via Vision and Language Knowledge Dis-tillation. In International Conference on Learning Repre-sentations .Hajimiri, S.; Ben Ayed, I.; and Dolz, J. 2025. Pay Attention to Your Neighbours: Training-Free Open-Vocabulary Semantic Segmentation. In Proceedings of the Winter Conference on Applications of Computer Vision (WACV) , 5061–5071. Lan, M.; Chen, C.; Ke, Y.; Wang, X.; Feng, L.; and Zhang, W. 2024. ClearCLIP: Decomposing CLIP Representations for Dense Vision-Language Inference. In European Conference on Computer Vision , 143–160. Li, B.; Weinberger, K. Q.; Belongie, S.; Koltun, V.; and Ranftl, R. 2022a. Language-driven Semantic Segmentation. In 
+
+International Conference on Learning Representations .Li, L. H.; Zhang, P.; Zhang, H.; Yang, J.; Li, C.; Zhong, Y.; Wang, L.; Yuan, L.; Zhang, L.; Hwang, J.-N.; Chang, K.-W.; and Gao, J. 2022b. Grounded Language-Image Pre-Training. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 10965–10975. Liang, F.; Wu, B.; Dai, X.; Li, K.; Zhao, Y.; Zhang, H.; Zhang, P.; Vajda, P.; and Marculescu, D. 2023. Open-Vocabulary Semantic Segmentation With Mask-Adapted CLIP. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 7061–7070. Lin, T.-Y.; Maire, M.; Belongie, S. J.; Hays, J.; Perona, P.; Ramanan, D.; Dollár, P.; and Zitnick, C. L. 2014. Mi-crosoft COCO: Common Objects in Context. In European Conference on Computer Vision , 740–755. Liu, S.; Zeng, Z.; Ren, T.; Li, F.; Zhang, H.; Yang, J.; Jiang, Q.; Li, C.; Yang, J.; Su, H.; Zhu, J.; and Zhang, L. 2024. Grounding DINO: Marrying DINO with Grounded Pre-Training for Open-Set Object Detection. In European Conference on Computer Vision , 38–55. Minderer, M.; Gritsenko, A.; Stone, A.; Neumann, M.; Weis-senborn, D.; Dosovitskiy, A.; Mahendran, A.; Arnab, A.; Dehghani, M.; Shen, Z.; Wang, X.; Zhai, X.; Kipf, T.; and Houlsby, N. 2022. Simple Open-Vocabulary Object Detec-tion with Vision Transformers. In European Conference on Computer Vision , 728–755. Mottaghi, R.; Chen, X.; Liu, X.; Cho, N.-G.; Lee, S.-W.; Fidler, S.; Urtasun, R.; and Yuille, A. 2014. The Role of Context for Object Detection and Semantic Segmentation in the Wild. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 891–898. Radford, A.; Kim, J. W.; Hallacy, C.; Ramesh, A.; Goh, G.; Agarwal, S.; Sastry, G.; Askell, A.; Mishkin, P.; Clark, J.; Krueger, G.; and Sutskever, I. 2021. Learning Transferable Visual Models From Natural Language Supervision. In Meila, M.; and Zhang, T., eds., Proceedings of the 38th International Conference on Machine Learning , volume 139 8of Proceedings of Machine Learning Research , 8748–8763. PMLR. Rao, Y.; Zhao, W.; Chen, G.; Tang, Y.; Zhu, Z.; Huang, G.; Zhou, J.; and Lu, J. 2022. DenseCLIP: Language-Guided Dense Prediction With Context-Aware Prompting. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 18082–18091. Shin, G.; Xie, W.; and Albanie, S. 2022. ReCo: Retrieve and Co-segment for Zero-shot Transfer. In Koyejo, S.; Mohamed, S.; Agarwal, A.; Belgrave, D.; Cho, K.; and Oh, A., eds., Advances in Neural Information Processing Systems , volume 35, 33754–33767. Curran Associates, Inc. Wang, F.; Mei, J.; and Yuille, A. 2024. SCLIP: Rethinking Self-Attention for Dense Vision-Language Inference. In 
+
+European Conference on Computer Vision , 315–332. Xu, J.; De Mello, S.; Liu, S.; Byeon, W.; Breuel, T.; Kautz, J.; and Wang, X. 2022. GroupViT: Semantic Segmentation Emerges From Text Supervision. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 18134–18144. Zhong, Y.; Yang, J.; Zhang, P.; Li, C.; Codella, N.; Li, L. H.; Zhou, L.; Dai, X.; Yuan, L.; Li, Y.; and Gao, J. 2022. RegionCLIP: Region-Based Language-Image Pretraining. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 16793–16803. Zhou, B.; Zhao, H.; Puig, X.; Xiao, T.; Fidler, S.; Barriuso, A.; and Torralba, A. 2019. Semantic Understanding of Scenes through the ADE20K Dataset. International Journal of Computer Vision , 127(3): 302–321. Zhou, C.; Loy, C. C.; and Dai, B. 2022. Extract Free Dense Labels from CLIP. In European Conference on Computer Vision , 696–712. 9

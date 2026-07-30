@@ -6,30 +6,24 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-29
-- 运行时间：2026-07-29 21:41:05 UTC
+- 最新运行日期：2026-07-30
+- 运行时间：2026-07-30 20:33:30 UTC
 - 运行状态：成功
-- 本次总论文数：3
-- 精读区：0
-- 速读区：3
+- 本次总论文数：1
+- 精读区：1
+- 速读区：0
 
 ### 今日简报（AI）
-今日速读3篇论文，均获6.0分，聚焦具身智能中的长尾物体导航、部分视角环境重建及视觉-语言-动作模型表示对齐。最值得关注IMPRINT的长尾查询增强方法，以及SAM3D-Guided的对象中心表示对齐思路。下一步可结合多模态预训练模型，尝试在开放世界导航与操作任务中验证这些表示增强策略的实际效果。
-- 详情：[/202607/29/README](/202607/29/README)
+今日精读《TraceCLIP: Recovering Local Semantics from Patch-to-CLS Contributions》，提出通过解析图像块到全局分类标记的贡献度来复原局部语义。核心价值在于揭示了CLIP模型内部局部与全局的关联机制，为理解视觉语言模型的可解释性提供新视角。建议后续关注该方法的泛化能力及其在细粒度识别或可解释AI应用中的实际效果。
+- 详情：[/202607/30/README](/202607/30/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [TraceCLIP: Recovering Local Semantics from Patch-to-CLS Contributions](/202607/30/2607.26107v1-traceclip-recovering-local-semantics-from-patch-to-cls-contributions)  
+   标签：评分：8.0/10、query:open-vocab-d
+   evidence：通过CLIP进行开放词汇语义分割
 
 ### 速读区论文标签
-1. [IMPRINT: Image-Conditioned Query Enrichment for Long-Tail Object Goal Navigation](/202607/29/2607.25106v1-imprint-image-conditioned-query-enrichment-for-long-tail-object-goal-navigation)  
-   标签：评分：6.0/10、query:open-vocab-d
-   evidence：2D CLIP图像查询增强用于零样本物体导航，类似于2D到3D投影
-2. [PanoLess: Environment Reconstruction from Partial Reflective Views](/202607/29/2607.25362v1-panoless-environment-reconstruction-from-partial-reflective-views)  
-   标签：评分：6.0/10、query:open-vocab-d
-   evidence：基于高斯泼溅的反射视图环境重建
-3. [SAM3D-Guided Object-Centric Representation Alignment for Vision-Language-Action Models](/202607/29/2607.25912v1-sam3d-guided-object-centric-representation-alignment-for-vision-language-action-models)  
-   标签：评分：6.0/10、query:open-vocab-d
-   evidence：使用SAM3D提取3D物体掩码和表示进行对齐
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
