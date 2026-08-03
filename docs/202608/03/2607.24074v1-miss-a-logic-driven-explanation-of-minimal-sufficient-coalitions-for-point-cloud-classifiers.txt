@@ -1,0 +1,1215 @@
+Title: MiSS: A Logic-Driven Explanation of Minimal Sufficient Coalitions for Point Cloud Classifiers
+
+URL Source: https://arxiv.org/pdf/2607.24074v1
+
+Published Time: Tue, 28 Jul 2026 01:36:50 GMT
+
+Number of Pages: 21
+
+Markdown Content:
+# MiSS: A Logic-Driven Explanation of Minimal Sufficient Coalitions for Point Cloud Classifiers 
+
+## Mengda Xing and Jean-Marie Lagniez 
+
+CRIL, Univ. Artois, Lens, France 
+
+mengda.xing@univ-artois.fr, jmarie.lagniez@univ-artois.fr 
+
+Abstract 
+
+We present MiSS, a black-box, query-based framework for explaining 3D point cloud classifiers through perturbation-relative sufficiency reasoning. MiSS treats a superpoint partition as an interpretable abstraction layer and asks whether the original prediction can be certified from a minimal coalition of geometric regions under a specified perturbation distribution. Unlike abductive explainers that require Boolean feature spaces or white-box logical encodings of the predictor, MiSS separates candidate proposal from verification: a weighted MaxSAT procedure proposes coalitions using a heuristic adaptive cardinality floor, certified exact-size fallback, a safely tightened upper bound, blocking clauses, and a surrogate acquisition heuristic learned from previous oracle evaluations, while a black-box statistical oracle decides sufficiency from prediction queries. The system returns a statistically verified sufficient coalition as a binary attribution, with minimum cardinality guaranteed when certified search completes. Experiments on ModelNet40 and ShapeNet with PointNet and PointMLP classifiers show higher precision and coverage than rule-based baselines in most settings, with lower explanation time than exhaustive search. 
+
+# 1 Introduction 
+
+Explainable AI (XAI) is used to audit deep learning models in domains where model errors carry operational risk [ 25 , 1, 26 ]. One recurring difficulty is that explanations must be faithful to the model while remaining interpretable to humans. This issue appears in perception tasks, where models operate on high-dimensional, low-level signals – such as pixel grids or geometric coordinates – while users often reason in terms of objects and parts. Standard feature attribution methods [ 16 , 21 ] may identify scattered pixels or points that influence a prediction, but such attributions do not by themselves provide a sufficient reason for the model’s output. Recent work has therefore studied Abductive Explanations (or Prime Implicants), which formalize sufficient reasons for model predictions. While attribution methods like SHAP [ 16 ] or LIME [ 21 ] answer “How much does this feature contribute?”, abductive methods ask whether a subset of features is sufficient for the prediction. Formally, an abductive explanation identifies a minimal subset of features whose presence serves as a sufficient certificate : once these features are fixed, the model’s prediction is guaranteed to remain invariant, regardless of any perturbation to the remaining inputs [ 11 ]. Despite the success of abductive reasoning in tabular and Boolean domains [ 17 , 5 ], extending these guarantees to deep perception models remains an open challenge. The difficulty comes from applying discrete logical reasoning to continuous neural models [ 13 ]. Deep neural networks are non-linear predictors, and common black-box settings do not expose a logical representation that can be verified directly [ 27 ]. For such models, verifying sufficiency over a continuous input space is computationally difficult. As a result, many practical explainers rely on perturbation or attribution heuristics without a minimal sufficiency certificate. This limitation is acute in 3D computer vision. Unlike 2D images with their regular grid, 3D point clouds are sparse, unordered, and irregular. Point cloud classification underpins applications arXiv:2607.24074v1 [cs.AI] 27 Jul 2026 MiSS M. Xing and J.-M. Lagniez 
+
+such as autonomous driving and robotics [ 15 ], yet explaining these classifiers remains difficult: gradient-based explainers (e.g., Grad-CAM [ 25 ]) rely on convolutional topologies that do not map cleanly to the MLPs or Transformers of modern 3D architectures [ 19 , 28 ]. Signal-level explanations also face a large search space, as highlighting individual points in a cloud of thousands reveals little about which geometric regions preserve the decision. A further drawback of point-level explanations is their size, which may exceed users’ cognitive capacity, whereas XAI users generally prefer concise explanations [ 18 , 24 , 12 ]. We therefore use an existing superpoint partition as an abstraction layer, reducing explanation search from thousands of points to a small set of geometric regions. Our contribution is not segmentation itself, but a black-box framework for finding minimal prediction-preserving superpoint coalitions. MiSS bridges the gap between logically certified abductive explanations and uncertified point-cloud attribution maps. It defines perturbation-relative sufficiency and uses weighted MaxSAT to propose promising superpoint coalitions, which are verified by a statistical black-box oracle. Each verified solution tightens the cardinality upper bound, focusing subsequent search on shorter explanations. The main contributions of this work are as follows: 
+
+• Perturbation-Relative Sufficient Explanations: We define a Minimal Sufficient Set over an interpretable superpoint partition using a probabilistic sufficiency criterion. This formulation makes the scope of the explanation explicit through the input, partition, perturbation distribution, and precision threshold, and applies to continuous black-box classifiers without requiring a logical model encoding. 
+
+• Surrogate-Guided MaxSAT Search with Oracle Verification: We separate candi-date proposal from sufficiency verification. Weighted MaxSAT combines sound blocking constraints with soft clauses learned from the complete oracle history, while a sequential black-box oracle makes the final sufficiency decision. 
+
+• Adaptive Cardinality Constraints: We accelerate search using a safely tightened upper bound and a heuristic adaptive lower bound. Certified fallback recovers skipped sizes, while an UNSAT certificate guarantees global minimum cardinality once the exhausted window covers the level below the incumbent. 
+
+# 2 Preliminaries 
+
+## 2.1 Formal Setting 
+
+Let X be the space of point clouds, where an input P ∈ X is a set of N points {p1, . . . , p N } with 
+
+pi ∈ Rd (typically d = 3 for XYZ coordinates). We consider a black-box classifier f : X → Y that maps a point cloud P to a predicted class label y ∈ Y . To reduce the explanation vocabulary to interpretable geometric units, we impose a partition on P .
+
+Definition 2.1 (Geometric Segmentation) . A segmentation is a partition S = {S1, . . . , S K } of 
+
+P such that S 
+
+> i
+
+Si = P and Si ∩ Sj = ∅ for i̸ = j. Each segment Si is referred to as a superpoint .We treat each superpoint as an atomic explanation unit that is either retained at its original geometry or replaced by the perturbation operator. A coalition T ⊆ S denotes the retained subset; the complement S \ T is replaced. 
+
+Definition 2.2 (Perturbation Operator) . A perturbation operator M is a stochastic function that produces a perturbed sample ˜PT by retaining the original geometry of the superpoints in 2MiSS M. Xing and J.-M. Lagniez 
+
+T and replacing each superpoint outside T with a random sample: 
+
+˜PT = [
+
+> Si∈T
+
+Si
+
+!
+
+∪
+
+ [ 
+
+> Sj/∈T
+
+M(Sj )
+
+ (1) The operator must produce valid point clouds; in this work, M replaces each masked superpoint with a patch drawn from an in-distribution patch bank. The validity of the resulting sufficiency test is tied to this perturbation distribution. In point clouds, the operator should preserve plausible local geometry; otherwise, the oracle may evaluate off-distribution artifacts rather than the absence of masked superpoints. The granularity of S
+
+also sets the resolution of the explanation. This perturbation model supports the following classical sufficiency condition. The universal quantification it uses is intractable for continuous black-box models; Section 3 replaces it with a probabilistic criterion that can be evaluated by a finite sequence of model queries. 
+
+Definition 2.3 (Abductive Explanation) . Let f be a classifier mapping an input to a class y.An abductive explanation is a minimal coalition E ⊆ S that satisfies: 1. Sufficiency: f ( ˜PE ) = y for any realization of the perturbation on S \ E .2. Minimality: No proper subset of E satisfies the sufficiency condition. 
+
+## 2.2 Propositional Logic and MaxSAT-based Search 
+
+We use standard propositional notation. A literal is a variable x or its negation ¯x, a clause is a disjunction of literals, and a CNF formula is a conjunction of clauses. An interpretation ω is a model of a formula Σ, written ω |= Σ , when it satisfies all clauses of Σ.SAT asks whether a CNF formula admits a model, and cardinality constraints such as Pni=1 xi ≤ L can be encoded into CNF [ 4, 23 ]. Weighted MaxSAT separates clauses into hard constraints and weighted soft clauses; the solver must satisfy every hard clause and maximize the total satisfied soft weight. In our setting, hard clauses encode adaptive at-most cardinality constraints and blocking clauses, while soft clauses encode acquisition preferences estimated from previous oracle evaluations. 
+
+# 3 The MiSS Framework 
+
+Figure 1 summarizes the MiSS workflow. The input point cloud is first partitioned into superpoints, and the singleton coalitions are evaluated by the oracle to seed the search history and initialize the per-superpoint surrogate weights. The surrogate-guided MaxSAT solver then proposes candidate coalitions, each of which is evaluated by the black-box sufficiency oracle under the perturbation distribution. The result is fed back to update the search history, blocking clauses, cardinality bounds, and per-superpoint surrogate weights. If multiple sufficient coalitions are verified within the search budget, the minimum-cardinality one is selected and returned as a binary superpoint attribution. 
+
+## 3.1 Minimal Sufficient Sets 
+
+Classical abductive explanations (Prime Implicants / AXp) define a sufficient reason as a minimal set of features whose fixed values force the prediction under any assignment to the 3MiSS M. Xing and J.-M. Lagniez                        
+
+> Input point cloud
+> P
+> Superpoint partition
+> S={S1, . . . , S K}
+> Singleton oracle initialization
+> ˆpi=ˆp({Si})
+> MaxSAT search
+> arg max C|=Ψ AH(C)
+> Candidate coalition
+> C⊆S
+> Perturbation generator
+> M
+> Surrogate
+> {wi}
+> Soft clauses
+> {(¬xi, q i)}
+> History and blocking clauses
+> H,Ψ
+> Black-box classifier
+> f(P) = y
+> Black-box sufficiency oracle
+> ˆp(C)≈
+> Pr [f(˜PC) = y]
+> Binary superpoint mask ϕ(C⋆)
+> Verified MiSS
+> C⋆
+> seed
+> ˜PC
+> ˆp(C)≥τ
+> fit
+> retain C, replace masked superpoints
+> Surrogate-Guided MaxSAT Search Black-box verification
+
+Figure 1: Overview of the MiSS framework. The input point cloud is partitioned into superpoints, and singleton coalitions are first evaluated by the oracle to seed the search history and initialize the per-superpoint surrogate weights. Candidate coalitions are then proposed by a MaxSAT search guided by the surrogate and verified by the black-box sufficiency oracle under the perturbation distribution. Oracle outcomes update the search history and blocking clauses; whenever a sufficient coalition is verified, the current cardinality upper bound is tightened, yielding a MiSS once all proper subcoalitions of the returned candidate have been verified as insufficient or safely pruned. remaining features [ 11 ]. This ∀-quantified condition cannot be checked by prediction queries alone over a continuous input space: the complement is infinite and a black-box model exposes no logical encoding. We therefore replace the universal condition with a probabilistic criterion parameterised by a user-chosen threshold τ and a perturbation distribution, making sufficiency verifiable by a finite sequence of model queries. 
+
+Definition 3.1 (Minimal Sufficient Set (MiSS)) . A coalition C ⊆ S is a Minimal Sufficient Set 
+
+for target class y under threshold τ ∈ (0 , 1] if: 1. Sufficiency: Pr[ f ( ˜PC ) = y] ≥ τ .2. Minimality: ∀C′ ⊊ C, Pr[ f ( ˜PC′ ) = y] < τ .
+
+Assumption 3.2 (Monotonic Sufficiency Assumption) . We assume that the sufficiency predicate is monotonic with respect to set inclusion: S ⊆ T, sufficient (S) ⇒ sufficient (T ). Under this assumption, checking all one-feature removals of a coalition is enough to certify subset minimality, avoiding enumeration of all proper subsets. When this assumption is violated, this check certifies only one-step minimality. A MiSS is a local, post-hoc explanation: its guarantee is relative to the fixed input P ,partition S, perturbation operator, and threshold τ , and does not claim causal necessity outside that scope. 
+
+Proposition 3.3 (Existence) . If any coalition T ⊆ S satisfies Pr [f ( ˜PT ) = y] ≥ τ , then at least one MiSS exists. Proof. The family of all τ -sufficient subsets of T is finite (it lies in 2T ) and non-empty (it contains T itself). Let C be any element of minimum cardinality. Then C is τ -sufficient by 4MiSS M. Xing and J.-M. Lagniez 
+
+Algorithm 1 MiSS Explainer 
+
+Require: Point cloud P , black-box classifier f , target class c = f (P ), superpoint set S,perturbation generator M, max coalition size L, heuristic floor patience η, precision threshold 
+
+τ , confidence level δtest , batch size B, max test samples Nmax , search budget Q, max time 
+
+Tmax 
+
+Ensure: Selected verified coalition C⋆ or ∅ 
+
+> 1:
+
+Initialize Ψ ← ⊤ , H, R ← ∅ , F [ℓ] ← 0, and [ℓcur , L cur ] ← [1 , L ] 
+
+> 2:
+
+for all Si ∈ S do ▷ surrogate initialization  
+
+> 3:
+
+(bi, ˆpi, n i) ← IsSufficient ({Si}, c, M) 
+
+> 4:
+
+Append ({Si}, ˆpi, n i) to H and record it in R if bi 
+
+> 5:
+
+ℓcur ← InitialFloor (H, L cur , τ ) 
+
+> 6:
+
+Fit the initial surrogate on H and compute per-superpoint weights wi (4)–(5)  
+
+> 7:
+
+while time < T max and |H| < Q do  
+
+> 8:
+
+Build WCNF Φt from Ψt = Ψ ∧ (ℓcur ≤ P 
+
+> i
+
+xi ≤ Lcur ) (7) and soft clauses by AH 
+
+> 9:
+
+Get candidate coalition C ⊆ S from MaxSAT solver on Φt 
+
+> 10:
+
+if C = ⊥ then break ▷ UNSAT, no more candidates  
+
+> 11:
+
+(b, ˆp, n ) ← IsSufficient (C, c, M) ▷ Algorithm 4  
+
+> 12:
+
+Append (C, ˆp, n ) to history H 
+
+> 13:
+
+if b then  
+
+> 14:
+
+Append C to R 
+
+> 15:
+
+Append exact candidate-blocking clause to prevent proposing C again  
+
+> 16:
+
+Lcur ← | C| − 1 
+
+> 17:
+
+else  
+
+> 18:
+
+Append failed-subset pruning clause Ψ ← Ψ ∧  W   
+
+> Si/∈C
+
+xi
+
+ 
+
+> 19:
+
+ℓcur ← UpdateFloor (ℓcur , L cur , η, C, b ) ▷ Algorithm 3  
+
+> 20:
+
+Re-fit surrogate and update soft clauses ▷ Algorithm 2  
+
+> 21:
+
+return selected coalition C⋆ from R, or ∅ if R = ∅
+
+construction. Moreover, any C′ ⊊ C is also a subset of T ; were it τ -sufficient it would be an element of the family of strictly smaller cardinality, contradicting the minimality of C. Hence C
+
+satisfies both conditions of Definition 3.1. 
+
+## 3.2 Surrogate-Guided MaxSAT Search 
+
+Finding a MiSS is in principle an exponential search over 2K coalitions. We target: 
+
+C⋆ ∈ arg min  
+
+> C⊆S
+
+|C| s.t. Pr[ f ( ˜PC ) = y] ≥ τ. (2) Algorithm 1 alternates surrogate-guided MaxSAT proposal with black-box sufficiency verification. It first evaluates all singleton coalitions to initialize the oracle history and per-superpoint surrogate weights. At each iteration, MaxSAT combines cardinality and blocking constraints with surrogate-derived soft clauses to propose a candidate; with uniform positive soft weights, this reduces to smallest-first enumeration. The oracle result then updates the history, constraints, cardinality bounds, and surrogate. The search continues until exhaustion or budget termination and returns the minimum-cardinality coalition among the verified sufficient candidates. 5MiSS M. Xing and J.-M. Lagniez 
+
+Algorithm 2 Surrogate Fitting and Soft-Clause Construction 
+
+Require: History H = {(Cj , ˆpj , n j )}mj=1 , features S, penalty λridge , scale αsoft 
+
+Ensure: Surrogate-induced soft clauses for the next WCNF  
+
+> 1:
+
+Build a binary design matrix X from H using an intercept and the indicator vector of each coalition Cj 
+
+> 2:
+
+Set targets yj ← ˆpj 
+
+> 3:
+
+Set regression sample weights rj ← nj 
+
+> 4:
+
+Fit a sample-weighted ridge surrogate on (X, y ) 
+
+> 5:
+
+for all features Si ∈ S do  
+
+> 6:
+
+Let ei be the one-hot indicator vector encoding {Si} 
+
+> 7:
+
+Set the surrogate weight of Si to wi ← clip( ˆθ⊤[1 ; ei], 0, 1)  
+
+> 8:
+
+Add soft clause (¬xi, α soft (1 − wi))  
+
+> 9:
+
+return the updated WCNF soft clauses 
+
+Surrogate-Guided Proposal 
+
+Algorithm 2 summarizes how the oracle history is converted into per-superpoint surrogate weights and the corresponding MaxSAT soft clauses. Each superpoint Si is associated with the weighted soft clause 
+
+(¬xi, q i), qi = round( αsoft (1 − wi)) , (3) where xi = 1 denotes that Si is included, wi ∈ [0 , 1] is the surrogate weight assigned to superpoint 
+
+Si, and αsoft converts the penalty to an integer MaxSAT weight. The negative literal ¬xi is satisfied when the superpoint is omitted; selecting Si violates the clause and incurs penalty qi.Thus every selected superpoint incurs a cost, encouraging shorter coalitions, while a superpoint with a larger weight wi incurs a smaller inclusion penalty. In the uniform case qi = q > 0 for all 
+
+i, the total violated soft weight is exactly q|C|, so MaxSAT returns a smallest feasible coalition before considering larger ones. However, exploring coalitions strictly level by level becomes expensive when the smallest MiSS is large. To reach larger coalitions sooner while still proposing meaningful candidates, we bias the search with the accumulated oracle history: the per-superpoint weights are learned from all 
+
+previous oracle evaluations rather than from the latest decision alone. Let H = {(Cj , ˆpj , n j )}mj=1 
+
+contain every evaluated coalition, its empirical precision ˆpj , and the number nj of oracle samples used to estimate it. The initialization phase contributes the precision of every singleton coalition (Algorithm 1, lines 2–4), and each later MaxSAT proposal adds another observation (Algorithm 1, line 12). We fit the sample-weighted ridge surrogate 
+
+ˆθ = arg min 
+
+> θm
+
+X
+
+> j=1
+
+nj
+
+ ˆpj − θ⊤[1 ; z(Cj )] 2+λridge ∥θ1: K ∥22, (4) where z(Cj ) ∈ { 0, 1}K is the binary indicator of Cj and the intercept is not regularized. Reusing the complete history avoids wasting expensive oracle queries. Crucially, the regression target is the normalized precision ˆpj rather than an absolute failure count, so a promising coalition is not penalized simply for having been tested more often; the sample count nj instead controls how strongly its precision estimate is trusted. The surrogate-weight vector w = ( w1, . . . , w K ) used in Equation (3) is computed by 
+
+w = clip 
+
+ˆθ, 0, 1
+
+
+
+. (5) 6MiSS M. Xing and J.-M. Lagniez 
+
+Algorithm 3 Cardinality-Floor Updates  
+
+> 1:
+
+function InitialFloor (H, L cur , τ ) 
+
+> 2:
+
+pmax ← max {ˆpj : ( Cj , ˆpj , n j ) ∈ H , |Cj | = 1 } 
+
+> 3:
+
+return min( Lcur , max(2 , ⌈τ / max( pmax , ε )⌉)) 
+
+State variable: F [ℓ] counts oracle-rejected candidates of size ℓ 
+
+> 4:
+
+function UpdateFloor (ℓcur , L cur , η, C, b ) 
+
+> 5:
+
+if ¬b and |C| = ℓcur then  
+
+> 6:
+
+F [ℓcur ] ← F [ℓcur ] + 1  
+
+> 7:
+
+if F [ℓcur ] ≥ η then ℓcur ← ℓcur + 1  
+
+> 8:
+
+if ℓcur ≥ Lcur then ℓcur = 2  
+
+> 9:
+
+return ℓcur 
+
+Together with Ψt, the MaxSAT solver returns 
+
+Cprop  
+
+> t
+
+∈ arg max 
+
+> C|=Ψ t
+
+AH(C), (6) where AH is the total satisfied soft weight induced by the oracle-history surrogate. 
+
+Heuristic Adaptive Cardinality Floor 
+
+In the same spirit as the surrogate above, which steers the search toward larger coalitions, we add a heuristic that avoids examining coalition sizes strictly one level at a time. Although users prefer concise explanations, overly small coalitions are often insufficient; MiSS therefore uses an adaptive cardinality window to skip unpromising sizes and accelerate the search. A further benefit is that whole groups of small coalitions can be discarded at once: if a coalition of size k
+
+is found insufficient, then under the Monotonic Sufficiency Assumption (Assumption 3.2) none of its subsets can be sufficient either, so all of them are pruned simultaneously. Algorithm 3 summarizes the heuristic floor updates. During the main search, MaxSAT restricts candidate size to the current window (Algorithm 1, line 8) 
+
+Ψt = Ψ ∧ ℓcur ≤
+
+> K
+
+X
+
+> i=1
+
+xi ≤ Lcur 
+
+!
+
+, 1 ≤ ℓcur ≤ Lcur ≤ L. (7) The lower bound ℓcur is heuristic: it is initialized from the singleton history and may be increased after η rejections, while the upper bound Lcur is tightened whenever a sufficient coalition is found (Algorithm 1, line 16). Because the floor may skip a shorter sufficient coalition, the condition ℓcur ≥ Lcur does not immediately terminate the algorithm; instead, the search returns to the minimum lower bound so that the full search space can still be explored. This revisiting is what allows the search to obtain an UNSAT window covering the level below the incumbent, which by Lemma 3.4 certifies global minimum cardinality. 
+
+Oracle Verification and Clause Update 
+
+Algorithm 4 applies a sequential KL-bounds test to the candidate C: it draws batches of perturbed samples ˜PC , queries f , and returns True as soon as the KL lower bound on the empirical precision exceeds τ , or False as soon as the upper bound falls below τ . If neither 7MiSS M. Xing and J.-M. Lagniez 
+
+Algorithm 4 IsSufficient 
+
+Require: Coalition C, target class c, perturbation generator M, precision threshold τ , confi-dence level δtest , batch size B, max test samples Nmax 
+
+Ensure: Decision bit b, empirical precision estimate ˆp(C), and number n of oracle samples used  
+
+> 1:
+
+nsucc ← 0, n ← 0 
+
+> 2:
+
+if C = ∅ then  
+
+> 3:
+
+return (False , 0, 0)  
+
+> 4:
+
+while n < N max do  
+
+> 5:
+
+Sample {(m(b), ˜P (b) 
+
+> C
+
+)}rb=1 from M conditioned on coalition C, where 1 ≤ r ≤ B 
+
+> 6:
+
+if no perturbed samples are produced then break  
+
+> 7:
+
+Evaluate ˆy(b) ← f ( ˜P (b) 
+
+> C
+
+) for all b = 1 , . . . , r  
+
+> 8:
+
+nsucc ← nsucc + Prb=1 1[ˆ y(b) = c] 
+
+> 9:
+
+n ← n + r 
+
+> 10:
+
+(prec_lb , prec_ub ) ← KLBounds( nsucc , n, δ test ) 
+
+> 11:
+
+if prec_lb > τ then return (True , n succ /n, n ) 
+
+> 12:
+
+if prec_ub < τ then return (False , n succ /n, n ) 
+
+> 13:
+
+if n = 0 then return (False , 0, 0)  
+
+> 14:
+
+return (( nsucc /n ) ≥ τ, n succ /n, n )
+
+bound resolves within Nmax samples the oracle falls back to the empirical ratio. Its output is the triple (b, ˆp, n ), containing the sufficiency decision, empirical precision, and number of oracle samples used to estimate it. The oracle thus provides a statistically verified sufficiency decision at confidence level δtest . When the oracle rejects C, a failed-subset pruning clause is appended: 
+
+Ψ ← Ψ ∧  W   
+
+> Si/∈C
+
+xi
+
+.Under Assumption 3.2, this clause safely removes C and its subsets from future proposals: any future candidate must include at least one superpoint outside the rejected coalition. The triple (C, ˆp, n ) is added to H, an exact blocking clause is also added to avoid proposing the same candidate again, and the acquisition heuristic is re-fitted before the next MaxSAT call. If the oracle accepts C, the successful coalition is recorded and blocked by Ψ ← Ψ ∧ W  
+
+> Si∈C
+
+¬xi
+
+ ∨  W   
+
+> Si/∈C
+
+xi
+
+ , and the upper cardinality bound is updated (Algorithm 1, line 16). 
+
+## 3.3 Correctness Guarantees 
+
+Intuitively, rejected coalitions prune themselves and, by monotonicity, all their subsets, while accepted ones tighten the size bound. An UNSAT result over the current window therefore certifies that every smaller candidate is provably insufficient or already recorded, as the next lemma and theorem formalize. 
+
+Lemma 3.4 (UNSAT Certificate) . Consider the hard formula Ψt = Ψ ∧ (ℓcur ≤ P 
+
+> i
+
+xi ≤ Lcur )
+
+built at Algorithm 1, line 8, with ℓcur ≤ Lcur . If Ψt is UNSAT, then no τ -sufficient coalition of size at most Lcur exists. Proof. Throughout Algorithm 1 every accepted coalition has size strictly greater than Lcur : the bound is set to |C| − 1 whenever a coalition C is accepted (line 16), and later acceptances only decrease it. Since Ψt is UNSAT and every coalition of size in [ℓcur , L cur ] satisfies the cardinality constraint, each such coalition falsifies a clause of Ψ. The clauses of Ψ are failed-subset clauses 8MiSS M. Xing and J.-M. Lagniez 
+
+W  
+
+> Si/∈R
+
+xi, added when a coalition R is rejected and falsified exactly by the subsets of R, and exact blocks, each falsified by a single accepted coalition. Suppose a sufficient coalition C has ℓcur ≤ | C| ≤ Lcur . As C is blocked, either C ⊆ R for some rejected R, whence R is sufficient by monotonicity (Assumption 3.2), contradicting its rejection; or C equals an accepted coalition, which is impossible since accepted coalitions have size > L cur ≥ | C|. Hence no sufficient coalition lies in the band [ℓcur , L cur ].Finally, suppose a sufficient coalition D has |D| < ℓ cur . Extend it to T ⊇ D with |T | = ℓcur ;by monotonicity T is sufficient and lies in the band, contradicting the previous paragraph. Therefore no τ -sufficient coalition of size at most Lcur exists. 
+
+Theorem 3.5 (Minimum-Cardinality Guarantee) . Suppose Algorithm 1 returns a verified coalition C⋆ after an UNSAT window satisfying the conditions of Lemma 3.4. Then C⋆ has minimum cardinality among all τ -sufficient coalitions and is therefore a MiSS. Proof. The oracle verifies that C⋆ is τ -sufficient. At termination Lcur = |C⋆| − 1 (Algorithm 1, line 16), so by Lemma 3.4 no τ -sufficient coalition of size < |C⋆| exists. Hence C⋆ has minimum cardinality, solves Equation (2), and satisfies Definition 3.1. 
+
+Remark 3.6 . The heuristic floor may temporarily skip smaller candidates. An UNSAT window nevertheless certifies optimality as soon as it reaches cardinality |C⋆| − 1, because monotonicity lifts every hypothetical smaller sufficient coalition into that window. If the search is interrupted by the time limit Tmax or query budget Q before this condition is met, the returned coalition remains statistically τ -verified, but minimum cardinality is not guaranteed. 
+
+## 3.4 Returned Explanation 
+
+Algorithm 1 records all sufficient coalitions verified before certified exhaustion or budget ter-mination and selects a primary explanation C⋆ from these successful records. Under certified termination, Theorem 3.5 guarantees minimum cardinality; under budget termination, C⋆
+
+remains a statistically verified sufficient coalition. The returned coalition is presented as a binary superpoint attribution: 
+
+ϕi(C⋆) = 
+
+(
+
+1, Si ∈ C⋆,
+
+0, Si /∈ C⋆. (8) This binary vector identifies which geometric regions are sufficient to preserve the prediction under the specified perturbation distribution, and directly supports visualisation by highlighting the corresponding superpoints in the point cloud. 
+
+# 4 Related Works 
+
+Signal-Level Explanations. Explanations for 3D point clouds adapt many techniques originally developed for images. Several studies have extended saliency analysis to point clouds, including gradient-based importance measures [ 6, 29 ], perturbation-based deletion and insertion metrics [ 20 ], and contrastive explanation methods [ 2]. These approaches typically produce signal-level attributions that can be noisy, unstable, and semantically fragmented. Although such explanations are often visually intuitive, they usually do not provide certified sufficiency guarantees under perturbation. By contrast, we treat superpoints as structured explanatory units and verify the prediction-preservation probability of the returned coalition through the oracle. 9MiSS M. Xing and J.-M. Lagniez 
+
+Rule-Based and Concept-Level Explanations. Rule-based explainers represent a prediction as a logical predicate over feature literals rather than as a continuous attribution score, and constitute the main baselines in our tabular study (Table 2). Anchors [ 22 ] greedily searches for if-then predicates whose local precision exceeds a user-specified threshold on a perturbed neighborhood. LORE [ 8] fits a local decision tree on a genetically generated neighborhood and reads the root-to-leaf path as the factual explanation, while sibling leaves supply counterfactual rules. SkopeRules [ 7] mines high-precision rules from a bagged ensemble of trees and deduplicates them by logical equivalence; CORELS [ 3] instead produces certifiably optimal rule lists through branch-and-bound search over a discretized feature space. These methods move toward discrete and semantically meaningful explanations, but they are typically designed for tabular feature literals rather than structured 3D regions. In contrast, MiSS uses surrogate-guided MaxSAT with a heuristic cardinality floor and certified fallback over superpoint coalitions, and verifies the returned coalition under the perturbation distribution. 
+
+# 5 Experiment 
+
+## 5.1 Implementation Details 
+
+Datasets. We evaluate on four datasets spanning 3D point cloud domains and tabular datasets. 
+
+ModelNet40 is a large-scale 3D object classification benchmark containing 12,311 CAD models from 40 categories; we use the official split with 9,843 shapes for training and 2,468 for explaining the black-box model. ShapeNet is a richly annotated repository of 3D shapes covering a wide range of object categories; we use the official split with 12,137 shapes for training and 2,874 for explaining. Explanations are drawn from the shuffled test list because the raw test files are category ordered; shuffling avoids category-biased prefixes when only a bounded subset is explained. Optdigits (64 features) and Splice (60 features) are standard tabular benchmarks used with a logistic-regression backbone. 
+
+Black-Box Model. For 3D point cloud experiments, we use two target classifiers f : PointNet and PointMLP. Both are trained for 200 epochs on ModelNet40 and ShapeNet. PointNet is trained with Adam using batch size 32 and learning rate 10 −3. PointMLP is trained with SGD using batch size 32, initial learning rate 0.1, momentum 0.9, weight decay 2 × 10 −4, and cosine decay to a minimum learning rate of 5 × 10 −3. We also report results across these backbone choices in Table 1. These experiments evaluate the black-box sufficiency of the returned superpoint coalitions, but they do not establish alignment with architecture-specific receptive fields in PointNet++-style FPS-neighborhood backbones. For tabular experiments, we use a logistic-regression classifier. 
+
+MaxSAT Solver. We implement our MiSS search algorithm using PySAT [ 9]. Each search iteration rebuilds a weighted CNF and solves it with the RC2 MaxSAT optimizer [ 10 ], using MapleSat [14] via PySAT as the underlying SAT backend. 
+
+Superpoint Construction. The current point-cloud implementation constructs superpoints with curvature-augmented K-Means rather than FPS sampling or ball-query neighborhoods. For each point, we first estimate a local curvature feature from its Euclidean k-nearest-neighbor neighborhood using PCA. We then cluster the augmented features [xi, y i, z i, κ i] with K-Means and convert the resulting hard labels into superpoints Sj = {pi : ai = j}. Because each point receives exactly one K-Means label, the resulting superpoints are disjoint and their union covers the input point cloud; no additional de-duplication or overlap resolution is required. The full construction is given in Algorithm 5. 
+
+Perturbation Operator. In the point-cloud experiments, the perturbation operator M
+
+10 MiSS M. Xing and J.-M. Lagniez 
+
+Figure 2: Comparison of superpoint-level explanations produced by different explainers. Columns correspond to Anchors, CORELS, MiSS, LORE, SkopeRules, and GradCAM. For all methods except GradCAM, the viridis colormap encodes point height along the z axis and hollow red circles mark the explanation regions. GradCAM instead uses a signed coolwarm attribution map, where red indicates positive contribution and blue indicates negative contribution. from Section 2.1 is instantiated as an in-distribution patch-bank replacement. We build the bank from Mbank = 32 training point clouds by applying the same superpoint construction and storing centered, scale-normalized training patches. During oracle evaluation, superpoints in 
+
+C are preserved, while each inactive superpoint Si /∈ C is replaced by a sampled bank patch with the same number of points, rescaled to the target region, translated to its centroid, and perturbed by a small random rotation and Gaussian translation. We use this replacement rather than zero padding or point deletion because the black-box classifiers expect fixed-size, plausible point clouds: deletion changes the input size, while zero padding creates artificial origin points and geometric holes. The perturbation therefore tests semantic absence through plausible local replacements rather than out-of-distribution artifacts. 
+
+Hyperparameters. We set the dataset-specific point-cloud parameters according to the validation sweep: ModelNet40 uses K = 16 , L = 6 , and perturbation strength 0.4, while ShapeNet uses K = 40 , L = 5 , and perturbation strength 1.0. Shared settings follow the current MiSS implementation: RC2 with MapleSat, patch-bank perturbation, the sequential sufficiency 11 MiSS M. Xing and J.-M. Lagniez 
+
+oracle, and surrogate-guided proposal. Search uses a cardinality window updated from oracle feedback and invokes the certified exact-size fallback when the heuristic window is exhausted. After each oracle query, the evaluated coalition is added to the history, the blocking clauses are updated, and the surrogate acquisition heuristic is re-fitted before rebuilding the next WCNF. Complete implementation hyperparameters are reported in Appendix B. 
+
+Baselines. We evaluate our approach against four quantitative baselines: Anchors [ 22 ], LORE [ 8], SkopeRules [ 7], and CORELS [ 3]. GradCAM [ 25 ] is included only for visual comparison. Each baseline is implemented following the specifications in its original publication to ensure a fair comparison. When a method is not natively defined for point-cloud inputs, we make the minimal adaptations required to run it on superpoint-based point-cloud representations. 
+
+Artifact Availability. The downloadable artifact package for this work is available at 
+
+https://owncloud.univ-artois.fr/index.php/s/1KfJ1EdzUerUVlS . The access password is lpar_26_miss . We plan to release the source code as an open-source repository in future work. 
+
+## 5.2 Evaluation Metrics 
+
+We employ four complementary metrics that capture the faithfulness, empirical applicability, parsimony, and stability of the explanation method. 
+
+Precision. Following the sufficiency criterion in Section 3, we define Prec (C) = Pr [f ( ˜PC ) = 
+
+y], the empirical estimate of the probability that the model’s prediction is preserved under the perturbation distribution when only coalition C is retained. A valid MiSS must satisfy 
+
+Prec( C) ≥ τ .
+
+Prec( C) = Pr f ( ˜PC ) = y, (9) 
+
+Coverage. Coverage measures the empirical applicability of a candidate explanation. Let 
+
+{Xj }Nj=1 denote evaluation coalitions sampled from the perturbation distribution, represented as subsets of the superpoint universe S. For a candidate MiSS C, coverage is the fraction of evaluation coalitions that contain C:
+
+Cov( C) = 1
+
+N
+
+> N
+
+X
+
+> j=1
+
+1[C ⊆ Xj ] , (10) 
+
+## 5.3 Evaluation on Point Cloud Benchmarks 
+
+Visual Comparison. As shown in Figure 2, all explanations are computed at concept-level and rendered back to the signal level for visualization. For all methods except GradCAM, the viridis colormap represents point height along the z axis, while red circles indicate the regions selected as explanations. GradCAM follows its standard signed attribution convention, with red denoting positive contribution and blue denoting negative contribution. For MiSS, the highlighted regions correspond to the superpoints belonging to the returned coalition C⋆.
+
+Quantitative Comparison. On ModelNet40, MiSS and MiSS* achieve substantially higher precision than all rule-based baselines on both backbones. Their coverage is lower than Anchors but remains competitive with the other baselines. MiSS* approximately halves the runtime of full MiSS while retaining similar precision and coverage. 
+
+Results. On ShapeNet, MiSS* achieves the highest precision on both PointMLP and PointNet. Anchors attains the highest coverage, while MiSS and MiSS* rank next and outperform the other rule-based baselines. The similarity between MiSS* and full MiSS indicates that the first sufficient coalition already provides strong explanation quality with substantially lower runtime. 12 MiSS M. Xing and J.-M. Lagniez 
+
+Dataset Explainer PointMLP PointNet Prec.(%) ↑ Cov.(%) ↑ Runtime ↓ Prec.(%) ↑ Cov.(%) ↑ Runtime ↓
+
+ModelNet40 Anchors 58 .62 35 .16 52 .88 83 .32 36 .84 5.88 
+
+MiSS 87 .01 14 .88 39 .00 90 .18 32 .12 20 .01 
+
+MiSS* 86 .93 14 .60 22 .74 91 .43 31 .77 10 .14 
+
+LORE 62 .41 19 .01 26 .27 83 .08 28 .55 3.08 
+
+SkopeRules 65 .82 14 .80 30 .41 84 .59 25 .01 3.36 
+
+CORELS 64 .03 14 .99 10 .29 84 .76 21 .53 1.21 
+
+ShapeNet Anchors 93 .82 50 .11 20 .16 95 .83 48 .90 8.34 
+
+MiSS 94 .98 45 .15 36 .09 97 .19 46 .29 20 .90 
+
+MiSS* 95 .25 45 .08 4.08 97 .38 46 .62 3.62 
+
+LORE 94 .78 43 .40 38 .11 95 .71 44 .51 8.30 
+
+SkopeRules 93 .47 42 .39 39 .84 95 .98 44 .67 8.79 
+
+CORELS 94 .17 38 .22 11 .80 96 .07 40 .95 2.59 
+
+Table 1: Results on the point cloud benchmarks. We report precision, coverage, and runtime on ModelNet40 and ShapeNet for the PointMLP and PointNet backbones. MiSS* denotes the first sufficient coalition. 
+
+Dataset Explainer Dim. Prec.(%) ↑ Cov.(%) ↑ Runtime (s) ↓
+
+Bank Anchors 16 98 .13 50 .53 0.04 
+
+MiSS 99 .83 50 .97 0.62 
+
+MiSS* 99 .59 49 .78 0.61 
+
+LORE 98 .44 50 .22 0.05 
+
+SkopeRules 98 .44 50 .22 0.05 
+
+CORELS 98 .58 49 .97 0.02 
+
+Breast Anchors 30 85 .85 51 .06 0.03 
+
+MiSS 79 .78 48 .81 0.03 
+
+MiSS* 79 .22 50 .56 0.01 
+
+LORE 80 .55 51 .28 0.06 
+
+SkopeRules 80 .55 51 .28 0.06 
+
+CORELS 91 .42 39 .03 0.02 
+
+Table 2: Main tabular experiment summary on Bank and Breast for the logistic-regression backbone. Dim. reports the number of features. 
+
+## 5.4 Evaluation on Tabular Benchmarks 
+
+To test MiSS outside geometric domains, we evaluate it on ten tabular benchmarks using logistic regression as the black-box classifier. We compare against four rule-based or anchor-style explainers: Anchors, LORE, SkopeRules, and CORELS. Table 2 highlights Bank and Breast, while the complete results are reported in Appendix A. 
+
+Results. On Bank, MiSS achieves the highest precision (99.83%) and coverage (50.97%), but is slower than the rule-based baselines. On Breast, MiSS* is the fastest method and retains competitive coverage, although its precision trails CORELS. Across all ten datasets in Table 4, MiSS is competitive on precision and coverage, while MiSS* is the fastest or tied-fastest method on seven datasets. Overall, the results show a dataset-dependent trade-off between explanation quality and runtime. 13 MiSS M. Xing and J.-M. Lagniez ModelNet40 ShapeNet      
+
+> 0
+> 10
+> 20
+> 30
+> 40
+> Explain time (s)
+> (a) Explain time
+> ModelNet40 ShapeNet
+> 0.86
+> 0.88
+> 0.90
+> 0.92
+> 0.94
+> 0.96
+> 0.98
+> Precision
+> (b) Precision
+> ModelNet40 ShapeNet
+> 0.175
+> 0.200
+> 0.225
+> 0.250
+> 0.275
+> 0.300
+> 0.325
+> 0.350
+> Coverage
+> (c) Coverage
+> Surrogate-guided w/o surrogate w/o adaptive bound w/o both
+
+Figure 3: Comparison of the runtime, precision, and coverage of the first verified explanation returned by full MiSS and variants that remove surrogate guidance, dynamic cardinality bounds, or both. 30 60 120 180 240         
+
+> Search time budget (s)
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Metric value
+> (a) Precision/coverage over time
+> ModelNet40 precision
+> ModelNet40 coverage
+> ShapeNet precision
+> ShapeNet coverage
+> 30 60 120 180 240
+> Search time budget (s)
+> 0
+> 10
+> 20
+> 30
+> 40
+> Coalition count
+> (b) Explanations found
+> ModelNet40
+> ShapeNet
+> 30 60 120 180 240
+> Search time budget (s)
+> 0
+> 20
+> 40
+> 60
+> 80
+> Explain time (s)
+> (c) Runtime scaling
+> ModelNet40
+> ShapeNet
+
+Figure 4: Search-budget sensitivity on ModelNet40 and ShapeNet. Panels (b)–(d) report precision and coverage, the number of coalitions found, and explanation runtime as the search-time budget increases. 
+
+## 5.5 Ablation Study 
+
+Effect of Surrogate-Guided Proposal Figure 3 compares the default method with variants that remove surrogate guidance, dynamic cardinality bounds, or both. The default method has the lowest explanation runtime on both datasets while retaining comparable precision and coverage. 
+
+Search-Budget Sensitivity Figure 4 reports results from sweeping Tmax from 30 to 240 
+
+seconds. Precision, coverage, and coalition count remain nearly flat, whereas explanation runtime increases with the budget; longer search therefore provides little improvement in explanation quality or yield. 
+
+Solver Sensitivity Table 3 compares the average explanation runtime under different PySAT solvers. MapleSat gives the lowest average runtime, followed by Glucose3 and MapleChrono, 
+
+Metric Glucose3 Glucose4 MapleSat MapleChrono MapleCM Minisat22 MinisatGH Time (s) ↓ 32 .57 34 .36 31 .69 33 .06 34 .25 34 .25 35 .88 
+
+Table 3: Average MiSS explanation runtime under different PySAT solvers, aggregated over all backbone/dataset settings. Lower is better. 14 MiSS M. Xing and J.-M. Lagniez 1     
+
+> 2
+> 3
+> 4
+> 5
+> 6
+> 8
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> ModelNet40
+> max_coalition_size
+> 0.1
+> 0.2
+> 0.4
+> 0.7
+> 1
+> 1.5
+> 2
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0 patch_perturbation_strength
+> 0.5
+> 0.65
+> 0.8
+> 0.9
+> 0.95
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0 neighbor_search_threshold_ratio
+> 8
+> 12
+> 16
+> 24
+> 32
+> 40
+> 64
+> 80
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0 n_clusters
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 8
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> ShapeNet
+> 0.1
+> 0.2
+> 0.4
+> 0.7
+> 1
+> 1.5
+> 2
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 0.5
+> 0.65
+> 0.8
+> 0.9
+> 0.95
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 8
+> 12
+> 16
+> 24
+> 32
+> 40
+> 64
+> 80
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 9
+> 10
+> 6.90
+> 6.95
+> 7.00
+> 7.05
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> Runtime (s)
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 1.00
+> 1.25
+> 1.50
+> 1.75
+> 2.00
+> 2.25
+> 2.50
+> 2.75
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 3.5
+> 4.0
+> 4.5
+> Runtime (s)
+> Coverage Precision Runtime (s)
+
+Figure 5: Hyperparameter sensitivity on ModelNet40 (top) and ShapeNet (bottom). Each column varies one hyperparameter while keeping the others fixed. Precision and coverage use the left y-axis, while runtime uses the right y-axis. so we use MapleSat as the default solver. The complete per-backbone and per-dataset solver results are reported in Appendix D. 
+
+Hyperparameter Sensitivity Figure 5 shows the point-cloud hyperparameter sweep over maximum coalition size, perturbation strength, neighbor-search threshold ratio, and superpoint cluster number. Accordingly, we set L = 6 , perturbation strength 0.4, threshold ratio 0.8, and 
+
+K = 16 for ModelNet40, and L = 5 , perturbation strength 1.0, threshold ratio 0.9, and K = 40 
+
+for ShapeNet. 
+
+# 6 Conclusion 
+
+We presented MiSS, a black-box framework that searches for perturbation-relative sufficient coalitions over a chosen superpoint partition. MiSS combines surrogate-guided weighted MaxSAT proposal with oracle verification, blocking clauses, a heuristic adaptive cardinality floor, certified exact-size fallback, and a safely tightened upper bound. Experiments on point-cloud and tabular benchmarks demonstrate its ability to produce compact, high-precision explanations without requiring a logical encoding of the classifier. 
+
+Scope and limitations. The guarantees are relative to the partition, perturbation operator, threshold τ , and certified-termination condition in Theorem 3.5. Although the heuristic floor may temporarily skip shorter coalitions, the exact-size fallback revisits skipped levels before certified termination. Minimum cardinality is therefore guaranteed when certification completes, but not when the time or query budget interrupts it. The explanations also depend on the semantic quality of the partition and perturbations, and should be interpreted as partition-level sufficiency evidence rather than causal evidence, internal model units, or a safety certificate. Future work will study architecture-aware regions and the use of MiSS explanations for retraining, data curation, and downstream decision support. 15 MiSS M. Xing and J.-M. Lagniez 
+
+# References 
+
+[1] Julius Adebayo, Justin Gilmer, Michael Muelly, Ian Goodfellow, Moritz Hardt, and Been Kim. Sanity checks for saliency maps. Advances in neural information processing systems , 31, 2018. [2] Mohamed Afham, Isuru Dissanayake, Dinithi Dissanayake, Amaya Dharmasiri, Kanchana Thi-lakarathna, and Ranga Rodrigo. Crosspoint: Self-supervised cross-modal contrastive learning for 3d point cloud understanding. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 9902–9912, 2022. [3] Elaine Angelino, Nicholas Larus-Stone, Daniel Alabi, Margo Seltzer, and Cynthia Rudin. Learning certifiably optimal rule lists for categorical data. Journal of Machine Learning Research , 18(234):1– 78, 2018. [4] Armin Biere, Marijn Heule, Hans van Maaren, and Toby Walsh, editors. Handbook of Satisfiability - Second Edition , volume 336 of Frontiers in Artificial Intelligence and Applications . IOS Press, 2021. [5] Adnan Darwiche and Auguste Hirth. On the (complete) reasons behind decisions. Journal of Logic, Language and Information , 32(1):63–88, 2023. [6] Daniel Dworak and Jerzy Baranowski. Adaptation of grad-cam method to neural network architec-ture for lidar pointcloud object detection. Energies , 15(13):4681, 2022. [7] Nicolas Goeix, Jean-Matthieu Guillot, Clément Morel, Mathilde Casanova, and Maxime Sang-nier. Skope-rules: Machine learning with logical rules in python. https://github.com/ scikit-learn-contrib/skope-rules , 2017. [8] Riccardo Guidotti, Anna Monreale, Salvatore Ruggieri, Dino Pedreschi, Franco Turini, and Fosca Giannotti. Local rule-based explanations of black box decision systems. arXiv preprint arXiv:1805.10820 , 2018. [9] Alexey Ignatiev, António Morgado, and João Marques-Silva. Pysat: A python toolkit for prototyping with SAT oracles. In Olaf Beyersdorff and Christoph M. Wintersteiger, editors, Theory and Applications of Satisfiability Testing - SAT 2018 - 21st International Conference, SAT 2018, Held as Part of the Federated Logic Conference, FloC 2018, Oxford, UK, July 9-12, 2018, Proceedings ,Lecture Notes in Computer Science, pages 428–437. Springer, 2018. [10] Alexey Ignatiev, António Morgado, and João Marques-Silva. RC2: an efficient maxsat solver. J. Satisf. Boolean Model. Comput. , 11(1):53–64, 2019. [11] Alexey Ignatiev, Nina Narodytska, Nicholas Asher, and Joao Marques-Silva. From contrastive to abductive explanations and back again. In International Conference of the Italian Association for Artificial Intelligence , pages 335–355. Springer, 2020. [12] Isaac Lage, Emily Chen, Jeffrey He, Menaka Narayanan, Been Kim, Samuel J. Gershman, and Finale Doshi-Velez. Human evaluation of models built for interpretability. In Edith Law and Jennifer Wortman Vaughan, editors, Proceedings of the Seventh AAAI Conference on Human Computation and Crowdsourcing, HCOMP 2019, Stevenson, WA, USA, October 28-30, 2019 , pages 59–67. AAAI Press, 2019. [13] Baoyu Liang, Yuchen Wang, and Chao Tong. Ai reasoning in deep learning era: From symbolic ai to neural–symbolic ai. Mathematics , 13(11):1707, 2025. [14] Jia Hui Liang, Vijay Ganesh, Pascal Poupart, and Krzysztof Czarnecki. Learning rate based branching heuristic for SAT solvers. In Nadia Creignou and Daniel Le Berre, editors, Theory and Applications of Satisfiability Testing - SAT 2016 - 19th International Conference, Bordeaux, France, July 5-8, 2016, Proceedings , volume 9710 of Lecture Notes in Computer Science , pages 123–140. Springer, 2016. [15] Yahui Liu, Bin Tian, Yisheng Lv, Lingxi Li, and Fei-Yue Wang. Point cloud classification using content-based transformer via clustering in feature space. IEEE/CAA Journal of Automatica Sinica , 11(1):231–239, 2023. [16] Scott M Lundberg and Su-In Lee. A unified approach to interpreting model predictions. Advances 
+
+16 MiSS M. Xing and J.-M. Lagniez 
+
+in neural information processing systems , 30, 2017. [17] Joao Marques-Silva. Logic-based explainability in machine learning. In Reasoning Web. Causality, Explanations and Declarative Knowledge: 18th International Summer School 2022, Berlin, Germany, September 27–30, 2022, Tutorial Lectures , pages 24–104. Springer, 2023. [18] George A. Miller. The magical number seven, plus or minus two: Some limits on our capacity for processing information. The Psychological Review , 63(2):81–97, March 1956. [19] Charles R Qi, Hao Su, Kaichun Mo, and Leonidas J Guibas. Pointnet: Deep learning on point sets for 3d classification and segmentation. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 652–660, 2017. [20] Stefan Rass, Sandra König, Shahzad Ahmad, and Maksim Goman. Metricizing the euclidean space toward desired distance relations in point clouds. IEEE Transactions on Information Forensics and Security , 19:7304–7319, 2024. [21] Marco Tulio Ribeiro, Sameer Singh, and Carlos Guestrin. " why should i trust you?" explaining the predictions of any classifier. In Proceedings of the 22nd ACM SIGKDD international conference on knowledge discovery and data mining , pages 1135–1144, 2016. [22] Marco Tulio Ribeiro, Sameer Singh, and Carlos Guestrin. Anchors: High-precision model-agnostic explanations. In Proceedings of the AAAI conference on artificial intelligence , volume 32, 2018. [23] Olivier Roussel and Vasco Manquinho. Pseudo-boolean and cardinality constraints. In Armin Biere, Marijn Heule, Hans van Maaren, and Toby Walsh, editors, Handbook of Satisfiability - Second Edition , volume 336 of Frontiers in Artificial Intelligence and Applications , pages 1087–1129. IOS Press, 2021. [24] T.L. Saaty and M.S. Ozdemir. Why the magic number seven plus or minus two. Mathematical and Computer Modelling , 38(3):233–244, 2003. [25] Ramprasaath R Selvaraju, Michael Cogswell, Abhishek Das, Ramakrishna Vedantam, Devi Parikh, and Dhruv Batra. Grad-cam: Visual explanations from deep networks via gradient-based localization. In Proceedings of the IEEE international conference on computer vision , pages 618–626, 2017. [26] Mukund Sundararajan, Ankur Taly, and Qiqi Yan. Axiomatic attribution for deep networks. In 
+
+International conference on machine learning , pages 3319–3328. PMLR, 2017. [27] Yu Zhang, Peter Tiňo, Aleš Leonardis, and Ke Tang. A survey on neural network interpretability. 
+
+IEEE transactions on emerging topics in computational intelligence , 5(5):726–742, 2021. [28] Hengshuang Zhao, Li Jiang, Jiaya Jia, Philip HS Torr, and Vladlen Koltun. Point transformer. In 
+
+Proceedings of the IEEE/CVF international conference on computer vision , pages 16259–16268, 2021. [29] Tianhang Zheng, Changyou Chen, Junsong Yuan, Bo Li, and Kui Ren. Pointcloud saliency maps. In Proceedings of the IEEE/CVF international conference on computer vision , pages 1598–1606, 2019. 
+
+17 MiSS M. Xing and J.-M. Lagniez 
+
+# A Full Tabular Benchmark Results 
+
+Table 4 reports the complete tabular benchmark results over all evaluated datasets, complement-ing the summarized results in the main text. 
+
+Dataset Explainer Dim. Prec.(%) ↑ Cov.(%) ↑ Runtime (s) ↓
+
+Bank Anchors 16 98 .13 50 .53 0.04 
+
+MiSS 99 .83 50 .97 0.62 
+
+MiSS* 99 .59 49 .78 0.61 
+
+LORE 98 .44 50 .22 0.05 
+
+SkopeRules 98 .44 50 .22 0.05 
+
+CORELS 98 .58 49 .97 0.02 
+
+Breast Anchors 30 85 .85 51 .06 0.03 
+
+MiSS 79 .78 48 .81 0.03 
+
+MiSS* 79 .22 50 .56 0.01 
+
+LORE 80 .55 51 .28 0.06 
+
+SkopeRules 80 .55 51 .28 0.06 
+
+CORELS 91 .42 39 .03 0.02 
+
+Credit Anchors 23 99 .66 48 .53 0.03 
+
+MiSS 99 .49 50 .22 0.03 
+
+MiSS* 99 .65 49 .00 0.00 
+
+LORE 99 .43 48 .16 0.05 
+
+SkopeRules 99 .43 48 .16 0.06 
+
+CORELS 99 .94 48 .28 0.02 
+
+Heart Anchors 13 86 .11 49 .49 0.03 
+
+MiSS 88 .96 49 .95 0.02 
+
+MiSS* 87 .26 49 .80 0.01 
+
+LORE 86 .75 50 .77 0.05 
+
+SkopeRules 86 .75 50 .77 0.06 
+
+CORELS 93 .66 43 .49 0.03 
+
+Mushroom Anchors 22 84 .34 50 .88 0.03 
+
+MiSS 81 .24 49 .12 0.03 
+
+MiSS* 75 .26 50 .88 0.01 
+
+LORE 80 .48 50 .00 0.05 
+
+SkopeRules 80 .48 50 .00 0.06 
+
+CORELS 92 .73 39 .44 0.02 
+
+Table 4: Full tabular experiment results for the logistic-regression backbone. Dim. reports the number of features. MiSS* denotes the first sufficient coalition. 18 MiSS M. Xing and J.-M. Lagniez 
+
+Dataset Explainer Dim. Prec.(%) ↑ Cov.(%) ↑ Runtime (s) ↓
+
+Optdigits Anchors 64 74 .62 46 .47 2.23 
+
+MiSS 81 .53 31 .00 34 .92 
+
+MiSS* 81 .94 30 .59 11 .99 
+
+LORE 71 .14 46 .47 0.08 
+
+SkopeRules 73 .16 44 .47 0.09 
+
+CORELS 79 .31 27 .56 0.03 
+
+Splice Anchors 60 85 .07 49 .44 0.04 
+
+MiSS 86 .63 48 .62 0.11 
+
+MiSS* 87 .95 50 .88 0.02 
+
+LORE 87 .27 51 .53 0.08 
+
+SkopeRules 87 .27 51 .53 0.09 
+
+CORELS 89 .79 39 .69 0.02 
+
+Vowel Anchors 12 68 .43 42 .91 0.16 
+
+MiSS 77 .25 36 .47 0.68 
+
+MiSS* 73 .72 35 .59 0.18 
+
+LORE 65 .88 41 .72 0.05 
+
+SkopeRules 68 .95 39 .72 0.05 
+
+CORELS 75 .58 31 .06 0.02 
+
+Wine Anchors 13 90 .05 47 .14 0.04 
+
+MiSS 91 .94 50 .43 0.02 
+
+MiSS* 88 .24 50 .87 0.01 
+
+LORE 90 .45 48 .70 0.06 
+
+SkopeRules 90 .45 48 .70 0.06 
+
+CORELS 98 .77 48 .61 0.03 
+
+Quality Anchors 11 84 .52 50 .44 0.04 
+
+MiSS 86 .48 47 .47 0.05 
+
+MiSS* 83 .97 48 .50 0.02 
+
+LORE 85 .02 50 .34 0.04 
+
+SkopeRules 85 .02 50 .34 0.05 
+
+CORELS 94 .62 44 .97 0.02 
+
+Table 4: Full tabular experiment results (continued). 
+
+# B Point-Cloud Hyperparameters 
+
+Table 5 lists the point-cloud implementation hyperparameters used for ModelNet40 and ShapeNet. 
+
+# C Algorithm Listings 
+
+Algorithm 5 gives the curvature-augmented K-Means procedure used to construct the superpoint partition in the point-cloud experiments. 19 MiSS M. Xing and J.-M. Lagniez 
+
+Component Hyperparameter ModelNet40 ShapeNet Superpoints Number of segments K 16 40 
+
+Curvature neighbors 20 
+
+Clustering method K-Means on [x, y, z, κ ]
+
+K-Means restarts 10 
+
+K-Means max iterations 300 
+
+K-Means tolerance 10 −4
+
+Masker Inactive replacement mode patch_bank 
+
+Mask activation probability 0.5
+
+Patch-bank train samples 32 
+
+Patch perturbation strength 0.4 1.0
+
+Search Max coalition size L 6 5
+
+Successful-coalition cap 500 
+
+Time limit Tmax 60 sMaxSAT optimizer RC2 SAT backend MapleSat Heuristic adaptive cardinality floor enabled Certified exact-size fallback enabled Floor patience η 8
+
+Oracle Precision threshold τ 0.85 
+
+Confidence level δtest 0.05 
+
+Oracle batch size B 100 
+
+Max oracle batches 5
+
+Max oracle samples Nmax 500 
+
+Surrogate Surrogate-guided proposal enabled Ridge penalty 1.0
+
+Soft-weight scale 100 
+
+Selection Primary coverage tolerance 0.02 
+
+Primary precision margin 0.05 
+
+General Random seed 43 
+
+Table 5: Main hyperparameters used by the point-cloud MiSS explainer. Dataset-specific settings match the current code path; shared settings are identical for ModelNet40 and ShapeNet. The oracle sample cap satisfies Nmax = B times the maximum number of oracle batches. Training details of the black-box models are reported separately in the text. 
+
+# D Ablation Study 
+
+Solver Runtime. Table 6 reports the complete solver-runtime ablation across all backbone and dataset settings, complementing the average-runtime summary in Table 3. 
+
+# E Manifold-Preserving Perturbation 
+
+To verify the sufficiency condition defined above, we must simulate the removal of features. Zero-padding can create “holes” in the 3D structure, pushing the data out-of-distribution. To ensure the perturbed point cloud ˜PC remains on the data manifold, we utilize a neighborhood-based sampling strategy . For each masked superpoint Si /∈ C, we replace its points with samples drawn 20 MiSS M. Xing and J.-M. Lagniez 
+
+Algorithm 5 Curvature-Augmented Superpoint Segmentation 
+
+Require: Point cloud P = {pi}Ni=1 , number of superpoints K, curvature neighborhood size k,random seed s
+
+Ensure: Superpoint partition S = {Sj }Kj=1  
+
+> 1:
+
+Fit a Euclidean k-nearest-neighbor index on P 
+
+> 2:
+
+for i = 1 to N do  
+
+> 3:
+
+Let Nk(i) be the k nearest neighbors of pi 
+
+> 4:
+
+Compute the covariance matrix of the points in Nk(i) 
+
+> 5:
+
+Let λ0 ≤ λ1 ≤ λ2 be the covariance eigenvalues  
+
+> 6:
+
+Set κi ← λ0/(λ0 + λ1 + λ2 + ϵ) 
+
+> 7:
+
+Form the augmented feature ui ← [xi, y i, z i, κ i] 
+
+> 8:
+
+Run K-Means on {ui}Ni=1 with K clusters, seed s, 10 restarts, 300 maximum iterations, and tolerance 10 −4 
+
+> 9:
+
+Let ai ∈ { 1, . . . , K } be the hard K-Means label of point pi 
+
+> 10:
+
+for j = 1 to K do  
+
+> 11:
+
+Set Sj ← { pi ∈ P : ai = j} 
+
+> 12:
+
+return S = {S1, . . . , S K }
+
+Solver PointMLP@MN40 PointMLP@SN PointNet@MN40 PointNet@SN Avg. Glucose3 54 .10 34 .36 23 .38 18 .43 32 .57 
+
+Glucose4 55 .43 34 .47 29 .08 18 .45 34 .36 
+
+Glucose42 55 .24 34 .07 29 .54 18 .27 34 .28 
+
+MapleSat 50 .88 34 .72 22 .91 18 .24 31 .69 
+
+MapleChrono 50 .89 34 .10 28 .90 18 .35 33 .06 
+
+MapleCM 54 .76 35 .13 28 .86 18 .23 34 .25 
+
+Minisat22 54 .59 34 .68 29 .48 18 .26 34 .25 
+
+MinisatGH 54 .79 34 .09 36 .35 18 .31 35 .88 
+
+Table 6: MiSS explanation runtime under different PySAT solvers. Values are mean explanation time in seconds; lower is better. MN40 denotes ModelNet40, SN denotes ShapeNet. from the local geometric context: 
+
+˜Si = {p | p ∼ U ( [ 
+
+> j∈N (i)
+
+Sj )} (11) where N (i) denotes the set of k-nearest unmasked superpoints to the centroid of Si. This preserves the local geometric density, ensuring that the classifier evaluates the semantic absence of the feature rather than an artifact of the deletion process. 21
