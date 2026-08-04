@@ -1,0 +1,253 @@
+Title: Room-Mediated Co-occurrence for Zero-Shot Object-Centric Semantic Navigation via Frontier Scoring
+
+URL Source: https://arxiv.org/pdf/2607.25448v1
+
+Published Time: Wed, 29 Jul 2026 00:41:59 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# Room-Mediated Co-occurrence for Zero-Shot Object-Centric Semantic Navigation via Frontier Scoring 
+
+Adam Scicluna, Gavin Paul and Alen Alempijevic 
+
+Abstract — Zero-shot ObjectNav methods increasingly use vision-language priors, but direct object-object similarity in the latent space is often a weak proxy for spatial co-occurrence. We present an analytical, training-free semantic navigation pipeline that mediates object relationships through a compact room lexicon. Each object label is mapped to a CLIP-derived 
+
+Room Probability Vector (RPV), and object-target co-occurrence is computed from RPV distribution overlap. These scores are projected onto a value map using geodesic flood-fill propagation (Fast Marching Method), with adaptive signal decay, and are used to rank frontiers by semantic score for navigation. Together, these components form an integrated, training-free, object-centric pipeline for open-vocabulary zero-shot naviga-tion. Results show that our object-centric approach improves Success Rate (SR) and Success by weighted inverse Path Length (SPL) by a relative 3% and 1.3%, respectively, compared to image-holistic baselines on the HM3D dataset validation split, while preserving interpretability and open-vocabulary flexibility. Code is available at: uts-ri.github.io/RPV-SemNav. 
+
+I. I NTRODUCTION 
+
+The ability of an embodied agent to locate specific ob-jects in a completely unknown environment, known as the Object-Goal Navigation (ObjectNav) problem [1], [2], is foundational for general-purpose robotics. While geometric awareness provides the topological constraints necessary to navigate physical space, efficient task completion relies on semantic navigation, which infers spatial associations with the target from sparse visual cues. Thus, where geometry defines the navigable space, semantics prioritize the search space, transforming a random walk into an informed, goal-driven policy. The current ObjectNav work can be divided into learning-based and zero-shot approaches. Learning-based methods learn semantic priors on a fixed list of object categories from large annotated indoor datasets [3]–[5], or apply reinforce-ment learning techniques for end-to-end navigation, while zero-shot approaches are open-vocabulary and generalizable, enabling navigation toward any target specified in natural language without task-specific fine-tuning. Recent advance-ments in these methods [6] leverage large-scale Vision-  
+
+> All authors are with the Robotics Institute, Faculty of Engineering and Information Technology, University of Technology Sydney (UTS), Sydney, Australia. Corresponding author: {adam.scicluna@uts.edu.au }
+> Adam Scicluna is supported by Australian Government Research Training Program Scholarships. © 2026 IEEE. Personal use of this material is permitted. Permission from IEEE must be obtained for all other uses, in any current or future media, including reprinting/republishing this material for advertising or promotional purposes, creating new collective works, for resale or redistribution to servers or lists, or reuse of any copyrighted component of this work in other works.
+> Fig. 1. Graphical overview of our proposed framework, example task of trying to find a microwave in a novel environment. Objects visible by the agent that have a high spatial relationship to the target emit stronger signals (indicated by a green signal symbol) than objects unlikely to share the same room type (indicated by a red signal symbol).
+
+Language Models (VLMs) [7], [8] for semantic inference, and combine this knowledge with explicit mapping and frontier selection [9] for navigation. Many such approaches adopt a holistic image perspective, deriving a navigation signal by comparing a target string against the entire ego-centric frame. We instead propose an object-centric zero-shot approach. By considering the environment to be a collection of semantically specific entities, an agent can derive search signals by treating detected objects as “semantic anchors”. While an object-centric approach offers more precise spatial grounding, a central issue remains that raw semantic simi-larity between object labels does not reliably encode spatial co-occurrence [10]. In the high-dimensional latent space of a VLM, linguistically and visually similar categories can exist close together, but be spatially unrelated. In this paper, we propose a novel analytical framework that bridges the gap between semantic similarity and spatial reality for the ObjectNav task. Rather than directly com-paring object-to-object embeddings in the latent space, we develop a pipeline that mediates an object’s semantic signal through a taxonomy of room types, thereby providing spatial context. Given a compact room lexicon, we map both the target and detected objects into a “Room Probability Space”, deriving a co-occurrence score reflecting the likelihood of any given object pair sharing the same location. To ensure these semantic priors respect the physical reality of the environment, we propagate object signals through free space arXiv:2607.25448v1 [cs.RO] 28 Jul 2026 using a geodesic flood-fill. This directly binds the semantic search space to the geometric constraints of the navigable space, scoring frontiers based on signal strength. The highest-scoring frontier is chosen as the next waypoint for navigation. The main contributions of this work are as follows:  
+
+> •
+
+An analytical, room-mediated co-occurrence model that computes “Room Probability Vectors” (RPVs) and esti-mates object-target spatial association from their prob-abilistic overlap.  
+
+> •
+
+A geodesically constrained semantic value map formu-lation using flood-fill propagation with adaptive signal amplitude and spread.  
+
+> •
+
+An integrated, object-centric navigation pipeline sup-porting open-vocabulary zero-shot navigation with real-time inference and no task-specific fine-tuning. We demonstrate our pipeline on the HM3D dataset [3] within the Habitat simulator [11], achieving competitive performance against prior state-of-the-art VLM zero-shot ObjectNav approaches, including relative improvements in the success rate ( +3% ) and the success weighted by inverse path length ( +1 .3% ) metrics. II. R ELATED WORK 
+
+A. Learning-Based and End-to-End Navigation 
+
+Learning-based approaches to the ObjectNav task have traditionally involved either learning semantic priors to guide exploration [12]–[14] or using end-to-end techniques such as behavioral cloning [15] and reinforcement learning (RL) [2] for full autonomous navigation. Modular map-based pipelines such as SemExp [12] and PONI [13] isolate seman-tic mapping from the decision-making navigational process. These approaches train models on top-down maps to predict which unexplored regions are most likely to lead the agent toward the goal, effectively learning spatial layout priors and semantic co-occurrences from large-scale datasets. However, these methods are trained to only semantically understand a fixed set of predefined object categories. This restriction makes deployment into novel environments difficult, as the agent cannot generalize to open-vocabulary targets without in-domain fine-tuning or retraining. Alternatively, end-to-end frameworks such as PIRLNav [15] learn policies that implicitly convert observations into actions. Although effec-tive, these methods incur high computational costs and often struggle with the sim-to-real domain gap when deployed in novel physical scenes. 
+
+B. Image-Based Zero-Shot Navigation 
+
+To overcome the limitations of closed-set vocabularies, recent works [6], [16] exploit the visual-semantic repre-sentations inherent in foundational VLMs to enable open-vocabulary reasoning and zero-shot ObjectNav. CLIP on Wheels (CoW) [17] pioneered the use of CLIP [7] text-image embeddings to relax constraints on target categories, allowing an agent to recognise and navigate towards arbitrary objects without task-specific training. VLFM [6] computes language-grounded value maps to guide frontier selection [9] by calculating cosine similarity between BLIP-2 [8] image embeddings and handcrafted text prompts. UIAP-OGN [16] addresses prompt sensitivity by ensembling multiple prompts to model linguistic uncertainty, but this increases inference cost. A common limitation of VLFM-style image-holistic meth-ods is the use of visibility-cone projection for semantic mapping. In these pipelines, semantic evidence is primarily updated from the agent’s current line of sight, so value maps can remain sparse and concentrated in the observed regions. As a result, frontiers outside the current field of view may receive delayed semantic updates, even when they are geometrically reachable. 
+
+C. Object-Centric and Language-Guided Navigation 
+
+Several zero-shot object-goal navigation methods move beyond image-holistic scoring by leveraging object-level cues. L3MVN [18] and ESC [19] construct “search win-dows” around frontiers, extract visible objects, and use Large Language Model (LLM) reasoning to rank candidate fron-tiers. LOAT [20] reduces runtime LLM queries by a priori 
+
+extracting commonsense object relations, but still depends on a learned experience module, thus retaining dependence on task-specific training signals. Other approaches embed object labels to guide frontier selection. SemUtil [10] builds spatial scene graphs by embed-ding object labels near each frontier with BERT [21], while SEEK [22] extends this to room-level reasoning using trained relational semantic networks. However, direct language-space similarity can be an unreliable proxy for physical co-occurrence, and learned relational modules introduce addi-tional data and training assumptions. This highlights the need for a zero-shot, training-free framework that grounds object semantics into room-structured spatial priors for unmapped environments. III. M ETHOD 
+
+A high-level overview of the system is shown in Fig. 2. The novelty is in computing room-mediated co-occurrence priors and injecting them into frontier scoring. 
+
+A. Task Definition 
+
+The ObjectNav [1] task requires a robot agent to explore an unknown environment, given an arbitrary starting pose, to locate a specified target object. The robot operates in three modes: {initialize, explore, navigate }. In “initialize”, the robot performs 12 left turns to survey an entire 360 ◦
+
+view of its starting location. During “explore”, it captures an egocentric RGB-D observation at each timestep. It executes an action at ∈ A from the discrete set: 
+
+A = {forward (0 .25 m), left (30 ◦), right (30 ◦), stop }.
+
+Robot odometry is provided by the Habitat simulator [11]. When the target object is detected, the robot goes into “navigate” and solely focuses on reaching the goal. An episode succeeds if the robot navigates to within 1m of a target instance in less than T = 500 steps. Unlike methods trained on fixed category sets, our open-vocabulary approach RGB-D observation 
+
+Open-vocab perception (detector + seg.) 
+
+Object labels + locations 
+
+CLIP text embeddings RPVs 
+
+Room lexicon 
+
+R
+
+Semantic value map 
+
+Frontier candidates 
+
+Frontier scoring Local PointNav Planner  
+
+> Fig. 2. Overview of the proposed system: main novelty is the deterministic room-mediated co-occurrence scoring (RPVs) and its use in frontier scoring.
+
+(a) Mask and blur irrelevant regions (b) YOLO detections (boxes, labels) (c) SAM masks (pixel-accurate segments)  
+
+> Fig. 3. Perception pipeline used to build an object-centric map while suppressing distractions. (a) Regions and classes not used for navigation are masked and blurred to reduce spurious detections. (b) A detector proposes object candidates with bounding boxes and confidence scores. (c) The labels serve as prompts for a segmentation model to produce refined instance masks, which are subsequently used for semantic scoring.
+
+handles arbitrary object categories expressible in natural language. 
+
+B. Perception Pipeline 
+
+The perception pipeline extracts object instances for map-ping and computing semantic relevance scores, as shown in Fig. 3. 
+
+Background Masking. We first mask image regions cor-responding to categories that do not contribute to object-goal navigation, such as structural surfaces. Semantic segmen-tation is performed using Mask2Former [23] and a model trained on the ADE20K [24] dataset with a ResNet-50 [25] backbone. The ADE20K class list defines each category as either “thing” or “stuff”, where “stuff” refers to architectural instances such as “floor”, “wall”, and “ceiling”. These seg-ments are blurred to prevent them from generating detections downstream. Although ADE20K does not classify “door”, “window”, or “curtain” as “stuff”, we blur these categories as well, as they contribute little semantic discrimination for navigation and often introduce noise. 
+
+Open-Vocabulary Detection + Prompt Proposal. Next, an open-vocabulary YOLOE [26] detector is applied on the masked image with an unfiltered list of 1203 categories defined in the LVIS dataset [27]. YOLOE is chosen for its open-vocabulary nature and computational efficiency. All detections with confidence above 0.5 are retained as proposed prompts for a subsequent high-accuracy segmentation stage. The broad, unrestricted LVIS category set makes this step sensitive to false positives, underscoring the importance of the initial masking stage. 
+
+High-Accuracy Segmentation. We cross-verify the list of detections by feeding the labels as prompts to SAM 3 [28], a high-accuracy segmentation model. This step fil-ters out false positives, preventing undesirable signals from permeating through the map. SAM 3 returns pixel-accurate instance masks, from which object centroids are extracted and projected into world coordinates via depth information. The target category is always included in the prompt list to enable immediate goal recognition. 
+
+C. Room-Mediated Co-occurrence Model 1) Room Lexicon: Object co-occurrence in indoor envi-ronments is closely tied to functional context. Objects appear near one another when serving related or synergistic pur-poses. Room types, therefore, provide a natural abstraction for semantically grouping objects and imposing the spatial context necessary for reasoning about co-occurrence. We de-fine a compact room lexicon R that serves as an intermediary semantic space for estimating spatial association between objects. For indoor spaces, focusing primarily on household environments, we use a variation on the list of room types in the HM3D dataset [3]: {bathroom , bedroom , dining room ,
+
+garage , kitchen , hallway , laundry , living room , home office }.Importantly, R is not fixed; users may substitute domain-specific or more abstract categories (e.g. “sleeping area”, “cooking area”, etc.) without requiring retraining, enabling zero-shot spatial reasoning. 
+
+2) Room Probability Vectors (RPVs): Let the room lex-icon R = {r1, . . . , r K } and denote e(·) as the CLIP text embedding of a label. To avoid sensitivities inherent to prompt engineering, we use raw class names without template prompts. For an object o, we compute its similarity to each room label via cosine similarity: 
+
+so(ri) = cos ( e(o), e(ri)) = e(o) · e(ri)
+
+∥e(o)∥ ∥ e(ri)∥ (1) A room-probability distribution is then obtained by apply-ing a temperature-scaled softmax function: 
+
+po(ri) = exp( so(ri)/τ )
+
+PKj=1 exp( so(rj )/τ ) (2) where τ controls the sharpness of the room-probability distri-bution. We set τ = 0 .03 to balance discriminative power and robustness to noise in CLIP’s embeddings. Lower tempera-tures lead to over-confident distributions, whereas higher val-ues yield under-informative, near-uniform distributions. The 
+
+Room Probability Vector (RPV) po = [ po(r1), . . . , p o(rK )] ⊤
+
+represents the estimated likelihood of an object o being associated with each room type. 
+
+3) Room-Mediated Co-occurrence Scoring: We treat the RPV po as the parameters of a categorical distribution for a random variable Xo, such that P (Xo = ri) = po(ri). To estimate the co-occurrence between a detected object od and the target object ot, we compute the dot product of their respective RPVs: 
+
+Ao = cooc (od, o t) = pod · pot =
+
+> K
+
+X
+
+> i=1
+
+pod (ri) · pot (ri) (3) This operation yields the Joint Probability of Co-occurrence , P (Xod = Xot ), representing the likelihood of objects being associated with the same room categories, thus sharing spatial context. By marginalizing over the latent room basis R, this formulation provides a probabilistic grounding rather than relying on raw embedding similar-ity. Consequently, object pairs with significant distributional overlap receive high scores, while functionally disjoint pairs are naturally suppressed. 
+
+D. Signal Propagation 1) Geometrically-Aware Value Mapping: Each detected object will emit a spatially decaying signal into a value map to guide the agent through navigation. We perform a flood-fill using the Fast Marching Method (FMM) [29] in combination with a continuously evolving occupancy grid to ensure that signals respect the topology of the navigable space. Let Ox
+
+denote the set of detected objects whose signals reach cell location x. The value at x aggregates these contributions using normalized summation to prevent object-density bias: 
+
+V (x) = 1
+
+|O x|
+
+X
+
+> o∈O x
+
+Ao · exp 
+
+
+
+− dgeo (x, xo)2
+
+2σ2
+
+> o
+
+
+
+(4) where Ox ⊆ O , dgeo is the geodesic distance through free space from object centroid position xo to cell position x, and 
+
+Ao, σo are signal amplitude and spatial spread parameters (§III-D.2). Using FMM for flood-fill guarantees that signals do not penetrate through walls, thereby preventing any in-fluence on frontiers in adjacent, unrelated rooms, a failure mode of Euclidean distance-based approaches. We validate this design choice against isotropic Gaussian propagation in Section V-C. Normalization ensures cells affected by multiple relevant objects receive compound evidence while maintaining the [0 , 1] range, preventing regions with many weak detections from dominating regions with few strong detections. 
+
+2) Adaptive Sigma: We modulate the signal decay rate of the detected objects based on the calculated co-occurrence score relative to the target object. Objects of high relevance should guide exploration across a broader area, whereas weak associations should exert only local influence. We apply a square root transformation to the signal amplitude such that: 
+
+w = pAo (5) The resulting value w is used to determine the rate of decay. Observing that a large distribution of scores clusters within the [0 .1, 0.3] range, as displayed in Fig. 6, we apply this correction to improve the discriminatory power of ob-jects whose co-occurrence score falls in the upper echelon of this band. This comes at the cost of compressing the overall dynamic range. However, instances of extremely relevant ob-jects are still scored highly, and the extent of their relevance is further boosted, making the trade-off worthwhile. The spatial spread of the signal scales proportionally with the weighting factor, so that high-relevance objects exert a wider influence and low-relevance objects have a more local effect. We define σo as a linear interpolation between minimum and maximum values: 
+
+σo = σmin + ( σmax − σmin ) · w (6) where σmin = 1 .0 m and σmax = 5 .0 m. This ensures high-relevance objects guide navigation over room-scale distances, while low-relevance objects have only localized influence. 
+
+E. Frontier Selection 
+
+At each timestep, we extract frontiers, defined as bound-aries between free and unexplored space, and cluster neigh-boring free space cells within a radius r = 0.5 m into candidate regions F = {F1, F 2, . . . , F N }, where Cj denotes the set of free-space cells comprising region Fj . Similar to VLFM [6], for each region Fj ∈ F , the median value is calculated and used as the frontier score: 
+
+Vj = median 
+
+> c∈C j
+
+(V (c)) (7) where V (c) is given by Eq. (4). This captures the representa-tive signal strength in the vicinity of the frontier. The highest scoring frontier is selected for navigation: 
+
+F ∗ = arg max  
+
+> Fj∈F
+
+Vj (8) Given a selected goal or frontier waypoint, the robot is driven by a fixed, pretrained PointNav controller shared across methods (following the VLFM-based implementa-tion), so differences arise from frontier scoring rather than low-level control. (a) Early exploration (b) Expanding mapped area (c) Semantic focus increases 
+
+(d) Frontier refinement (e) Room transition (f) Bed region reached   
+
+> Fig. 4. Qualitative progression of one ObjectNav episode with target class bed . Across the six snapshots, the agent incrementally expands free-space coverage (map panel), updates semantic value around plausible goal regions (heatmap panel), and refines frontier selection as new observations are integrated. The final frame shows successful visual grounding of the bed region while the explored trajectory and accumulated frontier evidence converge near the goal room.
+
+IV. E XPERIMENTAL SETUP 
+
+A. Simulation, Datasets and Hardware 
+
+We evaluate in the Habitat [11] simulator on the validation split of the HM3D semantics dataset [30]. This consists of 2000 unique episodes split over 20 indoor scenes and six defined target objects T =
+
+{chair , bed , potted plant , toilet , tv , couch }. All evaluations were run on a PC with a 12th Gen Intel Core i9-12900K CPU and an NVIDIA Quadro RTX 8000 GPU with 48GB of VRAM. 
+
+B. Metrics and Baselines 
+
+We evaluate two versions of our pipeline, RPV-V1 and 
+
+RPV-V2 , to isolate the impact of our signal-propagation method. In RPV-V1 , we model signals as isotropic Gaussian distributions stamped onto the value map, which strictly decay with Euclidean distance and neglect environmental topology. In RPV-V2 , we use FMM flood-fill to ensure that signals propagate geodesically and do not permeate physical walls. We report Success Rate (SR), Success weighted by in-verse Path Length (SPL), and Distance to Goal (DTG) in meters [31] for navigation. To contextualize our performance, we compare against prominent zero-shot and learning-based baseline approaches. For zero-shot, training-free methods, we evaluate against VLFM [6], the state-of-the-art, and UIAP-OGN [16], which extends VLFM by ensembling re-sults across multiple input prompts, incorporating linguistic uncertainty into value mapping, and reducing reliance on prompt engineering. As an LLM-incorporated method, we also compare against the zero-shot variant of L3MVN [18]. To establish the performance ceiling of methods requiring in-domain training, we also compare against a trained end-to-end policy in PIRLNav [15] and the feed-forward variant of L3MVN [18]. 
+
+C. Perception Throttling 
+
+In our pipeline, we run the full perception stack once every three steps while the robot is in “explore” mode. Once the target object is found, we run only SAM 3 segmentation once every three steps in “navigate” mode (masking and detection are unnecessary). Given discrete robot actions and typical indoor scene layouts, consecutive frames rarely introduce novel objects, so per-step masking and detection are redundant and increase computation. 
+
+D. Ground-Truth Conditional Probability 
+
+To evaluate the fidelity of our Room Probability Vec-tors independent of navigation performance, we establish a ground-truth co-occurrence benchmark derived from anno-tations in the HM3D semantic dataset [30]. We compute a matrix, P (t | o) representing the conditional probability of encountering target object t in the same room as detected object o:
+
+P (t | o) = |R t ∩ R o||R o| (9) where Rt is the set of rooms containing target object t and 
+
+Ro is the set of rooms containing detected object o.When computing RPVs and conditional probabilities, we use the Matterport semantic mapping table defined in Habi-tat [11] to map raw, noisy object labels to 40 standardized Fig. 5. Per-category rank agreement between distribution comparison measures and HM3D MP21 categories ground-truth co-occurrence, reported as full-row Spearman, Top-5 Spearman, Recall@5 and NDCG@5 at K = 5 .
+
+categories. Following VLFM [6] and PONI [13], we exclude non-discriminative architectural categories such as floor ,
+
+wall , and ceiling , which appear abundantly across all room types, providing negligible information for spatial reasoning. This filtering yields a set of 21 object classes, including the subset of target objects T defined in Section IV-A. For each target category, we compute Spearman’s rank correlation ( ρ)between RPV comparison measures and ground-truth co-occurrence, evaluated both across the full candidate set and the ground truth Top-5 anchors, alongside Recall@5 and Normalized Discounted Cumulative Gain (NDCG@5). V. R ESULTS 
+
+A. Co-occurrence Measure Validation 
+
+Fig. 5 shows the mean full-row and Top-5 per-category Spearman rank correlation ( ρ) between different Room Prob-ability Distribution comparison measures and the conditional probability ground truth, at softmax temperature τ = 0 .03 .Mean Recall@5 and NDCG@5 were also computed for each measure. The RPV dot product exhibited the highest Top-5 Spearman rank correlation ( ρ = 0 .319 ), Recall@5 ( 0.524 )and NDCG@5 ( 0.715 ), making it the strongest proxy for spatial association despite a slightly lower full-row Spearman correlation relative to the other four measures ( ρ = 0 .329 
+
+compared to ρ = 0 .355 − 0.365 ). For the ObjectNav task, the relative ranking of object asso-ciations in the “Room Probability Space” is more critical than their absolute alignment. From an object-centric perspective, given a target object t and a set of detected objects O, the agent must prioritize navigation toward anchor objects o in an order that reflects the likelihood of physical co-occurrence. Correlation is computed per target category rather than glob-ally, reflecting how the navigation signal during inference is taken as the comparison of a fixed target RPV against those of detected objects. Ranking quality is evaluated at K = 5 
+
+as the ground truth co-occurrence distribution is concentrated among a small number of strong anchors out of the 21 can-didate categories per target. Correctly prioritizing this subset is what determines navigation efficiency, as the relative order of weakly-associated candidates carries comparatively little operational consequence. Although the Spearman correlation  
+
+> Fig. 6. Room Probability Vectors (RPVs) sorted by normalized entropy (top: most uniform, bottom: most peaked). Low-entropy objects (e.g., bed, bathtub, toilet) are strongly concentrated in a single room type, whereas high-entropy objects (e.g., fireplace, clothes, chair) are spread across many rooms, indicating weak spatial specificity.
+
+is modest, the Recall@5 and NDCG@5 scores, respec-tively, indicate that high co-occurrence anchors are reliably surfaced by the RPV dot product, and of those anchors, the strongest associated objects are commonly assigned the greatest weight. This is notable given the method’s zero-shot nature and the domain gap between VLM text embeddings and physical 3D environmental layouts. Although the dot product is a symmetric measure, the dataset’s conditional distribution P (t | o) is inherently asymmetric. Notably, it nonetheless outperforms KL diver-gence, the only directed measure evaluated. More broadly, we hypothesize the remaining measures are more sensitive to the high normalized entropy of “generic” objects (e.g. chair :
+
+ˆH = 0 .773 ), whose probability mass is distributed across many room types, visualized in Fig. 6, as none share the mul-tiplicative suppression trait of the dot product. Conversely, low-entropy structural fixtures tightly concentrate their mass, serving as reliable anchors. The dot product, while influenced by entropy, mitigates it by measuring mutual overlap rather than directional divergence. However, this suppression of low-magnitude mass, while advantageous for isolating peak alignment, explains the convergence in full-row Spearman correlation (Fig. 5). As the candidate set expands beyond the strongest objects, the distribution of high-entropy RPVs (Fig. 6) causes dot product scores to collapse into a narrow, low-magnitude band, making genuine associations difficult to distinguish from noise. This highlights the necessity of the non-linear square root transformation in Eq. 5. By expanding the relative differences between low-scoring pairs, the transformation ensures semantically meaningful but weaker co-occurrence relationships remain detectable during navigation. 
+
+B. ObjectNav Performance 
+
+Table I summarizes the navigation performance on the HM3D dataset. Among zero-shot approaches, our final pro-posed pipeline (RPV-V2) establishes highly competitive per-formance, achieving an SR of 0.539 and an SPL of 0.307. Compared to our primary zero-shot baseline, VLFM [6], RPV-V2 demonstrates a +3% relative improvement in suc-TABLE I HM3D O BJECT NAV PERFORMANCE . † DENOTES BASELINES RE -EVALUATED LOCALLY . BOLD DENOTES BEST OVERALL METRIC .UNDERSCORE DENOTES BEST FROM NON -TRAINED APPROACHES .Method Trained? SR ↑ SPL ↑ DTG ↓                             
+
+> L3MVN (feed-forward) [18] Yes 0.542 0.255 3.93
+> PIRLNav [15] Yes 0.641 0.271 -L3MVN (zero-shot) [18] No 0.504 0.231 4.43 UIAP-OGN [16] No 0.523 0.290 -VLFM †[6] No 0.523 0.303 4.18 RPV-V1 (ours) No 0.534 0.304 4.12 RPV-V2 (ours) No 0.539 0.307 4.06
+
+cess rate and a +1 .3% relative improvement in path ef-ficiency (SPL). Furthermore, we outperform the recently proposed UIAP-OGN [16] framework in both metrics, dis-playing the robustness of our semantic room-probability projection. Notably, our pipeline achieves this zero-shot per-formance using only raw object-label strings as VLM inputs, thereby completely removing the need for explicit prompt engineering, text templates, or computationally expensive LLMs. This also highlights the distinct advantage of utilizing individual detected objects as spatial signals, rather than relying on noisy, image-holistic VLM embeddings. While fully supervised methods like PIRLNav achieve a higher overall success rate, this advantage stems from exten-sive in-domain training via behavioral cloning on 77k human demonstrations collected in the HM3D training dataset split. Furthermore, because our pipeline is built directly on the 2D mapping framework of VLFM, we only support single-floor simulated environments and, as a result, cannot solve 14.6% of HM3D validation episodes requiring multi-floor navigation. Despite this, RPV-V2 significantly outperforms both PIRLNav and the trained variant of L3MVN in SPL. By mathematically grounding frontier selection in geodesic distance fields rather than relying on black-box learned policies, our agent takes more direct paths to the target. 
+
+C. Ablation of Signal Propagation 
+
+To assess the influence of different signal-propagation strategies on navigation, we compare against our RPV-V1 and RPV-V2 pipelines as described in Section IV-B. As shown in Table I, changing the propagation method results in a slight absolute improvement of +0 .005 points in SR, and +0 .003 in SPL. This comparison highlights the positives and negatives in-herent in both propagation methods for embodied navigation. In RPV-V1, isotropic Gaussian signals bleed through walls, causing frontiers that are spatially disconnected from objects, yet inside the Gaussian radius, to accumulate low-magnitude responses. As frontier scoring uses a normalized sum, these weak but widespread signals suppress the influence of rele-vant object cues. However, as the signal is non-dependent on topology, detections made in “unknown” space immediately influence navigation decisions, which is helpful to prevent bias towards close-proximity, high-object-density areas. By contrast, the FMM flood-fill ensures that signals wrap around obstacles and through doorways. As such, the signal cannot propagate into the “unknown” but will more reliably affect frontiers spatially associated with the detected object. By enforcing this free-space topology, the resulting value map remains consistent with the reachable environment. Despite the added mathematical rigor of FMM relative to simple isotropic stamping, our pipeline remains effi-cient, with an average inference time per step of 335.5 ms for RPV-V2. Although feasible for robotic deployment, resource-constrained mobile platforms would benefit from offloading perception and VLM inference to an edge server. VI. C ONCLUSION 
+
+We presented a training-free, open-vocabulary ObjectNav framework that maps semantic object knowledge directly to architectural room layouts in the CLIP embedding space, thereby exploiting estimated spatial co-occurrence likeli-hoods between objects. We introduce the concept of aRoom Probability Vector (RPV) to provide spatial context for semantic relevance. By taking the dot product between RPVs, we computed the probabilistic overlap between the target and a detected object’s room-probability distributions, projecting the score as a “semantic signal” in a value map via flood-fill to respect geometric topology. This enables object-centric frontier prioritization: searching regions con-taining objects that are more likely to co-occur with the target. On the HM3D validation set, our flood-fill pipeline variant (RPV-V2) outperforms both a topologically unaware isotropic Gaussian propagation model (RPV-V1) and the baseline comparison method in Success Rate (SR) and Suc-cess weighted by inverse Path Length (SPL). Despite its effectiveness, existing limitations highlight promising directions for future work. First, the current RPV formulation does not explicitly account for entropy. Objects that appear across many room types (e.g., chairs or tables) naturally yield high-entropy room probability distributions, which can dilute the overall signal permeating the value map. Entropy-aware pruning or regularization could penalize these low-specificity signals, granting higher discriminatory power to functionally definitive objects (e.g., beds or bathtubs), increasing the dynamic range between good and bad frontiers for frontier selection. Second, the method for analytically estimating spatial co-occurrence does not strongly correlate with ground truth data. Investigating further models to reduce this gap would increase the reliability of signals. Represent-ing the value map as a combination of isotropic Gaussians and flood-fill signals may also improve path efficiency. Finally, the current navigation policy relies purely on semantic exploitation. In semantically sparse regions, such as hallways, the agent may over-commit to weak signals rather than seek novel vantage points or uncover more free space. Incorporating an information-gain component could more effectively balance semantic guidance with topological exploration. A. Acknowledgements 
+
+The authors acknowledge that AI-assisted tools (Gemini 3 Flash (Nano Banana 2) and ChatGPT) were used for limited editing of text and for generating some preliminary code and figure templates. All outputs were checked, corrected as needed, and integrated by the authors, who are solely responsible for the final content. REFERENCES [1] D. Batra, A. Gokaslan, A. Kembhavi, O. Maksymets, R. Mottaghi, M. Savva, A. Toshev, and E. Wijmans, “ObjectNav Revisited: On Evaluation of Embodied Agents Navigating to Objects,” Aug. 2020, arXiv:2006.13171 [cs]. [2] J. Ye, D. Batra, A. Das, and E. Wijmans, “Auxiliary tasks and exploration enable objectgoal navigation,” in Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) ,2021, arXiv:2104.04112. [3] S. K. Ramakrishnan, A. Gokaslan, E. Wijmans, O. Maksymets, A. Clegg, J. Turner, E. Undersander, W. Galuba, A. Westbury, A. X. Chang, M. Savva, Y. Zhao, and D. Batra, “Habitat-matterport 3d dataset (hm3d): 1000 large-scale 3d environments for embodied ai,” 
+
+arXiv preprint arXiv:2109.08238 , 2021. [4] F. Xia, A. R. Zamir, Z. He, A. Sax, J. Malik, and S. Savarese, “Gibson env: Real-world perception for embodied agents,” in 2018 IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2018, pp. 9068–9079. [5] A. Chang, A. Dai, T. Funkhouser, M. Halber, M. Niessner, M. Savva, S. Song, A. Zeng, and Y. Zhang, “Matterport3d: Learning from rgb-d data in indoor environments,” International Conference on 3D Vision (3DV) , 2017. [6] N. Yokoyama, S. Ha, D. Batra, J. Wang, and B. Bucher, “Vlfm: Vision-language frontier maps for zero-shot semantic navigation,” 
+
+arXiv preprint arXiv:2312.03275 , 2023. [7] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark, G. Krueger, and I. Sutskever, “Learning transferable visual models from natural language supervi-sion,” in Proceedings of the International Conference on Machine Learning (ICML) , 2021, arXiv:2103.00020. [8] J. Li, D. Li, S. Savarese, and S. Hoi, “BLIP-2: Bootstrapping language-image pre-training with frozen image encoders and large language models,” in Proceedings of the 40th International Conference on Machine Learning , ser. Proceedings of Machine Learning Research, vol. 202. PMLR, 23–29 Jul 2023, pp. 19 730–19 742. [9] B. Yamauchi, “A frontier-based approach for autonomous exploration,” in Proceedings of IEEE International Symposium on Computational Intelligence in Robotics and Automation (CIRA) , 1997. [10] J. Chen, G. Li, S. Kumar, B. Ghanem, and F. Yu, “How To Not Train Your Dragon: Training-free Embodied Object Goal Navigation with Semantic Frontiers,” in Robotics: Science and Systems XIX . Robotics: Science and Systems Foundation, Jul. 2023. [11] M. Savva, A. Kadian, O. Maksymets, Y. Zhao, E. Wijmans, B. Jain, J. Straub, J. Liu, V. Koltun, J. Malik, D. Parikh, and D. Batra, “Habitat: A platform for embodied AI research,” in Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) ,2019, arXiv:1904.01201. [12] D. S. Chaplot, D. Gandhi, A. Gupta, K. Gupta, and R. Salakhutdinov, “Object goal navigation using goal-oriented semantic exploration,” in 
+
+Advances in Neural Information Processing Systems (NeurIPS) , 2020. [13] S. K. Ramakrishnan, D. S. Chaplot, Z. Al-Halah, J. Malik, and K. Grauman, “Poni: Potential functions for objectgoal navigation with interaction-free learning,” in Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition (CVPR) , 2022, arXiv:2201.10029. [14] H. Luo, A. Yue, Z.-W. Hong, and P. Agrawal, “Stubborn: A Strong Baseline for Indoor Object Navigation,” in 2022 IEEE/RSJ Interna-tional Conference on Intelligent Robots and Systems (IROS) , Oct. 2022, pp. 3287–3293, iSSN: 2153-0866. [15] R. Ramrakhya, D. Batra, E. Wijmans, and A. Das, “PIRLNav: Pre-training with Imitation and RL Finetuning for OBJECTNAV,” in 2023 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . Vancouver, BC, Canada: IEEE, Jun. 2023, pp. 17 896– 17 906. [16] U. Bajpai, J. R¨ uckin, C. Stachniss, and M. Popovi´ c, “Uncertainty-Informed Active Perception for Open Vocabulary Object Goal Nav-igation,” in 2025 European Conference on Mobile Robots (ECMR) ,Sep. 2025, pp. 1–7. [17] S. Y. Gadre, M. Wortsman, G. Ilharco, L. Schmidt, and S. Song, “CoWs on Pasture: Baselines and Benchmarks for Language-Driven Zero-Shot Object Navigation,” in 2023 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , Jun. 2023, pp. 23 171–23 181, iSSN: 2575-7075. [18] B. Yu, H. Kasaei, and M. Cao, “L3mvn: Leveraging large language models for visual target navigation,” arXiv preprint arXiv:2304.05501 ,2023. [19] K. Zhou, K. Zheng, C. Pryor, Y. Shen, H. Jin, L. Getoor, and X. E. Wang, “Esc: exploration with soft commonsense constraints for zero-shot object navigation,” in Proceedings of the 40th International Conference on Machine Learning , ser. ICML’23. JMLR.org, 2023. [20] M. Lin, S. Liu, D. Zhang, Y. Chen, Z. Wang, H. Li, and D. Zhao, “Ad-vancing object-goal navigation through llm-enhanced object affinities transfer,” in 2025 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , 2025, pp. 18 458–18 465. [21] J. Devlin, M. Chang, K. Lee, and K. Toutanova, “BERT: pre-training of deep bidirectional transformers for language understanding,” in 
+
+Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, NAACL-HLT 2019, Minneapolis, MN, USA, June 2-7, 2019, Volume 1 (Long and Short Papers) , J. Burstein, C. Doran, and T. Solorio, Eds. Association for Computational Linguistics, 2019, pp. 4171–4186. [22] M. F. Ginting, S.-K. Kim, D. D. Fan, M. Palieri, M. J. Kochenderfer, and A.-a. Agha-mohammadi, “Seek: Semantic reasoning for object goal navigation in real world inspection tasks,” in Proceedings of Robotics: Science and Systems (RSS) , Delft, Netherlands, July 2024. [23] B. Cheng, I. Misra, A. G. Schwing, A. Kirillov, and R. Gird-har, “Masked-attention mask transformer for universal image seg-mentation,” in Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition (CVPR) , 2022, pp. 1290–1299, arXiv:2112.01527. [24] B. Zhou, H. Zhao, X. Puig, S. Fidler, A. Barriuso, and A. Torralba, “Scene parsing through ade20k dataset,” Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 633–641, 2017, arXiv:1608.05442. [25] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image recognition,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2016, pp. 770– 778, arXiv:1512.03385. [26] A. Wang, L. Liu, H. Chen, Z. Lin, J. Han, and G. Ding, “Yoloe: Real-time seeing anything,” arXiv preprint arXiv:2503.07465 , 2025. [27] A. Gupta, P. Doll´ ar, and R. Girshick, “LVIS: A dataset for large vocabulary instance segmentation,” arXiv preprint arXiv:1908.03195 ,2019. [28] N. Carion, L. Gustafson, Y.-T. Hu, S. Debnath, R. Hu, D. Suris, C. Ryali, K. V. Alwala, H. Khedr, A. Huang, J. Lei, T. Ma, B. Guo, A. Kalla, M. Marks, J. Greer, M. Wang, P. Sun, R. R¨ adle, T. Afouras, E. Mavroudi, K. Xu, T.-H. Wu, Y. Zhou, L. Momeni, R. Hazra, S. Ding, S. Vaze, F. Porcher, F. Li, S. Li, A. Kamath, H. K. Cheng, P. Doll´ ar, N. Ravi, K. Saenko, P. Zhang, and C. Feichtenhofer, “SAM 3: Segment anything with concepts,” 2025, arXiv:2511.16719. [29] J. A. Sethian, “Fast marching methods,” SIAM Review , vol. 41, no. 2, pp. 199–235, 1999. [30] K. Yadav, R. Ramrakhya, S. K. Ramakrishnan, T. Gervet, J. Turner, A. Gokaslan, N. Maestre, A. X. Chang, D. Batra, M. Savva 
+
+et al. , “Habitat-matterport 3d semantics dataset,” arXiv preprint arXiv:2210.05633 , 2022. [31] P. Anderson, A. Chang, D. S. Chaplot, A. Dosovitskiy, S. Gupta, V. Koltun, J. Kosecka, J. Malik, R. Mottaghi, M. Savva, and A. R. Zamir, “On evaluation of embodied navigation agents,” arXiv preprint arXiv:1807.06757 , 2018.

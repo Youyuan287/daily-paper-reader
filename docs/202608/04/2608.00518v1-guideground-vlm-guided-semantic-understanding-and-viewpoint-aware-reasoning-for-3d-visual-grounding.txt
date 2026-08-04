@@ -1,0 +1,611 @@
+Title: GuideGround: VLM-guided Semantic Understanding and Viewpoint-aware Reasoning for 3D Visual Grounding
+
+URL Source: https://arxiv.org/pdf/2608.00518v1
+
+Published Time: Tue, 04 Aug 2026 00:31:47 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# GuideGround: VLM-guided Semantic Understanding and Viewpoint-aware Reasoning for 3D Visual Grounding 
+
+# Yiwen Wang, Yuyang Deng, Yihao Long, Xi Zhao B
+
+# Xi’an Jiaotong University 
+
+{junzi521,dengyuyang,2214312032 }@stu.xjtu.edu.cn, xi.zhao@mail.xjtu.edu.cn 
+
+> B
+
+Corresponding Author: Xi Zhao. 
+
+# Abstract 
+
+3D visual grounding aims to localize the target object in a 3D scene from a natural language query, requiring both fine-grained semantic understanding and viewpoint-dependent spatial reasoning. Existing methods typically formulate semantic understanding as an auxiliary closed-set object classification task and rely on multi-view fea-ture aggregation for viewpoint reasoning, limiting semantic generalization and weakening viewpoint-specific evidence. We observe that vision-language models naturally provide complementary capabilities through open-vocabulary se-mantic understanding and global scene perception. Based on this insight, we propose GuideGround, a VLM-guided framework that complements rather than replaces task-specific grounding models by leveraging VLMs for seman-tic enhancement and viewpoint-specific hypothesis verifica-tion. Specifically, we replace auxiliary closed-set object classification with VLM-generated object semantic descrip-tions to enhance semantic understanding. Meanwhile, in-stead of directly aggregating multi-view representations, we preserve viewpoint-specific grounding hypotheses through per-view grounding and explicitly verify them using VLMs across candidate viewpoints. Extensive experiments on the ReferIt3D benchmark demonstrate that GuideGround consistently outperforms previous state-of-the-art methods. Comprehensive ablation studies further confirm the effec-tiveness of both the proposed semantic understanding and viewpoint reasoning strategies. 
+
+# 1. Introduction 
+
+3D Visual Grounding (3DVG) aims to localize a target ob-ject in a 3D scene according to a natural language descrip-tion. As a fundamental task for 3D scene understanding, it serves as an essential capability for embodied AI and has attracted increasing attention in recent years [22]. Existing 3DVG mainly consider two settings: grounding 
+
+Figure 1. Motivation of GuideGround. Existing 3DVG methods struggle with semantic understanding and viewpoint-aware spatial reasoning. 
+
+from pre-segmented object proposals [3] and joint object detection and grounding [6]. Our work focuses on object-centric 3DVG with pre-segmented object proposals. De-spite recent progress, grounding objects in complex indoor scenes remains challenging because it depends on both ac-curate semantic understanding and reliable spatial reason-ing. Semantically, the model must distinguish the target object from visually or categorically similar objects. Spa-tially, it must correctly interpret viewpoint-dependent rela-tions such as “left” and “behind”. Existing methods im-1arXiv:2608.00518v1 [cs.CV] 1 Aug 2026 prove grounding by enhancing one or both of these capabil-ities. For semantic understanding, existing methods com-monly employ auxiliary object classification as semantic su-pervision [5, 17, 40], formulating semantic understanding as a closed-set classification problem. This is particularly difficult in 3D indoor scenes: datasets like ScanRefer [6] and ReferIt3D [3] contain more than 400 fine-grained object categories, many semantically similar. In addition, they ex-hibit highly long-tailed distributions, unseen categories dur-ing evaluation, and incomplete object point clouds caused by occlusions. Thus, auxiliary classification becomes a less effective semantic supervision source for 3DVG, rais-ing a fundamental question: Can semantic understanding in 3DVG be modeled beyond auxiliary object classifica-tion? 
+
+For spatial reasoning, most existing methods focus on improving object-object relation modeling [7, 35, 37]. However, accurate relation modeling alone cannot fully re-solve viewpoint-dependent spatial reasoning. Existing ap-proaches mainly follow two strategies to address this chal-lenge. One strategy directly predicts the viewpoint [11, 31]. However, such predictions are ambiguous, as multi-ple viewpoints may satisfy the same language query. The other strategy samples a set of candidate viewpoints and aggregates representations from multiple rotated views [5, 17]. While more robust, feature aggregation may blur viewpoint-specific evidence, leading to incorrect grounding even when one candidate viewpoint already contains suf-ficient evidence for identifying the target. This raises an-other fundamental question: Can grounding results from different viewpoints be effectively leveraged to improve viewpoint-dependent spatial reasoning? 
+
+These findings suggest that effective 3DVG requires ca-pabilities beyond conventional task-specific models. As il-lustrated in Figure 1, recent advances in vision-language models provide new opportunities for 3DVG with fine-grained semantic understanding and global scene percep-tion [39]. Rather than treating VLMs as end-to-end ground-ing models [20, 21, 34], we argue that they should com-plement task-specific 3DVG models: VLMs provide rich semantic knowledge and scene-level visual evidence, while task-specific models remain responsible for structured spa-tial reasoning. Guided by this insight, we propose GuideGround , a VLM-guided framework that enhances semantic under-standing and viewpoint-aware spatial reasoning by comple-menting task-specific 3DVG models with VLMs. First, a VLM-guided semantic understanding module generates de-scriptive object captions and parses the query into target and anchor descriptions, establishing semantic priors for subsequent grounding. For viewpoint-aware spatial reason-ing, an anchor-aware grounding module performs ground-ing independently across candidate viewpoints, preserving a grounding hypothesis for each viewpoint. Then these hy-potheses are verified by a VLM using scene-level visual ob-servations, identifying the most plausible viewpoint for final grounding. Our contributions are summarized as follows: • We propose GuideGround , a VLM-guided frame-work that complements task-specific 3DVG models with vision-language models. • We propose a VLM-guided semantic understanding mod-ule that enriches object representations with descriptive semantic information and parses language queries into target and anchor descriptions. • We propose a VLM-guided viewpoint reasoning strat-egy that performs anchor-aware grounding independently across candidate viewpoints and identifies the final target through hypothesis verification. • Extensive experiments on ReferIt3D demonstrate that GuideGrounder consistently outperforms previous state-of-the-art methods. The ablation studies further validate the effectiveness of its individual components. 
+
+# 2. Related Work 
+
+2.1. Semantic Understanding for 3DVG 
+
+Existing object-centric 3DVG methods improve semantic understanding by exploiting semantic information from dif-ferent sources. Most methods obtain semantic information from object point clouds through auxiliary object classifi-cation supervised by category labels [1, 3, 5, 7, 12, 13, 17, 33]. Another line of work introduces complementary semantic information from 2D images by exploiting pre-trained vision-language models such as CLIP [29] and DI-NOv2 [19, 27] to obtain richer object descriptions [4, 36, 40]. LanguageRefer [30] instead performs grounding in the language embedding space using object labels predicted from semantic categories. 
+
+2.2. Spatial Reasoning for 3DVG 
+
+Existing 3DVG methods mainly improve spatial reasoning through spatial relation modeling and viewpoint-aware rea-soning. For spatial relation modeling, early methods implic-itly encode spatial relations through object coordinates or bounding-box information within graph neural networks or Transformer architectures [1, 3, 30]. Later approaches ex-plicitly model pairwise geometric relations, such as relative distances, directions and sizes [7, 12, 13, 15, 35, 37]. For viewpoint-aware reasoning, existing methods either predict the observer’s viewpoint from the scene and language [31] or reason over multiple candidate viewpoints [5, 16, 17]. 2Figure 2. Overview of GuideGround. Given a 3D scene and a language query, GuideGround first performs VLM-guided semantic under-standing to generate object descriptions, parse the query, and establish semantic priors. It then performs per-view grounding independently for each candidate viewpoint to produce viewpoint-specific grounding hypotheses, followed by VLM-based hypothesis verification to iden-tify the most plausible viewpoint and determine the final grounding result. 
+
+2.3. Vision-Language Models for 3DVG 
+
+Existing studies mainly leverage VLMs in two paradigms: end-to-end grounding models or general vision-language representation learners. The former either convert 3D scenes into structured semantic descriptions and perform grounding through language reasoning [10, 14, 34, 38], or directly reason over RGB observations[18, 20, 23, 25]. The latter incorporates VLMs into unified vision-language learning frameworks by jointly optimizing grounding to-gether with other 3D scene understanding tasks, such as scene captioning and visual question answering [18, 41]. Our work instead exploit VLM’s strengths in open-vocabulary semantic understanding and global scene per-ception to enhance specialized 3DVG models while pre-serving the structured spatial reasoning capability of task-specific grounding networks. 
+
+# 3. Method 
+
+3.1. Overview 
+
+Figure 2 presents the overall pipeline of GuideGround, which performs 3D visual grounding in two stages. In the first stage, the semantic understanding module employs a pretrained VLM to generate descriptive object captions and parses the language query into target and anchor descrip-tions, establishing semantic priors for grounding. In the second stage, the viewpoint-aware spatial reasoning mod-ule first performs anchor-aware grounding independently for each candidate viewpoint to produce viewpoint-specific grounding hypotheses. These hypotheses are subsequently verified using scene-level visual observations to identify the most plausible viewpoint and determine the final grounding result. 
+
+3.2. VLM-Guided Semantic Understanding 
+
+The semantic understanding module constructs semantic representations for objects and extracts structured cues from the query, providing semantic priors for subsequent ground-ing. 
+
+Object Semantic Representation. Given a segmented object instance o, we first project its associated 3D points back onto the captured RGB images to collect object-centric visual observations. Since a single observation is often in-complete due to occlusions, multiple informative frames are selected and arranged into a unified collage Co, as shown in Figure 2 (a). The collage is then fed into a pretrained VLM Mcap to obtain (to, c o), where to is a concise object description that captures the object’s primary semantic at-tributes, and co is a more comprehensive semantic descrip-3tion containing richer appearance details and contextual in-formation. 
+
+Query Semantic Parsing. Given a language query 
+
+Q, we employ an LLM Mpar to extract a target descrip-tion tQ together with a set of anchor descriptions A =
+
+{a1, · · · , a K }. The target description summarizes the se-mantic attributes of the object to be grounded, while the an-chor descriptions describe contextual objects that provide spatial cues for grounding. The target description is used to estimate semantic correspondence, whereas the anchor descriptions are subsequently used to guide anchor-aware spatial reasoning. 
+
+Semantic Prior Construction. The detailed object de-scription co captures richer semantic cues and is used to es-timate semantic correspondence with the parsed target de-scription tQ. Specifically, co and tQ are encoded by the same sentence embedding model Msent to obtain semantic embeddings eo and et, respectively. The semantic prior is then computed as 
+
+ssem  
+
+> o
+
+= e⊤ 
+
+> o
+
+et
+
+∥eo∥∥ et∥ , (1) where ssem  
+
+> o
+
+measures the semantic consistency between can-didate object o and the target description tQ.Details of the frame selection strategy and the prompts used for semantic description generation and query parsing are provided in the Supplementary Material. 
+
+3.3. Viewpoint-aware Spatial Reasoning 
+
+To resolve viewpoint ambiguity, we decompose viewpoint-aware spatial reasoning into two stages: per-view grounding and hypothesis verification. Rather than directly aggregat-ing multi-view representations, the former generates an in-dependent grounding hypothesis for each viewpoint, while the latter verifies these hypotheses to determine the final ref-erent. 
+
+Per-view Grounding. For clarity, all formulations in this section are presented under a single viewpoint v. As shown in Figure 3, per-view grounding is accomplished through three sequential modules: Query-aware Fusion (QFM), Anchor-aware Refinement (ARM), and Grounding Hypothesis Generation (GHG). We first employ a Query-aware Fusion Module (QFM) to fuse object semantic features, coarse geometric cues, and the language query, producing query-conditioned ob-ject representations f viNi=1 . The QFM is built upon the language-spatial fusion design of MiKASA [5], while re-placing point-cloud object features extracted by PointNet++ with language embeddings of the object descriptions to gen-erated by the semantic understanding module. We then refine the query-conditioned object representa-tions using an Anchor-aware Refinement Module (ARM),     
+
+> Figure 3. Architecure of per-view grounding pipeline. QFM produces query-conditioned object representations from the lan-guage query, object descriptions, and geometric information. ARM further refines them through anchor localization and anchor-aware spatial reasoning, while GHG generates the grounding hy-pothesis for the current viewpoint.
+
+which first localizes anchor objects and subsequently per-forms anchor-aware spatial reasoning. For each anchor phrase ak, we first estimate its correspondence with every scene object by 
+
+ℓvk,i = (eak)⊤f vi
+
+τ ∥eak∥ ∥ f vi ∥ , pvk,i = softmax  
+
+> i
+
+(ℓvk,i ), (2) where eak denotes the language embedding of anchor phrase 
+
+ak, pvk,i denotes the probability that object oi corresponds to anchor phrase ak, and τ is the temperature parameter. The predicted anchor distributions are then used to construct anchor-aware messages by jointly considering encoded rel-ative geometry, object features, and anchor phrase represen-tations according to 
+
+mvk,i = ϕ
+
+
+
+> N
+
+X
+
+> j=1
+
+pvk,j rvij ,
+
+> N
+
+X
+
+> j=1
+
+pvk,j f vj , eak
+
+ , (3) where rvij denotes the encoded relative geometric represen-tation between objects oi and oj and ϕ(·) is an MLP. The messages from all valid anchor phrases are aggregated to obtain the refinement feature ∆f vi according to 
+
+wvk = max  
+
+> j
+
+pvk,j , ∆f vi =
+
+PKk=1 wvk mvk,i 
+
+PKk=1 wvk
+
+. (4) 4∆f vi then is injected into the query-conditioned representa-tion through a gated residual connection as 
+
+ˆf vi = f vi + γ∆f vi , (5) where γ is a learnable residual gate. Finally, the Grounding Hypothesis Generation (GHG) module produces a viewpoint-specific grounding hypothe-sis score by integrating the semantic consistency score ssem  
+
+> i
+
+,the coarse grounding score scoarse ,v i from the QFM, and the relation-aware grounding score srel ,v i from the ARM as 
+
+svi = λs ssem  
+
+> i
+
++ λc scoarse ,v i + λr srel ,v i , (6) where λs, λc, and λr are the corresponding fusion weights. The predicted object under viewpoint v is obtained by 
+
+ˆyv = arg max  
+
+> i
+
+svi . (7) The predicted object ˆyv , together with its grounding score distribution, forms the grounding hypothesis for viewpoint 
+
+v, which is subsequently examined by the hypothesis veri-fication module to determine the final referent. 
+
+VLM-based Hypothesis Verification. The per-view grounding module produces one grounding hypothesis for each viewpoint. As shown in Figure 2(e), we further evalu-ate the consistency and confidence of these hypotheses, and invoke the verification VLM Mver only when the ground-ing results are insufficiently reliable. Specifically, if all viewpoint-specific predictions are identical, the prediction is directly accepted. Otherwise, let smax and s2nd denote the highest and second-highest grounding scores after score fusion. If smax − s2nd > δ , where δ denotes the confi-dence threshold, the prediction is also accepted. Only the remaining ambiguous samples proceed to the VLM verifi-cation stage. For each viewpoint, we construct a verification hypothe-sis containing complementary visual and semantic evidence defined as 
+
+Hv = Iv
+
+> top
+
+, ˆyv , Pv (8) where Iv 
+
+> top
+
+denotes a top-down scene visualization high-lighting the predicted target object together with all query-related objects, ˆyv is the viewpoint-specific grounding pre-diction, and Pv represents the semantic descriptions of the corresponding context objects infered during semantic un-derstanding. Together, these cues provide sufficient evi-dence for assessing the consistency between the grounding prediction and the language query. The generated hypotheses {H v }Vv=1 and the language query Q are jointly provided to the VLM Mver , which de-termines the most plausible referent ˆyvlm .Unlike end-to-end VLM-based grounding methods, the VLM is only responsible for comparing the candidate hy-potheses and selecting the one that is most consistent with the language query, while the spatial reasoning itself is per-formed by the task-specific grounding model. 
+
+3.4. Training Objective. 
+
+Only the per-view grounding module is optimized during training, while the semantic understanding and hypothe-sis verification modules remain frozen. Since each query corresponds to a single target object, directly supervising each viewpoint-specific prediction may introduce inconsis-tent optimization signals across viewpoints. Therefore, we aggregate grounding scores across viewpoints during train-ing, while preserving individual viewpoint hypotheses dur-ing inference for VLM-based verification. Specifically, let svi denote the grounding score of object 
+
+oi under viewpoint v. The aggregated score is computed as 
+
+sagg  
+
+> i
+
+= 1
+
+V
+
+> V
+
+X
+
+> v=1
+
+svi , (9) where V denotes the number of candidate viewpoints. The grounding network is optimized with a combination of the Cross-Entropy grounding loss Lref and two auxiliary objec-tives: 
+
+L = Lref + λaLanchor + λdLdis . (10) 
+
+Lanchor and Ldis are anchor correspondence and hard-negative ranking losses, respectively. λa and λd are their corresponding loss weights. Lanchor encourages the model to align anchor phrases with their corresponding objects, while Ldis improves discrimination between the target ob-ject and semantically similar distractors. Detailed formula-tions are provided in the Supplementary Material. 
+
+# 4. Experiments 
+
+4.1. Experimental Setup 
+
+Datasets and Evaluation. We evaluate GuideGround on the ReferIt3D benchmark [3], built upon ScanNet [8], under the standard pre-segmented object proposal set-ting. ReferIt3D consists of two complementary subsets: Nr3D, which contains 41.5K free-form natural language descriptions, and Sr3D, which contains 83.5K template-based descriptions emphasizing fine-grained spatial rela-tions. Following the official protocol, Nr3D is further divided into Easy /Hard and View-Dependent (VD) /View-Independent (VID) subsets. We report grounding accuracy on the overall test set and all evaluation subsets. For an-chor supervision, we use the entity annotations provided by ScanEnts3D [2]. 
+
+Implementation Details. Our framework is imple-mented in PyTorch and trained on three NVIDIA RTX 4090 GPUs (32 GB). We use the AdamW optimizer [24] with a batch size of 8 for 120 epochs. During training, only the per-view grounding module is optimized, while all pre-trained models remain frozen. DeepSeek-V3-0324 [9] is used for query parsing, Qwen3.5-397B-A17B [28] for ob-ject caption generation, GPT-5.6 Luna[26] for hypothesis 5Method Sem. Nr3D Sr3D Overall Easy Hard VD VID Overall Easy Hard VD VID UniVLG RGB-D 65.2 – – – – 81.7 – – – –Locate3D ∗ RGB-D 56.1 – – – – 68.2 – – – –SAT PCD+RGB 49.2 56.3 42.4 46.9 50.4 57.9 – – – –CoT3DRef PCD 64.4 70.0 59.2 61.9 65.7 73.2 75.2 67.9 67.6 73.5 CORE-3DVG ∗ PCD 49.6 54.0 45.4 46.9 48.2 50.1 54.3 – – –ViL3DRel PCD 64.4 70.2 57.4 62.0 64.5 72.8 74.9 67.9 63.8 73.2 MVT-3DVG PCD 55.1 61.3 49.1 54.3 55.4 64.5 66.9 58.8 58.4 64.7 LanguageRefer PCD 43.9 51.0 36.6 41.7 45.0 56.0 58.9 49.3 49.2 56.3 MiKASA PCD 64.4 69.7 59.4 65.4 64.0 75.2 78.6 67.3 70.4 75.4 3D-VisTA ∗ PCD 64.2 72.1 56.7 61.5 65.1 76.4 78.8 71.3 58.9 77.3                                     
+
+> ViewRefer PCD 56.0 63.0 49.7 55.1 56.8 67.0 68.9 62.1 52.2 67.7 MVT-ScanEnts PCD 59.3 65.4 53.5 57.3 60.4 –––––
+> Ours PCD + RGB 68.1 74.6 61.8 66.6 68.8 76.5 78.9 70.9 79.6 76.1 Table 1. Comparison with state-of-the-art specialized models on ReferIt3D validation split. “Sem.” indicates the source of semantic information used for object representation. VD and VID denote view-dependent and view-independent queries, respectively. * indicates that the results are predicted from the detected bounding boxes on acc@0.25.
+
+verification, and MPNet [32] as the sentence embedding model for semantic similarity estimation. Additional im-plementation details, prompt templates, and hyperparame-ter settings are provided in the Supplementary Material. 
+
+4.2. Comparison with State-of-the-Art Methods 
+
+We compare GuideGround with two kinds of methods: spe-cialized 3DVG models and zero-/few-shot approaches. To facilitate a fair comparison, we report the semantic sources and object proposal settings of different methods. Table 1 compares GuideGround with existing special-ized 3DVG methods on ReferIt3D. GuideGround achieves the best overall performance on Nr3D and remains highly competitive on Sr3D, demonstrating the effective-ness of combining VLM-enhanced semantic understand-ing with viewpoint-aware reasoning. On Nr3D, Guide-Ground improves the previous best overall accuracy from 65.2% to 68.1%, with consistent gains on challenging Hard and VD subsets (61.8% and 66.6%, respectively). These improvements indicate that VLM-enhanced seman-tics help distinguish fine-grained objects, while preserv-ing viewpoint-specific hypotheses improves grounding un-der view-dependent descriptions. On Sr3D, GuideGround achieves 76.5% overall accuracy. Although Sr3D is gen-erated from predefined spatial templates with less seman-tic and viewpoint ambiguity, GuideGround still achieves strong performance on VD queries (79.6%), suggesting that viewpoint-aware reasoning remains beneficial for spatial re-lation understanding. Table 2 compares GuideGround with recent zero-/few-shot grounding methods that directly leverage pretrained vision-language or large language models without task-                                         
+
+> Method Nr3D Overall Easy Hard VD VID SeeGround 46.1 54.5 38.3 42.3 48.2 WS-3DVG 39.0 46.5 31.7 36.8 40.0 ZSVG3D 39.0 46.5 31.7 36.8 40.0 VLM-Grounder 48.0 55.2 39.5 45.8 49.4 View-on-Graph 47.6 58.9 37.2 39.4 52.1 SeqVLM 53.2 58.1 47.4 51.0 54.5
+> Ours 68.1 74.6 61.8 66.6 68.8
+> Table 2. Comparison with SOTA Zero-/Few-shot methods on NR3D validation split. VD/VID definitions same as above.
+
+specific 3D grounding training. GuideGround achieves a substantial improvement over these approaches, increasing the overall accuracy from 53.2% to 68.1%. This result in-dicates that pretrained foundation models are more effec-tive when serving as complementary semantic and reason-ing components within a dedicated 3D grounding frame-work, rather than being directly used as standalone pre-dictors. By combining VLM-enhanced semantic under-standing with task-specific viewpoint-aware spatial reason-ing, GuideGround effectively exploits the strengths of both foundation models and specialized 3D representations. 
+
+4.3. Ablation Study 
+
+We conduct ablation studies on NR3D to evaluate the effec-tiveness of each component of GuideGround. 
+
+Does replacing auxiliary object classification with VLM-generated semantic priors improve grounding? 
+
+We compare different semantic representations while 6keeping the remaining grounding framework unchanged. Specifically, we compare three representative semantic rep-resentations based on PointNet++, CLIP, and their combi-nation (PN++ & CLIP), where object semantics are learned through the same auxiliary object classification objective. Our method instead replaces this objective with VLM-generated object descriptions and semantic priors. Table 3 shows that replacing auxiliary object classifica-tion with VLM-generated semantic priors consistently im-proves grounding performance across all evaluation subsets. Compared with the strongest conventional semantic repre-sentation based on PointNet++, our method improves the overall grounding accuracy from 64.4% to 68.1%. These results validate our motivation that semantic understand-ing in 3DVG can be more effectively modeled through VLM-generated semantic priors than conventional auxiliary object classification. Moreover, simply combining Point-Net++ and CLIP features does not outperform PointNet++, indicating that introducing additional visual features alone is insufficient without explicit semantic priors.                            
+
+> Semantic Rep. Overall Easy Hard VD VID PointNet++ 64.4 71.6 57.5 64.4 64.3 CLIP 53.3 59.3 47.5 53.1 53.3 PN++ & CLIP 61.5 69.1 54.2 60.9 61.8
+> Ours 68.1 74.6 61.8 66.6 68.8
+> Table 3. Comparison of different semantic representations. All variants use the same grounding framework.
+
+Does VLM-guided viewpoint reasoning improve grounding performance? We compare different strate-gies for viewpoint-aware grounding while keeping the se-mantic representation unchanged. Specifically, we compare conventional multi-view feature fusion, direct foundation-model reasoning (text-only and text+image), and our VLM-guided viewpoint reasoning framework. We further remove ARM and the VLM-based hypothesis verification module to evaluate the contribution of each component. As shown in Table 4, our method consistently outper-forms all competing reasoning strategies. Compared with conventional multi-view feature fusion, our framework im-proves the overall accuracy from 64.7% to 68.1%, demon-strating that preserving viewpoint-specific grounding hy-potheses is more effective than aggregating multi-view fea-tures before grounding. Direct foundation-model reasoning alone performs substantially worse, even when both textual and visual observations are provided. For a fair comparison, the direct foundation-model baselines use the same founda-tion model as the verification stage, with either textual scene descriptions or both textual descriptions and rendered im-ages as input. This indicates that the improvement does not simply come from applying a stronger foundation model, but from integrating its semantic and visual reasoning capa-bility with structured 3D grounding. To isolate the contribution of each design, we addition-ally remove ARM and the VLM-based hypothesis verifi-cation module from the full model. Removing ARM de-creases the accuracy from 68.1% to 63.4%, demonstrat-ing the importance of anchor-aware object-relation model-ing for fine-grained spatial reasoning. Removing hypothe-sis verification also causes a performance drop from 68.1% to 65.2%, showing that multimodal verification effectively resolves ambiguous viewpoint-specific grounding hypothe-ses. Together, these results confirm that per-view grounding and VLM-based verification provide complementary bene-fits.                                    
+
+> Strategy Overall Easy Hard VD VID
+> Existing Reasoning Paradigms
+> MV Fusion 64.7 71.2 58.4 63.2 65.5 VLM(Text-only) 28.6 36.0 21.5 26.9 29.5 VLM(Text+Image) 54.6 58.1 51.3 49.1 59.4
+> Component Ablation
+> w/o ARM. 63.4 69.8 57.3 63.1 63.6 w/o verification 65.2 72.4 58.3 63.7 66.0
+> Ours 68.1 74.6 61.8 66.6 68.8
+> Table 4. Comparison of different spatial reasoning strategies. All variants use the same semantic representation.
+
+How does the number of candidate viewpoints affect grounding? We analyze the influence of the number of candidate viewpoints while keeping other components un-changed. As shown in Table 5, performance improves as the number of viewpoints increases from 1 to 4, indicating that additional views provide more complete scene obser-vations. However, using 8 viewpoints introduces redundant hypotheses and slightly degrades performance. Therefore, we select 4 viewpoints as a good trade-off between view-point coverage and reasoning complexity.                          
+
+> # Views Overall Easy Hard VD VID 160.1 66.5 53.8 60.0 61.8 264.4 70.6 58.5 62.4 65.5 468.1 74.6 61.8 66.6 68.8 865.5 72.0 59.3 64.3 66.2 Table 5. Effect of the number of candidate viewpoints.
+
+4.4. Qualitative Analysis 
+
+Figure 4 presents two representative examples illustrat-ing how GuideGround resolves semantic and viewpoint 7Figure 4. Qualitative examples of GuideGround. Case 1 highlights the benefit of VLM-enhanced semantic evidence under incomplete geometric observations, while Case 2 demonstrates viewpoint-specific hypothesis verification. 
+
+ambiguities. In the first example, the baseline model grounds the query to the jacket instead of the target chair because occlusion introduces misleading geometric cues, making the jacket appear similar to a chair back. Guide-Ground correctly identifies the target by leveraging VLM-enhanced semantic evidence. In the second example, dif-ferent viewpoints produce inconsistent grounding hypothe-ses. GuideGround preserves these hypotheses and em-ploys VLM-based verification to select the most plausible candidate based on visual evidence and spatial relations. These examples demonstrate that semantic enhancement and viewpoint-aware hypothesis verification address com-plementary challenges in 3D visual grounding. More quali-tative results are provided in the Supplementary Material. 
+
+# 5. Conclusion 
+
+In this paper, we presented GuideGround , a VLM-guided framework for 3D visual grounding that addresses seman-tic understanding and viewpoint-aware spatial reasoning. By leveraging VLM-generated semantic descriptions and viewpoint-specific hypothesis verification, GuideGround improves grounding beyond auxiliary closed-set classifica-tion and conventional multi-view featureaggregation. Ex-periments on ReferIt3D demonstrate the effectiveness of the proposed framework, highlighting the potential of integrat-ing foundation models with specialized 3D perception mod-els for semantic-rich and reasoning-aware 3D understand-ing. 
+
+# References 
+
+[1] Eslam Abdelrahman, Mohamed Ayman Mohamed, Mah-moud Ahmed, and Mohamed Elhoseiny. Cot3dref: Chain-of-thoughts data-efficient 3d visual grounding. In Inter-national Conference on Learning Representations , pages 11871–11896, 2024. 2 [2] Ahmed Abdelreheem, Kyle Olszewski, Hsin-Ying Lee, Pe-ter Wonka, and Panos Achlioptas. Scanents3d: Exploit-ing phrase-to-3d-object correspondences for improved visio-linguistic models in 3d scenes. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision , pages 3524–3534, 2024. 5 [3] Panos Achlioptas, Ahmed Abdelreheem, Fei Xia, Mohamed Elhoseiny, and Leonidas Guibas. Referit3d: Neural listeners for fine-grained 3d object identification in real-world scenes. In European conference on computer vision , pages 422–440. Springer, 2020. 1, 2, 5 [4] Eslam Bakr, Yasmeen Alsaedy, and Mohamed Elhoseiny. Look around and refer: 2d synthetic semantics knowledge distillation for 3d visual grounding. Advances in neural in-formation processing systems , 35:37146–37158, 2022. 2 [5] Chun-Peng Chang, Shaoxiang Wang, Alain Pagani, and Di-dier Stricker. Mikasa: Multi-key-anchor & scene-aware transformer for 3d visual grounding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 14131–14140, 2024. 2, 4 [6] Dave Zhenyu Chen, Angel X Chang, and Matthias Nießner. Scanrefer: 3d object localization in rgb-d scans using natural language. In European conference on computer vision , pages 202–221. Springer, 2020. 1, 2 [7] Shizhe Chen, Pierre-Louis Guhur, Makarand Tapaswi, Cordelia Schmid, and Ivan Laptev. Language conditioned spatial relation reasoning for 3d object grounding. Advances in neural information processing systems , 35:20522–20535, 2022. 2 [8] Angela Dai, Angel X Chang, Manolis Savva, Maciej Hal-ber, Thomas Funkhouser, and Matthias Nießner. Scannet: Richly-annotated 3d reconstructions of indoor scenes. In 
+
+Proceedings of the IEEE conference on computer vision and pattern recognition , pages 5828–5839, 2017. 5 [9] DeepSeek-AI, Aixin Liu, Bei Feng, Bing Xue, et al. Deepseek-v3 technical report, 2025. 5 [10] Jiading Fang, Xiangshan Tan, Shengjie Lin, Igor Vasilje-vic, Vitor Guizilini, Hongyuan Mei, Rares Ambrus, Gregory Shakhnarovich, and Matthew R Walter. Transcrib3d: 3d re-ferring expression resolution through large language models. 
+
+8In 2024 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pages 9737–9744. IEEE, 2024. 3[11] Zoey Guo, Yiwen Tang, Ray Zhang, Dong Wang, Zhigang Wang, Bin Zhao, and Xuelong Li. Viewrefer: Grasp the multi-view knowledge for 3d visual grounding. In Proceed-ings of the IEEE/CVF International Conference on Com-puter Vision , pages 15372–15383, 2023. 2 [12] Dailan He, Yusheng Zhao, Junyu Luo, Tianrui Hui, Shaofei Huang, Aixi Zhang, and Si Liu. Transrefer3d: Entity-and-relation aware transformer for fine-grained 3d visual ground-ing. In Proceedings of the 29th ACM international confer-ence on multimedia , pages 2344–2352, 2021. 2 [13] Joy Hsu, Jiayuan Mao, and Jiajun Wu. Ns3d: Neuro-symbolic grounding of 3d objects and relations. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 2614–2623, 2023. 2 [14] Haifeng Huang, Yilun Chen, Zehan Wang, Rongjie Huang, Runsen Xu, Tai Wang, Luping Liu, Xize Cheng, Yang Zhao, Jiangmiao Pang, et al. Chat-scene: Bridging 3d scene and large language models with object identifiers. 
+
+Advances in Neural Information Processing Systems , 37: 113991–114017, 2024. 3 [15] Pin-Hao Huang, Han-Hung Lee, Hwann-Tzong Chen, and Tyng-Luh Liu. Text-guided graph neural networks for re-ferring 3d instance segmentation. In Proceedings of the AAAI conference on artificial intelligence , pages 1610–1618, 2021. 2 [16] Ronggang Huang, Haoxin Yang, Yan Cai, Xuemiao Xu, Huaidong Zhang, and Shengfeng He. Viewsrd: 3d vi-sual grounding via structured multi-view decomposition. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 9726–9736, 2025. 2 [17] Shijia Huang, Yilun Chen, Jiaya Jia, and Liwei Wang. Multi-view transformer for 3d visual grounding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 15524–15533, 2022. 2 [18] Ayush Jain, Alexander Swerdlow, Yuzhou Wang, Sergio Ar-naud, Ada Martin, Alexander Sax, Franziska Meier, and Ka-terina Fragkiadaki. Unifying 2d and 3d vision-language un-derstanding, 2025. 3 [19] Cijo Jose, Th´ eo Moutakanni, Dahyun Kang, Federico Baldassarre, Timoth´ ee Darcet, Hu Xu, Daniel Li, Marc Szafraniec, Micha¨ el Ramamonjisoa, Maxime Oquab, Oriane Sim´ eoni, Huy V. Vo, Patrick Labatut, and Piotr Bojanowski. Dinov2 meets text: A unified framework for image- and pixel-level vision-language alignment, 2024. 2 [20] Rong Li, Shijie Li, Lingdong Kong, Xulei Yang, and Jun-wei Liang. Seeground: See and ground for zero-shot open-vocabulary 3d visual grounding. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 3707–3717, 2025. 2, 3 [21] Jiawen Lin, Shiran Bian, Yihang Zhu, Wenbin Tan, Yachao Zhang, Yuan Xie, and Yanyun Qu. Seqvlm: Proposal-guided multi-view sequences reasoning via vlm for zero-shot 3d vi-sual grounding. In Proceedings of the 33rd ACM Interna-tional Conference on Multimedia , pages 3094–3103, 2025. 2[22] Daizong Liu, Yang Liu, Wencan Huang, and Wei Hu. A sur-vey on text-guided 3-d visual grounding: Elements, recent advances, and future directions. IEEE Transactions on Neu-ral Networks and Learning Systems , 2025. 1 [23] Yuanyuan Liu, Haiyang Mei, Dongyang Zhan, Jiayue Zhao, Dongsheng Zhou, Bo Dong, and Xin Yang. View-on-graph: Zero-shot 3d visual grounding via vision-language reasoning on scene graphs. In Proceedings of the AAAI Conference on Artificial Intelligence , pages 7386–7394, 2026. 3 [24] Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization, 2019. 5 [25] Paul McVay, Sergio Arnaud, Ada Martin, Arjun Majumdar, Krishna Murthy Jatavallabhula, Phillip Thomas, Ruslan Part-sey, Daniel Dugas, Abha Gejji, Alexander Sax, et al. Locate 3d: Real-world object localization via self-supervised learn-ing in 3d. In Forty-second International Conference on Ma-chine Learning , 2025. 3 [26] OpenAI. Gpt-5.6: Frontier intelligence that scales with your ambition. https://openai.com/index/gpt- 5-6/ , 2026. 5 [27] Maxime Oquab, Timoth´ ee Darcet, Th´ eo Moutakanni, Huy Vo, Marc Szafraniec, Vasil Khalidov, Pierre Fernandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, et al. Dinov2: Learning robust visual features without supervision. 
+
+Transactions on Machine Learning Research Journal , 2024. 2[28] Qwen Team. Qwen3.5: Towards native multimodal agents, 2026. 5 [29] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural language supervi-sion. In International conference on machine learning , pages 8748–8763. PmLR, 2021. 2 [30] Junha Roh, Karthik Desingh, Ali Farhadi, and Dieter Fox. Languagerefer: Spatial-language model for 3d visual grounding. In Conference on Robot Learning , pages 1046– 1056. PMLR, 2022. 2 [31] Xiangxi Shi, Zhonghua Wu, and Stefan Lee. Aware visual grounding in 3d scenes. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pages 14056–14065, 2024. 2 [32] Kaitao Song, Xu Tan, Tao Qin, Jianfeng Lu, and Tie-Yan Liu. Mpnet: Masked and permuted pre-training for language understanding. Advances in neural information processing systems , 33:16857–16867, 2020. 6 [33] Yanmin Wu, Xinhua Cheng, Renrui Zhang, Zesen Cheng, and Jian Zhang. Eda: Explicit text-decoupling and dense alignment for 3d visual grounding. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 19231–19242, 2023. 2 [34] Jianing Yang, Xuweiyi Chen, Shengyi Qian, Nikhil Madaan, Madhavan Iyengar, David F Fouhey, and Joyce Chai. Llm-grounder: Open-vocabulary 3d visual grounding with large language model as an agent. In 2024 IEEE International Conference on Robotics and Automation (ICRA) , pages 7694–7701. IEEE, 2024. 2, 3 
+
+9[35] Li Yang, Ziqi Zhang, Zhongang Qi, Yan Xu, Wei Liu, Ying Shan, Bing Li, Weiping Yang, Peng Li, Yan Wang, et al. Exploiting contextual objects and relations for 3d visual grounding. Advances in Neural Information Processing Sys-tems , 36:49542–49554, 2023. 2 [36] Zhengyuan Yang, Songyang Zhang, Liwei Wang, and Jiebo Luo. Sat: 2d semantics assisted training for 3d visual grounding. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 1856–1866, 2021. 2 [37] Zhihao Yuan, Xu Yan, Yinghong Liao, Ruimao Zhang, Sheng Wang, Zhen Li, and Shuguang Cui. Instancerefer: Cooperative holistic understanding for visual grounding on point clouds through instance multi-level contextual refer-ring. In Proceedings of the IEEE/CVF International Confer-ence on Computer Vision , pages 1791–1800, 2021. 2 [38] Zhihao Yuan, Jinke Ren, Chun-Mei Feng, Hengshuang Zhao, Shuguang Cui, and Zhen Li. Visual programming for zero-shot open-vocabulary 3d visual grounding. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 20623–20633, 2024. 3 [39] Beichen Zhang, Yuhang Zang, Xiaoyi Dong, Yuhang Cao, Haodong Duan, Dahua Lin, and Jiaqi Wang. Think visually, reason textually: Vision-language synergy in arc, 2025. 2 [40] Yiming Zhang, ZeMing Gong, and Angel X Chang. Multi3drefer: Grounding text description to multiple 3d ob-jects. In Proceedings of the IEEE/CVF International Con-ference on Computer Vision , pages 15225–15236, 2023. 2 [41] Ziyu Zhu, Xiaojian Ma, Yixin Chen, Zhidong Deng, Siyuan Huang, and Qing Li. 3d-vista: Pre-trained transformer for 3d vision and text alignment. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 2911– 2921, 2023. 3 
+
+10 GuideGround: VLM-guided Semantic Understanding and Viewpoint-aware Reasoning for 3D Visual Grounding 
+
+# Supplementary Material 
+
+# A. Additional Method Details 
+
+A.1. Key Frame Selection 
+
+For each object o, we select a small set of informative RGB frames for object description generation. To balance visual quality and viewpoint diversity, we adopt an object-aware key-frame selection strategy instead of uniform temporal sampling or naive top-Nf selection. 
+
+Candidate frame construction. Let Po ⊂ R3 denote the point cloud of object o. We subsample the RGB sequence using a temporal stride of 6. Each sampled frame consists of an RGB image It and the corresponding target-instance mask Mo,t . We project Po onto each sampled frame using the corresponding camera parameters. The frames without valid image-plane projections will be discarded. To reduce computation, at most 2,500 object points are used when evaluating each object–frame pair. 
+
+Frame quality evaluation. For each valid object–frame pair ( o, t ), we compute three complementary quality mea-sures. The projection coverage ratio is defined as 
+
+rcov  
+
+> o,t
+
+= |{ p ∈ Po : πt(p) ∈ Ωt}| |Po| , (11) where πt(·) denotes projection onto frame t, and Ωt denotes its image domain. This ratio measures the fraction of the object geometry that falls within the camera view. Multiple 3D points may project onto the same pixel. We retain the front-most projected point according to depth and define the visibility ratio as 
+
+rvis  
+
+> o,t
+
+= |U front  
+
+> o,t
+
+∩ Mo,t ||U front  
+
+> o,t
+
+| , (12) where Ufront  
+
+> o,t
+
+is the set of pixels occupied by the front-most projections of object o. This measure estimates the fraction of the projected object that is consistent with the observed instance mask and therefore remains visible after occlusion. We additionally compute the normalized projected area 
+
+rarea  
+
+> o,t
+
+= area( Bo,t )
+
+HtWt
+
+, (13) where Bo,t is the tight 2D bounding box of the valid pro-jection and Ht × Wt is the image resolution. The overall frame-quality score is 
+
+ϕ(o, t ) = λcov rcov  
+
+> o,t
+
++ λvis rvis  
+
+> o,t
+
+. (14) We set λcov = 0 .65 , λvis = 0 .35 .Although projected area is not included in the ranking score, it is retained as a hard filtering criterion to prevent very small object regions from being selected. Specifically, a frame is considered qualified only if 
+
+rcov  
+
+> o,t
+
+≥ 0.08 , rvis  
+
+> o,t
+
+≥ 0.10 , rarea  
+
+> o,t
+
+≥ 0.002 . (15) These conditions remove frames in which the object is largely outside the camera frustum, heavily occluded, or too small to provide useful appearance information. 
+
+Segment-wise key-frame selection. We select Nf = 4 
+
+key frames for each object. Since the highest-scoring frames are often temporally adjacent, directly selecting the top-Nf candidates results in redundant observations. In-stead, we sort the qualified candidates by timestamp and partition them into Nf contiguous temporal segments, 
+
+Qo = Q(1)  
+
+> o
+
+∪ · · · ∪ Q (Nf ) 
+
+> o
+
+. (16) The highest-scoring candidate is selected from each seg-ment: 
+
+ˆqk = arg max 
+
+> q∈Q (k)
+> o
+
+ϕ(q), k = 1 , . . . , N f . (17) The highest-scoring frame is selected from each segment. If fewer than Nf qualified candidates are available, the re-maining positions are filled using the highest-quality unse-lected candidates. Objects without any valid candidate are skipped. 
+
+Multi-view evidence construction. For each selected frame, we highlight the visible support of the target instance with a green contour. Compared with a rectangular 2D box, the contour more precisely identifies the target region while retaining the surrounding scene context required for recog-nizing object attributes. The four selected frames are re-sized and arranged into a 2 × 2 collage, 
+
+Co = Ψ  Iˆt1 , I ˆt2 , I ˆt3 , I ˆt4
+
+ , (18) which is subsequently provided to the VLM for object de-scription generation. 
+
+A.2. Candidate Viewpoint Construction 
+
+Given a scene coordinate system, we generate candidate viewpoints by rotating the scene around the vertical axis 1with uniformly sampled angles. For V viewpoints, the ro-tation angle of the v-th view is defined as 
+
+θv = 2πv V . (19) The same candidate viewpoints are used for all objects within a scene. Geometric relations are recomputed under each viewpoint, while language queries and object semantic descriptions remain unchanged. 
+
+# B. Training Details 
+
+B.1. Training Objective 
+
+As we describe in the main paper, viewpoint-specific grounding scores are aggregated during training to obtain a unified supervision target, whereas inference preserves the per-view grounding hypotheses for subsequent verification. Specifically, let svi denote the final grounding score of ob-ject oi under viewpoint v. The aggregated training score is computed by 
+
+sagg  
+
+> i
+
+= 1
+
+NvNvX
+
+> v=1
+
+svi , (20) where Nv is the number of candidate viewpoints and we set it to 4. The aggregated prediction is supervised using the standard cross-entropy loss 
+
+Lref = CE( sagg , y ), (21) where y denotes the ground-truth target object. Besides the grounding loss, we employ two auxiliary ob-jectives. The first is a multi-positive anchor loss 
+
+Lanchor = − 1
+
+|A +|
+
+X
+
+> k∈A +
+
+log X
+
+> i∈P k
+
+exp( ℓk,i )
+
+P 
+
+> j
+
+exp( ℓk,j ) , (22) where Pk denotes the set of valid objects corresponding to anchor phrase ak. Lanchor supervises anchor-object corre-spondence when multiple valid anchor objects exist. The second is a margin-based ranking loss which further sep-arates the target object from hard distractors of the same category. It is defined as 
+
+Ldis = 1
+
+|D| 
+
+X
+
+> j∈D
+
+max (0 , m − sy + sj ) (23) where sy denotes the grounding score of the target object, 
+
+sj is the grounding score of distractor object oj . D denotes all non-target objects sharing the same semantic category as the target. m is the ranking margin and we set it to 0.2. The overall objective is 
+
+L = Lref + λaLanchor + λdLdis , (24) where λa and λd are the loss weights for the auxiliary ob-jectives. We set λa = 0 .05 and λd = 0 .1.
+
+B.2. Optimization Settings 
+
+We optimize the trainable modules using AdamW with a base learning rate of 5 × 10 −4 and a weight decay of 0.05 .The query encoder, post-object encoder, and base fusion layers are optimized with a learning rate of 5 × 10 −5, while the newly introduced caption mapping, box mapping, re-lation branch, grounding classifier, and anchor refinement branch use the base learning rate. The learning rate is de-cayed by a factor of 0.66 at epochs 30, 40, 50, 60, 70, 80, 90, 100, 110, and 120. We train the model for 120 epochs with a batch size of 8 on three NVIDIA RTX 4090 GPUs. 
+
+B.3. Hyperparameter Settings 
+
+Anchor-related hyperparameters. We extract at most K
+
+anchor phrases from each referring expression. The anchor-object matching score is computed with a temperature pa-rameter τ to control the sharpness of the similarity distribu-tion. In our implementation, we set the maximum number of anchors to K = 6 and use τ = 0 .1.
+
+Grounding score aggregation. The final grounding score combines coarse object-level matching and relation-aware refinement scores. Specifically, the grounding score is com-puted as a weighted combination of the coarse grounding score and the relation-enhanced score: 
+
+svi = λs ssem  
+
+> i
+
++ λc scoarse ,v i + λr srel ,v i , (25) where λs, λc, and λr control the contributions of the three components. We set λs = 0 .2, λc = 1 .0, and λr = 0 .2 in all experiments. 
+
+# C. Prompt Templates 
+
+C.1. Object Caption Prompt 
+
+We use the following prompts for object-centric caption generation. Given a 2 × 2 multi-view collage of a target object, the VLM is instructed to generate a structured de-scription based only on visible evidence. 
+
+Primary system prompt. 
+
+> You caption one highlighted indoor object from a 2x2 multi-view collage. In every tile, the same target object is marked by a green outline or contour. Use only the visible evidence in the images. Do not assume any hidden GT label. Return JSON only.
+
+Primary user prompt.   
+
+> Task: Describe the highlighted object shown across four views.
+> Important context: The collage contains 4 viewpoints
+
+2of the same target object. The target is the region en-closed by the green outline or contour in each tile. Some views may be blurry, partial, or heavily occluded. Use the combination of all views before deciding the object category. 
+
+Output requirements: 
+
+- Return strict JSON only. - Use this exact schema: 
+
+{"target": "short object noun phrase", "caption": "one concise sentence" }
+
+- ‘target‘ should be a short noun phrase, ideally 1 to 4 words. - ‘caption‘ should be one concise sentence describing the object category and a few visible distinguishing cues. - Do not mention the green outline, collage layout, or camera viewpoints in the caption. - Avoid generic targets like ‘object‘ unless the object is truly unidentifiable. 
+
+Example output: 
+
+{"target": "toilet", "caption": "A white ceramic toilet with the lid raised beside a tiled wall." }
+
+The prompt design aims to ensure that (1) the VLM fo-cuses only on the target object, (2) the generated description is grounded in visible evidence, and (3) the output follows a structured format for automatic parsing. 
+
+C.2. Query Parsing Prompt 
+
+We provide the prompt template used for query parsing. The parsing process is performed by a single LLM call, which jointly identifies the target description and reference entities required for subsequent anchor-aware reasoning. 
+
+Primary system prompt. 
+
+You are an assistant for 3D visual grounding. Given a re-ferring expression describing an object in a 3D scene, ex-tract the target object phrase and reference anchors required for spatial reasoning. Analyze only the provided language query. Do not assume any additional scene information. Re-turn JSON only. 
+
+Primary user prompt. 
+
+Task: Parse the referring expression for 3D visual ground-ing. 
+
+Input: 
+
+A language query referring to a target object in a 3D scene. 
+
+Target object extraction: 
+
+- Identify the phrase that describes the target object to be grounded. - Preserve the original wording whenever possible. - Include necessary semantic modifiers that define the target object. - Do not include relational descriptions that only indicate the target object’s location. 
+
+Anchor extraction: 
+
+- Identify reference objects or entities used to locate the target object. - Each anchor should correspond to an object phrase or meaningful reference entity in the query. - Preserve the original wording whenever possible. - Do not include the target object itself as an anchor. - Do not include pure spatial words (e.g., left, right, above) without an associated reference object. - If no valid anchor exists, return an empty list. 
+
+Output requirements: 
+
+- Return strict JSON only. - Use this exact schema: 
+
+{"target": "target object phrase", "anchors": ["anchor phrase 1", "anchor phrase 2"] }
+
+Example input: 
+
+Find the mug on the right shelf next to the coffee machine. 
+
+Example output: 
+
+{"target": "the mug", "anchors": ["the right shelf", "the coffee machine"] }
+
+C.3. Hypothesis Verification Prompt 
+
+We provide the prompt template used for VLM-based grounding hypothesis verification. The output is formatted as a structured JSON object for automatic parsing. 
+
+Primary system prompt. 
+
+You are a 3D visual grounding verifier. Given an Nr3D re-ferring expression, multiple top-view box images, and the corresponding textual information for each view, your task is to verify the grounding hypothesis. The images contain proposal IDs. The textual information provides proposal ID, object ID, object category mappings, and model predictions for each view. Use the query, object categories, and spatial layouts across different views to determine the most plausi-ble grounding result. Return JSON only. 
+
+Primary user prompt. 
+
+Task: Verify the grounding hypothesis for the given referring expression. 
+
+Important context: 
+
+- The input contains a referring expression, multiple top-view images, and view-specific object information. 
+
+3- The images contain proposal IDs corresponding to objects in the scene. - The textual information provides the mapping between proposal IDs, object IDs, object descriptions, and model predictions. - The grounding model has generated predictions from different views, which should be considered as strong evidence. - Only override the model prediction when the visual spatial evidence clearly contradicts it. 
+
+Decision requirements: 
+
+- Combine the referring expression, object categories, and spatial layouts across views to determine the most plausible grounding hypothesis. - Select the view that provides the most useful evidence for interpreting the referring expression. - If the expression contains viewpoint-dependent terms (e.g., left, right, front, behind, facing), select the view that best explains the corresponding directional relationship. - If the expression contains spatial relations involving relative positions (e.g., closest, farthest, near, next to, between, above, below), select the view that most clearly reveals the involved objects and their relationships. - If multiple views provide sufficient evidence, prefer the view where the model prediction is more stable and consistent with the object category information. 
+
+Input information: 
+
+example id : ¡example id¿ 
+
+scene id : ¡scene id¿ 
+
+ann id : ¡ann id¿ 
+
+utterance : ¡utterance¿ 
+
+Model grounding prediction : ¡fused prediction¿ 
+
+Available view IDs : ¡available view ids¿ 
+
+View-specific textual information :
+
+{proposal IDs, object IDs, object descriptions, and confi-dence scores for each view. }
+
+Output requirements: 
+
+- Return strict JSON only. - Use this exact schema: 
+
+{"selected view": 0, "selected proposal id": 0, "selected object id": 0, "confidence": 0.0, "reason": "short reason" }
+
+- selected view must be selected from the provided view IDs. - selected proposal id should correspond to the selected grounding hypothesis. - selected object id should be filled from the object mapping when available; otherwise output -1. - confidence should be a value between 0 and 1. - reason should be a concise one-sentence explanation. 
+
+Example input: 
+
+example_id: example_00000 scene_id: scene0565_00 ann_id: 0utterance: The chair to the far left hand side of the taller desk with the computer monitor on it. Model grounding prediction: proposal 30 Available view IDs: [0,1,2,3] View 0: proposal -> object_description proposal 0: grey office chair proposal 1: office chair proposal 2: teal office chair proposal 3: computer monitor Top predictions: proposal 30: purple office chair, score =7.349187 proposal 2: teal office chair, score =4.801944 proposal 1: office chair, score=0.843593 proposal 0: grey office chair, score =0.087762 proposal 4: black desk, score=0.054076 View 1: ... 
+
+Example output: 
+
+{"selected view": 2, "selected proposal id": 12, "selected object id": 45, "confidence": 0.92, "reason": "View 2 clearly shows the chair on the right side of the table." }
+
+C.4. VLM-based Baseline Prompt 
+
+For the VLM-only baselines, we use simplified prompts that directly request the target object proosal from either the lan-guage query alone or the query-image pair. In the text-only setting, the VLM receives only the referring expression and structured proposal information, including object categories and 3D bounding box coordinates. No rendered images are provided. This setting evaluates the capability of language-based reasoning with explicit geometric descriptions. In the image-text setting, the VLM receives the referring expres-sion together with rendered scene images. Unlike our veri-fication module, no grounding predictions are provided. In-4stead, the VLM is directly asked to identify the target object from the visual input. This setting evaluates direct VLM-based 3D visual grounding without specialized grounding models. The exact prompts are included in the released code. 
+
+# D. Additional Experimental Results 
+
+D.1. Empirical Analysis of Multi-view Fusion 
+
+In the main paper, we motivate GuideGround by observ-ing that direct multi-view feature aggregation may weaken viewpoint-specific spatial evidence. To further validate this observation, we conduct an additional analysis comparing conventional multi-view fusion with independent view-wise grounding evaluation. This analysis investigates whether candidate viewpoints already contain sufficient grounding information before aggregation and provides empirical mo-tivation for our viewpoint-aware verification strategy. Specifically, we modify MVT-3DVG and MiKASA to perform grounding independently for each candidate view-point while keeping the remaining inference pipeline un-changed. A prediction is considered correct if any candi-date viewpoint identifies the target, providing an oracle up-per bound of the 3DVG model assuming perfect viewpoint selection. As shown in Table 6, independent per-view grounding consistently outperforms the original multi-view inference strategy, indicating that the correct target is often identi-fiable from at least one candidate viewpoint before fea-ture aggregation. This suggests that the key challenge is not generating multiple viewpoints, but explicitly select-ing the most informative viewpoint for spatial reasoning. Motivated by this, GuideGround performs independent per-view grounding and identifies the final target through VLM-based hypothesis verification instead of direct multi-view feature aggregation. 
+
+D.2. Analysis of Semantic Understanding 
+
+To better understand the effect of VLM-enhanced semantic understanding, we analyze two complementary metrics in Table 7. Semantic Accuracy (S. Acc.) measures whether the predicted object belongs to the correct semantic category regardless of the exact instance, reflecting the model’s abil-
+
+Method Fusion View-Wise ∆
+
+MVT-3DVG 54.8 68.9 +14.1 MiKASA 55.3 76.9 +21.6  
+
+> Table 6. Comparison between the original multi-view fusion strategy and per-view evaluation. View-wise evaluation performs grounding independently on each candidate viewpoint while keep-ing the remaining inference pipeline unchanged.
+
+ity to (1) recognize object semantics and (2) understand the semantic target specified in the referring expression. Dis-tractor Error (D. Err.) denotes the gap between S. Acc. and the final grounding accuracy, corresponding to cases where the model correctly identifies the target category but fails to localize the correct instance among semantically similar objects. The proposed semantic representation consistently im-proves S. Acc., particularly on the Easy split. Compared with MiKASA, our grounding model without verification increases S. Acc. from 84.66% to 86.94%, and the com-plete framework further improves it to 88.36%. Since Easy examples contain relatively limited spatial ambiguity, this improvement mainly reflects stronger semantic understand-ing enabled by VLM-generated object descriptions rather than enhanced spatial reasoning. On the Hard split, the grounding model without verification only achieves com-parable S. Acc. to MiKASA. We attribute this observation to the substantially stronger spatial ambiguity in Hard ex-amples, where incorrect spatial reasoning may prevent se-mantically correct candidates from being selected. Interest-ingly, the verification module further improves S. Acc. on this split, suggesting that viewpoint-aware verification can recover semantic predictions affected by ambiguous spatial reasoning. The D. Err. further reveals the remaining challenge after semantic understanding. D. Err. measures failures in distin-guishing the referred instance after the semantic category has been correctly identified. A smaller D. Err. indicates that the model is better able to distinguish the correct target from other objects with the same semantic category. Our method exhibits lower D. Err. on most evaluation splits, indicating that stronger semantic representations provide a better foundation for instance-level grounding. Neverthe-less, the Hard split still exhibits substantially larger D. Err. than the Easy split for all methods, suggesting that many remaining failures arise from distinguishing semantically similar objects based on their spatial relationships rather than recognizing object semantics. We further compare the View-dep. and View-indep. subsets. On the View-indep. subset, our method consistently reduces D. Err., indicating that improved semantic representations directly benefit in-stance discrimination when viewpoint-dependent reasoning is not required. In contrast, on the View-dep. subset, the grounding model without verification slightly increases D. Err. despite achieving higher S. Acc. This suggests that once object semantics are correctly identified, the remain-ing errors are dominated by viewpoint-dependent spatial ambiguity rather than semantic confusion. After introduc-ing viewpoint-aware verification, D. Err. is reduced while S. Acc. is further improved, demonstrating that the ver-ification module effectively complements semantic under-standing by resolving spatial ambiguities that cannot be ad-5Overall Easy Hard View-dep. View-indep. Method Acc. S. Acc. D. Err. Acc. S. Acc. D. Err. Acc. S. Acc. D. Err. Acc. S. Acc. D. Err. Acc. S. Acc. D. Err. MVT 54.90 83.50 28.59 62.44 79.83 17.39 47.65 87.02 39.37 52.93 84.93 31.99 55.88 82.79 26.90 MiKASA 64.28 88.23 23.94 69.80 84.66 14.85 58.98 91.66 32.69 65.43 89.59 24.16 63.71 87.55 23.84 Ours w/o Veri. 65.18 88.92 23.74 72.36 86.94 14.58 58.27 90.83 32.56 64.53 90.31 25.79 65.50 88.23 22.73 Ours + Veri. 68.05 90.05 21.99 74.60 88.36 13.76 61.76 91.66 29.91 66.55 91.16 24.62 68.80 89.49 20.70                                                  
+
+> Table 7. Semantic error analysis on Nr3D across different splits. S. Acc. (Semantic Accuracy) measures whether the predicted object belongs to the same semantic class as the target. D. Err. (Distractor Error) denotes the gap between the S. Acc. and the final grounding performance. Veri. denotes the VLM-based verification module. Split NOrig. Acc. Final Acc. ∆Corrected Semantic Fix Spatial Fix Verified Overall 7484 65.18 68.05 +2.87 275 86 189 2049 Easy 3669 72.36 74.60 +2.23 119 55 64 791 Hard 3815 58.27 61.76 +3.49 156 31 125 1258 View-dep. 2478 64.53 66.55 +2.02 75 24 51 727 View-indep. 5006 65.50 68.80 +3.30 200 62 138 1322 Table 8. Analysis of VLM-based verification on Nr3D. Verified denotes the number of samples processed by the verification module. Corrected denotes samples whose predictions are changed from incorrect to correct after verification. For each corrected sample, the VLM additionally identifies whether the correction is primarily attributed to semantic evidence (Semantic Fix) or spatial reasoning (Spatial Fix).
+
+dressed by semantic representations alone. This observation further supports our viewpoint-aware verification module, which explicitly reasons over viewpoint-specific grounding hypotheses to resolve such spatial ambiguities. 
+
+D.3. Analysis of VLM-based Verification 
+
+To analyze the effectiveness of VLM-based verification, we examine how it refines grounding hypotheses on Nr3D. Ta-ble 8 reports grounding performance before and after verifi-cation, together with the numbers of verified and corrected samples. A corrected sample denotes a prediction changed from incorrect to correct after verification, while corrected cases are further categorized according to whether the im-provement is mainly attributed to semantic evidence (Se-mantic Fix) or spatial reasoning (Spatial Fix). VLM-based verification consistently improves ground-ing performance across all splits. On the overall split, veri-fication increases the grounding accuracy from 65.18% to 68.05%, yielding a 2.87% absolute improvement by cor-recting 275 previously incorrect predictions. These re-sults demonstrate that the VLM verifier effectively refines the viewpoint-specific grounding hypotheses generated by the task-specific grounding model rather than replacing it. The corrected cases further provide insights into the role of VLM-based verification. Among the 275 corrected samples on the overall split, 189 are attributed to spatial reasoning, whereas only 86 are attributed to semantic evidence. These statistics suggest that spatial reasoning plays a dominant role during verification, while semantic evidence mainly serves as complementary support. The benefit of verification becomes more evident in chal-lenging scenarios. On the Hard split, verification corrects 156 samples, improving accuracy by 3.49%. Among these corrections, 125 are attributed to spatial reasoning. This suggests that verification is particularly useful when the tar-get must be distinguished from same-category distractors using relational evidence. On the View-dep. split, spa-tial corrections still account for the majority of improve-ments (51 out of 75 corrected samples). This distribution is consistent with the intended role of the verifier, which compares viewpoint-specific grounding hypotheses to re-solve spatial relations expressed under a particular refer-ence frame. Overall, the results support the complemen-tary design of GuideGround, where the task-specific model performs structured grounding and the VLM verifier refines ambiguous hypotheses through high-level spatial reasoning. 
+
+D.4. More Qualitive Results 
+
+The qualitative results in Figure 5. demonstrate the effec-tiveness of GuideGround in challenging grounding scenar-ios. Existing methods often fail when multiple objects share similar appearances or when the referring expression re-quires viewpoint-dependent spatial reasoning. The first three examples illustrate the challenge of se-mantic understanding in indoor 3D scenes. Existing meth-ods may rely heavily on geometric representations or closed-set semantic cues, making them vulnerable to visu-ally similar objects and incomplete observations. In the first example, the target bag is confused with a semantically re-lated backpack, which shares similar appearance but does 6not satisfy the query. In the second example, incomplete object geometry causes the co-located jacket to be inter-preted as a chair-like structure, leading to incorrect ground-ing. In the third example, the target mural is distinguished by fine-grained visual attributes, such as the depicted tree and red mushrooms, which are difficult to capture through coarse object categories. By leveraging VLM-generated semantic descriptions, GuideGround captures these object-specific cues and better distinguishes the target from dis-tractors. The remaining examples demonstrate the difficulty of viewpoint-dependent spatial reasoning. The target object cannot be identified solely from object categories, but re-quires interpreting spatial relations under a specific refer-ence viewpoint. For example, expressions involving ”en-tering the room from the brown door” or ”facing the sink” require selecting the viewpoint that matches the described frame of reference. Direct multi-view aggregation may obscure such viewpoint-specific evidence, whereas Guide-Ground preserves viewpoint-specific hypotheses and uses VLM-based verification to identify the viewpoint that best explains the query. 7Figure 5. Qualitative comparison on challenging 3D visual grounding cases. The green,red and blue boxes indicate the ground-truth target, false predictions and the correct predictions respectively. GuideGround achieves more accurate grounding by leveraging fine-grained semantic descriptions and viewpoint-aware hypothesis verification, especially in cases involving ambiguous object categories and complex spatial relations. 
+
+8
