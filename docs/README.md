@@ -6,39 +6,46 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-04
-- 运行时间：2026-08-04 21:14:36 UTC
+- 最新运行日期：2026-08-05
+- 运行时间：2026-08-05 21:49:44 UTC
 - 运行状态：成功
-- 本次总论文数：5
+- 本次总论文数：8
 - 精读区：1
-- 速读区：4
+- 速读区：7
 
 ### 今日简报（AI）
-今日共读5篇3D视觉与具身智能论文，精读1篇、速读3篇，聚焦3D视觉定位与语义导航。
-
-最值得关注精读论文《GuideGround》，获8.0分，提出VLM引导的语义理解与视角感知推理方法，显著提升3D视觉定位性能。
-
-明日可顺藤摸瓜，延伸阅读VLM与3D场景理解结合的相关工作，并留意多模态检索与数字孪生方向的新进展。
-- 详情：[/202608/04/README](/202608/04/README)
+今日聚焦3D视觉定位、开放词汇分割与点云生成，共阅读8篇论文。  
+最值得关注的是精读的《TDVR》（8.0分），它通过联合文本消歧与视角推理解决零样本3D视觉定位；速读中《Perceptual Anchoring》提出的原型引导文本校准也值得一看。  
+建议优先精读TDVR，并顺带对比其他训练无关的开放词汇分割方法。
+- 详情：[/202608/05/README](/202608/05/README)
 
 ### 精读区论文标签
-1. [GuideGround: VLM-guided Semantic Understanding and Viewpoint-aware Reasoning for 3D Visual Grounding](/202608/04/2608.00518v1-guideground-vlm-guided-semantic-understanding-and-viewpoint-aware-reasoning-for-3d-visual-grounding)  
+1. [TDVR: Joint Text Disambiguation and Viewpoint Reasoning for Zero-Shot 3D Visual Grounding](/202608/05/2608.03763v1-tdvr-joint-text-disambiguation-and-viewpoint-reasoning-for-zero-shot-3d-visual-grounding)  
    标签：评分：8.0/10、query:open-vocab-d
-   evidence：VLM引导的开放词汇语义理解与多视图特征聚合用于三维视觉接地
+   evidence：基于文本与点云的零样本三维视觉定位，通过语义场景图和大模型推理完成区域检索，直接匹配开放词汇三维区域检索
 
 ### 速读区论文标签
-1. [Multimodal Embeddings for 3D Similarity Search in Semantic Web-of-Things Digital-Twin Platforms](/202608/04/2608.01852v1-multimodal-embeddings-for-3d-similarity-search-in-semantic-web-of-things-digital-twin-platforms)  
+1. [GaussianSelector: Lightweight Human-Guided Object Selection in 3D Gaussian Splatting with Graph Optimization](/202608/05/2608.01492v1-gaussianselector-lightweight-human-guided-object-selection-in-3d-gaussian-splatting-with-graph-optimization)  
    标签：评分：7.0/10、query:open-vocab-d
-   evidence：利用三维点云语义嵌入进行相似性检索，支持多模态检索与本体约束结合。
-2. [Room-Mediated Co-occurrence for Zero-Shot Object-Centric Semantic Navigation via Frontier Scoring](/202608/04/2607.25448v1-room-mediated-co-occurrence-for-zero-shot-object-centric-semantic-navigation-via-frontier-scoring)  
+   evidence：在原生高斯原语上进行超点图聚合以支持交互式目标选择
+2. [Perceptual Anchoring: Prototype-Guided Text Calibration for Training-free Open-Vocabulary Semantic Segmentation](/202608/05/2608.03991v1-perceptual-anchoring-prototype-guided-text-calibration-for-training-free-open-vocabulary-semantic-segmentation)  
+   标签：评分：7.0/10、query:open-vocab-d
+   evidence：提出免训练的开放词汇语义分割文本校准方法，可迁移到多视角二维特征上支持三维开放词汇场景分割
+3. [Learning to Tessellate: Point Cloud Generation via Recursive Spectral Partitioning](/202608/05/2608.02432v1-learning-to-tessellate-point-cloud-generation-via-recursive-spectral-partitioning)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：将CLIP房间概率向量投射到空间价值图，类似2D CLIP到3D的投影
-3. [Articulated Object Reconstruction from Rest-State Observation](/202608/04/2607.27749v1-articulated-object-reconstruction-from-rest-state-observation)  
+   evidence：递归谱划分用于保持拓扑的点云层级结构
+4. [Hunyuan3D-Buffalo 1.0: A Unified Multimodal Model for Scalable 3D Generation, Understanding, and Editing](/202608/05/2608.02711v1-hunyuan3d-buffalo-10-a-unified-multimodal-model-for-scalable-3d-generation-understanding-and-editing)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：融合视觉语言与分割模型输出构造三维部件结构，支持部件级场景理解
-4. [EOVSAM: Efficient Open-Vocabulary Segmentation with SAM 3 in One Pass](/202608/04/2608.02284v1-eovsam-efficient-open-vocabulary-segmentation-with-sam-3-in-one-pass)  
+   evidence：统一三维理解与文本引导部件生成，大规模多模态语料
+5. [PixelUp: Zero-Shot Semantic Feature Upsampling for Fine-Grained Vision Tasks](/202608/05/2608.02792v1-pixelup-zero-shot-semantic-feature-upsampling-for-fine-grained-vision-tasks)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：高效开放词汇二维掩码生成器，注意力聚合，可直接用于二维掩码到三维的提举流程
+   evidence：零样本语义特征上采样，可提升用于三维提升的二维特征分辨率
+6. [Qwen-3D: A Generalist 3D Vision-Language Model for Spatial Understanding](/202608/05/2608.02980v1-qwen-3d-a-generalist-3d-vision-language-model-for-spatial-understanding)  
+   标签：评分：6.0/10、query:open-vocab-d
+   evidence：面向空间理解的通用三维视觉-语言模型，通过几何感知解码提升三维定位与分割，可支撑语言驱动的三维区域检索
+7. [Standalone DINOv3 for Training-Free Open-Vocabulary Semantic Segmentation in Remote Sensing](/202608/05/2608.03023v1-standalone-dinov3-for-training-free-open-vocabulary-semantic-segmentation-in-remote-sensing)  
+   标签：评分：6.0/10、query:open-vocab-d
+   evidence：利用DINOv3的免训练开放词汇分割，为3D高斯投影提供2D语义特征来源
 
 
 <div class="dpr-home-promo-card">

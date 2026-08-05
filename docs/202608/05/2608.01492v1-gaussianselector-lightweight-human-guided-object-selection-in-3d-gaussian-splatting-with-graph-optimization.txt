@@ -1,0 +1,367 @@
+Title: GaussianSelector: Lightweight Human-Guided Object Selection in 3D Gaussian Splatting with Graph Optimization
+
+URL Source: https://arxiv.org/pdf/2608.01492v1
+
+Published Time: Tue, 04 Aug 2026 01:58:16 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# GaussianSelector: Lightweight Human-Guided Object Selection in 3D Gaussian Splatting with Graph Optimization 
+
+## Baihan Yang 1∗, Tiexin Li 2∗, Yuheng Liu 3, Xin Lin 1, Xinke Li 2†, Xiaohui Xie 3, Truong Nguyen 1
+
+> 1
+
+UC San Diego 2City University of Hong Kong 3UC Irvine Input 2D View Image      
+
+> Selection Result
+> Foreground Scribbles
+> Background Scribbles
+> Optimized Cut
+> Foreground Nodes Background Nodes
+
+Figure 1: Overview of GaussianSelector . We propose a plug-and-play interactive framework for object selection in 3DGS. Given user scribbles on a single view or a few views, GaussianSelector extracts 3D objects efficiently using graph-based optimization in the 3DGS space. 
+
+Abstract 
+
+Selecting a complete 3D object from a reconstructed scene with minimal user effort is essential for practical scene edit-ing and embodied interaction. Existing 3DGS-based methods either retrain the Gaussian representation to embed per-object labels, or build dense multi-view SAM observations, both re-quiring heavy computation and dense viewpoint coverage that is rarely available in practice. We present GaussianSelector, a training-free framework for interactive 3D object selection from sparse views and sparse scribble guidance. Operating di-rectly on native Gaussian primitives, we coarsen dense Gaus-sians into geometrically coherent superpoints and construct a continuity-weighted graph using appearance and spatial cues. Sparse user scribbles are lifted into 3D via visibility-aware transmittance coverage, and selection is solved as a global graph-cut energy minimization that propagates sparse evi-dence to a complete 3D object. This design naturally supports multi-round refinement, where users iteratively correct the se-lection from additional viewpoints to progressively improve  
+
+> *
+
+Equal Contribution.  
+
+> †
+
+Corresponding Author. the result. Experiments demonstrate that GaussianSelector achieves competitive selection quality against state-of-the-art multi-view SAM-based methods, while requiring significantly fewer interaction views and substantially lower computational overhead. These properties make it well suited for human-in-the-loop 3D scene editing and 3D asset extraction in real-world deployment scenarios. 
+
+## 1 Introduction 
+
+Interactive object selection in reconstructed 3D scenes is a fundamental capability for scene editing, asset extraction, robotic manipulation, and embodied perception (Kobayashi, Matsumoto, and Sitzmann 2022; Miao et al. 2025; Ren et al. 2022; Yan et al. 2024). Among recent 3D data formats, 3D Gaussian Splatting (3DGS) has become particularly attrac-tive as it offers high-fidelity rendering together with an ex-plicit set of 3D primitives (Kerbl et al. 2023; Lin et al. 2025; Song et al. 2025). This explicit structure makes 3DGS a promising substrate for post-hoc scene understanding: once a scene has been reconstructed, users should ideally be able to quickly select an object of interest and turn it into an arXiv:2608.01492v1 [cs.CV] 2 Aug 2026 editable 3D asset. However, existing 3DGS-based interactive methods typi-cally rely on user scribbles from multiple views and employ pretrained 2D foundation models, such as SAM (Kirillov et al. 2023), to generate per-view segmentation masks. These masks are then propagated back to the 3D Gaussian represen-tation to enable interaction, often through feature indexing or related mechanisms, while some methods further require retraining the 3DGS backbone. Such pipelines are therefore not only computationally expensive, but also heavily depen-dent on dense multi-view observations and user interaction across views. In real-world scenarios, collecting such multi-view observations together with per-view scribbles is often impractical. Moreover, occlusion, viewpoint changes, and ap-pearance variations across views (Ren et al. 2022) can easily introduce inconsistencies among the generated prompts or masks, resulting in discontinuous and ambiguous 3D selec-tion. These limitations motivate us to study sparse scribble 
+
+interactive object selection, where only a single or a few spa-tially sparse yet informative views and scribbles are available (Ren et al. 2022). In this work, we present GaussianSelector, a lightweight Gaussian-native framework for interactive object selection in reconstructed 3DGS scenes. Instead of relying on SAM-generated multi-view masks or learned 3D feature fields, our method directly operates on the original 3D Gaussian primitives and propagates sparse user intent within a com-pact structural abstraction of the scene. Specifically, we first oversegment dense Gaussians into geometrically coherent superpoints using Gaussian-native appearance and structural cues, and then convert sparse user scribbles into dense fore-ground/background evidence through visibility-aware scrib-ble lifting and appearance contrast modeling. Object selec-tion is finally formulated as an energy minimization problem on the superpoint graph and solved efficiently with graph cuts. As a result, GaussianSelector is neural network-free and plug-and-play: it does not require pretrained segmentation networks during interaction, nor does it require retraining, finetuning, or refining the reconstructed 3DGS representa-tion. This design naturally supports iterative human-in-the-loop refinement, where users progressively correct the selec-tion from additional viewpoints to improve the result. This combination of sparse-view efficiency and iterative refine-ment makes our method particularly practical for real-world human-in-the-loop and embodied interaction scenarios. Our main contributions are as follows: 
+
+• We propose GaussianSelector , a lightweight and training-free framework for interactive object selection in reconstructed 3DGS scenes. Our method directly operates on native 3D Gaussian primitives, supports sparse scrib-ble guidance from one or only a few interaction views, and does not require pretrained segmentation networks or any retraining, finetuning, or refinement of the underlying 3DGS representation. 
+
+• We introduce a Gaussian-native selection pipeline tai-lored to 3DGS scenes. Specifically, we design a geomet-rically coherent superpoint abstraction for dense Gaussian primitives, construct a structured graph over superpoints using Gaussian appearance and geometry cues, and de-velop a visibility-aware mechanism that lifts sparse user scribbles into superpoint-level foreground/background evidence for graph-based object selection. 
+
+• Extensive experiments on the NVOS benchmark show that GaussianSelector achieves competitive selection quality against state-of-the-art multi-view SAM-based methods, while requiring significantly fewer interaction views, lower VRAM consumption, and substantially less computation. 
+
+## 2 Related Works 
+
+3DGS Segmentation by Semantic Feature Field Learn-ing. The explicit and differentiable nature of 3DGS en-ables segmentation via feature training directly in the 3D space using supervision from multi-view rendered images. LangSplat (Qin et al. 2024), VLGaussian (Peng et al. 2024), Feature3DGS (Zhou et al. 2024), and N2F2 (Bhalgat et al. 2024) leverage 2D foundation models, including CLIP (Rad-ford et al. 2021), DINO (Caron et al. 2021), and LSeg (Li et al. 2022), to distill semantic cues into Gaussian feature fields for object segmentation. Further studies (Shi et al. 2024; Qu et al. 2024; Zuo et al. 2025; Ji et al. 2025) adopt discretiza-tion or compact embeddings to reduce storage while retain-ing semantic expressiveness. Furthermore, SAGA (Cen et al. 2025a) and OmniSeg3D (Ying et al. 2024) incorporate con-trastive learning to better associate 3D objects with 2D SAM masks. While these approaches demonstrate effectiveness in object retrieval and scene understanding in 3DGS scenes, they often introduce substantial computational overhead and costly labeling, which limit their real-world usability. 
+
+3DGS Segmentation by SAM Lifting. Driven by the ad-vances in image segmentation, a line of work emerges that leverages the differentiable renderer of 3D Gaussian Splat-ting to directly lift 2D segmentation results into 3D space via cross-view consistency alignment to avoid the com-putational and annotation costs of large-scale feature field learning. Specifically, SA3D (Cen et al. 2025b), SAGD (Hu et al. 2024), GaussianGrouping (Ye et al. 2024), OpenGaus-sian (Wu et al. 2024), FlashSplat (Shen, Yang, and Wang 2024), VoteSplat (Jiang et al. 2025), and iSegMan (Zhao et al. 2025) directly transfer SAM masks into the Gaus-sian domain and enforce cross-view consistency to reduce discrepancies. Although these methods leverage strong 2D priors to achieve fine-grained segmentation and are more ef-ficient than dense per-Gaussian feature training, they inherit ambiguity from cross-view lifted supervision and incur large VRAM memory cost in multi-view prediction. 
+
+3D Segmentation via Graphs. Given the effectiveness of graph structures in modeling spatial neighborhood relation-ships, many methods have explored leveraging graph-based formulations for object segmentation across different 3D rep-resentations. NVOS (Ren et al. 2022) and GaussianCut (Jain, Mirzaei, and Gilitschenski 2024) perform interactive object segmentation via graph-cut energy minimization on neural rendering representations. However, these methods formu-late fine-grained segmentation directly on the global 3D rep-resentation, leading to high optimization complexity. Other approaches exploit superpoint graph as a representation back-bone to enable more expressive and computationally efficient scene understanding and segmentation, including Open3DIS (Nguyen et al. 2024) and (Hui et al. 2022) for point clouds, and AG 2aussian (Wang, Li, and Tu 2025) and InstanceGaus-sian (Li et al. 2025) in 3D Gaussian Splatting. Unlike our method, these approaches still learn semantic embeddings to define superpoints. We instead depart from semantic learning and construct superpoints directly from intrinsic 3DGS at-tributes and geometric structures, resulting in a lightweight, training-free interactive segmentation framework. 
+
+## 3 Method 
+
+Given a reconstructed 3DGS scene G = {Gi}Ni=1 and sparse 2D scribbles M, we seek a binary labeling L : Vs → { F, B }
+
+over scene-native superpoints that maximizes the posterior 
+
+P (L | G , M) ∝ P (M | L, G)
+
+| {z }  
+
+> how well Lexplains the scribbles
+
+· P (L | G )
+
+| {z }
+
+> scene continuity prior
+
+.
+
+Taking the negative log yields the energy we minimize: 
+
+E(L) = X
+
+> k∈V s
+
+Dk(Lk) + λ X
+
+> (i,j )∈E s
+
+wij 1[Li̸ = Lj ], (1) where the unary term Dk encodes per-node foreground or background evidence derived from the scribbles, and the pairwise term penalizes label disagreement across edges weighted by scene continuity. E(L) is a binary submodu-lar Potts energy with an exact global minimum via s-t min-cut (Boykov and Funka-Lea 2006). The method instantiates this framework in three stages: scene encoding (scribble-independent, cached once), broadcasting user intent into seed evidence, and solving for the globally optimal labeling. The overall algorithmic workflow is described in Algorithm 1. 
+
+3.1 Preliminary: Appearance Reparameterization for 3D Gaussian Splatting 
+
+Each primitive Gi is parameterized by mean μi ∈ R3, log-scale si ∈ R3, rotation Ri ∈ SO(3) , opacity αi ∈ (0 , 1) , and spherical-harmonic (SH) radiance coefficients ci. Its spatial extent is given by the anisotropic covariance 
+
+Σi = Ri diag(exp 2 si) R⊤ 
+
+> i
+
+. (2) Comparing Gaussians by appearance attributes is non-trivial: the DC component of ci ignores view-dependent effects, while raw SH coefficients suffer from non-unique representation ambiguity , the same rendered appearance can be expressed by multiple distinct coefficient vectors (Xin et al. 2025), making coefficient-space distances an unreliable proxy for perceptual similarity. We characterize the appear-ance of each Gaussian as the Canonical Axis Color (CAC) feature, which is obtained by evaluating SH radiance along the six local canonical axes D = {± ex, ±ey , ±ez } after transformation by the Gaussian’s anisotropic support: 
+
+f i = concat  
+
+> d∈D
+
+SH 
+
+ Ri diag(exp si) d
+
+∥Ri diag(exp si) d∥2 + ϵ ; ci
+
+
+
+. (3) CAC can be understood as a moment projection of the SH radiance field onto the principal axes of the Gaussian’s sup-port: it captures the first-order directional anisotropy of each primitive’s appearance while remaining deterministic and renderer-aligned. The resulting 18-dimensional descriptor f i
+
+serves as the common currency for both graph structural ab-straction and appearance modeling throughout the method. 
+
+3.2 Gaussian-Native Structural Proximity Prior 
+
+Individual Gaussians may be under-constrained, partially transparent, or exhibit artifacts near object boundaries. To obtain stable geometric boundaries for subsequent labeling, we represent 3D Gaussians as a spatial graph and perform graph coarsening to extract a compact structural abstraction. We achieve this by aggregating them into superpoints 
+
+S = {Sk}Kk=1 via Leiden community detection on a set of Gaussians, and grouping primitives that share both spa-tial proximity and similar appearance. Each superpoint Sk
+
+is represented by the mean-pooled position ¯μk, CAC feature 
+
+¯f k, and opacity ¯αk of its members. Crucially, superpoints serve as the low-frequency support of the label field: the community structure groups Gaussians that should share a label, so the subsequent graph-cut boundary falls naturally at the seams between communities rather than across their interiors. We build a k-NN graph Gs = ( Vs, Es) over superpoint centroids { ¯μk}. Each edge (i, j ) carries a continuity weight 
+
+wij = exp − d2
+
+> ij
+
+σ2
+
+> ij
+
+!
+
+, dij = wx dx + wc dc + wo do,
+
+(4) where dx, dc, do are normalized spatial, CAC, and opacity distances, fixed hyperparameters wx + wc + wo = 1 , and 
+
+σij is self-tuned from the edge-distance distribution at local 
+
+k-NN neighborhood N (i) to adapt to Gaussian density: 
+
+σij = √γiγj , γi = median {dik | k ∈ N (i)}, (5) A gating mechanism removes edges whose dx, dc, or do
+
+exceed the quantile threshold, preventing outliers from dis-torting graph connectivity. The continuity weight wij di-rectly instantiates the scene prior P (L | G ): a label boundary crossing a high-wij edge incurs a large pairwise cost, concen-trating cuts precisely where the scene itself is discontinuous. This graph constitutes a scribble-independent scene encod-ing , computed once per session, and forms the fixed substrate over which all subsequent inference runs. 
+
+3.3 Visibility-Aware Scribble Evidence Broadcast 
+
+The user provides foreground and background scribbles M +,
+
+M − on one or more rendered views. Lifting these into 3D is subtle, as it operates over a soft volumetric visibility field rather than a hard spatial boundary: a Gaussian’s projected center may fall inside a scribble yet contribute negligibly to those pixels, while a Gaussian lying outside may still bleed significantly through its alpha-composited footprint. We therefore define the visible coverage of Gi by scribble mask M as the expected overlap under Gi’s own rendering Scene Continuity Prior    
+
+> Clustering
+> Superpoints
+> Reparam.
+> 3D Gaussian Primitives Gaussian Feature Prior
+> Building
+> Structural Proximity Prior
+> Superpoints Graph
+> Selection Evidence
+> 2D Image with Scribbles
+> BG
+> Scribbles
+> FG
+> Scribbles
+> Inverse
+> Rasterization
+> Evidenced 3D Superpoints
+> FG Voting Labels
+> BG Voting Labels
+> Contrast
+> Modeling
+> Contrastive Posterior
+> Probabilistic Field Local Condition Model
+> Results
+> BG FG
+> Graph Cut
+> 3DGS Scene Energy
+> +
+> FG
+> BG
+
+Figure 2: Method overview. GaussianSelector first converts a reconstructed 3DGS scene into a superpoint graph using CAC appearance, opacity, and spatial proximity. Foreground (FG) and background (BG) scribbles are lifted to visible Gaussians via alpha-transmittance coverage and aggregated as sparse superpoint seeds. These seeds define contrastive foreground/background likelihoods, which are combined with the structural continuity prior in a binary graph-cut objective. The optimized superpoint labels are finally broadcasted back to Gaussian primitives to obtain the dense 3D selection. Algorithm 1: GaussianSelector 
+
+1: Scene Encoding (once per scene) 
+
+2: Compute CAC descriptors {f i} for all Gaussians (Eq. 3) 
+
+3: Build k-NN Gaussian graph with weights wij (Eq. 4) 
+
+4: Cluster into superpoints S = {Sk} via Leiden 
+
+5: Build superpoint graph Gs = ( Vs, Es) over { ¯μk}
+
+6: 7: Broadcast seeds to superpoints ˜yk; form F, B (Eq. 7) 
+
+8: repeat 
+
+9: Fit pF on F, pB on B; compute δk (Eq. 8) 
+
+10: Compute unary costs Dk (Eq. 10) 
+
+11: Minimize E(L) via s-t min-cut; obtain L∗ (Eq. 1) 
+
+12: Restrict to foreground subgraph: rebuild Gs on {k :
+
+L∗ 
+
+> k
+
+= F }; re-estimate F, B on the restricted graph 
+
+13: until L∗ converges or maximum iterations reached 
+
+14: Broadcast L∗ to Gaussians; output ˆG
+
+distribution qi(p) ∝ αipTip:
+
+ρi = Ep∼qi
+
+M (p) =
+
+P 
+
+> p
+
+αip Tip M (p)
+
+P 
+
+> p
+
+αip Tip + ϵ , (6) where Tip is the accumulated transmittance before Gi. Intu-itively, ρi asks: if one were to sample a pixel from wherever Gi
+
+actually renders, how likely is it to land inside the scribble? 
+
+Gaussians with foreground or background coverage above a per-view threshold receive a seed label yi ∈ { F, B }; ambigu-ous cases remain unlabeled ( yi = U ). For multiple views, labels are reconciled by majority vote. Seed labels are then broadcasted from Gaussians to super-points by majority aggregation: 
+
+˜yk = majority yi : i ∈ Sk , ˜yk ∈ { F, B, U }. (7) This yields a sparse seed partition F = {k : ˜ yk = F } and 
+
+B = {k : ˜ yk = B} that carries the user’s intent into the superpoint graph. 
+
+3.4 Appearance Contrast Modeling 
+
+With seeds F and B identified, we estimate the likelihood term P (M | L, G) by learning what each side of the selection looks like. Each superpoint is described by the standardized feature ϕk = [ z(¯f k), z (¯ αk)] , combining CAC appearance and opacity; spatial information is delegated to the pairwise term and excluded here. We fit two independent Gaussian Mixture Models to the seed features— pF on F and pB on 
+
+B—and measure the radiance margin of each superpoint as the log-likelihood ratio between the two models: 
+
+δk = log pF (ϕk)
+
+pB (ϕk) . (8) According to the Neyman–Pearson lemma, δk is the most powerful test statistic for discriminating the foreground hy-pothesis from the background hypothesis given ϕk: no other function of the node’s features carries more discriminative information about its class. A positive δk indicates that the node’s appearance is better explained by the foreground model; negative values point toward background. To obtain a calibrated and symmetric evidence field, we transform the raw log-likelihood ratio by a contrastive affine normalization: 
+
+ˆδk = s(δk − m), (9) where m denotes the midpoint between foreground/back-ground seed medians in likelihood-ratio space, and s is an adaptive scale determined by their separation. Unlike raw per-class likelihoods, whose absolute scale depends on seed count and covariance, δk is automatically centered by the separation between pF and pB .The unary cost is derived from the calibrated contrastive posterior under equal class priors: 
+
+Dk(c) = − log exp(sg( δk, c )) exp( δk) + exp( −δk)+ β 1[˜ yk̸ = c, k ∈ F ∪ B ],
+
+(10) where sg( δk, c ) = δk if c = F and −δk if c = B. The first term is the Bayes-optimal unary under equal priors; the sec-ond reinforces seed superpoints toward their designated class with weight β, encoding the user’s direct evidence without treating noisy lifted scribbles as hard constraints. Substitut-ing Eqs. (8)–(10) into Eq. (1) completes the instantiation of the MAP objective. 
+
+3.5 Graph-Cut Optimization and Interactive Inference 
+
+The energy E(L) in Eq. (1) is minimized exactly by an s-t min-cut algorithm, which finds the globally optimal binary partition of the superpoint graph. The unary term pulls each node toward the class favored by its appearance contrast; the pairwise term propagates this evidence through the graph, aligning boundaries with the scene’s own continuity structure and suppressing isolated mislabelings caused by noisy or incomplete seed coverage. Once the optimal labeling L∗ is obtained, it is broadcasted back to every Gaussian primitive: each Gi ∈ Sk inherits L∗
+
+> k
+
+, yielding the final dense foreground selection ˆG = {Gi : L∗ 
+
+> k(i)
+
+= F }.GaussianSelector separates the scene encoding (Secs. 3.1– 3.2) from the scribble-dependent object modeling (Secs. 3.3– 3.5). This design makes our method well suited for efficient iterative object selection under interactive user inputs, as the large-scale Gaussian primitive graph is computed only once after scene loading. When the user adds or corrects a scrib-ble, only the evidence broadcast, appearance modeling, and min-cut on the superpoint graph are rerun. Our method there-fore enables a natural human-in-the-loop workflow: an initial sparse scribble yields a first selection; the user inspects the selection, inputs a complementary scribble from an infor-mative view, and the system updates the dense 3D selection without modifying the scene representation. Since object se-lection is inherently local, we implement an ROI variant that restricts graph construction, optimization, and refinement to a local bounding box initialized from the scribble, enabling more efficient selection of small objects in large scenes. 
+
+## 4 Experiments 
+
+4.1 Experimental Setup 
+
+Dataset and Benchmark. We evaluate our method on the 8-task LLFF-NVOS (Ren et al. 2022) benchmark and 5 scenes from 3D-OVS (Liu et al. 2023) benchmark. We further design two input settings for quantitative comparison on top of the initial NVOS scribble, including 1 additional round and 2 additional rounds of fine-grained user interactive refinement. This setup contextualizes our human-in-the-loop results in comparison to reported dense multi-view SAM-lifting-based results, while also highlighting the benefits of interactive refinement. To provide a more comprehensive qualitative study across different 3DGS reconstruction set-tings, we further conduct qualitative experiments to visually demonstrate the object selection results. 
+
+Baselines and Metric. We compare our method with representative 3DGS segmentation methods including NVOS (Ren et al. 2022), FlashSplat (Shen, Yang, and Wang 2024), GaussianCut (Jain, Mirzaei, and Gilitschenski 2024), GaussianGrouping (Ye et al. 2024), SAGA (Cen et al. 2025a), iSegMan (Zhao et al. 2025), OmniSeg3D (Ying et al. 2024). Following prior methods, we report intersection-over-union (IoU) between the rendered evaluation-view masks induced by selected Gaussians and the ground-truth object masks. We further compare the runtime of our method with the baselines to evaluate computational efficiency. 
+
+Implementation Details. All experiments are conducted on a workstation with an AMD Ryzen 9 9950X3D CPU and an NVIDIA V100 GPU. We set parameters in a default set-ting, with 3 GMM components for appearance contrast mod-eling, and k = 8 for k-NN graphs. We use a 0.95 quantile for edge gating, a target seed confidence of 0.95 (Eq. 9), and a seed-evidence weight β = 4 .0 (Eq. 10). GaussianSelector has three user-adjustable hyperparameters tailored to differ-ent object selection tasks: the over-segmentation resolution which controls the granularity of the superpoint abstraction, and a connected component filtering threshold applied af-ter graph-cut optimization to remove isolated regions, and a scale-outlier criterion that rejects excessively large Gaussian primitives, which are typically caused by highlight or shadow artifacts. The immediate visual feedback enables users to ef-ficiently tune these settings to enhance the selection quality. Our method supports multi-round interactive object se-lection across different viewpoints between the user and the model. The CAC features and superpoint graph construction are computed only once. During each subsequent interac-tion round, only the visibility-aware scribble lifting, seed-conditioned likelihood estimation, and graph-cut inference steps are re-executed, enabling efficient iterative refinement. Most computations of our method are performed on the CPU. More details are provided in the supplementary. 
+
+4.2 Quantitative Results 
+
+Table 1 compares GaussianSelector with prior 3DGS ob-ject selection methods under different view and supervision settings, including single-view versus multi-view input and whether SAM mask supervision is required. 
+
+Single-Round Setting. We begin with the simplest and most computationally constrained interaction setting, where only a single view with NVOS scribbles is available for ob-ject selection. The representative 3D segmentation baseline under this setting is NVOS (Ren et al. 2022). With only the spatially sparse scribbles provided by the NVOS bench-mark as input, GaussianSelector achieves 85.3 mIoU, sig-nificantly outperforming the NVOS baseline, which obtains Method View SAM GPU mIoU ↑ Time ↓                                                  
+
+> Single-Round Settings
+> NVOS 1×✓70.1 –Ours w/ NVOS Scribble 1××85.3 0.2
+> Multi-Round Settings
+> FlashSplat ALL ✓✓91.8 0.8 GaussianCut ALL ✓✓92.5 2.1 GaussianGrouping ALL ✓✓90.6 27.8 SAGA ALL ✓✓90.9 27.4 iSegMan ALL ✓✓92.0 0.6 OmniSeg3D ALL ✓✓91.7 51.1 Ours w/ 2 Rounds 2××89.6 0.2
+> Ours w/ 3 Rounds 3××92.2 0.2
+
+Table 1: Quantitative comparison on the NVOS benchmark. We categorize methods by interaction setting, and explicit reliance on SAM supervision and GPU. 2/3 Rounds denotes 1/2 additional rounds of interactive refinement based on the scribble setting. Our implementation does not require GPU beyond the 3DGS optimization/rendering. The best results are highlighted in bold, and the second-best results are un-derlined. Runtime is reported in minutes . " −" indicates un-available.                                     
+
+> Method bed bench room sofa lawn mIoU ↑
+> SAGA 97.4 88.4 81.0 71.2 94.8 86.5 GSGrouping 97.3 73.7 79.0 68.1 96.5 82.9 GaussianCut 96.8 95.4 94.9 95.0 89.8 94.4
+> Ours 94.2 94.5 92.0 94.0 91.4 93.2 Ours-ROI 92.5 94.8 91.9 94.3 92.6 93.6
+
+Table 2: Quantitative comparison of interactive object selec-tion methods on the 3D-OVS benchmark. The best results are in bold, and the second-best results are underlined. 70.1 mIoU. This result indicates that, even without multi-view mask propagation or pretrained 2D segmentation mod-els, a Gaussian-native formulation can already recover high-quality 3D object selections from minimal user input. 
+
+Multi-Round Refinement Setting. We further evaluate GaussianSelector with extra rounds of scribble human-in-the-loop refinement at different viewpoints. With one addi-tional refinement view, our method improves to 89.6 mIoU, and with 2 additional rounds of interactive refinement on novel views, it further reaches 92.2 mIoU, becoming compa-rable to strong baselines built on dense-view priors. While these baselines rely on SAM-derived cues across densely sampled views, whereas GaussianSelector achieves compet-itive performance with substantially fewer but informative views, selected online by users (1 per round), and without explicit requirement of image segmentation models. As we allow users to select informative views and inject scribbles, our method mitigates the cross-view semantic ambiguity that often arises in dense multi-view lifting approaches. The re-sult also validates our design: directly exploiting the struc-tural and appearance cues encoded in 3D Gaussian primitives is sufficient to support strong interactive selection. GaussianCut  Ours  GaussianCut 
+
+> Scribble
+> Ours
+> 2 views 3 views
+
+Figure 3: Qualitative comparison on NVOS under various input view settings (NVOS scribbles, 1/2 additional views or interaction rounds). 
+
+4.3 Efficiency Analysis 
+
+We report the average runtime of each method over NVOS tasks in Table 3 as a measure of computational efficiency. A key advantage of GaussianSelector is that it decouples scribble-dependent interaction from scene-level optimiza-tion. This design enables efficient multi-round interactive scribble refinement and graph-cut optimization with low run-time overhead, making our method well suited for human-in-the-loop object selection. In contrast to prior methods that re-quire expensive training or high inference costs, GaussianS-elector introduces much smaller inference overhead dur-ing subsequent human refinement. This observation demon-strates that our method enables high-quality human-in-the-loop object selection with minimal computational overhead. Furthermore, since our method operates with significantly fewer input views than prior approaches and does not rely on deep neural networks such as SAM, it substantially re-duces VRAM memory consumption and overall computa-tional overhead. Original  Ours  GaussianCut 
+
+> -
+> SAGA
+> --
+
+Figure 4: Qualitative comparison on 3D-OVS. Our method uses 5 interaction rounds; all baselines use all views. Method Prep. Training Infer. Total ↓
+
+FlashSplat 36.3 – 13.1 49.4 GaussianGrouping 159.7 1491.0 16.4 1667.1 SAGA 190.2 1407.3 46.9 1644.4 OmniSeg3D 89.6 2960.2 16.7 3066.5 GaussianCut 35.7 – 90.8 126.5 Ours 11.3 – 0.3 11.6 
+
+Ours-ROI 3.0 – 0.2 3.2 
+
+Table 3: Average runtime comparison on all NVOS object selection tasks (in seconds). Preparation denotes scene-level preprocessing or optimization. Inference refers to the query stage. Training denotes feature field learning when required. 
+
+Variant Unary Graph mIoU ↑
+
+Scribble only × × 33.2 w/o unary ✓ × 79.6 w/o graph × ✓ 61.0 w/o CAC ✓ ✓ 80.3 w/ uniform edges ✓ ✓ 80.3 Full ✓ ✓ 85.3 
+
+Table 4: Component ablation under the NVOS benchmark. 
+
+4.4 Ablation Studies 
+
+As shown in Table 4, we conduct ablation studies under the NVOS benchmark to analyze the impact of different compo-nents of our method on segmentation quality. We organize our method into unary evidence modeling and graph prop-agation. Using scribbles alone yields only 33.2 mIoU, con-firming that sparse scribbles are too incomplete to directly recover an object. Adding graph propagation improves the re-sult to 61.0 mIoU, showing that graph connectivity serves as an effective prior for propagating user scribbles, but remains insufficient without stronger evidence modeling approaches. Combining scribble lifting with unary modeling reaches 79.6 mIoU, indicating that the lifted labels provide effective su-pervision for learning evidence likelihoods and the contrast between the background and the foreground objects. 
+
+4.5 Qualitative Results 
+
+This section provides a qualitative analysis of GaussianSelec-tor, showing that GaussianSelector enables effective object selection on the 3DGS superpoint graph from a small num-ber of sparsely captured views. We compare our method with GaussianCut (Jain, Mirzaei, and Gilitschenski 2024) under progressively enriched sparse-view input conditions. Fig. 3 shows the object selection results under differ-ent sparse-view input settings. With limited NVOS scrib-bles, GaussianSelector already achieves competitive results, while additional human-in-the-loop refinement further im-proves boundary consistency and reduces artifacts. In con-trast, GaussianCut is more sensitive to input quality, leading to noticeable degradation when fewer views or less informa-tive inputs are provided. These results highlight the effective-ness of iterative refinement for fine-grained object selection. Fig. 5 visualizes each step of GaussianSelector, showing how (a)  Scribble Input  (b) Superpoints  (c) Scribble Lifting     
+
+> (d) GMM Likelihood (e) Graph -Cut Result (f) Selection Result
+
+Figure 5: Visualization of the intermediate steps. the user inputs progressively refine the selection. Fig. 6 il-lustrates a human-in-the-loop interaction scenario of Gaus-sianSelector. As our method is characterized by fast inference on the 3DGS superpoint graph, we exploit this workflow to enable iterative refinement of object selection with fast and lightweight feedback, which is particularly useful for han-dling sophisticated structure and appearance patterns. (a) Original  3DGS + Scribbles  (b) Lifted Labels on Gaussians  (c) First -round Foreground      
+
+> (d)Updated Scribbles (e)Updated Lifted Labels (f)Refined Foreground
+> Round 1 Round 2
+
+Figure 6: User interaction demonstration for human-in-the-loop object selection workflow. 
+
+4.6 User Study 
+
+We conducted a user study with 12 participants on two ob-ject selection tasks. Participants rated intent matching, blind visual satisfaction, and waiting acceptability using 7-point Likert scales, and completed the standard System Usabil-ity Scale (SUS) questionnaire to assess overall usability. As shown in Table 5, our scribble-based interaction provides more precise user control. Moreover, the substantially shorter response time enables users to iteratively refine their inputs based on immediate visual feedback, leading to markedly better waiting acceptability and overall usability. 
+
+Ours GaussianCut FlashSplat 
+
+Intent matching 6.3 ±0.6 5.8 ±0.8 5.8 ±0.7 Visual satisfaction 5.9 ±0.6 6.0 ±0.7 5.9 ±0.7 Wait acceptability 6.5 ±0.5 3.4 ±1.1 3.9 ±1.2 SUS (0–100) 84.2 ±6.8 63.5 ±9.4 60.8 ±10.2 
+
+Table 5: User study results (mean ± SD, best in bold). 5 Conclusion 
+
+In this work, we present GaussianSelector, a plug-and-play and neural network-free framework that reformulates 3DGS interactive object selection as graph-based abstraction and evidence modeling directly in the native 3DGS space. Ex-periments show that GaussianSelector achieves comparable performance with state-of-the-art 3DGS-based methods in the human-in-the-loop workflow while being significantly more efficient in computational cost and VRAM usage. References 
+
+Bhalgat, Y.; Laina, I.; Henriques, J. F.; Zisserman, A.; and Vedaldi, A. 2024. N2f2: Hierarchical scene understanding with nested neural feature fields. In European Conference on Computer Vision , 197–214. Springer. Boykov, Y.; and Funka-Lea, G. 2006. Graph cuts and efficient ND image segmentation. International journal of computer vision , 70(2): 109–131. Caron, M.; Touvron, H.; Misra, I.; Jégou, H.; Mairal, J.; Bojanowski, P.; and Joulin, A. 2021. Emerging properties in self-supervised vision transformers. In Proceedings of the IEEE/CVF international conference on computer vision ,9650–9660. Cen, J.; Fang, J.; Yang, C.; Xie, L.; Zhang, X.; Shen, W.; and Tian, Q. 2025a. Segment any 3d gaussians. In Proceedings of the AAAI conference on artificial intelligence , volume 39, 1971–1979. Cen, J.; Fang, J.; Zhou, Z.; Yang, C.; Xie, L.; Zhang, X.; Shen, W.; and Tian, Q. 2025b. Segment anything in 3d with radiance fields. International Journal of Computer Vision ,133(8): 5138–5160. Hu, X.; Wang, Y.; Fan, L.; Luo, C.; Fan, J.; Lei, Z.; Li, Q.; Peng, J.; and Zhang, Z. 2024. SAGD: Boundary-enhanced segment anything in 3D Gaussian via Gaussian decomposi-tion. arXiv preprint arXiv:2401.17857 .Hui, L.; Tang, L.; Shen, Y.; Xie, J.; and Yang, J. 2022. Learning superpoint graph cut for 3d instance segmenta-tion. Advances in Neural Information Processing Systems ,35: 36804–36817. Jain, U.; Mirzaei, A.; and Gilitschenski, I. 2024. Gaussian-cut: Interactive segmentation via graph cut for 3d gaussian splatting. Advances in Neural Information Processing Sys-tems , 37: 89184–89212. Ji, Y.; Zhu, H.; Tang, J.; Liu, W.; Zhang, Z.; Tan, X.; and Xie, Y. 2025. Fastlgs: Speeding up language embedded gaussians with feature grid mapping. In Proceedings of the AAAI con-ference on artificial intelligence , volume 39, 3922–3930. Jiang, M.; Jia, S.; Gu, J.; Lu, X.; Zhu, G.; Dong, A.; and Zhang, L. 2025. Votesplat: Hough voting gaussian splatting for 3d scene understanding. In Proceedings of the IEEE/CVF International Conference on Computer Vision , 6456–6465. Kerbl, B.; Kopanas, G.; Leimkühler, T.; Drettakis, G.; et al. 2023. 3d gaussian splatting for real-time radiance field ren-dering. ACM Trans. Graph. , 42(4): 139–1. Kirillov, A.; Mintun, E.; Ravi, N.; Mao, H.; Rolland, C.; Gustafson, L.; Xiao, T.; Whitehead, S.; Berg, A. C.; Lo, W.-Y.; et al. 2023. Segment anything. In Proceedings of the IEEE/CVF international conference on computer vision ,4015–4026. Kobayashi, S.; Matsumoto, E.; and Sitzmann, V. 2022. De-composing nerf for editing via feature field distillation. Ad-vances in neural information processing systems , 35: 23311– 23330. Li, B.; Weinberger, K. Q.; Belongie, S.; Koltun, V.; and Ranftl, R. 2022. Language-driven semantic segmentation. 
+
+arXiv preprint arXiv:2201.03546 .Li, H.; Wu, Y.; Meng, J.; Gao, Q.; Zhang, Z.; Wang, R.; and Zhang, J. 2025. Instancegaussian: Appearance-semantic joint gaussian representation for 3d instance-level percep-tion. In Proceedings of the Computer Vision and Pattern Recognition Conference , 14078–14088. Lin, X.; Luo, S.; Shan, X.; Zhou, X.; Ren, C.; Qi, L.; Yang, M.-H.; and Vasconcelos, N. 2025. Hqgs: High-quality novel view synthesis with gaussian splatting in degraded scenes. In 
+
+The Thirteenth International Conference on Learning Rep-resentations .Liu, K.; Zhan, F.; Zhang, J.; Xu, M.; Yu, Y.; El Saddik, A.; Theobalt, C.; Xing, E.; and Lu, S. 2023. Weakly supervised 3d open-vocabulary segmentation. Advances in Neural In-formation Processing Systems , 36: 53433–53456. Miao, B.; Wei, R.; Ge, Z.; Gao, S.; Zhu, J.; Wang, R.; Tang, S.; Xiao, J.; Tang, R.; Li, J.; et al. 2025. Towards Physically Executable 3D Gaussian for Embodied Navigation. arXiv preprint arXiv:2510.21307 .Nguyen, P.; Ngo, T. D.; Kalogerakis, E.; Gan, C.; Tran, A.; Pham, C.; and Nguyen, K. 2024. Open3dis: Open-vocabulary 3d instance segmentation with 2d mask guidance. In Pro-ceedings of the IEEE/CVF conference on computer vision and pattern recognition , 4018–4028. Peng, Q.; Planche, B.; Gao, Z.; Zheng, M.; Choudhuri, A.; Chen, T.; Chen, C.; and Wu, Z. 2024. 3d vision-language gaussian splatting. arXiv preprint arXiv:2410.07577 .Qin, M.; Li, W.; Zhou, J.; Wang, H.; and Pfister, H. 2024. Langsplat: 3d language gaussian splatting. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 20051–20060. Qu, Y.; Dai, S.; Li, X.; Lin, J.; Cao, L.; Zhang, S.; and Ji, R. 2024. Goi: Find 3d gaussians of interest with an op-timizable open-vocabulary semantic-space hyperplane. In 
+
+Proceedings of the 32nd ACM international conference on multimedia , 5328–5337. Radford, A.; Kim, J. W.; Hallacy, C.; Ramesh, A.; Goh, G.; Agarwal, S.; Sastry, G.; Askell, A.; Mishkin, P.; Clark, J.; et al. 2021. Learning transferable visual models from natural language supervision. In International conference on machine learning , 8748–8763. PmLR. Ren, Z.; Agarwala, A.; Russell, B.; Schwing, A. G.; and Wang, O. 2022. Neural volumetric object selection. In Pro-ceedings of the IEEE/CVF conference on computer vision and pattern recognition , 6133–6142. Shen, Q.; Yang, X.; and Wang, X. 2024. Flashsplat: 2d to 3d gaussian splatting segmentation solved optimally. In Euro-pean Conference on Computer Vision , 456–472. Springer. Shi, J.-C.; Wang, M.; Duan, H.-B.; and Guan, S.-H. 2024. Language embedded 3d gaussians for open-vocabulary scene understanding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 5333–5343. Song, M.; Lin, X.; Zhang, D.; Li, H.; Li, X.; Du, B.; and Qi, L. 2025. D 2GS: Depth-and-Density Guided Gaussian Splatting for Stable and Accurate Sparse-View Reconstruction. arXiv preprint arXiv:2510.08566 .Wang, Z.; Li, M.; and Tu, C. 2025. AG 2aussian: Anchor-Graph Structured Gaussian Splatting for Instance-Level 3D Scene Understanding and Editing. In Proceedings of the IEEE/CVF International Conference on Computer Vision ,26806–26816. Wu, Y.; Meng, J.; Li, H.; Wu, C.; Shi, Y.; Cheng, X.; Zhao, C.; Feng, H.; Ding, E.; Wang, J.; et al. 2024. Opengaussian: Towards point-level 3d gaussian-based open vocabulary un-derstanding. Advances in Neural Information Processing Systems , 37: 19114–19138. Xin, Y.; Liu, Y.; Xie, X.; and Li, X. 2025. Learning Unified Representation of 3D Gaussian Splatting. arXiv preprint arXiv:2509.22917 .Yan, Z.; Li, L.; Shao, Y.; Chen, S.; Wu, Z.; Hwang, J.-N.; Zhao, H.; and Remondino, F. 2024. 3dsceneeditor: Control-lable 3d scene editing with gaussian splatting. arXiv preprint arXiv:2412.01583 .Ye, M.; Danelljan, M.; Yu, F.; and Ke, L. 2024. Gaussian grouping: Segment and edit anything in 3d scenes. In Euro-pean conference on computer vision , 162–179. Springer. Ying, H.; Yin, Y.; Zhang, J.; Wang, F.; Yu, T.; Huang, R.; and Fang, L. 2024. Omniseg3d: Omniversal 3d segmenta-tion via hierarchical contrastive learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 20612–20622. Zhao, Y.; Xu, W.; Zheng, R.; Qiao, P.; Liu, C.; and Chen, J. 2025. isegman: Interactive segment-and-manipulate 3d gaussians. In Proceedings of the Computer Vision and Pat-tern Recognition Conference , 661–670. Zhou, S.; Chang, H.; Jiang, S.; Fan, Z.; Zhu, Z.; Xu, D.; Chari, P.; You, S.; Wang, Z.; and Kadambi, A. 2024. Feature 3dgs: Supercharging 3d gaussian splatting to enable distilled feature fields. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 21676–21685. Zuo, X.; Samangouei, P.; Zhou, Y.; Di, Y.; and Li, M. 2025. Fmgs: Foundation model embedded 3d gaussian splatting for holistic 3d scene understanding. International Journal of Computer Vision , 133(2): 611–627.

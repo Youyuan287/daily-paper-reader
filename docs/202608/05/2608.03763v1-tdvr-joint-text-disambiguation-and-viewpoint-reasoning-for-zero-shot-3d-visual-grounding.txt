@@ -1,0 +1,448 @@
+Title: TDVR: Joint Text Disambiguation and Viewpoint Reasoning for Zero-Shot 3D Visual Grounding
+
+URL Source: https://arxiv.org/pdf/2608.03763v1
+
+Published Time: Wed, 05 Aug 2026 01:12:44 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# TDVR: Joint Text Disambiguation and Viewpoint Reasoning for Zero-Shot 3D Visual Grounding 
+
+## Qingxi Du ∗
+
+Northwestern Polytechnical University Software School Xi’an, Shaanxi, China duqingxi@mail.nwpu.edu.cn 
+
+## Junbo Wang ∗
+
+Northwestern Polytechnical University Software School Xi’an, Shaanxi, China jbwang@nwpu.edu.cn 
+
+## Yuke Li †
+
+Northwestern Polytechnical University Software School Xi’an, Shaanxi, China liyuke@nwpu.edu.cn 
+
+## Yining Zhu †
+
+Northwestern Polytechnical University School of Computer Science Xi’an, Shaanxi, China yiningzhu@nwpu.edu.cn 
+
+## Abstract 
+
+Zero-shot 3D visual grounding aims to localize specific objects based on textual descriptions and 3D visual input, playing an im-portant role in many fields such as embodied intelligence. However, the effectiveness of existing methods is significantly hindered by the ambiguous query text and deficient viewpoints. To address these issues, we propose TDVR, a training-free reasoning frame-work that disambiguates the input text and infers accurate view-points for zero-shot 3D visual grounding. First, we construct se-mantic 3D scene graph from the detected instances in the 3D point cloud.Subsequently, we put the original query, appearance and spatial relationship descriptions into the LLM for fusion, thereby disambiguating the initial input.Given the complexity of linguistic expressions, we leverage chain-of-thought reasoning to generate the structured representation of disambiguated query.Then taking the scene graph and structured query as input, we get the opti-mal view via viewpoint reasoning to solve the problem of missing viewpoints during grounding.Based on the obtained optimal view-point,we further discriminate the distracting objects,enabling the model with the ability to distinguish similar instances.After that, we match the category text and appearance images with the query by computing the similarity of feature vectors.Finally the target object was identified by integrating the viewpoint score,confusion score,category score,and appearance score.Compared with previ-ous methods, our TDVR has stronger capabilities in viewpoint reasoning, similar object discrimination, and ambiguous query un-derstanding.Experimental results on the public ScanRefer dataset show that our method outperforms the existing state-of-the-art methods by 15.25% and 14.46% in Acc@0.25 and Acc@0.5 respec-tively, demonstrating the effectiveness of our TDVR in addressing ambiguous query text and deficient viewpoints.  
+
+> ∗Both authors contributed equally to this research.
+> †Corresponding author.
+> This work is licensed under a Creative Commons Attribution 4.0 International License.
+> MM ’26, Rio de Janeiro, Brazil
+> ©2026 Copyright held by the owner/author(s). ACM ISBN 979-8-4007-2213-4/2026/11 https://doi.org/10.1145/3767308.3835532
+
+## CCS Concepts 
+
+• Computing methodologies → Scene understanding .
+
+## Keywords 
+
+3D Visual Grounding, Scene Graph, View Inference, Visual-Language Model 
+
+ACM Reference Format: 
+
+Qingxi Du, Junbo Wang, Yuke Li, and Yining Zhu. 2026. TDVR: Joint Text Disambiguation and Viewpoint Reasoning for Zero-Shot 3D Visual Ground-ing. In Proceedings of the 34th ACM International Conference on Multimedia (MM ’26), November 10–14, 2026, Rio de Janeiro, Brazil. ACM, New York, NY, USA, 10 pages. https://doi.org/10.1145/3767308.3835532 
+
+## 1 Introduction 
+
+3D Visual Grounding (3DVG) is a fundamental task in Embodied AI [ 22 , 24 ] and autonomous driving[ 16 , 33 ], requiring agents to precisely localize objects within complex 3D environments based on natural language. Unlike 2D methods [ 4 , 18 , 25 , 26 , 29 ], 3DVG involves intricate geometric topologies and viewpoint-dependent spatial relations, posing significant challenges for cross-modal align-ment and geometric reasoning. Recently, 3D visual grounding methods [ 7, 12 , 14 , 17 , 19 , 27 , 35 ,36 , 40 , 42 , 44 ] have achieved remarkable performance, yet they are still facing two major challenges: (1)Spatial ambiguity with unknown viewpoints. Spatial relationship descriptions are often view-dependent, such as "on the left" and "at the back". However, in 3D space, these directional terms will lead to severe referential ambiguity if the describer’s camera pose is not explicitly specified. As shown in the two images on the left side of Fig.1a, if we local-ize according to the query “the office chair left of the armchair (marked by the blue box)”, the localization may be accurate un-der viewpoint 1.However, when the viewpoint is rotated 180 ° to viewpoint 2, the description “on the left” will result in an incorrect target localization. Most existing models fail to account for the influence of viewpoint.In contrast, as shown in Fig. 1b, benefiting from viewpoint reasoning, our model achieves accurate object lo-calization across different views. (2)Ambiguous queries under similar instance interference. In dense indoor scenes, there often arXiv:2608.03763v1 [cs.CV] 4 Aug 2026 MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Qingxi Du, Junbo Wang, Yuke Li, and Yining Zhu  
+
+> Viewpoint-aware:False Similarity Confusion
+
+(a) Previous Method  
+
+> Viewpoint-aware:True Clear Discrimination
+
+(b) Our Method 
+
+Figure 1: Under two challenging situations, performance comparison of different methods.(a) Previous methods yield incorrect localization.(b) Our method achieves correct local-ization. 
+
+exist multiple distractors with the same category, similar appear-ance, and close proximity.As shown in the right image of Fig. 1a, given the query "A black leather armchair next to another identi-cal chair", there exist multiple objects that match the description. Therefore, when the textual description is relatively brief and multi-ple similar objects exist in the scene, most agents lack fine-grained discrimination method. They can only rely on random guessing among multiple candidates, making it difficult to achieve robust and deterministic localization.In contrast, as shown in Fig.1b, our model can accurately localize objects in scenes with multiple object interference. To address these issues, we propose TDVR, a training-free rea-soning framework that disambiguates the input text and infers accurate viewpoints for zero-shot 3D visual grounding. First, from the detected instances and the 2D images cropped according to minimum occlusion, we construct the semantic 3D scene graph. Meanwhile, we feed the original query, the appearance descriptions generated from 2D images, as well as the spatial relationship de-scriptions into the LLM for fusion. By doing so, we disambiguate the original query. For these disambiguated queries, we perform structured extraction via chain-of-thought reasoning and result self-checking,ensuring they accurately capture the semantics of the description. After that, taking the scene graph and structured query as input, we infer the viewpoints that best match the description by rotating the point cloud and simultaneously compute the viewpoint score for each object. Based on the obtained optimal viewpoint, we calculate the confusion score of each object by evaluating how its spatial relationship with other intra-class instances matches the description, enabling the model to distinguish similar instances. Subsequently, we match the category text and appearance images with the query by computing the similarity of feature vectors. Fi-nally the target object is identified by integrating the viewpoint score,confusion score,category score,and appearance score. We conducted experiments on the Sr3D [ 1] and ScanRefer [ 3]datasets. On the Sr3D[ 1] dataset, we achieve an overall accuracy of 70%, and 79.03% accuracy on the viewpoint-dependent subset. Experimental results on the ScanRefer [ 3] dataset demonstrate that TDVR sets a new state-of-the-art (SOTA) for zero-shot methods, reaching 64.06% on the strict Acc@0.5 metric—a 14.46% improve-ment over the previous best. Remarkably, TDVR even outperforms several recent fully supervised models (e.g., TSP3D [ 12 ], Pseudo-EV [ 9]), significantly narrowing the gap between zero-shot reasoning and supervised learning. Our primary contributions are summarized as follows: 
+
+• We propose TDVR, a zero-shot 3D visual grounding frame-work based on MLLM for ambiguity elimination and view-point inference. 
+
+• We introduce a query disambiguation pipeline,which en-hances the descriptive text by integrating expressions such as appearance and spatial relationship. 
+
+• We propose a method for viewpoint inference and similar object discrimination, which enhances the model’s spatial perception ability in complex scenes with multiple distrac-tors. 
+
+• We achieve substantial performance improvements on Scan-Refer and Sr3D,demonstrating excellent localization capabil-ity. 
+
+## 2 Related Work 2.1 Supervised 3D Visual Grounding 
+
+Many supervised 3DVG methods have also achieved favorable per-formance. Some are combined with LLMs, some incorporate view-point information, and others employ voxel cropping, all of which have yielded promising results. Pseudo-EV [ 9] resolves viewpoint ambiguity by splitting 3DVG into embodied viewpoint prediction and target localization. It adopts LLM-generated pseudo-labels and semantic structuring to cut computation costs and boost localiza-tion accuracy. DDPA-3DVG [ 10 ] achieves coarse-to-fine progressive cross-modal alignment by performing dual disentanglement and multi-grained feature extraction on both 3D scenes and natural lan-guage. TSP3D [ 12 ] is an efficient single-stage 3D visual grounding framework. Based on multi-level sparse convolution, it employs text-guided pruning to refine voxels and performs compensation to repair over-pruning, achieving both superior accuracy and real-time speed. VPP - Net [ 32 ] explicitly predicts the speaker’s viewpoint and rotates the 3D scene, assisted by a unified object representa-tion loss, achieving state-of-the-art performance across multiple datasets. 
+
+## 2.2 Zero-shot 3D Visual Grounding 
+
+Existing zero-shot 3DVG methods adopt LLMs and MLLMs. Utiliz-ing their cross-modal vision-language ability, these approaches con-vert 3D point clouds to 2D renders or scene video frames, and input such visuals into multimodal models to build vision-text alignment. ZSVG3D [ 42 ] propose a zero-shot 3D visual grounding method based on visual programming, which uses LLMs to generate code and combines 2D/3D modules to achieve complex spatial reasoning. SeeGround [ 17 ]’s core idea is to convert 3D scenes into a hybrid representation of query-aware 2D renderings and 3D spatial textual descriptions, and strengthen the alignment between visual and spa-tial information through visual prompting techniques. SeqVLM [ 19 ]TDVR: Joint Text Disambiguation and Viewpoint Reasoning for Zero-Shot 3D Visual Grounding MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil 
+
+leverages visual-language models to perform spatial reasoning and feature fusion guided by multi-view image sequences and 2D can-didate boxes, thereby achieving high-precision zero-shot 3D visual grounding. LASP [ 27 ] employs an LLM to translate natural lan-guage instructions into executable 3D spatial programming codes, and directly parses target objects and their complex spatial relations in 3D space using mathematical logic, realizing efficient and high-precision training-free 3D visual grounding. SPAZER [ 14 ] achieves zero-shot 3D visual grounding through progressive reasoning by combining 3D spatial analysis and 2D semantic verification. It uses a VLM agent to collaborate on multimodal information, improving the robustness of localization without requiring 3D annotated data. 
+
+## 3 Methodology 3.1 Overview 
+
+As shown in Fig. 2,we first disambiguate the original query via the proposed observer-centric synergetic disambiguation. The disam-biguated query is fed into the structured relation extraction module to extract textual semantics. Then ,we construct a scene graph 𝐺 
+
+for objects in the scene to represent their multiple attributes and spatial relationships. After that, the scene graph is fed into the viewpoint-aware directional reasoning module to obtain the op-timal viewpoint score 𝑆 𝑣 and the inferred optimal viewpoint list 
+
+Θ𝑏𝑒𝑠𝑡 . Based on the inferred view, we rotate the point cloud and calculate the confusion score 𝑆 𝑐 for each object via the view-based similarity decoupled reasoning module. Subsequently, we compute the category matching score 𝑆 𝑐𝑎𝑡 and appearance matching score 
+
+𝑆 𝑎𝑝𝑝 via the feature-matched category and appearance evaluation module. Finally, we calculate an overall score by weighted summa-tion across multiple metrics, then select the object with the highest score as the predicted target. 
+
+## 3.2 Semantic 3D Scene Graph Construction 
+
+We represent the 3D scene as a scene graph 𝐺 = (𝑉 , 𝐸, X𝑉 ) [2, 11 ,30 , 38 , 41 , 43 ], where each node 𝑣 𝑖 ∈ 𝑉 corresponds to a detected instance. The node attributes are defined as x𝑖 = [𝑝 𝑖 , 𝑎 𝑖 , 𝑙 𝑖 ], where 
+
+𝑝 𝑖 ∈ R3 denotes the 3D bounding box, 𝑙 𝑖 is the category label, and 
+
+𝑎 𝑖 is an optimally selected 2D cropped view. We employ a pre-trained detector to extract object candidates and their spatial geometric properties. For each candidate, we gen-erate the 2D attribute 𝑎 𝑖 by identifying the viewpoint with minimal occlusion. Specifically, we project the 3D point cloud P𝑤𝑜𝑟𝑙𝑑 onto the image plane (𝑢, 𝑣 ) using the camera’s intrinsic 𝐾 and extrinsic 
+
+𝑇 𝑤 2𝑐 matrices: 
+
+P𝑝𝑖𝑥𝑒𝑙 = 𝐾 · ( 𝑇 𝑤 2𝑐 · P𝑤𝑜𝑟𝑙𝑑 )
+
+To ensure 𝑎 𝑖 provides high-quality visual features, we imple-ment a depth-consistency check. A point is considered visible if its calculated depth 𝑑 𝑐𝑎𝑙𝑐 aligns with the recorded depth map value 
+
+𝑑 𝑚𝑎𝑝 within an extremely small threshold 𝜖 : |𝑑 𝑐𝑎𝑙𝑐 − 𝑑 𝑚𝑎𝑝 | < 𝜖 .We select the 2D crop from the frame that yields the highest ra-tio of visible points for the target object. As shown in Algorithm 1, we present the pseudocode for our semantic 3D scene graph construction algorithm. 
+
+Algorithm 1: Semantic 3D Scene Graph Construction                                                                            
+
+> Input: Point cloud P𝑤 , RGB image F,depth map D𝑓 , Matrices {𝐾,𝑇 𝑤 2𝑐 },Threshold 𝜖 .
+> Output: Scene Graph 𝐺 =(𝑉 , 𝐸, X𝑉 ).Detect object candidates O={𝑜 1, . . . , 𝑜 𝑛 };
+> foreach 𝑜 𝑖 ∈ O do
+> 𝑉 𝑚𝑎𝑥 ←0;𝑝 𝑖 , 𝑙 𝑖 ←Extract3D (𝑜 𝑖 );
+> foreach frame 𝑓 ∈ F do
+> P𝑝𝑥 =𝐾 · ( 𝑇 𝑤 2𝑐 ·P𝑤 );
+> 𝑁 𝑣𝑖𝑠 =Íp∈P𝑤 I( | 𝑧 (p𝑐𝑎𝑚 ) − D 𝑓 (𝑢, 𝑣 ) | <𝜖 );
+> if 𝑅𝑎𝑡𝑖𝑜 =𝑁 𝑣𝑖𝑠 /| P𝑤 |>𝑉 𝑚𝑎𝑥 then
+> 𝑉 𝑚𝑎𝑥 =𝑅𝑎𝑡𝑖𝑜 ;𝑎 𝑖 =Crop (𝑓 , 𝑜 𝑖 );
+> 𝑣 𝑖 ← [ 𝑝 𝑖 , 𝑎 𝑖 , 𝑙 𝑖 ] ∈ 𝑉 ;Construct 𝐸 via spatial proximity;
+> return 𝐺 =(𝑉 , 𝐸, X𝑉 );
+
+## 3.3 Observer-Centric Synergetic Disambiguation 
+
+To resolve the inherent ambiguities in human-provided descriptions, we propose the observer-centric synergetic disambiguation module. This module enhances the original query by generating three types of descriptions: appearance details of the target object, directional descriptions of multiple anchors, and spatial cues for instances of the same category. First, we extract fine-grained appearance descriptions (e.g., color, texture) by feeding 2D object crops into an MLLM. Next, to de-termine the spatial relations from the observer’s perspective, we establish a local coordinate system. Let 𝑉 𝑔𝑡 = 𝐿 − 𝑃 be the viewing direction from camera position 𝑃 to look-at point 𝐿 . We project 𝑉 𝑔𝑡 
+
+onto the floor plane to define the horizontal heading 𝑉 ℎ𝑔𝑡 as the Y-axis, with 𝑃 as the origin. To optimize computation, we trans-form only the 3D bounding boxes into this observer-centric space rather than the entire point cloud. We resolve horizontal relative directions by selecting 𝑛 anchor points across four sectors: 
+
+𝐴 𝑑𝑖𝑟 = {( 𝑑𝑥, 𝑑𝑦 ) | | 𝑑 𝑎𝑥𝑖𝑠 1 | ≥ | 𝑑 𝑎𝑥𝑖𝑠 2 |, 𝑑 𝑎𝑥𝑖𝑠 1 ≷ 0}
+
+For each anchor, we compute the cosine similarity between the target-to-anchor vector 𝑣 𝑡𝑎𝑟 2𝑎𝑛 and eight canonical directional vec-tors . The direction with the maximum similarity is embedded into a template: "[anchor] is [direction] of [target]". To distinguish the target from distractors of the same class, we generate intra-category descriptions. We construct a category-specific local frame centered at the mean coordinates of all same-category objects and determine the target’s relative position. Subsequently, according to the ob-tained relative position, we generate position descriptions among instances of the same category (e.g., "Among these [target objects], the one I want is the one located at the [direction]"). Note that ver-tical relationships are determined by direct Z-axis comparison ,so no additional enhancement is required. Finally, the LLM integrates the original query with these enriched descriptions to produce a precise, disambiguated query for grounding. 
+
+## 3.4 Structured Relation Extraction 
+
+To bridge the gap between enriched natural language and machine-interpretable reasoning, we employ an LLM as a Structured Informa-tion Extractor. We propose a Chain-of-Thought prompting strategy [13 , 15 , 23 , 34 , 37 , 45 ] that systematically decomposes the query into MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Qingxi Du, Junbo Wang, Yuke Li, and Yining Zhu Target and Appearance: 
+
+> {chair+brown \round \dark
+> \fabric}
+> Anchor and Relation:
+> {kitchen cabinets +
+> behind of}
+> {armchair + left of}
+> {tv + front of}
+> {refrigerator + right of}
+> {sink + behind of}
+> Among same category:
+> {right of}
+
+(c) Structured Relation 
+
+Extraction 
+
+(d) Viewpoint -Aware 
+
+Directional Reasoning 
+
+(e) View -based 
+
+Similarity 
+
+Decoupled 
+
+Reasoning 
+
+(f) Feature -Matched Category and 
+
+Appearance Evaluation 
+
+Target Grounding  
+
+> Original Query:
+> There is a dark
+> brown chair
+> placed in the table
+> of the kitchen.
+> Look at
+> position
+
+LLM 
+
+> Appearance
+> Description
+> Spatial position
+> description
+
+LLM              
+
+> That dark ,brown , round fabric chair is right in front of the
+> kitchen cabinets and the sink. It's behind the TV, sitting
+> between the armchair on its left and the fridge on its right .
+> If you're looking at the group of chairs in the table of the
+> kitchen , it’s the one on the far right .
+
+(b) Observer -
+
+Centric Synergetic 
+
+Disambiguation 
+
+(a) 
+
+Semantic 3D 
+
+SceneGraph 
+
+Construction  Viewpoint Transformation 
+
+Localization Anchor 
+
+Directional Alignment Score 
+
+Optimal Angle 
+
+Confusion Score 
+
+> Query:
+> There is a dark brown
+> chair placed in the table
+> of the kitchen.
+
+LLM 
+
+Figure 2: Overview of TDVR. TDVR begins by refining the raw query via the Observer-Centric Synergetic Disambiguation module, while constructing a scene graph to organize the 3D point cloud. The Viewpoint-Aware Directional Reasoning module then predicts the optimal viewpoint and score. Subsequently, the framework evaluates targets through View-based Similarity Decoupled Reasoning, Feature-Matched Category and Appearance Evaluation modules. By integrating these scores through weighted summation, the system identifies the object with the highest overall confidence as the final target. 
+
+a structured semantic representation through the following four inference stages: Stage 1 : Target Entity Identification. The LLM identifies the primary target subject 𝑇 and extracts its fine-grained appearance attributes description A𝑇 (e.g., color, material, and tex-ture). Stage 2 : Anchor Object Localization. The model parses the description to identify reference objects or "anchors" 𝑆 𝑎𝑛𝑐 , which serve as spatial landmarks to constrain the search space. Stage 3 :Spatial Relation Standardization. Descriptive spatial cues are nor-malized into a set of predefined binary tuples R = {⟨ 𝑠 𝑖 , 𝑟 𝑖 ⟩} , where 
+
+𝑠 𝑖 ∈ 𝑆 𝑎𝑛𝑐 and 𝑟 𝑖 represents a standardized directional or proximity relation (e.g., left-of, under). Stage 4 : Intra-category Refinement. To resolve ambiguities among distractors of the same class, the LLM extracts the target’s relative viewpoint within its category. To ensure the integrity of the output, the large language model is required to re-verify the parsed structured expressions against predefined formatting specifications. If the output fails to meet the format requirements, the extraction is performed again. This ensures that the extracted expressions are maximally accurate and provides a deterministic semantic foundation for subsequent 3D visual grounding. 
+
+## 3.5 Viewpoint-Aware Directional Reasoning 
+
+This section proves the rotation invariance of object spatial rela-tionships to support viewpoint-aware directional reasoning. Specif-ically, the relative spatial relationship between objects is position-irrelevant under a fixed rotation angle, enabling viewpoint estima-tion via point cloud rotation. Given an arbitrary 3D point p ∈ R3, the point rotated around center c with rotation matrix 𝑅 ∈ SO (3) is formulated as: 
+
+p′ = 𝑅 (p − c) + c (1) Let p𝐴 and p𝐵 denote the centroids of object 𝐴 and 𝐵 , respectively. The rotated centroids are: 
+
+p′
+
+𝐴 = 𝑅 (p𝐴 − c) + c, p′
+
+𝐵 = 𝑅 (p𝐵 − c) + c (2) 
+
+Figure 3: Schematic diagram of the Viewpoint-Aware Direc-tional Reasoning module: The left side shows the coordinate system for direction judgment, and the right side presents the view scores of the target object under different viewpoints. 
+
+The relative displacement vector after rotation is derived as: 
+
+v′ = p′
+
+𝐵 − p′
+
+𝐴 = 𝑅 (p𝐵 − p𝐴 ) = 𝑅 v (3) The derivation indicates that the transformed relative vector v′ is only determined by the rotation matrix 𝑅 and the original relative vector v, which is independent of the rotation center c. Accordingly, with a fixed rotation matrix 𝑅 and direction judgment vector u,the projection score characterizing the relative spatial relationship remains stable: 
+
+𝑆 = ⟨v′, u⟩ = ⟨𝑅 v, u⟩ (4) Therefore, viewpoint inference is independent of object position. Combined with the vertical direction prior in Section 3.3 that 𝑍 -axis-based vertical judgment is unambiguous without pitch opti-mization, the original 6-D viewpoint inference can be reduced to 1-D horizontal rotation angle estimation. The core of viewpoint-aware directional reasoning is to retrieve the optimal rotation viewpoint that matches the textual spatial constraint. We randomly sample prand as the rotation center and rotate the entire point cloud with horizontal angle 𝜃 to simulate TDVR: Joint Text Disambiguation and Viewpoint Reasoning for Zero-Shot 3D Visual Grounding MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil 
+
+diverse observation perspectives: 
+
+p′ 
+
+> 𝑘
+
+(𝜃 ) = 𝑅 𝑧 (𝜃 ) · ( p𝑘 − prand ) (5) The rotated relative vector between the target object 𝑇 and anchor object 𝐴 𝑖 is: 
+
+®𝑣 𝑇 𝐴 𝑖 (𝜃 ) = p′ 
+
+> 𝐴 𝑖
+
+(𝜃 ) − p′ 
+
+> 𝑇
+
+(𝜃 ) (6) For each spatial constraint in structured queries, we first match anchor objects of category 𝐶 𝑗 via category feature similarity and obtain the standard reference vector ®𝑣 ref ,𝑗 corresponding to the spatial relation. The alignment degree between the rotated relative vector and the reference vector is defined as: 
+
+Ψ(𝑇 , 𝐶 𝑗 , 𝜃 ) = max  
+
+> 𝐴 𝑖 ∈𝐶 𝑗
+
+
+
+ReLU 
+
+ ®𝑣 𝑇 𝐴 𝑖 (𝜃 ) · ® 𝑣 ref ,𝑗 
+
+∥® 𝑣 𝑇 𝐴 𝑖 (𝜃 )∥ 
+
+ 
+
+(7) The ReLU function eliminates negative matching interference, and max pooling selects the best-matched anchor from similar distrac-tors. To avoid premature filtering of valid targets, we calculate view-point scores for all candidate objects instead of screening high-score objects in advance. The final optimal viewpoint score is obtained by traversing all candidate rotation angles: 
+
+𝑆 𝑣 = max  
+
+> 𝜃 ∈Θ
+> 𝑁
+
+∑︁ 
+
+> 𝑗 =1
+
+Ψ(𝑇 , 𝐶 𝑗 , 𝜃 ) (8) This paradigm efficiently generates the optimal viewpoint set Θbest 
+
+for each target object while calculating the viewpoint matching score 𝑆 𝑣 .
+
+## 3.6 View-based Similarity Decoupled Reasoning 
+
+While viewpoint reasoning (Section 3.5) evaluates candidates based on global spatial relations, multiple adjacent objects of the same category often satisfy the same directional constraints, leading to intra-class confusion. To distinguish the target from these similar distractors, as shown in Fig. 4, we introduce a fine-grained reason-ing module centered on the relative distribution of the category. 
+
+Figure 4: Schematic diagram of the View-based Similarity Decoupled Reasoning module.This figure illustrates the con-fusion scores of different chairs in the scene. 
+
+For a given category 𝐶 , let S𝐶 = {𝑂 1, 𝑂 2, . . . , 𝑂 𝑛 } be the set of all instances of the same category as the detected target object in the scene. To establish a stable internal reference, we compute the category’s geometric centroid M𝐶 in the rotated coordinate system.The rotation angle here is derived from the optimal view obtained for each object in Section 3.5. 
+
+M𝐶 = 1
+
+𝑛 ∑︁ 𝑂 𝑗 ∈ S 𝐶 
+
+p′
+
+> 𝑗
+
+where p′ 
+
+> 𝑗
+
+represents the rotated center coordinates of object 𝑂 𝑗 .For each candidate 𝑂 𝑖 ∈ S 𝐶 , we define a local displacement vector 
+
+®𝑣 𝑐𝑜𝑛𝑓 relative to this class centroid: 
+
+®𝑣 𝑐𝑜𝑛𝑓 = p′ 
+
+> 𝑖
+
+− M𝐶 
+
+Leveraging the intra-category directional cues parsed in Section 3.4(e.g., "the one on the right among the chairs"), we evaluate the alignment between the candidate’s displacement and the reference direction ®𝑅 𝑟𝑒 𝑓 . The confusion score 𝑆 𝑐 is defined by the cosine similarity: 
+
+𝑆 𝑐 (𝑂 𝑖 ) = ®𝑣 𝑐𝑜𝑛𝑓 · ® 𝑅 𝑟𝑒 𝑓 
+
+∥® 𝑣 𝑐𝑜𝑛𝑓 ∥∥ ® 𝑅 𝑟𝑒 𝑓 ∥
+
+This score effectively measures the target’s relative standing within its group. By identifying the object that occupies the described relative position among its peers, the module resolves ambiguities that global spatial relations cannot address. Consistent with our previous strategy, we compute 𝑆 𝑐 for all candidates to avoid error propagation from premature filtering. 
+
+## 3.7 Feature-Matched Category and Appearance Evaluation 
+
+To locate objects whose categories match the description, we further feed the category label of each object in the scene graph and the category text of the target object from the structured description into a pre-trained BERT [ 6] model, obtaining the embedding of the category label 𝐸 𝑐𝑎𝑡 and the embedding of the target category 𝐸 𝑡𝑎𝑟 .We then compute the similarity between these two vectors as the category matching score 𝑆 𝑐𝑎𝑡 between each category and the target category. In addition, we input the 2D cropped image of each object in the scene graph, together with the target object category text and descriptive text from the structured description, into a pre-trained CLIP model [ 28 ], yielding the image feature vector 𝐸 𝑝𝑖𝑐 and the appearance text feature vector 𝐸 app . By calculating the similarity between these two vectors, we obtain the appearance matching score 𝑆 𝑎𝑝𝑝 for each object. 
+
+## 3.8 Target Grounding 
+
+We combine the obtained 𝑆 𝑣 , 𝑆 𝑐 , 𝑆 𝑐𝑎𝑡 , and 𝑆 𝑎𝑝𝑝 to compute the overall evaluation score 𝑆 𝑡𝑜𝑡𝑎𝑙 for each object. 
+
+𝑆 total = 𝑆 cat · ( 𝛼𝑆 𝑣 + 𝛽𝑆 𝑐 + 𝛾𝑆 app )
+
+𝑆 𝑐𝑎𝑡 is a metric that measures how similar the object category is to the description, and acts as a coefficient multiplied by the weighted sum of 𝑆 𝑣 , 𝑆 𝑐 ,and 𝑆 𝑎𝑝𝑝 . We then sort the final evaluation scores 𝑆 𝑡𝑜𝑡𝑎𝑙 of all objects, and select the object with the highest total score as the target object. MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Qingxi Du, Junbo Wang, Yuke Li, and Yining Zhu 
+
+Table 1: Comparative results on on the ScanRefer dataset. We report the Accuracy@0.25 and Accuracy@0.5 for Unique, Multiple, and Overall categories. 
+
+Venue Method Type Unique Multiple Overall Acc@0.25 Acc@0.5 Acc@0.25 Acc@0.5 Acc@0.25 Acc@0.5 CoRL’24 Vlm-grounder [40] zero-shot 66.0 29.8 48.3 33.5 51.6 32.8 CVPR’24 3DLFVG [21] zero-shot 65.80 51.27 22.03 16.94 30.53 23.61 CVPR’24 ZSVG3D [42] zero-shot 63.8 58.4 27.7 24.6 36.4 32.7 CVPR’25 SeeGround [17] zero-shot 75.7 68.9 34.0 30.0 44.1 39.4 ACM MM’25 SeqVLM [19] zero-shot 77.3 72.7 47.8 41.3 55.6 49.6 RA-L ’24 ViewInfer3D [8] zero-shot - - 56.25 42.83 60.31 47.20 NIPS’25 SPAZER [14] zero-shot 80.9 72.3 51.7 43.4 57.2 48.8 CVPR’25 TSP3D [12] fully - - - - 56.45 46.71 CVPR’24 VPP-Net [32] fully 86.05 67.09 50.32 39.03 55.65 43.29 CVPR’24 𝑀𝐴 2𝑇𝑟𝑎𝑛𝑠𝑉 𝐺 [39] fully 86.3 74.1 53.8 41.4 57.9 45.7 TCSVT’25 Pseudo-EV [9] fully - - 55.56 43.00 61.42 47.96 AAAI’25 LIBA [36] fully 88.81 74.27 54.42 44.41 59.57 48.96 AAAI’25 AugRefer [35] fully 86.21 70.75 49.96 39.06 55.68 44.03 IJCAI’25 DDPA-3DVG [10] fully 86.8 70.2 49.8 38.4 55.3 43.3 
+
+TDVR(Ours) zero-shot 80.05 72.85 65.48 58.93 70.85 64.06 
+
+## 4 Experiments 4.1 Experiments Settings 
+
+Datasets. We evaluate our method on the ScanRefer [ 3] and Sr3D [ 1] datasets. Built upon ScanNet[ 5 ], ScanRefer [ 3] provides 51,583 free-form natural language descriptions for 11,046 objects. These de-scriptions emphasize appearance attributes and complex spatial re-lationships, requiring models to achieve sophisticated cross-modal alignment between 3D point clouds and language embeddings. ReferIt3D [ 1 ] is a large-scale dataset for 3D visual grounding. It fea-tures two subsets: Sr3D [ 1], using synthetic spatial templates, and Nr3D[ 1 ], containing natural language. Since the Nr3D[ 1 ] dataset does not provide camera pose information, whereas that of Sr3D[ 1 ]can be inferred through its construction code, We therefore conduct our experiments on the Sr3D [1] dataset. 
+
+Implementation Details. We utilize Mask3D [ 31 ] for initial in-stance segmentation and scene graph node generation. For the query disambiguation and structured reasoning modules, we em-ploy GPT-4o (temp=0.7) and DeepSeek-V3 (temp=0.3), respectively, to generate enriched descriptions and perform CoT-based pars-ing.We adopt a locally deployed all-MiniLM-L6-v2 (BERT-based) [6 ] to compute text embeddings.In the viewpoint-aware directional reasoning module, the rotation angle of the scene uses 10 degrees as one rotation unit. For visual-linguistic matching, the CLIP ViT-B/32 [ 28 ] model is used to extract features from both 2D object crops and appearance descriptions.During the target grounding stage, the fusion weights are empirically set as 𝛼 = 5, 𝛽 = 3, and 𝛾 = 1. All experiments are conducted on a single NVIDIA RTX 4090 GPU. 
+
+## 4.2 Quantitative Results 
+
+As shown in Table 1, our method sets a new state-of-the-art perfor-mance for zero-shot 3D visual grounding on ScanRefer [ 3 ] dataset. Under the overall metric, we achieve 70.85% (Acc@0.25) and 64.06% (Acc@0.5). Notably, our approach is the first zero-shot method to surpass the 60% threshold on the strict Acc@0.5 metric, outper-forming the previous best competitor, SPAZER [ 14 ] (48.8%), by a substantial margin of 15.26%. Even when compared to recent fully-supervised methods (e.g., TSP3D [ 12 ] and Pseudo-EV [ 9 ]), our zero-shot TDVR framework consistently yields superior perfor-mance, effectively narrowing the gap between zero-shot reasoning and supervised learning. Our method demonstrates exceptional strength in the "Multiple" category, which contains distracting ob-jects of the same class. We achieve 58.93% (Acc@0.5), exceeding the previous best zero-shot method by 15.53%. This significant improve-ment validates the effectiveness of our view-based similarity decou-pled reasoning and viewpoint-aware directional reasoning modules in resolving spatial ambiguities and performing fine-grained dis-crimination among similar instances. In the "Unique" category at Acc@0.25, our performance (80.05%) aligns with top-tier methods but shows a marginal plateau. This is primarily due to the inher-ent recall limits of the frozen Mask3D [ 31 ] detector used for fair comparison across zero-shot baselines. However, under the stricter Acc@0.5 criterion, our method still leads with 72.85%, proving that our reasoning pipeline provides higher-precision localization than existing supervised or heuristic-based alternatives. We also conduct experiments on the Sr3D [ 1 ]dataset. Since the ReferIt3D [ 1] dataset did not release camera pose information, the view annotations for the Sr3D [ 1] dataset are inferred from its construction process.For objects with the ℎ𝑎𝑠 _𝑓 𝑟𝑜𝑛𝑡 _𝑑𝑖𝑟𝑒𝑐𝑡𝑖𝑜𝑛 at-tribute set to True (i.e., oriented objects), we employ object orien-tations as viewpoint information. For objects with it set to False, the default direction of the point cloud is used as the viewpoint. As shown in Table 2,among zero-shot methods of the same category, TDVR achieves a high accuracy of 70.00%, outperforming many classic zero-shot approaches in recent years. Furthermore, we also TDVR: Joint Text Disambiguation and Viewpoint Reasoning for Zero-Shot 3D Visual Grounding MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil 
+
+Description Ground Truth SeeGround SPAZER Ours            
+
+> (a) The chair is against the wall. it is the first chair from the right.
+> (b) this chair is facing away. it is wooden.
+> (c) this is a blue sofa chair . it is against a yellow wall.it is the first from the left.
+> (d) there is a rectangular pillow .it is front of a gray table and left of another pillow .
+
+Figure 5: Qualitative comparison of 3D visual grounding results. We visualize four challenging cases (a–d) that involve spatial relation descriptions and multiple similar confusing objects.Objects outlined in yellow boxes in the leftmost column represent the ground truth bounding boxes. The three columns on the right show the results of SPAZER, SeeGround, and our proposed TDVR model, respectively. Green boxes indicate correct predictions, while red boxes indicate incorrect predictions. Table 2: Comparison with other methods on Sr3D dataset. We report the localization accuracy (%) under different splits. †
+
+indicates results reproduced by our implementation. 
+
+Method Setting Hard View-dep. Overall TSP3D (CVPR’25) [12] fully - - 57.10 AugRefer (AAAI’25) [35] fully - - 60.22 DDPA-3DVG (IJCAI’25) [10] fully - - 69.70 SPAZER (NIPS’25) [14] † zero-shot 49.00 55.65 57.52 SeeGround (CVPR’25) [17] † zero-shot 35.14 30.10 49.22 ZSVG3D (CVPR’24) [42] † zero-shot 38.33 32.35 50.07 
+
+Ours zero-shot 63.23 79.03 70.00 
+
+surpass several representative fully-supervised methods, demon-strating the excellent grounding capability of our method. On the hard subset, TDVR reaches 63.23%, which proves the superiority of our model in handling complex spatial relationships and confusing objects. And under the view-dependent subset, our performance achieves 79.03%, reflecting the effectiveness of the model’s spatial perception ability. 
+
+## 4.3 Qualitative Results 
+
+To intuitively evaluate the localization capability of TDVR, we present qualitative comparisons with the representative methods (SPAZER [ 14 ] and SeeGround [ 17 ]) in Fig. 5. The visualized scenes involve complex spatial reasoning and visually similar distrac-tors. In cases (a), (c),and (d), the descriptions involve viewpoint-dependent cues such as "first chair from the right". While SPAZER [14 ] and SeeGround [ 17 ] struggle with the latent observation angle, our TDVR accurately identifies the target by inferring the observer’s horizontal heading . In scenes with multiple identical objects (e.g., the pillows in case (d) ,the chairs in case (b) and the sofas in case (c)), our method excels at resolving intra-category confusion. In scenes where the original query is ambiguous, such as case (b), our method also achieves precise localization performance, demonstrat-ing the excellent description disambiguation capability of the TDVR method. TDVR maintains high-precision grounding where baseline methods often drift to adjacent distractors. As illustrated in Fig. 5, our method (green boxes) consistently aligns with the ground truth (yellow boxes), proving its superior robustness in ambiguous query reasoning and fine-grained 3D scene understanding. 
+
+## 4.4 Ablation Studies 
+
+We conduct a systematic ablation experiments to verify the con-tribution of each module in TDVR (refer to Table 3). Removing MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Qingxi Du, Junbo Wang, Yuke Li, and Yining Zhu 
+
+Table 3: Ablation study on the ScanRefer dataset. "OD": Observer-Centric Synergetic Disambiguation, "CM": Cate-gory Matching, "AM": Appearance Matching, "VR": viewpoint-Aware Directional Reasoning, "VSD":View-based Similarity Decoupled Reasoning .                                   
+
+> ID OD CM VR VSD AM Overall 1√√√√√64.06
+> 2√√√√61.54 3√√√59.21 4√√39.95 5√√√√59.71 6√√√√40.59
+
+the observer-centric synergetic disambiguation module (ID 6 vs. 1) causes the most dramatic performance collapse, with overall Acc@0.5 dropping by 23.4%. This underscores that resolving lin-guistic uncertainty is the prerequisite for precise 3D grounding. The viewpoint-aware directional reasoning (VR) module provides a substantial 19.3% gain (ID 4 vs. 3), proving that viewpoint-aware spatial logic is the core driver for distinguishing similar objects. Additionally, the view-based similarity decoupled reasoning (VSD) (ID 3 vs. 2) further yields a 3.2% boost, validating its necessity in fine-grained discrimination within the same category. 
+
+Table 4: Comparison of the Number of Anchors in Generated Descriptions in Observer-Centric Synergetic Disambiguation module on ScanRefer                           
+
+> Unique Multiple Overall number Acc@0.25 Acc@0.5 Acc@0.25 Acc@0.5 Acc@0.25 Acc@0.5 174.99 69.48 39.15 34.69 52.36 47.51 377.85 71.22 54.09 48.18 62.84 56.67 580.05 72.85 65.48 58.93 70.85 64.06 779.27 72.02 61.87 55.77 68.28 61.76
+
+We investigate the sensitivity of spatial inference to the num-ber of anchor objects ( 𝑁 𝑎𝑛𝑐 ). As shown in Table 4, performance peaks at 𝑁 𝑎𝑛𝑐 = 5. We observe a performance degradation when 
+
+𝑁 𝑎𝑛𝑐 increases to 7. This "more is less" phenomenon suggests that excessive anchors introduce redundant context, which potentially exceeds the optimal reasoning window of the LLM and introduces spatial noise that complicates the geometric matching process. 
+
+Table 5: Comparison of the Capabilities of Different Large Language Models on ScanRefer 
+
+LLM Acc@0.25 Acc@0.5 gpt-4o(SPAZE[14]) 57.20 48.80 gpt-4o 59.31 52.71 glm-4 50.78 45.41 qwen2.5-72b-instruct 47.58 42.43 
+
+deepseekv3.2-reason (Ours) 70.85 64.06 Table 6: Comparison of the influence of rotation unit angle on ScanRefer.           
+
+> Rotation Angle ( ◦)10 20 30 40 50
+> Overall@0.5 (%) 64.06 60.82 58.64 57.33 46.61
+
+Table 7: Comparison of inference time among different meth-ods.     
+
+> Model Time (s)
+> SPAZER 23.5 Vlm-Grounder 50.3
+> Ours 10.21
+
+We further evaluate TDVR across various LLMs to verify its generalizability (Table 5).DeepSeek-V3 [ 20 ] achieves the best per-formance, benefiting from its superior Chain-of-Thought reasoning in structured parsing.Notably, even when restricted to the same GPT-4o backbone, our TDVR framework outperforms the previous SOTA method, SPAZER [ 14 ], by 3.91%. This result demonstrates that our performance gains stem from the inherent architectural in-novations of the TDVR pipeline—specifically the multi-dimensional scene graph reasoning—rather than merely relying on a stronger language model. We also conduct experiments on the angular unit of rotation, and perform viewpoint inference with different angles respectively. The results are shown in Table 6. It can be observed that as the rotation unit angle increases, the accuracy of the final results decreases. Therefore, we select 10 ◦ as the rotation unit angle in this work. As shown in Table 7 , we further compare the average infer-ence speed of different models for a single query. Our model con-sumes less runtime than the representative models, taking only 10.21 seconds on average per query, which achieves substantial improvements over other zero-shot approaches. 
+
+## 5 Conclusion 
+
+We propose TDVR, a training-free framework for 3D visual ground-ing. TDVR introduces an observer-centric synergetic disambigua-tion module, effectively alleviating language ambiguity. To achieve accurate localization, TDVR constructs a multi-attribute scene graph and combines text-based structured reasoning to translate complex natural language into executable geometric constraints. Furthermore, via the viewpoint-aware directional reasoning and view-based similarity decoupled reasoning modules, the system can infer the observer’s viewpoint and distinguish visually similar candidates in dense 3D scenes. Extensive experiments on the Scan-Refer and Sr3D benchmarks demonstrate that TDVR achieves state-of-the-art performance among training-free methods,significantly narrowing the performance gap between zero-shot and fully super-vised 3D visual grounding approaches. 
+
+## Acknowledgments 
+
+This work is jointly supported by the Fundamental Research Funds for the Central Universities (D5000250044, D5000250060),Natural TDVR: Joint Text Disambiguation and Viewpoint Reasoning for Zero-Shot 3D Visual Grounding MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil 
+
+Science Basic Research Program of Shaanxi (2025JC-YBQN-882,2025JC-YBQN-805),National Natural Science Foundation of China (62506301). 
+
+## References 
+
+[1] Panos Achlioptas, Ahmed Abdelreheem, Fei Xia, Mohamed Elhoseiny, and Leonidas Guibas. 2020. Referit3d: Neural listeners for fine-grained 3d object identification in real-world scenes. In European conference on computer vision .Springer, 422–440. [2] Haonan Chang, Kowndinya Boyalakuntla, Shiyang Lu, Siwei Cai, Eric Jing, Shreesh Keskar, Shijie Geng, Adeeb Abbas, Lifeng Zhou, Kostas Bekris, et al .2023. Context-aware entity grounding with open-vocabulary 3d scene graphs. 
+
+arXiv preprint arXiv:2309.15940 (2023). [3] Dave Zhenyu Chen, Angel X Chang, and Matthias Nießner. 2020. Scanrefer: 3d object localization in rgb-d scans using natural language. In European conference on computer vision . Springer, 202–221. [4] Keqin Chen, Zhao Zhang, Weili Zeng, Richong Zhang, Feng Zhu, and Rui Zhao. 2023. Shikra: Unleashing multimodal llm’s referential dialogue magic. arXiv preprint arXiv:2306.15195 (2023). [5] Angela Dai, Angel X Chang, Manolis Savva, Maciej Halber, Thomas Funkhouser, and Matthias Nießner. 2017. Scannet: Richly-annotated 3d reconstructions of indoor scenes. In Proceedings of the IEEE conference on computer vision and pattern recognition . 5828–5839. [6] Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. 2019. Bert: Pre-training of deep bidirectional transformers for language understanding. In 
+
+Proceedings of the 2019 conference of the North American chapter of the association for computational linguistics: human language technologies, volume 1 (long and short papers) . 4171–4186. [7] Chun Feng, Joy Hsu, Weiyu Liu, and Jiajun Wu. 2024. Naturally supervised 3d visual grounding with language-regularized concept learners. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 13269–13278. [8] Liang Geng and Jianqin Yin. 2024. Viewinfer3d: 3d visual grounding based on embodied viewpoint inference. IEEE Robotics and Automation Letters 9, 9 (2024), 7469–7476. [9] Liang Geng, Jianqin Yin, Gang Chen, and Qingxuan Jia. 2025. Pseudo-EV: Enhanc-ing 3D Visual Grounding with Pseudo Embodied Viewpoint. IEEE Transactions on Circuits and Systems for Video Technology (2025). [10] Hongjie Gu, Jinlong Fan, Liang Zheng, Jing Zhang, and Yuxiang Yang. 2025. DDPA-3DVG: vision-language dual-decoupling and progressive alignment for 3D visual grounding. In Proceedings of the Thirty-Fourth International Joint Conference on Artificial Intelligence . 1044–1052. [11] Qiao Gu, Ali Kuwajerwala, Sacha Morin, Krishna Murthy Jatavallabhula, Bipasha Sen, Aditya Agarwal, Corban Rivera, William Paul, Kirsty Ellis, Rama Chellappa, et al . 2024. Conceptgraphs: Open-vocabulary 3d scene graphs for perception and planning. In 2024 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 5021–5028. [12] Wenxuan Guo, Xiuwei Xu, Ziwei Wang, Jianjiang Feng, Jie Zhou, and Jiwen Lu. 2025. Text-guided sparse voxel pruning for efficient 3d visual grounding. In 
+
+Proceedings of the Computer Vision and Pattern Recognition Conference . 3666–3675. [13] Namgyu Ho, Laura Schmid, and Se-Young Yun. 2023. Large language models are reasoning teachers. In Proceedings of the 61st annual meeting of the association for computational linguistics (volume 1: long papers) . 14852–14882. [14] Zhao Jin, Rong-Cheng Tu, Jingyi Liao, Wenhao Sun, Xiao Luo, Shunyu Liu, and Dacheng Tao. 2025. SPAZER: Spatial-Semantic Progressive Reasoning Agent for Zero-shot 3D Visual Grounding. arXiv preprint arXiv:2506.21924 (2025). [15] Takeshi Kojima, Shixiang Shane Gu, Machel Reid, Yutaka Matsuo, and Yusuke Iwasawa. 2022. Large language models are zero-shot reasoners. Advances in neural information processing systems 35 (2022), 22199–22213. [16] Fuhao Li, Huan Jin, Bin Gao, Liaoyuan Fan, Lihui Jiang, and Long Zeng. 2025. Nugrounding: A multi-view 3d visual grounding framework in autonomous driving. arXiv preprint arXiv:2503.22436 (2025). [17] Rong Li, Shijie Li, Lingdong Kong, Xulei Yang, and Junwei Liang. 2025. Seeground: See and ground for zero-shot open-vocabulary 3d visual grounding. In Proceedings of the Computer Vision and Pattern Recognition Conference . 3707–3717. [18] Fangjian Lin, Jianlong Yuan, Sitong Wu, Fan Wang, and Zhibin Wang. 2023. Uninext: Exploring a unified architecture for vision recognition. In Proceedings of the 31st ACM International Conference on Multimedia . 3200–3208. [19] Jiawen Lin, Shiran Bian, Yihang Zhu, Wenbin Tan, Yachao Zhang, Yuan Xie, and Yanyun Qu. 2025. SeqVLM: Proposal-Guided Multi-View Sequences Reasoning via VLM for Zero-Shot 3D Visual Grounding. In Proceedings of the 33rd ACM International Conference on Multimedia . 3094–3103. [20] Aixin Liu, Bei Feng, Bing Xue, Bingxuan Wang, Bochao Wu, Chengda Lu, Cheng-gang Zhao, Chengqi Deng, Chenyu Zhang, Chong Ruan, et al . 2024. Deepseek-v3 technical report. arXiv preprint arXiv:2412.19437 (2024). [21] Yuanyuan Liu, Haiyang Mei, Dongyang Zhan, Jiayue Zhao, Dongsheng Zhou, Bo Dong, and Xin Yang. 2026. View-on-Graph: Zero-Shot 3D Visual Grounding via Vision-Language Reasoning on Scene Graphs. In Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 40. 7386–7394. [22] Zhenyang Liu, Yikai Wang, Sixiao Zheng, Tongying Pan, Longfei Liang, Yanwei Fu, and Xiangyang Xue. 2025. Reasongrounder: Lvlm-guided hierarchical feature splatting for open-vocabulary 3d visual grounding and reasoning. In Proceedings of the Computer Vision and Pattern Recognition Conference . 3718–3727. [23] Pan Lu, Liang Qiu, Wenhao Yu, Sean Welleck, and Kai-Wei Chang. 2023. A survey of deep learning for mathematical reasoning. In Proceedings of the 61st annual meeting of the association for computational linguistics (volume 1: long papers) .14605–14631. [24] Ziyang Lu, Yunqiang Pei, Guoqing Wang, Peiwei Li, Yang Yang, Yinjie Lei, and Heng Tao Shen. 2024. Scaneru: Interactive 3d visual grounding based on embodied reference understanding. In Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 38. 3936–3944. [25] Chuofan Ma, Yi Jiang, Jiannan Wu, Zehuan Yuan, and Xiaojuan Qi. 2024. Groma: Localized visual tokenization for grounding multimodal large language models. In European Conference on Computer Vision . Springer, 417–435. [26] Yunze Man, De-An Huang, Guilin Liu, Shiwei Sheng, Shilong Liu, Liang-Yan Gui, Jan Kautz, Yu-Xiong Wang, and Zhiding Yu. 2025. Argus: Vision-centric reasoning with grounded chain-of-thought. In Proceedings of the Computer Vision and Pattern Recognition Conference . 14268–14280. [27] Boyu Mi, Hanqing Wang, Tai Wang, Yilun Chen, and Jiangmiao Pang. 2025. Language-to-Space Programming for Training-Free 3D Visual Grounding. In 
+
+Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing . 3844–3864. [28] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al . 2021. Learning transferable visual models from natural language supervision. In International conference on machine learning . PmLR, 8748–8763. [29] Hanoona Rasheed, Muhammad Maaz, Sahal Shaji, Abdelrahman Shaker, Salman Khan, Hisham Cholakkal, Rao M Anwer, Eric Xing, Ming-Hsuan Yang, and Fahad S Khan. 2024. Glamm: Pixel grounding large multimodal model. In Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition .13009–13018. [30] Antoni Rosinol, Arjun Gupta, Marcus Abate, Jingnan Shi, and Luca Carlone. 2020. 3D dynamic scene graphs: Actionable spatial perception with places, objects, and humans. arXiv preprint arXiv:2002.06289 (2020). [31] Jonas Schult, Francis Engelmann, Alexander Hermans, Or Litany, Siyu Tang, and Bastian Leibe. 2023. Mask3d: Mask transformer for 3d semantic instance segmentation. In 2023 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 8216–8223. [32] Xiangxi Shi, Zhonghua Wu, and Stefan Lee. 2024. Aware visual grounding in 3d scenes. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 14056–14065. [33] Shihao Wang, Zhiding Yu, Xiaohui Jiang, Shiyi Lan, Min Shi, Nadine Chang, Jan Kautz, Ying Li, and Jose M Alvarez. 2025. Omnidrive: A holistic vision-language dataset for autonomous driving with counterfactual reasoning. In Proceedings of the computer vision and pattern recognition conference . 22442–22452. [34] Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang, Aakanksha Chowdhery, and Denny Zhou. 2022. Self-consistency improves chain of thought reasoning in language models. arXiv preprint arXiv:2203.11171 (2022). [35] Xinyi Wang, Na Zhao, Zhiyuan Han, Dan Guo, and Xun Yang. 2025. Augre-fer: Advancing 3d visual grounding via cross-modal augmentation and spatial relation-based referring. In Proceedings of the AAAI Conference on Artificial Intel-ligence , Vol. 39. 8006–8014. [36] Yuan Wang, Ya-Li Li, WU Eastman ZY, and Shengjin Wang. 2025. LIBA: Lan-guage instructed multi-granularity bridge assistant for 3D visual grounding. In 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 39. 8114–8122. [37] Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny Zhou, et al . 2022. Chain-of-thought prompting elicits reasoning in large language models. Advances in neural information processing systems 35 (2022), 24824–24837. [38] Shun-Cheng Wu, Johanna Wald, Keisuke Tateno, Nassir Navab, and Federico Tombari. 2021. Scenegraphfusion: Incremental 3d scene graph prediction from rgb-d sequences. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 7515–7525. [39] Can Xu, Yuehui Han, Rui Xu, Le Hui, Jin Xie, and Jian Yang. 2024. Multi-attribute interactions matter for 3d visual grounding. In Proceedings of the IEEE/CVF Con-ference on Computer Vision and Pattern Recognition . 17253–17262. [40] Runsen Xu, Zhiwei Huang, Tai Wang, Yilun Chen, Jiangmiao Pang, and Dahua Lin. 2024. Vlm-grounder: A vlm agent for zero-shot 3d visual grounding. arXiv preprint arXiv:2410.13860 (2024). [41] Hang Yin, Xiuwei Xu, Zhenyu Wu, Jie Zhou, and Jiwen Lu. 2024. Sg-nav: Online 3d scene graph prompting for llm-based zero-shot object navigation. Advances in neural information processing systems 37 (2024), 5285–5307. [42] Zhihao Yuan, Jinke Ren, Chun-Mei Feng, Hengshuang Zhao, Shuguang Cui, and Zhen Li. 2024. Visual programming for zero-shot open-vocabulary 3d visual grounding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 20623–20633. MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Qingxi Du, Junbo Wang, Yuke Li, and Yining Zhu 
+
+[43] Tatiana Zemskova and Dmitry Yudin. 2025. 3dgraphllm: Combining semantic graphs and large language models for 3d scene understanding. In Proceedings of the IEEE/CVF International Conference on Computer Vision . 8885–8895. [44] Yuqi Zhang, Han Luo, and Yinjie Lei. 2024. Towards clip-driven language-free 3d visual grounding via 2d-3d relational enhancement and consistency. In Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition .13063–13072. [45] Wayne Xin Zhao, Kun Zhou, Junyi Li, Tianyi Tang, Xiaolei Wang, Yupeng Hou, Yingqian Min, Beichen Zhang, Junjie Zhang, Zican Dong, et al . 2023. A survey of large language models. arXiv preprint arXiv:2303.18223 1, 2 (2023), 1–124.

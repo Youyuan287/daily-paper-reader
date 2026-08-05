@@ -1,0 +1,480 @@
+Title: Perceptual Anchoring: Prototype-Guided Text Calibration for Training-free Open-Vocabulary Semantic Segmentation
+
+URL Source: https://arxiv.org/pdf/2608.03991v1
+
+Published Time: Wed, 05 Aug 2026 01:26:04 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# Perceptual Anchoring: Prototype-Guided Text Calibration for Training-free Open-Vocabulary Semantic Segmentation 
+
+Wanli Ma a,b , Jiangwen Lu c, Qinmu Peng a,b, ∗, Xinge You a,b 
+
+> aSchool of Electronic Information and Communications, Huazhong University of Science and Technology, Wuhan 430074, China
+> bNational Anti-counterfeit Engineering Research Center, Huazhong University of Science and Technology, Wuhan 430074, China
+> cSchool of Automation, Hangzhou Dianzi University, Hangzhou 310018, China
+
+Abstract 
+
+Training-free open-vocabulary semantic segmentation (OVSS) partitions an image into semantically distinct regions based on arbitrary text descriptions, without learning any additional parameters. However, existing methods typically focus on improving visual representations while treating text embeddings that encode only generic category concepts as fixed classification references. The resulting semantic gap between these generic concepts and the visual representations that capture the specific appearances of target instances often causes incomplete masks and erroneous predictions in non-target regions. Inspired by the symbol-percept correspondence underlying perceptual anchoring, we propose Prototype-Guided Text Calibration (PTC) for training-free OVSS. In the Perceiving stage, PTC selects reliable visual evidence based on initial matching scores to construct category-specific visual prototypes. In the Anchoring stage, PTC uses these prototypes to calibrate their corresponding text embeddings, with the calibration strength adaptively adjusted based on the amount of visual evidence. Consequently, the calibrated text embeddings align more accurately with instance-specific visual representations while preserving generic category semantics and open-vocabulary generalization. Moreover, PTC requires neither additional training nor external models and can serve as a plug-and-play module for existing methods. Extensive experiments across eight benchmarks show that PTC significantly enhances the performance of six representative methods and yields more complete and accurate segmentation results. These results validate PTC as a simple and e ff ective approach to improving visual-text alignment. The code is available at [https://github.com/Valeria-MaW/PTC ]. 
+
+Keywords: Open-vocabulary, Semantic segmentation, Vision-language models, CLIP, Training-free 
+
+1. Introduction 
+
+Open-vocabulary semantic segmentation (OVSS) aims to partition an image into semantically distinct regions using arbitrary text descriptions. Unlike traditional semantic segmentation methods that rely on closed-set categories and costly dense annotations [ 1 , 2, 3, 4 ], OVSS can recognize classes unseen during training, making it better suited to real-world visual perception, which encompasses tens of thousands of categories. Large-scale vision-language pre-trained models (VLMs) (e.g., CLIP [ 5] and ALIGN [ 6]) have demonstrated impressive transferability in recognizing novel classes. This prompts researchers to apply them to OVSS and to explore their adaptation to dense prediction tasks [ 7 , 8, 9, 10 , 11 , 12 ], since CLIP is inherently designed for image-level visual-text matching. Existing OVSS methods can be broadly divided into training-based and training-free approaches, depending on whether additional parameter learning is required. Training-based approaches typically rely on large segmentation datasets [ 7, 8, 13 , 14 ], image-text pair datasets [ 9, 10 , 15 ], or other forms of supervision [ 16 , 17 ], introducing significant computational costs. In contrast, training-free OVSS has attracted increasing attention because it requires no additional parameter learning and facilitates generalization to new scenes and classes. Most existing training-free methods focus on improving visual representations, primarily by enhancing their local perception and spatial consistency, thereby improving visual–text matching and segmentation performance    
+
+> ∗Corresponding author arXiv:2608.03991v1 [cs.CV] 4 Aug 2026 Baseline Baseline + PTC
+> Partial Activation More Complete Activation
+> Background -biased Activation Target -focused Activation
+
+(a) Activation Map Comparison  (b)  Performance across Eight Benchmarks Figure 1: Motivation and e ff ectiveness of PTC . (a) Compared with the ProxyCLIP baseline, adding PTC yields more complete activation over object regions and suppresses background-biased responses. (b) Introducing PTC consistently improves ProxyCLIP across all eight benchmarks. 
+
+[18 , 11 , 19 , 20 , 21 , 22 , 23 , 24 , 12 , 25 , 26 , 27 , 28 ]. However, these methods often treat class text embeddings as reliable zero-shot classifiers and directly match them to visual features, which overlooks a semantic gap between category text embeddings and visual representations. Specifically, class text embeddings generated by pre-trained large language models (LLMs) [ 29 , 30 ] learn generic, input-agnostic category concepts. In contrast, visual representations are extracted from the input image and characterize the specific appearances of target instances under particular poses, viewpoints, or imaging conditions. Consequently, directly matching generic category text embeddings with instance-specific visual representations inevitably su ff ers from semantic misalignment, which naturally degrades segmentation performance and manifests in two limitations. First, the model tends to recognize only local regions that are highly representative of the category, resulting in incomplete mask coverage, as shown in the upper part of Fig. 1(a). Second, generic text embeddings may be incorrectly matched with visually similar background regions or with regions belonging to co-occurring classes, resulting in erroneous segmentation, as shown in the lower part of Fig. 1(a). Since final segmentation predictions inherently rely on visual–text matching, refining only visual representations while leaving generic text embeddings unchanged fails to fully mitigate the aforementioned semantic gap. To bridge this gap, we draw inspiration from perceptual anchoring in cognitive robotics, a conceptual mechanism that links abstract symbols to concrete percepts, allowing the symbols to refer to specific entities [ 31 , 32 ]. From this perspective, we argue that category text embeddings should not always be treated as fixed classification references. Instead, they should be linked to the instance-specific visual representations in the input image using reliable perceptual evidence, enabling these abstract category concepts to more accurately refer to the target instances, thus achieving more precise segmentation. Building on this insight, we propose Prototype-Guided Text Calibration (PTC) for training-free OVSS. In the Perceiving stage, PTC conducts a reliability assessment and an evidence-quantity strategy to mitigate noise interference and to accommodate target-scale variations, thereby selecting reliable visual evidence based on the initial matching scores to construct category prototypes. In the Anchoring stage, PTC uses these prototypes to calibrate the corresponding text embeddings and adaptively adjusts the calibration strength based on evidence su ffi ciency to prevent semantic deviations caused by over-reliance on limited evidence. In this way, we establish a link between generic category concepts and category instances with specific appearances, which enables calibrated text embeddings to preserve generic semantics while aligning more closely with instance-specific visual representations, thereby improving final segmentation performance. The main contributions of this work are as follows: 2• We identify an underexplored semantic gap in training-free OVSS between generic category text embeddings and instance-specific visual representations derived from the input, which limits the accuracy of visual-text alignment and thereby constrains segmentation performance. 
+
+• We propose PTC, a novel prototype-guided text calibration method that can be integrated into various training-free OVSS methods as a plug-and-play module. It calibrates category text embeddings using visual prototypes with evidence-driven adaptive calibration, aligning them more closely with visual representations while preserving generic semantics, thereby improving visual–text matching. 
+
+• We conduct extensive experiments on eight segmentation benchmarks and integrate PTC into six representative training-free OVSS baselines. Quantitative and qualitative results validate the e ff ectiveness of PTC. 
+
+2. Related Work 
+
+Visual representation enhancement . Most existing training-free OVSS methods directly modify the internal architec-ture of CLIP, enabling its visual representations to capture local information. MaskCLIP [18] modifies the final-layer self-attention to exploit CLIP’s latent localization capability. SCLIP [ 11 ] replaces this with correlative self-attention to enhance spatial consistency of visual representations. NACLIP [ 19 ] extends this by strengthening local neighborhood modeling to improve the continuity of predictions across neighboring regions. CLIP Surgery [ 20 ], GEM [ 21 ], and CLIPtrase [ 22 ] introduce more flexible and generalized formulations of self-attention, thereby enhancing segmentation performance. ClearCLIP [ 23 ] removes the residual branch and feed-forward network from the final layer to obtain cleaner dense representations. ResCLIP [ 24 ] exploits localization information in intermediate-layer attention to improve category consistency. Moreover, other studies leverage spatial information from external models to compensate for CLIP’s limited local perception. ProxyCLIP [ 12 ] constructs proxy attention from spatial correspondences between vision foundation models (VFMs), e.g., SAM [ 26 ], DINO [ 27 ], DINOv2 [ 33 ], and CLIP features to enhance CLIP’s local consistency. CorrCLIP [ 25 ] uses SAM to constrain patch interactions and reconstructs more coherent patch corre-lations by self-supervised vision models, thereby improving region predictions. For high-resolution images, Trident [28 ] proposes a splice-then-segment paradigm, which first splices CLIP and DINO features from sub-images, then uses the global correlations provided by SAM to aggregate features and refine predictions. Despite these advancements, these methods typically treat category text embeddings as fixed classification references and overlook the inherent semantic gap between generic category text embeddings and the instance-specific visual representations in the input, leading to limited segmentation performance. 
+
+Visual reference construction . Recent e ff orts use external models to construct visual references and segment target objects based on robust correspondences in the visual representation space. FreeDA [ 34 ] constructs visual references from images generated by Stable Di ff usion [ 35 ] and performs prediction by combining local region-to-prototype similarity with global image-to-text similarity. FOSSIL [ 36 ] constructs retrievable synthetic visual references and uses OpenCut to generate candidate regions from input images, then matches their embeddings with prototypes in a self-supervised visual space. Moreover, RIM [ 37 ] uses Stable Di ff usion [ 35 ] and SAM to construct image references and to perform image-to-image matching via relation-aware ranking in the DINOv2 feature space. Rather than directly improving visual features, these methods construct category-level visual references for visual-visual matching, alleviating the ambiguity and noise caused by the modality gap during visual-text matching. Notably, these references represent generic visual patterns for each category as they are externally constructed from other pre-trained models. Consequently, these methods still essentially match generic semantics with instance-specific representations, and while useful for target localization, they struggle to accurately align object boundaries for dense prediction. Instead, PTC directly constructs visual prototypes from reliable visual evidence in the current input, which are not used to replace text embeddings but to calibrate the original category text embeddings, aiming to establish a perceptual link between generic concepts and the specific visual appearances of the corresponding instances. This enables the calibrated text embeddings to align more closely in semantics with instance-specific visual representations, thereby mitigating the semantic gap. 3Text-side adaptation . Several studies explore how category text descriptions a ff ect training-free OVSS. LLM-Supervision [ 38 ] aggregates predictions from GPT-3 [ 39 ]-generated subclass descriptions to represent the segmentation mask of the target category, whereas ITACLIP [ 40 ] directly fuses text embeddings of category synonyms for prediction. Moreover, FreeCP [ 41 ] purifies the candidate category set to reduce the e ff ects of category redundancy and confusion on segmentation results. Although the first two methods enrich category descriptions, they still rely on fixed, pre-generated text that encodes only generic semantics. Meanwhile, FreeCP primarily focuses on filtering candidate classes to mitigate confusion. Consequently, the semantic gap between generic category text embeddings and instance-specific visual representations, along with the resulting limited segmentation performance, remains underexplored. 
+
+3. Methodology 
+
+3.1. Preliminaries 
+
+Given an input image I and a target vocabulary Y = {y1, y2, . . . , yC }, training-free OVSS aims to assign each pixel in the image a semantic label from Y without any additional training. 
+
+CLIP-based Segmentor . In the CLIP visual encoder, which is built on the Vision Transformer [ 42 ], the input image I
+
+is first mapped to visual features F = [ f1, f2, . . . , fN ]⊤ ∈ RN×D, where N is the number of tokens and fi ∈ RD denotes the D-dimensional feature of the i-th token. Each category name yc ∈ Y is combined with a predefined prompt template (e.g., “a photo of a {class name}”) and encoded by the text encoder to produce the corresponding class text embedding 
+
+tc ∈ RD. The resulting text embeddings are stacked as T = [t1, t2, . . . , tC ]⊤ ∈ RC×D. Then, the model computes the cosine similarities between the visual features and category text embeddings to obtain the initial matching scores: 
+
+S = cos( F, T ) (1) where, S i,c = cos ( fi, tc) = f ⊤   
+
+> itc
+> ∥fi∥2∥tc∥2
+
+denotes the matching score between the i-th visual token and the c-th text embedding. Finally, the segmentation map is obtained as 
+
+M = arg max 
+
+> c
+
+S (2) Although most existing methods improve segmentation performance by enhancing the ability of visual features to capture local information, they generally treat the category text embeddings produced by the pre-trained text encoder as fixed classification references. However, class text embeddings primarily encode generic concepts learned through large-scale image–text pre-training, while visual representations are extracted directly from the input image to characterize the specific visual appearances of the target object in the current scene. Therefore, the process in Eq. (1) amounts to directly matching generic category text embeddings with instance-specific visual representations, which inevitably su ff ers from visual-text misalignment due to the semantic gap, thus resulting in incomplete or erroneous predictions even for a strong baseline, as illustrated in Fig. 1(a). Inspired by perceptual anchoring, we argue that narrowing this semantic gap requires establishing a perceptual link between generic category concepts and the corresponding target instances in the input image. Accordingly, category text embeddings should not remain standalone classification references, but should instead be linked to instance-specific visual representations. Based on this insight, we propose PTC, whose details are presented in Section 3.2. 
+
+3.2. Prototype-Guided Text Calibration 3.2.1. Overview 
+
+To mitigate the semantic gap between generic category text embeddings and instance-specific visual representations in the input image, we propose Prototype-Guided Text Calibration (PTC). It aims to use reliable visual evidence from the image to establish a perceptual link between text and visual representations, allowing class text embeddings to incorporate the specific visual cues of category instances while preserving generic semantics, thereby enabling more accurate visual–text alignment. The overall framework of PTC is shown in Fig. 2. Specifically, PTC comprises two core stages: Perceiving and Anchoring. In the Perceiving stage, PTC extracts reliable visual evidence and aggregates it into category-specific visual prototypes that capture the appearances of the corresponding category instances in the input image. In the Anchoring stage, PTC uses these prototypes to calibrate the original category text embeddings. For 4Instance -specific Visual Features       
+
+> Reliable Visual Evidence
+> Visual Prototypes
+> Generic Class Text Embeddings
+> Calibrated Text Embeddings
+> Class 1
+> Class 2
+> Image
+> Image
+> Encoder
+> Text
+> Encoder
+> Cat
+> Cabinet
+> Chair
+> Class Names
+> Perceiving Visual Features
+> Class 3
+> Class 1
+> Class 2
+> Insufficient
+> evidence
+> Text Embeddings
+> Anchoring
+> Class 1
+> Class 2
+> Generic Class Text Embeddings
+> Visual Prototypes
+> Segmentation Map
+> Margin -based
+> Reliability Assessment
+> Hybrid Evidence -
+> Quantity Setting
+> Evidence -driven
+> Text Calibration
+> Insufficient evidence: skipping prototyping and calibration
+> Initial
+> Scores
+> Generic Class Text Embeddings
+> Calibrated Class Text Embeddings
+> Visual Features
+> Visual Prototypes
+> Frozen Parameters
+> 1. Feature Extraction 2. Prototype -guided Text Calibration (PTC) 3. Prediction
+
+Figure 2: Overall framework of PTC for training-free OVSS. 1. Feature Extraction: The input image and class names are encoded by frozen encoders to obtain visual features and text embeddings, respectively. 2. PTC: In the Perceiving stage, reliable visual evidence is selected from the visual features based on initial matching scores and aggregated into visual prototypes. In the Anchoring stage, the text embeddings of categories with su ffi cient visual evidence are calibrated using their corresponding prototypes, while those with insu ffi cient visual evidence remain unchanged. 3. Prediction: The resulting text embeddings are matched with the visual features to generate the final segmentation map. 
+
+categories with insu ffi cient visual evidence, PTC skips prototype construction and text calibration, thereby preventing semantic deviations caused by over-reliance on limited evidence. We denote the calibrated text embeddings by Tcal , and the final visual-text matching scores and segmentation map are then computed as 
+
+S new = cos( F, Tcal ), Mnew = arg max 
+
+c
+
+S new (3) Since initial predictions are often a ff ected by background noise and category confusion, constructing visual prototypes directly from the corresponding visual features may introduce unreliable information, thereby compromising the generic category semantics in the original text embeddings during subsequent calibration. Consequently, PTC addresses two key design challenges. The first is to extract reliable visual evidence from noisy initial matching scores and determine an appropriate evidence quantity across varying object scales, thereby constructing robust visual prototypes (Section 3.2.2). The second is to incorporate instance-specific visual information into the text embeddings while preserving their original generic semantics (Section 3.2.3). 
+
+3.2.2. Perceiving: Reliable Visual Prototype Construction 
+
+In the Perceiving stage, PTC extracts reliable visual evidence from visual features and aggregates it into class-specific visual prototypes that characterise the appearance of the category instance in the current image. This stage inherently faces two key challenges. First, the initial matching scores are susceptible to background noise and category confusion, making it essential to evaluate the reliability of candidate tokens to construct high-quality visual prototypes. Second, it is challenging to adapt the number of evidence tokens to variations in object scale, which requires a careful balance between ensuring su ffi cient tokens to guarantee prototype representativeness and avoiding the oversampling of noisy or ambiguous tokens that could contaminate the prototype. To overcome these challenges, PTC measures token reliability using the score margin and employs a hybrid strategy to determine the number of evidence tokens required for each category. Given the initial matching scores S computed by Eq. (1), the initially predicted category for the i-th visual token is ˆci = arg max c S i,c. Thus, the candidate token set of category c is defined as 
+
+Ωc = {i | ˆci = c}, Nc = |Ωc| (4) where Nc denotes the number of visual tokens initially predicted as category c.5Margin-based Reliability Assessment . To select reliable visual tokens from Ωc as visual evidence, we introduce the score margin to quantify the certainty of the predicted category for each candidate token: 
+
+∆i = S i,ˆci − max 
+
+> c′,ˆci
+
+S i,c′ (5) where ∆i denotes the di ff erence between the matching scores of the category with the highest score for the i-th token and the category with the second-highest score. A larger ∆i indicates a greater score advantage of the predicted category over its strongest competitor, meaning the token’s category assignment is less ambiguous and thus more reliable as visual evidence. Compared with the absolute confidence that reflects only the response strength for a single class, the score margin is a relative measure that can e ff ectively filter out ambiguous tokens that have high absolute confidence in the predicted category but also respond strongly to other categories, thereby ensuring reliable and stable prototype construction. 
+
+Hybrid Evidence-Quantity Determination . To account for di ff erences in spatial scales and candidate set sizes across categories, we design a hybrid strategy that combines a minimum-count constraint with proportional sampling to determine the target number of tokens selected as visual evidence for category c:
+
+Kc = min ( Nc, max ( Kmin , ⌊ρNc⌋)) (6) where Kmin denotes the minimum number of tokens required to construct a reliable visual prototype, while ρ is the sampling ratio and is set to 0 .1 by default. The hybrid strategy is designed to provide su ffi cient visual evidence across di ff erent categories with various candidate set sizes. When the candidate set is relatively small, the Kmin term prevents the prototype from exhibiting poor representativeness due to being constructed from only a few tokens. When the candidate set is large, the proportional term allows more visual evidence to be collected, providing a more complete characterization of the instance appearance. Meanwhile, Nc serves as an upper bound, ensuring that the actual number of selected tokens does not exceed the number of candidate tokens available for the category. Categories with Nc < Kmin are regarded as having insu ffi cient evidence and are excluded from subsequent prototype construction and text calibration. Then, PTC selects the Kc tokens with the largest score margins from the candidate set Ωc as visual evidence: 
+
+Ec = TopK i∈Ωc (∆i, Kc) (7) where Ec denotes the index set of the Kc selected evidence tokens for category c.Subsequently, PTC aggregates the selected tokens using their score margins as weights: 
+
+Vproto  
+
+> c
+
+=
+
+X
+
+> i∈E c
+
+wi fi, wi = ∆i
+
+P j∈E c ∆ j + ϵ (8) where Vproto  
+
+> c
+
+is the visual prototype for category c, wi denotes the weight assigned to the i-th visual token during prototype aggregation, and ϵ is a small constant used to prevent division by zero. This weighting scheme assigns larger weights to tokens with less ambiguous category assignments while reducing the influence of low-margin tokens, thereby improving prototype stability. 
+
+3.2.3. Anchoring: Evidence-Driven Text Calibration 
+
+In the Anchoring stage, PTC uses category visual prototypes to calibrate the corresponding text embeddings, incorporating specific visual cues from category instances while preserving their generic category semantics. Achieving this goal requires appropriately controlling the influence of the visual prototypes on the text embeddings, i.e., the calibration strength. Since each prototype is formed by the weighted aggregation of visual evidence selected in the Perceiving stage, the number of evidence tokens can indicate whether the prototype is su ffi ciently supported. A larger evidence set provides broader support for the prototype and reduces its sensitivity to any individual token. In contrast, with limited evidence, an erroneous token can exert a greater influence on the aggregated prototype. Accordingly, PTC determines whether each category is eligible for calibration and adaptively adjusts its calibration strength based on the su ffi ciency of its visual evidence. 6First, the set of categories eligible for calibration is determined based on the amount of visual evidence: 
+
+Cvalid = c | nev  
+
+> c
+
+≥ Kmin (9) where nev  
+
+> c
+
+= |E c| denotes the amount of visual evidence for category c. For classes with nev  
+
+> c
+
+< Kmin , PTC leaves the corresponding text embeddings unchanged to avoid semantic deviations caused by calibration with limited evidence. For categories that meet the minimum evidence threshold, PTC further adjusts the calibration strength according to the amount of visual evidence. Specifically, for each c ∈ C valid , its calibration strength μc is computed as: 
+
+μc = μ · αc, αc = min 1, log  1 + nev 
+
+> c
+
+
+
+log (1 + λKmin )
+
+!
+
+(10) where μ denotes the global calibration strength and also serves as the upper bound of the category calibration strength μc,
+
+αc is the adaptive calibration coe ffi cient for category c, and λ controls the amount of evidence required for the category calibration strength to reach its upper bound. A larger λ raises the amount of evidence required for μc to reach μ. When 
+
+Kmin ≤ nev  
+
+> c
+
+< λ Kmin , μc increases logarithmically with the number of evidence tokens. When nev  
+
+> c
+
+≥ λKmin , μc saturates at μ. Therefore, categories that meet the threshold but have relatively limited evidence are calibrated conservatively. Meanwhile, the calibration strength no longer increases with the evidence count once it becomes su ffi cient, preventing text embeddings associated with large objects from deviating from their original category semantics due to progressively stronger calibration solely because they provide more visual evidence. Then, category text embeddings are updated as follows: 
+
+tcal  
+
+> c
+
+=
+
+
+
+(1 − μc)tc + μcVproto  
+
+> c
+
+, c ∈ C valid 
+
+tc, c < Cvalid 
+
+(11) By calibrating based on the su ffi ciency of visual evidence, PTC allows text embeddings to incorporate an appropriate amount of category-specific visual information from the input image while preserving their original generic category semantics, thus improving visual-text matching. The final matching scores and the segmentation map are obtained as specified in Eq. (3). 
+
+4. Experiments 
+
+4.1. Implementation Details 
+
+Datasets . We conduct a comprehensive evaluation on eight well-established datasets and categorize these datasets into two groups: (1) with the background class : Pascal VOC21 (VOC21) [ 43 ], PASCAL Context60 (Context60) [ 44 ], COCO-Object (Object) [ 45 ]; (2) without the background class : Pascal VOC20 (VOC20) [ 43 ], Cityscapes (City) [46 ], Pascal Context59 (Context59) [ 44 ], ADE20k-150 (ADE) [ 47 ], COCO-Stu ff (Stu ff ) [ 45 ]. All experiments strictly followed the original dataset division guidelines to ensure the reliability of the assessment results. 
+
+Implementation & metric . Our implementations rely on MMSegmentation [ 53 ] and MMEngine [ 54 ]. For image preprocessing, we resize the shorter side of each image to 336 pixels for the PASCAL and COCO datasets, and to 448 pixels for the higher-resolution Cityscapes and ADE20K datasets. For each input image, PTC extracts reliable visual evidence from overlapping 224 × 224 local crops with a stride of 112 × 112 and aggregates it across all crops to construct category visual prototypes, which are used to calibrate the corresponding text embeddings only once for the entire image. Final segmentation is performed using a sliding window inference strategy with a 336 ×336 window and a 112 ×112 stride. Following prior work [ 11 , 12 ], we obtain class text embeddings using the standard ImageNet prompts [ 5] and the corresponding class names. Our method undergoes direct evaluation on the validation set of all datasets without the need of retraining or fine-tuning. The semantic segmentation performance is evaluated by using mean intersection over union (mIoU). Meanwhile, any post-processing (e.g., DenseCRF [ 55 ] or Pixel-Adaptive Mask Refinement (PAMR) [ 56 ]) is refused in our results. All evaluations are conducted using 1 × NVIDIA RTX 4090 GPU. 7Table 1: Comparison with state-of-the-art training-free methods on eight benchmarks. The "External Models” column indicates whether the corresponding method relies on external models, such as VFMs or LLMs. Blue values denote the absolute improvements achieved by adding PTC to the corresponding baseline. Result with ∗ is postprocessed with denseCRF. 
+
+Methods External Models w background w/o background Avg. VOC21 Context60 Object VOC20 City Context59 ADE Stu ff 
+
+CLIP [ICML’21] [5] × 18.8 9.9 8.1 49.4 6.5 11.1 3.1 5.7 14.1 ReCo [CVPR’22] [48] × 25.1 19.9 15.7 57.7 21.6 22.3 11.2 14.8 23.5 MaskCLIP [ECCV’22] [18] × 43.4 23.2 20.6 74.9 24.9 26.4 11.9 16.7 30.3 CaR ∗ [CVPR’24] [49] × 67.6 30.5 36.6 91.4 - 39.5 17.7 - -GEM [CVPR’24] [21] × 56.9 32.6 31.1 79.9 30.8 35.9 15.7 23.7 38.3 CLIPtrase [ECCV’24] [22] × 53.0 30.8 44.8 81.2 - 34.9 17.0 24.1 -OVDi ff [ECCV’24] [50] × 62.8 28.6 34.6 80.9 23.4 32.9 14.1 20.3 -SCLIP [ECCV’24] [11] × 59.1 30.4 30.5 80.4 32.2 34.2 16.1 22.4 38.2 SCLIP + PTC [Ours] × 61.5 (+2.4) 31.6 (+1.2) 33.5 (+3.0) 82.2 (+1.8) 33.5 (+1.3) 35.2 (+1.0) 16.7 (+0.6) 23.5 (+1.1) 39.7 (+1.5) 
+
+ClearCLIP [ECCV’24] [23] × 51.8 32.6 33.0 80.9 30.0 35.9 16.7 23.9 38.1 ClearCLIP + PTC [Ours] × 51.9 (+0.1) 33.4 (+0.8) 33.1 (+0.1) 82.2 (+1.3) 31.7 (+1.7) 37.4 (+1.5) 18.2 (+1.5) 25.1 (+1.2) 39.1 (+1.0) 
+
+NACLIP [WACV’25] [19] × 58.8 32.2 33.2 77.1 35.5 35.2 17.4 22.9 39.0 NACLIP + PTC [Ours] × 62.6 (+3.8) 32.9 (+0.7) 34.2 (+1.0) 82.7 (+5.6) 36.8 (+1.3) 36.9 (+1.7) 18.6 (+1.2) 24.7 (+1.8) 41.2 (+2.2) 
+
+ResCLIP [CVPR’25] [24] × 61.1 33.5 35.0 86.0 35.9 36.8 18.0 24.7 41.4 ResCLIP + PTC [Ours] × 63.9 (+2.8) 33.5 (+0.0) 35.4 (+0.4) 86.9 (+0.9) 37.3 (+1.4) 37.3 (+0.5) 18.3 (+0.3) 25.2 (+0.5) 42.2 (+0.8) 
+
+ZeroGuideSeg [ICCV’23] [51] ✓ - - - 20.1 - 19.6 - - -RIM [CVPR’24] [37] ✓ 77.8 34.3 44.5 - - - - - -FreeDA [CVPR’24] [34] ✓ 55.4 38.3 37.4 85.6 36.7 43.1 22.4 27.8 43.3 LLM-Supervision [CVPRW’24] [38] ✓ - - - 61.7 - 27.8 - 29.1 -LaVG [ECCV’24] [52] ✓ 62.1 31.6 34.2 82.5 - 34.7 15.8 23.2 -ProxyCLIP [ECCV’24] [12] ✓ 61.3 35.3 37.5 80.3 38.1 39.1 20.2 26.5 42.3 ProxyCLIP + PTC [Ours] ✓ 67.2 (+5.9) 36.2 (+0.9) 38.6 (+1.1) 82.7 (+2.4) 40.0 (+1.9) 40.3 (+1.2) 20.9 (+0.7) 27.5 (+1.0) 44.2 (+1.9) 
+
+CorrCLIP [ICCV’25] [25] ✓ 74.8 44.2 43.7 88.8 49.4 48.8 26.9 31.6 51.0 CorrCLIP + PTC [Ours] ✓ 77.4 (+2.6) 44.3 (+0.1) 46.2 (+2.5) 89.4 (+0.6) 49.5 (+0.1) 49.2 (+0.4) 26.9 (+0.0) 32.3 (+0.7) 51.9 (+0.9) 
+
+4.2. Comparison Results 
+
+Compared baselines . The compared methods are classified into two groups. The first group consists of methods that rely solely on CLIP, including ReCo [ 48 ], MaskCLIP [ 18 ], CaR [ 49 ], GEM [ 21 ], CLIPtrase [ 22 ], OVDi ff 
+
+[ 50 ], SCLIP [ 11 ], ClearCLIP [ 23 ], NACLIP [ 19 ], and ResCLIP [ 24 ]. The second group comprises methods that incorporate additional models, including ZeroGuideSeg [ 51 ], RIM [ 37 ], FreeDA [ 34 ], LLM-Supervision [ 38 ], LaVG [52], ProxyCLIP [12], and CorrCLIP [25]. Results are presented in Table 1. 
+
+Quantitative results . As a plug-and-play text calibration method, PTC can be readily integrated into existing training-free OVSS methods to alleviate the semantic gap between generic category text embeddings and instance-specific visual representations. As shown in Table 1, applying PTC to SCLIP, ClearCLIP, NACLIP, ResCLIP, ProxyCLIP, and CorrCLIP improves their average mIoU by 1.5, 1.0, 2.2, 0.8, 1.9, and 0.9 percentage points, respectively. Notably, PTC not only substantially improves baselines with relatively limited initial performance, increasing the average mIoU of NACLIP from 39.0% to 41.2%, but also delivers further gains on strong baselines such as CorrCLIP, raising its average mIoU from 51.0% to 51.9%. These results collectively demonstrate the e ff ectiveness and generalization of PTC. 
+
+Qualitative results . Figs. 3 and 4 present qualitative comparisons with and without PTC on the PASCAL VOC and COCO-Object datasets, respectively. Although ProxyCLIP already localizes object regions reasonably well, its final predictions still rely on generic category text embeddings. Consequently, its recognition tends to focus on highly category-representative local regions and remains susceptible to interference from complex backgrounds and similar classes, leading to incomplete masks, misclassification of local regions, and missed small objects. In contrast, PTC yields more complete object coverage, fewer erroneous predictions caused by background interference and class confusion, and improved recognition of small and less salient objects. On PASCAL VOC, as shown in Fig. 3, PTC produces more complete object coverage, more accurate predictions, and better recognition of small objects. In Examples 1-6, ProxyCLIP often focuses on highly category-representative local regions, such as the heads of dogs and birds, while failing to recognize other parts of the object. After introducing PTC, the model can capture the complete extent of the target object. As illustrated in Examples 7-8, while background textures, adjacent regions, and occlusions lead ProxyCLIP into local misclassifications, PTC successfully suppresses 8Image ProxyCLIP + PTC GT     
+
+> Figure 3: Visualization results on the PASCAL VOC dataset. “GT” denotes ground truth.
+> Image ProxyCLIP + PTC GT
+> Figure 4: Visualization results on the COCO-Object dataset. “GT” denotes ground truth.
+
+these interferences, producing more accurate predictions. In Example 9, PTC successfully captures small objects that are missed by ProxyCLIP. Moreover, PTC improves the segmentation of a black dog whose dark appearance resembles the shadowed background in Example 10, demonstrating its ability to distinguish foreground from background. As shown in Fig. 4, PTC remains e ff ective on COCO-Object, which contains more categories and more complex scene compositions. In Examples 1-6, the predictions of ProxyCLIP often leave local regions with relatively weak category cues insu ffi ciently covered. For example, in Example 1, ProxyCLIP primarily identifies regions with distinctive bottle-like features but misses parts of the bottle whose label texture gives them a di ff erent appearance. A similar pattern is observed in Examples 2-6. After calibration with PTC, the text embeddings better match the diverse appearances of instances in the current image, resulting in more complete segmentation. In Examples 7-9, PTC eff ectively reduces erroneous predictions caused by complex backgrounds and similar categories, leading to more accurate object segmentation. In Example 10, PTC successfully captures these challenging small targets, demonstrating its ability to distinguish small objects even in complex scenes. Overall, PTC can extend the segmentation coverage from highly class-representative local regions to the entire object, reduce erroneous predictions caused by background interference and category confusion, and improve recognition of small and less salient objects. These results demonstrate that PTC brings the calibrated text embeddings into closer semantic alignment with the category instance appearances in the current image, thereby improving visual-text matching and segmentation performance. 
+
+4.3. Ablation studies and Analyses 
+
+To systematically validate the e ff ectiveness of PTC, we conduct experiments from three perspectives. First, we examine the necessity of the core designs of PTC, including margin-based reliability assessment, the hybrid evidence-9Table 2: Ablation studies on di ff erent reliability assessment criteria for visual evidence. 
+
+Method VOC21 Context60 Object City ADE Stu ff 
+
+Baseline 61.3 35.3 37.5 38.1 20.2 26.5 Confidence threshold ( τ = 0.35) 62.1 35.0 38.2 36.4 12.0 17.3 Confidence threshold ( τ = 0.50) 55.0 34.9 37.9 29.6 12.9 17.7 Confidence threshold ( τ = 0.75) 37.9 35.1 37.6 11.9 17.1 21.7 Confidence-based top-Kc 67.1 36.2 38.6 40.1 20.9 27.4 Margin-based top-Kc (Ours) 67.2 36.2 38.6 40.0 20.9 27.5 
+
+quantity setting, and evidence-adaptive text calibration. Second, we analyse the influence of key hyperparameters, including the minimum quantity of visual evidence Kmin and the global calibration strength μ, on segmentation performance across datasets. Finally, we evaluate the applicability of PTC with di ff erent VFMs and CLIP backbones. Unless otherwise specified, all experiments use ProxyCLIP [ 12 ] with a ViT-B /16 CLIP backbone and DINO-B /8 as the baseline. 
+
+4.3.1. Ablation on Core Designs of PTC 
+
+Eff ect of Reliability Assessment Criteria . To evaluate the proposed margin-based reliability assessment, we compare three criteria: confidence thresholding, confidence-based top-Kc ranking, and margin-based top-Kc ranking. For both ranking-based criteria, the number of evidence tokens for each category, Kc, is determined by the hybrid evidence-quantity strategy of PTC, as defined in Eq. (6). Instead, confidence thresholding retains all visual tokens with confidence scores above τ. The results are reported in Table 2. As shown in Table 2, confidence thresholding exhibits inconsistent performance across six representative bench-marks. At τ = 0.35, it improves upon the baseline only on PASCAL VOC21 and COCO-Object, while degrading performance on the remaining datasets, with particularly large drops on Cityscapes, ADE20K-150, and COCO-Stu ff . In addition, further increasing the confidence threshold does not yield consistent improvements. These results indicate that relying solely on a fixed confidence threshold fails to robustly select reliable visual evidence across di ff erent categories. A low threshold tends to include ambiguous tokens, thereby contaminating visual prototypes, whereas a high threshold may leave some categories with insu ffi cient visual evidence, thereby weakening the overall e ff ectiveness of PTC. Compared to the fixed confidence threshold, both top-Kc selection strategies are more stable and outperform this criterion on all datasets. Moreover, a closer comparison reveals a slight overall advantage for margin-based top-Kc.Specifically, its performance matches confidence-based top-Kc on PASCAL Context60, COCO-Object, and ADE20K, improves results on PASCAL VOC21 and COCO-Stu ff by 0.1%, and is 0.1% lower on Cityscapes alone. Although the performance di ff erence is small, the score margin accounts for the strongest competing category and therefore provides a more direct measure of category-assignment ambiguity than absolute confidence. Accordingly, we adopt margin-based top-Kc ranking as the default reliability assessment criterion. 
+
+Eff ect of Evidence-Quantity Strategies . To evaluate the proposed hybrid evidence-quantity strategy, we compare it with two alternatives: fixed-count selection and proportional sampling. Specifically, the fixed-count strategy uses Kmin 
+
+as the target evidence count for each category, whereas proportional sampling selects ⌊ρNc⌋ tokens according to the size of the corresponding candidate set. The hybrid design combines these two components. For a fair comparison, the proportional and hybrid strategies are evaluated using the same sampling ratios, ρ ∈ { 0.1, 0.2, 0.3}. The results are reported in Table 3. As shown in Table 3, the fixed-count strategy already improves upon the baseline, but yields relatively limited gains on Cityscapes, ADE20K-150, and COCO-Stu ff , where object scales vary more substantially across categories and scene compositions are more complex. By assigning the same evidence count regardless of candidate-set size, it provides insu ffi cient coverage for large candidate sets while increasing the inclusion of unreliable tokens in small or noisy candidate sets, thereby limiting the representativeness and reliability of visual prototypes. By contrast, proportional sampling adjusts the target evidence count according to the size of each category’s candidate set, but its performance is highly sensitive to ρ. Increasing ρ expands evidence coverage but also introduces lower-ranked tokens with smaller score margins; the coverage gain dominates on Cityscapes and COCO-Stu ff , whereas the reliability loss dominates on PASCAL VOC21. These results show that the size of a candidate set does not reliably indicate the amount of reliable 10 Table 3: Ablation studies on di ff erent visual evidence quantity setting strategies. 
+
+Method VOC21 Context60 Object City ADE Stu ff 
+
+Baseline 61.3 35.3 37.5 38.1 20.2 26.5 Fixed ( Kc = Kmin ) 67.2 36.2 38.5 38.5 20.7 27.1 Proportional ( ρ = 0.1) 61.2 35.4 37.5 39.0 19.7 26.9 Proportional ( ρ = 0.2) 58.7 35.7 37.6 39.6 20.5 27.3 Proportional ( ρ = 0.3) 50.5 35.9 37.6 39.6 20.7 27.3 Hybrid ( ρ = 0.1) 67.2 36.2 38.6 40.0 20.9 27.5 
+
+Hybrid ( ρ = 0.2) 67.1 36.2 38.5 39.9 20.9 27.4 Hybrid ( ρ = 0.3) 67.1 36.2 38.5 39.7 20.8 27.3  
+
+> Table 4: Ablation studies on di ff erent text calibration schemes.
+
+Method VOC21 Context60 Object City ADE Stu ff 
+
+Baseline 61.3 35.3 37.5 38.1 20.2 26.5 Uniform ( μc = μ) 64.3 36.0 38.3 39.1 20.4 26.7 Evidence-adaptive ( λ = 5) 66.8 36.1 38.5 39.9 20.7 27.2 Evidence-adaptive ( λ = 10) 67.2 36.2 38.6 40.0 20.9 27.5 
+
+Evidence-adaptive ( λ = 15) 67.2 36.2 38.5 39.8 20.9 27.4 
+
+visual evidence it contains, and therefore proportional sampling alone cannot ensure su ffi cient evidence while avoiding the inclusion of unreliable tokens. Compared with the fixed-count and proportional sampling strategies, the proposed hybrid strategy delivers the most stable performance across datasets and achieves the best overall results. Specifically, it improves mIoU over the baseline by 5.9, 0.9, 1.1, 1.9, 0.7, and 1.0 percentage points on PASCAL VOC21, PASCAL Context60, COCO-Object, Cityscapes, ADE20K, and COCO-Stu ff , respectively. For eligible categories with relatively small candidate sets, the minimum-count constraint prevents prototypes from being constructed from too few evidence tokens, whereas for those with large candidate sets, the proportional term scales the evidence count to provide broader coverage of the instance appearance. By ensuring a minimum level of evidence support while adapting the amount of evidence to variations in object scale, the hybrid strategy provides a more robust approach to visual prototype construction. Therefore, we adopt it as the default evidence-quantity strategy for PTC. 
+
+Eff ect of Text Calibration Schemes . To evaluate the proposed evidence-adaptive text calibration, we compare it with uniform calibration, which applies the same strength, μc = μ, to all eligible categories, rather than determining category-specific strengths based on evidence su ffi ciency. The results are reported in Table 4. Uniform calibration outperforms the baseline on all datasets, demonstrating the e ff ectiveness of calibrating generic category text embeddings with category-specific visual prototypes from the input image. However, because the amount of available visual evidence and the reliability of the resulting prototypes vary across categories, a uniform calibration strength cannot adequately balance prototype utilization against the preservation of generic category semantics. Compared with uniform calibration, evidence-adaptive calibration further improves performance across all six datasets, indicating that evidence-dependent calibration strengths enable more e ff ective use of reliable visual information while avoiding excessive modification of original text embeddings for categories with limited evidence. We further examine the e ff ect of λ on evidence-adaptive calibration. Increasing λ from 5 to 10 consistently improves performance across all six datasets, whereas a further increase to 15 yields no additional gains, with decreases in mIoU by 0.1%, 0.2%, and 0.1% on COCO-Object, Cityscapes, and COCO-Stu ff , respectively. According to Eq. (10), a larger λ assigns a smaller calibration strength for the same amount of visual evidence. Thus, the calibration is overly conservative when λ becomes excessively large, preventing the text embeddings from su ffi ciently incorporating instance-specific visual information and thereby limiting the e ff ectiveness of PTC. Overall, λ = 10 achieves the best balance between preserving generic category semantics and incorporating reliable instance-specific visual cues. Therefore, we use λ = 10 as the default value. 11 1 2 4 8 10 16 24 28 32 36 48 56 64 72 80 100 132 156   
+
+> Minimum Visual Evidence Kmin
+> 60.0
+> 62.0
+> 64.0
+> 66.0
+> 68.0
+> VOC21-mIoU (%)
+> Baseline: 61.3
+> Best Kmin =100
+> mIoU=67.2
+
+(a) PASCAL VOC21 1 2 4 8 10 16 24 28 32 36 48 56 64 72 80 100 132 156    
+
+> Minimum Visual Evidence Kmin
+> 25.0
+> 27.5
+> 30.0
+> 32.5
+> 35.0
+> 37.5
+> 40.0
+> 42.5
+> City-mIoU (%)  Baseline: 38.1
+> Best Kmin =2
+> mIoU=40.0
+
+(b) Cityscapes 1 2 4 8 10 16 24 28 32 36 48 56 64 72 80 100 132 156    
+
+> Minimum Visual Evidence Kmin
+> 18.5
+> 19.0
+> 19.5
+> 20.0
+> 20.5
+> 21.0
+> 21.5
+> ADE-mIoU (%)
+> Baseline: 20.2
+> Best Kmin =10
+> mIoU=20.9
+
+(c) ADE20K 1 2 4 8 10 16 24 28 32 36 48 56 64 72 80 100 132 156    
+
+> Minimum Visual Evidence Kmin
+> 37.2
+> 37.5
+> 37.8
+> 38.0
+> 38.2
+> 38.5
+> 38.8
+> Object-mIoU (%)
+> Baseline: 37.5
+> Best Kmin =132
+> mIoU=38.6
+
+(d) COCO-Object 0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5   
+
+> Calibration Strength μ
+> 60.0
+> 62.0
+> 64.0
+> 66.0
+> 68.0
+> VOC21-mIoU (%)
+> Baseline: 61.3
+> Best μ=0.3
+> mIoU=67.2
+
+(e) PASCAL VOC21 0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5    
+
+> Calibration Strength μ
+> 37.5
+> 38.0
+> 38.5
+> 39.0
+> 39.5
+> 40.0
+> 40.5
+> City-mIoU (%)
+> Baseline: 38.1
+> Best μ=0.35
+> mIoU=40.0
+
+(f) Cityscapes 0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5    
+
+> Calibration Strength μ
+> 20.0
+> 20.2
+> 20.4
+> 20.6
+> 20.8
+> 21.0
+> ADE-mIoU (%)
+> Baseline: 20.2
+> Best μ=0.15
+> mIoU=20.9
+
+(g) ADE20K 0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5    
+
+> Calibration Strength μ
+> 32.0
+> 34.0
+> 36.0
+> 38.0
+> 40.0
+> Object-mIoU (%)
+> Baseline: 37.5
+> Best μ=0.02
+> mIoU=38.6
+
+(h) COCO-Object 
+
+Figure 5: Sensitivity Analysis of Kmin and μ. Top row: Eff ect of the minimum quantity of visual evidence ( Kmin ) on mIoU across four datasets. 
+
+Bottom row: Eff ect of the global calibration strength ( μ). 
+
+4.3.2. Sensitivity Analysis of K min and μ
+
+In this subsection, we analyze the e ff ects of the hyperparameters Kmin and μ on segmentation performance. Kmin 
+
+specifies the minimum quantity of visual evidence required for a category to participate in prototype construction and text calibration. μ is the global calibration strength, which controls the overall influence of the visual prototype on the original category text embedding. To examine their individual e ff ects, we vary one parameter at a time while fixing the other at its dataset-specific default value. The results on four representative datasets are shown in Fig. 5. Overall, segmentation performance initially improves, then saturates or declines as either Kmin or μ increases. Within this trend, datasets favor di ff erent optimal values due to di ff erences in vocabulary size, the number of categories present in each image, object scales, and scene complexity. Despite comparably small category vocabularies, PASCAL VOC21 and Cityscapes favor distinct optimal values for 
+
+Kmin and μ due to di ff erences in scene composition, as well as the number and scale of semantic regions within each image. As illustrated in Fig. 5, PTC achieves its best performance of 67.2% mIoU on PASCAL VOC21 with Kmin = 100 and μ = 0.3. Images in this dataset generally contain few yet salient foreground objects whose regions are relatively complete and occupy large areas, which can provide a greater amount of reliable visual evidence. Accordingly, a larger 
+
+Kmin enables more stable visual prototypes to be constructed for well-supported categories while excluding categories supported only by sparse, scattered evidence. By contrast, PTC achieves its best performance of 40.0% mIoU on Cityscapes with Kmin = 2 and μ = 0.35. The Cityscapes dataset consists of urban street scenes that typically contain multiple semantic categories with substantial scale di ff erences, some of which are small or elongated. In this situation, an excessively large Kmin prevents categories represented by small or elongated regions from satisfying the minimum evidence requirement, reducing the number of categories eligible for calibration and weakening the gains from PTC. Notably, both PASCAL VOC21 and Cityscapes achieve better performance with relatively large values of the global calibration strength μ. This indicates that, when reliable visual prototypes can be constructed for eligible categories, appropriately increasing their influence on the text embeddings can improve visual-text matching more e ff ectively. Moreover, ADE20K and COCO-Object exhibit distinct preferences for Kmin and μ, despite comparably large class vocabularies and complex scene content. For ADE20K, the dataset covers diverse indoor and outdoor scenes, with each image typically containing multiple semantic regions. PTC achieves its best performance with Kmin = 10 and μ = 0.15 on this dataset, as shown in Fig. 5. This is because a moderate evidence threshold excludes insu ffi ciently supported categories without overly restricting category coverage, while a relatively conservative calibration strength mitigates interference from unreliable visual prototypes in complex scenes. Compared to the ADE20K dataset, COCO-Object images typically contain fewer categories but often include multiple object instances at di ff erent scales, together with complex scene context. In this setting, a larger Kmin = 132 restricts calibration to categories with su ffi cient visual evidence, whereas a smaller μ = 0.02 limits the influence of potentially erroneous prototypes on the original 12 Table 5: Ablation studies with di ff erent visual foundation models. 
+
+VFMs Method VOC21 Context60 Object City ADE Stu ff 
+
+SAM (B /16) Baseline 59.3 33.6 35.4 37.0 19.1 25.0 
+
++PTC 61.9 34.4 36.2 38.0 18.9 25.6 
+
+DINO (B /8) Baseline 61.3 35.3 37.5 38.1 20.2 26.5 
+
++PTC 67.2 36.2 38.6 40.0 20.9 27.5 
+
+DINOv2 (B /14) Baseline 58.6 33.8 37.4 33.9 19.7 25.4 
+
++PTC 62.4 34.2 37.7 35.2 20.1 26.1  
+
+> Table 6: Ablation studies with di ff erent CLIP backbones.
+
+CLIP Method VOC21 Context60 Object City ADE Stu ff 
+
+ViT-B /16 Baseline 61.3 35.3 37.5 38.1 20.2 26.5 
+
++PTC 67.2 36.2 38.6 40.0 20.9 27.5 
+
+ViT-L /14 Baseline 60.6 34.5 39.2 40.1 22.6 25.6 
+
++PTC 65.3 34.8 38.8 41.3 23.0 26.7 
+
+ViT-H /14 Baseline 65.0 35.4 38.6 42.0 24.2 26.8 
+
++PTC 67.7 36.4 39.0 42.2 24.5 27.2 
+
+text embeddings. In addition, the small μ reduces the e ff ect of varying Kmin on the final predictions, leading to the performance on COCO-Object remaining relatively stable over a broad range of Kmin values. Conversely, performance on this dataset decreases rapidly as μ increases, further indicating that a more conservative calibration magnitude is required in complex scenes. Overall, di ff erences in vocabulary size, scene composition, and the number and scale of semantic regions lead di ff erent datasets to favor di ff erent values of Kmin and μ. Based on these results, we adopt dataset-specific configurations for the current baseline. Moreover, these two parameters are adjusted when PTC is integrated with other baselines, because di ff erent baselines produce di ff erent initial visual-text matching scores, which a ff ect both the number of candidate tokens assigned to each category and the reliability of the top-ranked tokens selected as visual evidence. Despite di ff erences in their optimal values, the functional roles and overall sensitivity trends of Kmin and μ remain consistent across datasets and baselines, with all other PTC configurations held constant. 
+
+4.3.3. Ablation on Di ff erent Foundation Backbones 
+
+Eff ect of Visual Foundation Models . To evaluate the applicability of PTC, we follow ProxyCLIP [ 12 ] by replacing its underlying vision foundation model with SAM [ 26 ], DINO [ 27 ], and DINOv2 [ 33 ], yielding distinct visual features for evaluation. As shown in Table 5, incorporating PTC consistently improves segmentation performance across all three VFM variants, demonstrating its robustness to diverse visual representations. Specifically, PTC achieves the most notable improvements on PASCAL VOC21, with gains of 2.6%, 5.9%, and 3.8% under the three VFM settings, respectively. This is mainly because PASCAL VOC21 contains fewer categories, and foreground objects in its images are generally larger and more salient, making reliable visual evidence easier to extract. By contrast, ADE20K, COCO-Stu ff , and PASCAL Context60 contain more categories and more complex scene content. Category confusion and background interference increase the uncertainty involved in visual prototype construction, resulting in more modest performance gains. Nevertheless, PTC still yields gains overall on these challenging datasets, demonstrating its eff ectiveness in improving the accuracy of visual-text alignment. These results collectively validate the generalization of PTC with di ff erent vision foundation models. 
+
+Eff ect of CLIP Backbones . To verify the applicability of PTC, we further adopt di ff erent CLIP backbones on the DINO-B /8-based ProxyCLIP baseline. As shown in Table 6, PTC produces overall performance gains with ViT-B/16, ViT-L /14, and ViT-H /14, demonstrating that the proposed text calibration strategy can be e ff ectively applied across di ff erent CLIP backbones. Across the three CLIP backbones, PTC continues to produce the most significant improvements on PASCAL VOC21, increasing mIoU by 5.9%, 4.7%, and 2.7%, respectively. This may be because 13 the primary objects in this dataset are typically well defined, making reliable category-specific visual prototypes easier to construct. As the backbone size increases, the average gain from PTC gradually narrows, which may be because stronger CLIP representations leave less room for further improvement. Nevertheless, PTC achieves overall performance improvements on all three backbones. These findings indicate that the semantic gap between generic category text embeddings and category-specific visual representations in the current image does not entirely disappear as the representations become stronger, and that PTC remains e ff ective in mitigating this gap. Notably, when ViT-L /14 is used as the backbone, PTC produces a slight decrease on COCO-Object. This result indicates that in scenes with a large target vocabulary and strong background interference, the reliability of category-specific visual prototypes is more susceptible to these factors, thereby weakening the gains from text calibration. Despite this, the overall results demonstrate that PTC remains broadly applicable across di ff erent CLIP backbones. 
+
+5. Conclusion 
+
+In this work, we investigate an underexplored limitation in training-free OVSS: the semantic gap between generic category text embeddings and instance-specific visual representations, which hinders segmentation performance. To address this issue, we propose PTC, which extracts reliable visual evidence to construct category-specific prototypes and subsequently uses these prototypes to adaptively calibrate the corresponding text embeddings. In this way, the calibrated text embeddings incorporate visual cues of the corresponding category instances in the input while preserving generic category semantics, thereby improving the accuracy of visual-text alignment. PTC does not alter the feature extraction process of existing methods and requires neither additional training nor external models, thereby allowing it to serve as a plug-and-play module for various training-free OVSS methods. Experiments across eight benchmarks show that PTC significantly improves segmentation performance, confirming that establishing a perceptual link between generic category text embeddings and instance-specific visual appearance e ff ectively alleviates their semantic gap. Nevertheless, the performance of PTC remains dependent on the quality of the constructed visual prototypes. Future work will investigate more reliable prototype construction in complex scenes and further improve the robustness of text calibration. 
+
+References 
+
+[1] L.-C. Chen, G. Papandreou, I. Kokkinos, et al., Deeplab: Semantic image segmentation with deep convolutional nets, atrous convolution, and fully connected crfs, IEEE Trans. Pattern Anal. Mach. Intell. 40 (2018) 834–848. 
+
+doi:10.1109/TPAMI.2017.2699184 .[2] E. Xie, W. Wang, Z. Yu, et al., Segformer: Simple and e ffi cient design for semantic segmentation with transformers, in: NeurIPS, 2021, Vol. 34, 2021, pp. 12077–12090. doi:10.5555/3540261.3541185 .[3] B. Cheng, I. Misra, A. G. Schwing, et al., Masked-attention mask transformer for universal image segmentation, in: CVPR, 2022, pp. 1280–1289. doi:10.1109/CVPR52688.2022.00135 .[4] M.-H. Guo, C.-Z. Lu, Q. Hou, et al., Segnext: Rethinking convolutional attention design for semantic segmentation, in: NeurIPS, 2022, Vol. 35, pp. 1140–1156. doi:10.5555/3600270.3600354 .[5] A. Radford, J. W. Kim, C. Hallacy, et al., Learning transferable visual models from natural language supervision, in: ICML, 2021, Vol. 139, pp. 8748–8763. [6] C. Jia, Y. Yang, Y. Xia, et al., Scaling up visual and vision-language representation learning with noisy text supervision, in: ICML, 2021, Vol. 139, pp. 4904–4916. [7] J. Ding, N. Xue, G. Xia, et al., Decoupling zero-shot semantic segmentation, in: CVPR, 2022, pp. 11573–11582. 
+
+doi:10.1109/CVPR52688.2022.01129 .[8] S. Jiao, Y. Wei, Y. Wang, et al., Learning mask-aware clip representations for zero-shot segmentation, in: NeurIPS, 2023, Vol. 36, pp. 35631–35653. doi:10.52202/075280-1549 .14 [9] J. Xu, S. D. Mello, S. Liu, et al., Groupvit: Semantic segmentation emerges from text supervision, in: CVPR, 2022, pp. 18113–18123. doi:10.1109/CVPR52688.2022.01760 .[10] Y. Xing, J. Kang, A. Xiao, et al., Rewrite caption semantics: Bridging semantic gaps for language-supervised semantic segmentation, in: NeurIPS, 2023, Vol. 36, pp. 68798–68809. doi:10.52202/075280-3011 .[11] F. Wang, J. Mei, A. L. Yuille, SCLIP: rethinking self-attention for dense vision-language inference, in: ECCV, 2024, Vol. 15079, pp. 315–332. doi:10.1007/978-3-031-72664-4_18 .[12] M. Lan, C. Chen, Y. Ke, et al., Proxyclip: Proxy attention improves CLIP for open-vocabulary segmentation, in: ECCV, 2024, Vol. 15126, pp. 70–88. doi:10.1007/978-3-031-73113-6_5 .[13] S. Jiao, H. Zhu, J. Huang, et al., Collaborative vision-text representation optimizing for open-vocabulary segmen-tation, in: ECCV, 2024, Vol. 15091, pp. 399–416. doi:10.1007/978-3-031-73414-4_23 .[14] K. Han, Y. Liu, J. H. Liew, et al., Global knowledge calibration for fast open-vocabulary segmentation, in: ICCV, 2023, pp. 797–807. doi:10.1109/ICCV51070.2023.00080 .[15] K. Ranasinghe, B. McKinzie, S. Ravi, et al., Perceptual grouping in contrastive vision-language models, in: ICCV 2023, 2023, pp. 5571–5584. doi:10.1109/ICCV51070.2023.00513 .[16] J. Chen, D. Zhu, G. Qian, et al., Exploring open-vocabulary semantic segmentation from clip vision encoder distillation only, in: ICCV 2023, pp. 699–710. doi:10.1109/ICCV51070.2023.00071 .[17] S. Wu, W. Zhang, L. Xu, et al., Clipself: Vision transformer distills itself for open-vocabulary dense prediction, in: B. Kim, Y. Yue, S. Chaudhuri, et al. (Eds.), ICLR 2024, Vol. 2024, pp. 52484–52503. doi:10.48550/arXiv. 2310.01403 .[18] C. Zhou, C. C. Loy, B. Dai, Extract free dense labels from CLIP, in: ECCV, 2022, Vol. 13688, pp. 696–712. 
+
+doi:10.1007/978-3-031-19815-1_40 .[19] S. Hajimiri, I. B. Ayed, J. Dolz, Pay attention to your neighbours: Training-free open-vocabulary semantic segmentation, in: WACV, 2025, 2025, pp. 5061–5071. doi:10.1109/WACV61041.2025.00495 .[20] Y. Li, H. Wang, Y. Duan, et al., A closer look at the explainability of contrastive language-image pre-training, Pattern Recognition 162 (2025) 111409. doi:10.1016/j.patcog.2025.111409 .[21] W. Bousselham, F. Petersen, V. Ferrari, et al., Grounding everything: Emerging localization properties in vision-language transformers, in: CVPR, 2024, pp. 3828–3837. doi:10.1109/CVPR52733.2024.00367 .[22] T. Shao, Z. Tian, H. Zhao, et al., Explore the potential of clip for training-free open vocabulary semantic segmentation, in: ECCV, 2024, Vol. 15144, pp. 139–156. doi:10.1007/978-3-031-73016-0_9 .[23] M. Lan, C. Chen, Y. Ke, et al., Clearclip: Decomposing CLIP representations for dense vision-language inference, in: ECCV, 2024, Vol. 15105, pp. 143–160. doi:10.1007/978-3-031-72970-6_9 .[24] Y. Yang, J. Deng, W. Li, et al., Resclip: Residual attention for training-free dense vision-language inference, in: CVPR, 2025, pp. 29968–29978. doi:10.1109/CVPR52734.2025.02789 .[25] D. Zhang, F. Liu, Q. Tang, Corrclip: Reconstructing patch correlations in clip for open-vocabulary semantic segmentation, in: ICCV, 2025, pp. 24677–24687. doi:10.1109/ICCV51701.2025.02288 .[26] A. Kirillov, E. Mintun, N. Ravi, et al., Segment anything, in: ICCV, 2023, pp. 3992–4003. doi:10.1109/ ICCV51070.2023.00371 .[27] M. Caron, H. Touvron, I. Misra, et al., Emerging properties in self-supervised vision transformers, in: ICCV, 2021, pp. 9650–9660. doi:10.1109/ICCV48922.2021.00951 .15 [28] Y. Shi, M. Dong, C. Xu, Harnessing vision foundation models for high-performance, training-free open vocabulary segmentation, in: ICCV, 2025, pp. 23487–23497. doi:10.1109/ICCV51701.2025.02180 .[29] A. Radford, J. Wu, R. Child, et al., Language models are unsupervised multitask learners (2019). [30] J. Lee, K. Toutanova, Pre-training of deep bidirectional transformers for language understanding, in: NAACL, 2019, Vol. 1, pp. 4171–4186. doi:10.18653/V1/N19-1423 .[31] S. Coradeschi, A. Sa ffi otti, Perceptual Anchoring of Symbols for Action, in: IJCAI, 2001, pp. 407–416. [32] S. Coradeschi, A. Sa ffi otti, An introduction to the anchoring problem, Robotics and autonomous systems 43 (2-3) (2003) 85–96. [33] M. Oquab, T. Darcet, T. Moutakanni, et al., Dinov2: Learning robust visual features without supervision, arXiv preprint arXiv:2304.07193 (2023). [34] L. Barsellotti, R. Amoroso, M. Cornia, et al., Training-free open-vocabulary segmentation with o ffl ine di ff usion-augmented prototype generation, in: CVPR, 2024, pp. 3689–3698. doi:10.1109/CVPR52733.2024.00354 .[35] R. Rombach, A. Blattmann, D. Lorenz, et al., High-resolution image synthesis with latent di ff usion models, in: CVPR, 2022, pp. 10684–10695. doi:10.48550/ARXIV.2204.11824 .[36] L. Barsellotti, R. Amoroso, L. Baraldi, et al., Fossil: Free open-vocabulary semantic segmentation through synthetic references retrieval, in: WACV, 2024, pp. 1464–1473. doi:10.1109/WACV57701.2024.00149 .[37] Y. Wang, R. Sun, N. Luo, et al., Image-to-image matching via foundation models: A new perspective for open-vocabulary semantic segmentation, in: CVPR, 2024, pp. 3952–3963. doi:10.1109/CVPR52733.2024.00379 .[38] W. Sun, Y. Du, G. Liu, et al., Training-free semantic segmentation via llm-supervision, arXiv preprint arXiv:2404.00701 (2024). [39] T. Brown, B. Mann, N. Ryder, et al., Language models are few-shot learners, in: NeurIPS, 2020, Vol. 33, pp. 1877–1901. doi:10.5555/3495724.3495883 .[40] M. A. Aydın, E. M. Çırpar, E. Abdinli, et al., Itaclip: Boosting training-free semantic segmentation with image, text, and architectural enhancements, in: CVPR Workshops, 2025, pp. 4181–4191. doi:10.1109/CVPRW67362. 2025.00398 .[41] Q. Chen, L. Yang, Y. Chen, et al., Training-free class purification for open-vocabulary semantic segmentation, in: ICCV, 2025, pp. 23124–23134. doi:10.1109/ICCV51701.2025.02147 .[42] A. Vaswani, N. Shazeer, N. Parmar, et al., Attention is all you need, in: NeurIPS, 2017, Vol. 30, 2017, pp. 6000 – 6010. doi:10.5555/3295222.3295349 .[43] M. Everingham, S. M. A. Eslami, L. V. Gool, et al., The pascal visual object classes challenge: A retrospective, Int. J. Comput. Vis. 111 (1) (2015) 98–136. doi:10.1007/S11263-014-0733-5 .[44] M. Cordts, M. Omran, S. Ramos, et al., The cityscapes dataset for semantic urban scene understanding, in: CVPR, 2016, pp. 3213–3223. doi:10.1109/CVPR.2016.350 .[45] H. Caesar, J. Uijlings, V. Ferrari, Coco-stu ff : Thing and stu ff classes in context, in: CVPR, 2018, pp. 1209–1218. 
+
+doi:10.1109/CVPR.2018.00132 .[46] R. Mottaghi, X. Chen, X. Liu, et al., The role of context for object detection and semantic segmentation in the wild, in: CVPR, 2014, pp. 891–898. doi:10.1109/CVPR.2014.119 .[47] B. Zhou, H. Zhao, X. Puig, et al., Semantic understanding of scenes through the ADE20K dataset, Int. J. Comput. Vis. 127 (3) (2019) 302–321. doi:10.1007/S11263-018-1140-0 .16 [48] G. Shin, W. Xie, S. Albanie, Reco: Retrieve and co-segment for zero-shot transfer, in: NeurIPS, 2022, Vol. 35, pp. 33754–33767. doi:10.52202/068431-2446 .[49] S. Sun, R. Li, P. Torr, et al., Clip as rnn: Segment countless visual concepts without training endeavor, in: CVPR, 2024, pp. 13171–13182. doi:10.1109/CVPR52733.2024.01251 .[50] L. Karazija, I. Laina, A. Vedaldi, et al., Di ff usion models for open-vocabulary segmentation, in: ECCV, 2024, Vol. 15099, pp. 299–317. doi:10.1007/978-3-031-72652-1_18 .[51] P. Rewatbowornwong, N. Chatthee, E. Chuangsuwanich, et al., Zero-guidance segmentation using zero segment labels, in: ICCV, 2023, pp. 1162–1172. doi:10.1109/ICCV51070.2023.00113 .[52] D. Kang, M. Cho, In defense of lazy visual grounding for open-vocabulary semantic segmentation, in: ECCV, 2024, Vol. 15099, pp. 143–164. doi:10.1007/978-3-031-72940-9_9 .[53] M. Contributors, MMSegmentation: Openmmlab semantic segmentation toolbox and benchmark, https:// github.com/open-mmlab/mmsegmentation (2020). [54] M. Contributors, MMEngine: Openmmlab foundational library for training deep learning models, https: //github.com/open-mmlab/mmengine (2022). [55] P. Krähenbühl, V. Koltun, E ffi cient inference in fully connected crfs with gaussian edge potentials, in: NeurIPS, 2011, pp. 109–117. doi:10.5555/2986459.2986472 .[56] N. Araslanov, S. Roth, Single-stage semantic segmentation from image labels, in: CVPR, 2020, pp. 4252–4261. 
+
+doi:10.1109/CVPR42600.2020.00431 .17
