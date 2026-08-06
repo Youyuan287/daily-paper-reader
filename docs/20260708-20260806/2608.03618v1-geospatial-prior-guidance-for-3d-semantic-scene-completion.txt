@@ -1,0 +1,463 @@
+Title: Geospatial-Prior Guidance for 3D Semantic Scene Completion
+
+URL Source: https://arxiv.org/pdf/2608.03618v1
+
+Published Time: Wed, 05 Aug 2026 01:19:55 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# Geospatial-Prior Guidance for 3D Semantic Scene Completion 
+
+## Meng Wang, Shougao Zhang, Wenzhe He, Ruihui Li, Nan Hu, Zhuo Tang, Kenli Li 
+
+College of Computer Science and Electronic Engineering, Hunan University, Hunan, China {willem, zhangshougao, hewenzhe, liruihui, hunan5, ztang, lkl}@hnu.edu.cn 
+
+Abstract 
+
+Inferring complete 3D geometry and semantics from onboard images remains challenging because occlusions and restricted fields of view leave large scene regions underconstrained. Although satellite imagery provides wide-area context, ap-pearance cues alone offer limited structural guidance and may be unreliable because of spatial or temporal discrep-ancies. We present GeoScene, a geospatially guided frame-work that jointly uses satellite imagery and structured Open-StreetMap cues as soft priors for 3D semantic scene comple-tion. GeoScene learns complementary voxel-wise reliability weights for onboard observations and geospatial guidance, and uses them to control feature refinement in observed and unobserved regions. This design preserves local visual evi-dence while exploiting large-scale road and building structure beyond onboard visibility. Experiments on SemanticKITTI and SSCBench-KITTI-360 demonstrate that GeoScene con-sistently improves both geometric and semantic completion under the geospatial-prior-assisted setting, with the most pro-nounced benefits for large-scale static and geospatially struc-tured classes. 
+
+## Introduction 
+
+Understanding the complete 3D geometry and semantics of complex outdoor environments is a long-standing chal-lenge in autonomous perception. Reasoning beyond the vis-ible field of view is particularly important for motion plan-ning, autonomous navigation, and large-scale scene under-standing, where safe decisions depend on both observed and unobserved regions. To support such reasoning, 3D se-mantic scene completion (SSC) (Song et al. 2017; Roldao, de Charette, and Verroust-Blondet 2020; Fu et al. 2025) jointly predicts volumetric occupancy and semantic labels from partial 3D observations, thereby recovering a holistic representation of the surrounding environment. Recent advances have shown that dense 3D semantic rep-resentations can be inferred directly from monocular RGB images (Cao and de Charette 2022; Zhang, Zhu, and Du 2023; Huang et al. 2023; Jiang et al. 2024; Li et al. 2023c, 2024; Mei et al. 2024; Wang et al. 2024a), reducing dependence on expensive LiDAR sensors. Beyond voxel- and transformer-based context aggregation, object-centric feature learning explicitly organises representations around scene entities to strengthen local geometry and semantic reasoning (Wang 
+
+Copyright © 2027, Association for the Advancement of Artificial Intelligence (www.aaai.org). All rights reserved. 
+
+et al. 2026). Despite this progress, camera-based SSC re-mains fundamentally constrained by limited fields of view, occlusion, and viewpoint-dependent ambiguity. Regions be-hind buildings, outside the camera frustum, or heavily oc-cluded by foreground objects receive little direct evidence, often resulting in incomplete geometry and unstable semantic predictions. Because these methods derive their context pri-marily from onboard observations, stronger local or object-level reasoning alone cannot supply large-scale structural constraints beyond the sensing range. Recent studies (Guo et al. 2025; Chen et al. 2025) have therefore explored overhead or satellite imagery as comple-mentary context for 3D perception. Although these meth-ods demonstrate the value of overhead appearance cues, the joint use of satellite imagery and structured map-level se-mantics remains less explored. Structured sources such as OpenStreetMap (OSM) encode human-interpretable layouts, including road networks and building footprints, and thus complement the visual cues provided by satellite imagery. This observation motivates a fundamental question: Can we exploit geospatial priors to guide 3D semantic scene com-pletion beyond onboard visibility? 
+
+Geospatial information provides a form of context that is complementary to onboard visual evidence. Whereas on-board cameras capture local and viewpoint-dependent ob-servations, satellite imagery and map abstractions describe wide-area, topology-aware structures that are comparatively stable across viewpoints and short-term appearance changes. These priors are especially informative for static elements such as roads, buildings, and terrain—structures that are dif-ficult to infer from limited views but essential for globally coherent completion. When integrated appropriately, they can provide soft spatial and semantic guidance for occluded or unobserved regions. Directly injecting geospatial information into SSC is, how-ever, non-trivial. Such priors may be incomplete, noisy, spa-tially misaligned, or temporally outdated, and their reliabil-ity can vary across locations and semantic classes. Treating them as hard constraints may therefore propagate erroneous structure, particularly for dynamic objects and fine-grained categories. Effective integration must instead balance on-board evidence and geospatial guidance according to their local reliability. In this work, we propose GeoScene , Geo spatial-Prior arXiv:2608.03618v1 [cs.CV] 4 Aug 2026 GeoScene     
+
+> lOccFormer lCGFormer lSGFormer lGeoScene(Ours) GeoScene [Ours]
+> SGFormer [CVPR’2025] CGFormer [NIPS’2024]
+> Ground Truth OSM
+> Satellite
+
+Figure 1: GeoScene integrates geospatial priors to guide 3D semantic scene completion. Compared with previous SSC methods, GeoScene produces geometrically complete and semantically consistent reconstructions by leveraging both observation and geospatial priors. Guidance for 3D Semantic Scene Completion, a framework that uses external geospatial cues as soft auxiliary priors rather than ground-truth supervision. GeoScene jointly inte-grates satellite imagery and structured OSM cues to improve the reconstruction of large-scale static structures beyond on-board visibility. At the core of GeoScene is a Dual-Priors Weighted Classifier, which learns two complementary voxel-wise soft reliability weights: (i) an observation weight captur-ing the reliability of image-derived features, and (ii) a geospa-tial weight controlling the contribution of external geospatial guidance. These weights modulate feature fusion within a Weights-Guided Voxel Refiner, adaptively combining local observations with global structural cues while suppressing unreliable guidance. We evaluate GeoScene on two challeng-ing SSC benchmarks, SemanticKITTI (Behley et al. 2019) and SSCBench-KITTI-360 (Liao, Xie, and Geiger 2022; Li et al. 2023b). Extensive experiments demonstrate consis-tent improvements in the geospatial-prior-assisted setting, particularly for large-scale static and geospatially structured classes. Our main contributions are summarized as follows: 
+
+• We introduce GeoScene, which jointly incorporates satel-lite imagery and structured OSM cues as soft priors for completing large-scale static structures beyond onboard visibility. 
+
+• We propose a Dual-Priors Weighted Classifier that learns complementary observation and geospatial soft reliability weights, together with a Weights-Guided Voxel Refiner for adaptive voxel-level fusion. 
+
+• Experiments on SemanticKITTI and SSCBench-KITTI-360 demonstrate state-of-the-art performance under the geospatial-prior-assisted setting, with the largest benefits concentrated on static, geospatially structured classes. 
+
+## Related Work 
+
+3D Semantic Scene Completion. Semantic scene comple-tion (SSC) reconstructs dense 3D occupancy and seman-tics from partial observations. Monocular methods have progressed from direct volumetric prediction (Cao and de Charette 2022) to tri-plane and voxel-transformer rep-resentations (Huang et al. 2023; Zhang, Zhu, and Du 2023; Li et al. 2023c; Wei et al. 2023). Subsequent stud-ies improved feature aggregation through cross-attention, instance-level reasoning, multi-view reconstruction, and self-distillation (Zheng et al. 2024; Jiang et al. 2024; Wang and Tong 2024; Wang et al. 2024a). Object-centric feature learn-ing further organises voxel representations around scene en-tities to improve instance-aware geometric and semantic rea-soning (Wang et al. 2026). Stereo, depth, motion, and seman-tic priors also reduce geometric ambiguity (Li et al. 2023a; Wang et al. 2025a; Yu et al. 2024; Wang et al. 2025b; Bae, Ha, and Kim 2025; Xiao et al. 2026). Nevertheless, these rep-resentations remain derived primarily from onboard obser-vations and do not directly encode large-scale road–building structure outside the visible region. 
+
+Geospatial Perception. Geospatial perception complements ground-level observations with wide-area structural context. Early work established cross-view correspondences for re-trieval and localisation (Hu et al. 2018), followed by pose-aware methods for finer geometric alignment (Shi et al. 2022; Xia, Booij, and Kooij 2023; Wang et al. 2024b). BEV-based approaches subsequently supported dense satellite– street reasoning for segmentation and map reconstruction (Ye et al. 2024b,a; Sarlin et al. 2024). Recent occupancy meth-ods incorporated satellite features into 3D prediction (Chen et al. 2025; Guo et al. 2025), but satellite appearance alone may provide uncertain structural guidance. GeoScene instead combines satellite imagery with structured OSM priors and adaptively weights their contributions during voxel refine-ment. 
+
+## Method 
+
+Problem Setup. Given an onboard RGB image I, a spa-tially corresponding satellite image Isat , and a structured se-mantic map Sosm derived from OpenStreetMap, GeoScene aims to recover the complete 3D geometry and semantics of the surrounding environment. We discretize the target space into a voxel grid of size NX × NY × NZ and de-Satellite      
+
+> OpenStreetMap
+> Driving Car
+> GPS&IMU
+> Depth Map
+> Proposal
+> Image
+> Encoder Camera Image
+> Sparse Encoder
+> Geospatial Prior
+> Observation Prior
+> Geo Weights
+> Obs Weights
+> Obs 3D Features
+> Geo Features
+> Geo Lift
+> Geo 3D Features
+> (b) Dual-Priors
+> Weighted Classifier
+> (c) Weights-Guided
+> Voxel Refiner
+> Geo
+> Encoder
+> BEV Header 𝐀 𝐀𰰀𝐀
+> Refine 3D Features
+> SSC Header
+> 𝐀 𝐀𝐀𝐀
+> (a) Geo-Aware
+> View Transformation
+> Geospatial
+> BEV Projection
+
+Figure 2: The GeoScene framework for geospatially guided 3D semantic scene completion. fine the label set as C = {C0, C 1, . . . , C M }, where C0
+
+denotes empty space and C1, . . . , C M denote the M se-mantic classes. The ground-truth scene is represented by 
+
+ˆY ∈ C NX ×NY ×NZ . Our objective is to learn a parameter-ized mapping Y = fθ (I, I sat , S osm ), where Y contains the predicted class scores for all voxels. The final semantic occu-pancy grid is obtained by selecting the highest-scoring label at each voxel, and the model parameters θ are optimized to match the ground-truth grid ˆY .
+
+Overview. As illustrated in Figure 2, the overall workflow of GeoScene is as follows. Camera images are first fed into an image feature extractor (Wang et al. 2023; Lin et al. 2017) to obtain 2D observation features Fobs . Simultaneously, satel-lite imagery and structured semantic masks are processed by a geospatial encoder (He et al. 2016; Lin et al. 2017) to gen-erate 2D geospatial features Fgeo . An off-the-shelf depth es-timator (Shamsafar et al. 2022; Bhat, Alhashim, and Wonka 2021) predicts the depth map D from driving images and identifies visible surface voxels, which serve as query pro-posals P (Li et al. 2023c). Subsequently, Fobs , Fgeo , D, and 
+
+P are fused and transformed into 3D voxel features Vobs 
+
+via a Geo-Aware View Transformation module. The result-ing features are processed by a Sparse Encoder (Wang et al. 2025b) to efficiently handle non-empty voxels. After geo-metric alignment, the 2D geospatial features are lifted into BEV space and expanded into 3D to obtain geospatial voxel features Vgeo . Next, the query proposals P and structured prior map Sosm are passed into the Dual-Priors Weighted Classifier, which estimates two complementary soft relia-bility fields, Wobs and Wgeo , for onboard observations and geospatial guidance, respectively. These weights, together with voxel features from both views, are integrated by the Weights-Guided Voxel Refiner, which performs adaptive fea-ture fusion and refinement. Finally, the refined features Vfine 
+
+are upsampled and linearly projected to produce dense se-mantic voxel predictions Y . A detailed illustration of the three modules is provided in Figure 4 in the appendix. 
+
+View Transformation 
+
+Building on existing view-transformation methods (Li et al. 2023a; Yu et al. 2024), we incorporate geospatial cues to construct an observation voxel volume Vobs ∈ RX×Y ×Z×C ,where X, Y , and Z are the spatial dimensions and C is the feature dimension. Given the observation features Fobs ,geospatial features Fgeo , depth map D, and query proposals 
+
+P, we first estimate a depth distribution following LSS (Phil-ion and Fidler 2020). The depth distribution is combined with Fobs to construct 3D features F3d , which are projected onto the voxel grid to obtain Vobs . We then use P as queries in deformable cross-attention (Zhu et al. 2020) over Fgeo , al-lowing Vobs to incorporate geospatial context. Finally, Vobs 
+
+is processed by a Sparse Encoder (Wang et al. 2025b) to efficiently encode non-empty voxels. 
+
+Dual-Priors Weighted Classifier 
+
+The Dual-Priors Weighted Classifier estimates two comple-mentary volumetric weight fields, namely an observation weight Wobs and a geospatial weight Wgeo , from the voxel proposals P ∈ RX×Y ×Z and the 2D semantic prior Sosm .The observation weight characterizes the strength of onboard evidence at each voxel, whereas the geospatial weight con-trols the contribution of structured spatial cues. Together, they enable spatially adaptive voxel-level fusion. 
+
+Observation Weight The observation branch derives voxel-wise reliability from the local spatial cues encoded in P. A lightweight 3D CNN predicts the corresponding soft weights: 
+
+Wobs = σ(ϕ(P)) , (1) where ϕ(·) denotes a convolutional projection and σ(·) is the sigmoid function. The resulting map reflects the relative strength of visible geometric evidence at each voxel. 
+
+Geospatial Weight The geospatial branch combines local occupancy density with structured priors to estimate soft weights for unobserved or weakly observed regions. The local density is first computed as 
+
+Density = AvgConv3D( P). (2) The OSM map Sosm is encoded and lifted into 3D to provide static cues such as road and building layouts. Let Eosm denote the lifted OSM features. The density, Eosm , and Wobs are fused by a learnable projection ψ(·) to predict 
+
+Ubase = σ(ψ([Density , E osm , W obs ])) . (3) An unobserved-region factor Ufactor = 1 − Wobs sup-presses redundant guidance in well-observed regions, while class-aware scaling emphasizes geospatially informative cat-egories: 
+
+fWgeo = Ufactor ⊙ Ubase ⊙ (r M rb + o M oth ), (4) where Mrb is the binary mask for road and building cells derived from Sosm , Moth = 1 − Mrb , and r and o are the corresponding scaling coefficients. The preliminary weight 
+
+fWgeo therefore emphasizes structurally plausible regions that receive limited onboard evidence. 
+
+Complementary Alignment To balance the two weight fields, we normalize and align them within their respective spatial domains. We first define the binary masks 
+
+Mobs = I[P > 0] , Mgeo = 1 − Mobs . (5) The alignment operation (i) matches the peak magnitudes of Wobs within Mobs and fWgeo within Mgeo , (ii) adjusts their joint statistics toward a target mean, and (iii) clamps the resulting values to [0 , 1] :
+
+(Wobs , W geo ) ← Align( Wobs , fWgeo ; Mobs , M geo ). (6) This alignment promotes a complementary allocation of the two weights: onboard evidence dominates well-observed voxels, while geospatial guidance supports unobserved or occluded regions. Thus, Wobs preserves reliable onboard evidence, while 
+
+Wgeo acts as a soft gate for satellite and OSM cues in weakly observed regions. These learned weights represent relative reliability rather than calibrated probabilities, allowing the subsequent voxel refiner to reduce the influence of geospatial guidance that conflicts with local observations. 
+
+Weights-Guided Voxel Refiner 
+
+The Weights-Guided Voxel Refiner uses the two complemen-tary soft-weight fields to adaptively refine voxel features. It contains an observation-oriented branch that preserves on-board evidence and a geospatial-oriented branch that intro-duces structural context into weakly observed or occluded regions. Their outputs are combined through weight-guided fusion and subsequently processed by a global 3D harmo-nization stage to improve spatial and semantic consistency. The satellite feature map is first broadcast along the verti-cal ( Z) dimension to form the geospatial voxel representation 
+
+Vgeo . The refiner then receives Vobs , Vgeo , and their corre-sponding weights Wobs and Wgeo .The observation-oriented branch processes Vobs using two stacked 3×3×3 convolutional blocks, denoted by Pobs (·):
+
+V obs = P obs (Vobs ), (7) where V obs preserves fine-grained geometric evidence from the street view. In parallel, the geospatial-oriented branch aggregates the street-view and satellite features. It employs 5×5×5
+
+and 3×3×3 convolutional blocks, collectively denoted by 
+
+Pgeo (·), to capture broader structural context: 
+
+V geo = P geo 
+
+ [Vgeo , V obs ], (8) where V geo provides geospatially enriched representations for improving spatial continuity in unobserved regions. The two branches are then combined according to their learned soft reliability weights: 
+
+Vw = Wobs ⊙ V obs + Wgeo ⊙ V geo , (9) where ⊙ denotes element-wise multiplication. A lightweight 3D fusion block further refines Vw to harmonize the two feature sources. To reduce scale imbalance between the two weights, we additionally compute a normalized fusion: 
+
+Wsum = Wobs + Wgeo ,W obs = Wobs 
+
+Wsum 
+
+, W geo = Wgeo 
+
+Wsum 
+
+. (10) The normalized blend is 
+
+Vnorm = W obs ⊙ Vobs + W geo ⊙ Vgeo . (11) Finally, the two fusion outputs are combined using a fixed coefficient α, followed by a global 3D harmonizer t(·) that promotes spatial and semantic consistency: 
+
+Vfine = t(α V w + (1 − α) Vnorm ). (12) 
+
+Geospatial BEV Projection 
+
+To provide stable, geospatially consistent supervision, we derive a bird’s-eye-view (BEV) semantic map from the 3D occupancy labels ˆY ∈ C X×Y ×Z . Because static structures provide more reliable overhead cues than transient objects, we suppress dynamic categories and emphasize geospatially stable geometry during projection. Specifically, the BEV tar-get ˆB ∈ C X×Y is constructed by scanning each vertical column (x, y ) within a valid height range and selecting the static class with the highest priority. We use a dataset-specific order comprising (i) tall structures, including buildings, veg-etation, and trunks; (ii) mid-level elements, including fences, poles, and signs; and (iii) ground-level classes, including roads, sidewalks, and terrain. This priority-based projection produces temporally stable targets that are semantically com-patible with the satellite view. A lightweight BEV head pre-dicts a semantic map B from the geospatial features Fgeo and is supervised by ˆB using cross-entropy loss: 
+
+Lbev = CE(B , ˆB) . (13) CGFormer [NIPS’2024] Ours GT Driving Image Satellite OSM Seg SGFormer [CVPR’2025] Figure 3: Qualitative comparisons on the SemanticKITTI validation set. This auxiliary objective encourages spatial consistency be-tween 3D voxel reasoning and geospatial semantics. OSM priors are used only to model static scene struc-ture , since time-invariant map information cannot reliably describe dynamic objects. The suppression of dynamic cate-gories is restricted to the geospatial branch and does not af-fect the main street-view prediction stream; dynamic classes therefore remain inferred from onboard observations. 
+
+Training Loss 
+
+In the GeoScene framework, we adopt the scene-class affin-ity loss from MonoScene (Cao and de Charette 2022) to optimize precision, recall, and specificity concurrently. The semantic scene completion loss is shown as follows: 
+
+Lssc = λsLsem scal + λg Lgeo scal + λce Lce + λdLd. (14) Following preliminary experiments, we set λs = 1, λg = 1, 
+
+λce = 3 and λd = 1, respectively. The overall training loss function is formulated as follows: 
+
+L = Lssc + λbev Lbev , (15) where λbev is set to 1.5. 
+
+## Experiments 
+
+We evaluate GeoScene on two outdoor SSC benchmarks: SemanticKITTI (Behley et al. 2019; Geiger, Lenz, and Urta-sun 2012) and SSCBench-KITTI-360 (Li et al. 2023b; Liao, Xie, and Geiger 2022). For reproducibility, the supplemen-tary material provides complete documentation of the bench-mark data and geospatial priors, including their sources, pre-processing, coordinate alignment, and class mappings, to-gether with implementation settings, hyperparameters, and additional ablation, robustness, and qualitative experiments. 
+
+Datasets 
+
+SemanticKITTI contains 20 semantic classes and provides 10 training, 1 validation, and 11 test sequences. Because GPS information is unavailable for the official test split, we train on the GPS-available sequences, excluding sequence 03, and report results on the validation set. 
+
+SSCBench-KITTI-360 contains 19 semantic classes with 7 training, 1 validation, and 1 test sequence. We follow its offi-cial split and report results on the test set. Both benchmarks use the same geospatial acquisition and alignment pipeline described below. 
+
+Geospatial data and alignment. We retrieved satellite im-agery from the Mapbox service (Mapbox 2024) and queried OSM vector primitives through the Overpass interface (Ol-bricht 2015; OpenStreetMap contributors 2017) on 27 Jan-uary 2026. Mapbox imagery was accessed using a standard access token obtained by registering a free Mapbox account; no project-specific or privileged data service was required. For each frame, the benchmark GPS/IMU pose defines an ego-centered 51 .2 m × 51 .2 m region. The satellite crop and rasterized OSM map are resized to 512 ×512 pixels, yielding a processed ground-plane resolution of 0.1 m per pixel rather than the provider’s native ground sampling distance. GPS co-ordinates are converted into a common metric map frame, translated relative to the ego position, and rotated according to the recorded heading to produce vehicle-aligned inputs. To support reproducibility, the supplementary material pro-vides representative satellite crops and their rasterized OSM counterparts, the coordinate-transformation script used for alignment, and detailed retrieval and service-version meta-data. 
+
+Qualitative Results 
+
+Figure 3 qualitatively compares GeoScene with CGFormer and SGFormer on representative scenes from the Se-manticKITTI validation set. Each row shows the driving im-age, satellite crop, rasterized OSM prior, predictions from the competing methods, our result, and the ground truth. The yellow circles highlight regions in which CGFormer pro-duces missing, fragmented, or spatially inconsistent struc-tures, while the red circles indicate corresponding failure re-gions in SGFormer; circles of the same color in the GeoScene results mark the locations used for direct comparison. Across these examples, GeoScene recovers more continuous road Methods IoU mIoU Geo-mIoU road †
+
+> sidewalk †
+> parking †
+> other-grnd †
+> building †
+> car truck bicycle motorcycle other-vehicle vegetation †
+> trunk terrain †
+> person bicyclist motorcyclist fence pole traf.-sign
+
+MonoScene [CVPR’22] 36.86 11.08 22.80 56.5 26.7 14.3 0.5 14.1 23.3 7.0 0.6 0.5 1.5 17.9 2.8 29.6 1.9 1.2 0.0 5.8 4.1 2.3 VoxFormer [CVPR’23] 44.15 13.35 25.56 53.6 26.5 19.7 0.4 19.5 26.5 7.3 1.3 0.6 7.8 26.1 6.1 33.1 1.9 2.0 0.0 7.3 9.2 4.9 Symphonize [CVPR’24] 41.92 14.89 25.49 56.4 27.6 15.3 1.0 21.6 28.7 20.4 2.5 2.8 13.9 25.7 6.6 30.9 3.5 2.2 0.0 8.4 9.6 5.8 H2GFormer [AAAI’24] 44.69 14.29 27.52 57.0 29.4 21.7 0.3 20.5 28.2 6.8 1.0 0.9 9.3 27.4 7.8 36.3 1.2 0.1 0.0 8.0 9.9 5.8 CGFormer [NIPS’24] 45.99 16.87 29.83 65.5 32.3 20.8 0.2 23.5 34.3 19.4 4.6 2.7 7.7 26.9 8.8 39.5 2.4 4.1 0.0 9.2 10.7 7.8 VLScene [AAAI’25] 44.69 17.83 29.29 63.1 31.1 24.4 0.2 24.9 33.4 30.7 1.8 3.6 18.3 26.0 8.1 35.3 4.3 2.6 0.0 12.1 11.9 6.3 SGFormer [CVPR’25] 45.01 16.68 29.35 60.9 31.5 19.3 2.1 26.1 32.2 20.3 3.0 3.1 11.6 27.1 8.3 38.5 3.7 1.5 0.0 9.3 11.6 7.2 Ocean [AAAI’26] 46.40 17.39 30.56 66.1 34.3 21.9 0.1 23.4 34.0 19.3 3.2 2.0 15.3 28.1 8.9 40.0 3.7 1.2 0.0 10.3 10.8 7.8 
+
+GeoScene 46.58 18.76 32.56 66.7 36.2 22.3 1.8 30.1 34.0 32.3 1.1 2.9 13.9 30.3 9.1 40.5 2.7 2.1 0.0 10.8 11.8 7.9 
+
+Table 1: Quantitative results on the SemanticKITTI validation set. The best and second-best results are shown in bold and underlined, respectively. † represents the geospatial category selection used by SGFormer. 
+
+Methods IoU mIoU Geo-mIoU car bicycle motocycle truck other-vehicle person road †
+
+> parking †
+> sidewalk †
+> other-grnd †
+> building †
+> fence vegetation †
+> terrain †
+> pole traf.-sign other-struct. †
+> other-obj.
+
+MonoScene [CVPR’22] 37.87 12.31 21.40 19.3 0.4 0.6 8.0 2.0 0.9 48.4 11.4 28.1 3.3 32.9 3.5 26.2 16.8 6.9 5.7 4.2 3.1 VoxFormer [CVPR’23] 38.76 11.91 20.68 17.8 1.2 0.9 4.6 2.1 1.6 47.0 9.7 27.2 2.9 31.2 5.0 29.0 14.7 6.5 6.9 3.8 2.4 OccFormer [ICCV’23] 40.27 13.81 24.59 22.6 0.7 0.3 9.9 3.8 2.8 54.3 13.4 31.5 3.6 36.4 4.8 31.0 19.5 7.8 8.5 7.0 4.6 Symphonies [CVPR’24] 44.12 18.58 25.98 30.0 1.9 5.9 25.1 12.1 8.2 54.9 13.8 32.8 6.9 35.1 8.6 38.3 11.5 14.0 9.6 14.4 11.3 
+
+CGFormer [NIPS’24] 48.07 20.05 30.49 29.9 3.4 4.0 17.6 6.8 6.6 63.9 17.2 40.7 5.5 42.7 8.2 38.8 24.9 16.2 17.5 10.2 6.8 VLScene [AAAI’25] 46.08 19.10 32.27 29.0 4.7 7.7 18.3 7.6 7.4 60.1 17.4 39.0 6.0 42.1 9.6 36.5 24.8 17.0 18.8 10.5 6.5 SGFormer [CVPR’25] 46.35 18.30 29.01 27.8 0.9 2.6 10.7 5.7 4.3 61.0 13.2 37.0 5.1 43.1 7.5 39.0 24.9 15.8 16.9 8.9 5.3 EGS [TIP’26] 48.61 19.74 29.89 30.4 2.0 3.6 12.6 9.5 14.3 63.4 34.3 37.6 5.1 34.4 9.8 32.1 20.4 17.0 9.7 11.8 7.3 Ocean [AAAI’26] 48.19 20.28 33.46 29.3 3.7 4.6 15.1 7.7 6.8 63.7 17.0 40.9 5.0 43.7 8.9 39.2 24.7 16.7 19.2 10.8 8.3 
+
+GeoScene 49.46 21.59 34.89 29.7 5.1 3.6 22.4 8.8 8.3 64.9 17.5 39.9 7.2 47.9 10.0 41.5 25.3 16.7 18.4 13.5 7.9 
+
+Table 2: Quantitative results on the SSCBench-KITTI-360 test set. The best and second-best results are shown in bold and underlined, respectively. † represents the geospatial category selection used by SGFormer. 
+
+Method mIoU Geo-mIoU Time (s) Params (M) 
+
+MonoScene ⋆ 12.22 23.12 0.291 136.2 VoxFormer ⋆ 13.88 25.84 0.278 61.7 BRGScene ⋆ 16.37 28.53 0.306 165.2 CGFormer ⋆ 17.12 29.61 0.225 125.8 VLScene ⋆ 17.63 30.13 0.235 51.2 SGFormer 16.68 29.35 – 126.9 
+
+GeoScene 18.76 32.56 0.186 82.0 
+
+Table 3: Comparison of accuracy and computational effi-ciency. ⋆ denotes existing methods augmented with the same geospatial priors for a fair comparison. and sidewalk layouts, better preserves the boundaries of large static regions, and reduces isolated or fragmented pre-dictions. The differences are particularly evident near road boundaries, intersections, and regions that are occluded or only weakly observed from the onboard view. These exam-
+
+Variant Sat. OSM DPWC WGVR IoU mIoU 
+
+WObs WGeo 
+
+Base 44.13 15.98 1 ✓ 44.35 16.32 2 ✓ ✓ 44.26 16.67 3 ✓ ✓ ✓ 44.58 17.21 4 ✓ ✓ ✓ 44.13 17.48 5 ✓ ✓ ✓ ✓ 45.32 17.87 6 ✓ ✓ ✓ ✓ ✓ 46.58 18.76 
+
+Table 4: Ablation study of the architecture components. ples suggest that satellite appearance and structured OSM information provide complementary context for completing large-scale static structures beyond the camera field of view. The visual improvements are consistent with the class-wise results in Table 1, particularly for road, sidewalk, building, vegetation, and terrain. Building Road Geo-mIoU mIoU IoU          
+
+> ✓✗30.93 17.13 45.05
+> ✗✓31.46 17.97 45.47
+> ✓✓32.56 18.76 46.58
+
+Table 5: Ablation of OSM categories.           
+
+> Shift Geo-mIoU mIoU IoU
+> 0 m 32.56 18.76 46.58
+> 0.5 m 31.31 18.23 45.99 1 m 30.71 17.99 45.64 2 m 28.96 17.31 44.74 5 m 26.32 16.17 42.15
+
+Table 6: Satellite translation error.           
+
+> Angle Geo-mIoU mIoU IoU
+> 0◦32.56 18.76 46.58
+> 1◦31.24 18.22 45.98
+> 2◦30.35 17.85 45.57
+> 5◦27.08 16.54 43.90
+> 10 ◦25.14 15.12 41.30
+
+Table 7: Satellite heading error. 
+
+Quantitative Results 
+
+Table 1 compares GeoScene with existing methods on the SemanticKITTI validation set. GeoScene achieves the best overall performance, with 46.58% IoU, 18.76% mIoU, and 32.56% Geo-mIoU. Compared with the strongest previously reported result for each metric, GeoScene improves IoU, mIoU, and Geo-mIoU by 0.18, 0.93, and 2.00 percentage points, respectively. The improvement is particularly evident for large-scale static classes, where GeoScene obtains the highest IoU for road, sidewalk, building, vegetation, and ter-rain. Notably, its building IoU reaches 30.1%, surpassing the previous best result by 4.0 points. These results demon-strate the effectiveness of geospatial priors in improving both overall scene completion and the reconstruction of spatially persistent structures. Table 2 reports the results on the SSCBench-KITTI-360 test set. GeoScene again achieves the best aggregate perfor-mance, reaching 49.46% IoU, 21.59% mIoU, and 34.89% Geo-mIoU. These scores exceed the strongest prior results by 1.27, 1.31, and 1.43 percentage points, respectively. GeoScene also consistently improves the reconstruction of large static regions, including road, building, fence, vegeta-tion, and terrain. In particular, it increases building IoU from the previous best of 43.7% to 47.9%. The consistent improve-ments across both benchmarks confirm that the advantages of GeoScene generalize beyond a single dataset. Table 3 presents a controlled comparison with geospa-tially augmented baselines. For each method marked with ⋆,we incorporate the same satellite imagery and OSM priors through a lightweight feature-fusion layer, while retaining the original baseline architecture. All variants are retrained using the same data split, geospatial preprocessing, and train-ing protocol. Under this setting, GeoScene achieves the best performance, with 18.76% mIoU and 32.56% Geo-mIoU, demonstrating its stronger ability to exploit geospatial pri-ors. 
+
+Ablation Study 
+
+Ablation Study of Architecture Components. As shown in Table 4, introducing satellite imagery improves mIoU from 15.98% to 16.32%, demonstrating the benefit of comple-mentary overhead appearance cues. Adding the structured OSM prior further increases mIoU to 16.67%, although the IoU remains nearly unchanged, suggesting that OSM pri-marily strengthens semantic identification before adaptive fusion is applied. With both geospatial inputs, independently enabling the observation and geospatial weighting branches yields 17.21% and 17.48% mIoU, respectively. The larger semantic gain from the geospatial branch indicates the value of structured priors in weakly observed regions, whereas the observation branch helps preserve evidence from the on-board view. Combining both weights improves the results to 17.87% mIoU and 45.32% IoU, exceeding either individual branch and confirming their complementary roles. Finally, WGVR provides additional gains of 0.89 mIoU and 1.26 IoU points, reaching 18.76% mIoU and 46.58% IoU. Over-all, the complete model improves the baseline by 2.78 mIoU and 2.45 IoU points, showing that geospatial inputs, dual-prior weighting, and voxel refinement contribute progres-sively, with WGVR producing the largest gain in geometric completion. 
+
+Ablation and robustness analysis. As shown in Tables 5– 7, combining road and building priors yields the best perfor-mance, reaching 32.56 Geo-mIoU, 18.76 mIoU, and 46.58 IoU. The road-only configuration consistently outperforms the building-only configuration, while their combination pro-vides further gains across all three metrics, confirming that road topology and building geometry offer complementary structural cues. The perturbation experiments further show that GeoScene degrades progressively rather than catastroph-ically when GPS/IMU accuracy deteriorates. Under mild er-rors of 0.5 m or 1◦, mIoU decreases by only 0.53 and 0.54 points, respectively. Even with severe perturbations of 5 m or 
+
+10 ◦, the model retains 16.17 and 15.12 mIoU, together with 42.15 and 41.30 IoU. These results indicate that inaccurate geospatial alignment gradually reduces the benefit of exter-nal priors, while the onboard observation pathway provides a fallback that helps avoid abrupt failure under degraded localization. 
+
+## Conclusion 
+
+We presented GeoScene, a geospatial-prior-guided frame-work for 3D semantic scene completion beyond the onboard field of view. Rather than treating external information as a hard constraint, GeoScene combines satellite imagery and structured OpenStreetMap cues through learned voxel-wise soft reliability weights. The Dual-Priors Weighted Classifier estimates the complementary reliability of onboard obser-vations and geospatial guidance, while the Weights-Guided Voxel Refiner uses these weights to adaptively integrate the two feature sources. Experiments on SemanticKITTI and SSCBench-KITTI-360 demonstrate state-of-the-art perfor-mance under the geospatial-prior-assisted setting. References 
+
+Bae, J.; Ha, J.; and Kim, H. Y. 2025. Three Cars Approach-ing within 100m! Enhancing Distant Geometry by Tri-Axis Voxel Scanning for Camera-based Semantic Scene Com-pletion. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 11939– 11948. Behley, J.; Garbade, M.; Milioto, A.; Quenzel, J.; Behnke, S.; Stachniss, C.; and Gall, J. 2019. Semantickitti: A dataset for semantic scene understanding of lidar sequences. In ICCV ,9297–9307. Bhat, S. F.; Alhashim, I.; and Wonka, P. 2021. Adabins: Depth estimation using adaptive bins. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 4009–4018. Cao, A.-Q.; and de Charette, R. 2022. MonoScene: Monoc-ular 3D Semantic Scene Completion. In CVPR .Chen, C.; Wang, Z.; Sheng, T.; Jiang, Y.; Li, Y.; Cheng, P.; Zhang, L.; Chen, K.; Hu, Y.; Yang, X.; et al. 2025. SA-Occ: Satellite-Assisted 3D Occupancy Prediction in Real World. 
+
+arXiv preprint arXiv:2503.16399 .Fu, Z.; Guo, Y.; Chen, M.; Hu, Q.; Laga, H.; Boussaid, F.; and Bennamoun, M. 2025. WSSIC-Net: Weakly-Supervised Semantic Instance Completion of 3D Point Cloud Scenes. 
+
+IEEE Transactions on Image Processing , 34: 2008–2019. Geiger, A.; Lenz, P.; and Urtasun, R. 2012. Are we ready for Autonomous Driving? The KITTI Vision Benchmark Suite. In CVPR .Guo, X.; Hu, J.; Hu, J.; Bao, H.; and Zhang, G. 2025. SG-Former: Satellite-Ground Fusion for 3D Semantic Scene Completion. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 11929– 11938. He, K.; Zhang, X.; Ren, S.; and Sun, J. 2016. Deep residual learning for image recognition. In CVPR , 770–778. Hu, S.; Feng, M.; Nguyen, R. M.; and Lee, G. H. 2018. Cvm-net: Cross-view matching network for image-based ground-to-aerial geo-localization. In Proceedings of the IEEE Con-ference on Computer Vision and Pattern Recognition , 7258– 7267. Huang, Y.; Zheng, W.; Zhang, Y.; Zhou, J.; and Lu, J. 2023. Tri-perspective view for vision-based 3d semantic occupancy prediction. In CVPR , 9223–9232. Jiang, H.; Cheng, T.; Gao, N.; Zhang, H.; Lin, T.; Liu, W.; and Wang, X. 2024. Symphonize 3d semantic scene completion with contextual instance queries. In CVPR , 20258–20267. Li, B.; Deng, J.; Zhang, W.; Liang, Z.; Du, D.; Jin, X.; and Zeng, W. 2024. Hierarchical temporal context learning for camera-based semantic scene completion. In European Con-ference on Computer Vision , 131–148. Springer. Li, B.; Sun, Y.; Jin, X.; Zeng, W.; Zhu, Z.; Wang, X.; Zhang, Y.; Okae, J.; Xiao, H.; and Du, D. 2023a. Stereoscene: Bev-assisted stereo matching empowers 3d semantic scene completion. arXiv preprint arXiv:2303.13959 .Li, Y.; Li, S.; Liu, X.; Gong, M.; Li, K.; Chen, N.; Wang, Z.; Li, Z.; Jiang, T.; Yu, F.; Wang, Y.; Zhao, H.; Yu, Z.; and Feng, C. 2023b. SSCBench: Monocular 3D Seman-tic Scene Completion Benchmark in Street Views. arXiv preprint arXiv:2306.09001 .Li, Y.; Yu, Z.; Choy, C.; Xiao, C.; Alvarez, J. M.; Fidler, S.; Feng, C.; and Anandkumar, A. 2023c. VoxFormer: Sparse Voxel Transformer for Camera-based 3D Semantic Scene Completion. In CVPR .Liao, Y.; Xie, J.; and Geiger, A. 2022. KITTI-360: A Novel Dataset and Benchmarks for Urban Scene Understanding in 2D and 3D. TPAMI .Lin, T.-Y.; Dollár, P.; Girshick, R.; He, K.; Hariharan, B.; and Belongie, S. 2017. Feature pyramid networks for object detection. In CVPR , 2117–2125. Mapbox. 2024. Mapbox GL JS: JavaScript library for inter-active maps . Version 3.16. Mei, J.; Yang, Y.; Wang, M.; Zhu, J.; Ra, J.; Ma, Y.; Li, L.; and Liu, Y. 2024. Camera-based 3d semantic scene completion with sparse guidance network. IEEE Transactions on Image Processing .Olbricht, R. M. 2015. Data Retrieval for Small Spatial Re-gions in OpenStreetMap. In Jokar Arsanjani, J.; Zipf, A.; Mooney, P.; and Helbich, M., eds., OpenStreetMap in GI-Science: Experiences, Research, and Applications , Lecture Notes in Geoinformation and Cartography, 101–122. Cham: Springer. ISBN 978-3-319-14280-7. OpenStreetMap contributors. 2017. Planet dump retrieved from https://planet.osm.org. https://www.openstreetmap. org. Philion, J.; and Fidler, S. 2020. Lift, splat, shoot: Encoding images from arbitrary camera rigs by implicitly unprojecting to 3d. In ECCV , 194–210. Springer. Roldao, L.; de Charette, R.; and Verroust-Blondet, A. 2020. Lmscnet: Lightweight multiscale 3d semantic completion. In 3DV , 111–119. IEEE. Sarlin, P.-E.; Trulls, E.; Pollefeys, M.; Hosang, J.; and Ly-nen, S. 2024. Snap: Self-supervised neural maps for visual positioning and semantic understanding. Advances in Neural Information Processing Systems , 36. Shamsafar, F.; Woerz, S.; Rahim, R.; and Zell, A. 2022. Mo-bilestereonet: Towards lightweight deep networks for stereo matching. In Proceedings of the ieee/cvf winter conference on applications of computer vision , 2417–2426. Shi, Y.; Yu, X.; Liu, L.; Campbell, D.; Koniusz, P.; and Li, H. 2022. Accurate 3-DoF camera geo-localization via ground-to-satellite image matching. IEEE transactions on pattern analysis and machine intelligence , 45(3): 2682–2697. Song, S.; Yu, F.; Zeng, A.; Chang, A. X.; Savva, M.; and Funkhouser, T. 2017. Semantic scene completion from a single depth image. In CVPR , 1746–1754. Wang, A.; Chen, H.; Lin, Z.; Han, J.; and Ding, G. 2023. RepViT: Revisiting Mobile CNN From ViT Perspective. arXiv:2307.09283. Wang, M.; Ding, Y.; Liu, Y.; Qin, Y.; Li, R.; and Tang, Z. 2025a. MixSSC: Forward-Backward Mixture for Vision-based 3D Semantic Scene Completion. IEEE Transactions on Circuits and Systems for Video Technology .Wang, M.; Pi, H.; Li, R.; Qin, Y.; Tang, Z.; and Li, K. 2025b. VLScene: Vision-Language Guidance Distillation for Camera-Based 3D Semantic Scene Completion. In Pro-ceedings of the AAAI Conference on Artificial Intelligence ,volume 39, 7808–7816. Wang, S.; Yu, J.; Li, W.; Liu, W.; Liu, X.; Chen, J.; and Zhu, J. 2024a. Not all voxels are equal: Hardness-aware semantic scene completion with self-distillation. In CVPR ,14792–14801. Wang, W.; Cui, Y.; Lin, X.; Li, Z.; and Fang, Z. 2026. To-wards 3D object-centric feature learning for semantic scene completion. In Proceedings of the AAAI Conference on Ar-tificial Intelligence , volume 40, 10136–10144. Wang, X.; Xu, R.; Cui, Z.; Wan, Z.; and Zhang, Y. 2024b. Fine-grained cross-view geo-localization using a correlation-aware homography estimator. Advances in Neural Informa-tion Processing Systems , 36. Wang, Y.; and Tong, C. 2024. H2gformer: Horizontal-to-global voxel transformer for 3d semantic scene completion. In Proceedings of the AAAI Conference on Artificial Intelli-gence , volume 38, 5722–5730. Wei, Y.; Zhao, L.; Zheng, W.; Zhu, Z.; Zhou, J.; and Lu, J. 2023. Surroundocc: Multi-camera 3d occupancy prediction for autonomous driving. In ICCV , 21729–21740. Xia, Z.; Booij, O.; and Kooij, J. F. 2023. Convolutional cross-view pose estimation. IEEE Transactions on Pattern Analysis and Machine Intelligence .Xiao, H.; Kang, W.; Guo, Y.; Liu, H.; and He, Y. 2026. Enhanced Geometry and Semantics for Camera-Based 3D Semantic Scene Completion. IEEE Transactions on Image Processing , 35: 1–13. Ye, J.; Luo, Q.; Yu, J.; Zhong, H.; Zheng, Z.; He, C.; and Li, W. 2024a. SG-BEV: Satellite-Guided BEV Fusion for Cross-View Semantic Segmentation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 27748–27757. Ye, J.; Lv, Z.; Li, W.; Yu, J.; Yang, H.; Zhong, H.; and He, C. 2024b. Cross-view image geo-localization with Panorama-BEV Co-Retrieval Network. In European Conference on Computer Vision , 74–90. Springer. Yu, Z.; Zhang, R.; Ying, J.; Yu, J.; Hu, X.; Luo, L.; Cao, S.-Y.; and Shen, H.-L. 2024. Context and Geometry Aware Voxel Transformer for Semantic Scene Completion. In Advances in Neural Information Processing Systems .Zhang, Y.; Zhu, Z.; and Du, D. 2023. OccFormer: Dual-path Transformer for Vision-based 3D Semantic Occupancy Prediction. arXiv preprint arXiv:2304.05316 .Zheng, Y.; Li, X.; Li, P.; Zheng, Y.; Jin, B.; Zhong, C.; Long, X.; Zhao, H.; and Zhang, Q. 2024. Monoocc: Digging into monocular semantic occupancy prediction. arXiv preprint arXiv:2403.08766 .Zhu, X.; Su, W.; Lu, L.; Li, B.; Wang, X.; and Dai, J. 2020. Deformable DETR: Deformable Transformers for End-to-End Object Detection. In ICLR .Additional Implementation and Experimental Details 
+
+This appendix provides implementation details and support-ing analyses omitted from the main paper because of space constraints. It covers geospatial preprocessing, module-level ablations, robustness tests, additional qualitative results, and representative failure cases. Benchmark descriptions and ag-gregate results reported in the main text are not repeated. 
+
+Geospatial Data Preparation 
+
+Sources and temporal metadata. We retrieved the satel-lite crops from the Mapbox satellite imagery service and queried OpenStreetMap (OSM) vectors through the Over-pass interface at 2026-01-27T00:00:00Z (27 January 2026, UTC). Access to Mapbox used a standard token ob-tained by registering a free Mapbox account; the token itself is a private credential and is therefore not included in the supplementary material. The satellite crops correspond to the imagery served by Mapbox at retrieval time, because the interface does not expose acquisition timestamps for individ-ual source images or a fixed native-imagery version. Like-wise, the OSM data represent the database state returned by Overpass at the recorded retrieval time rather than a sepa-rately named snapshot. We provide the retrieval timestamp and applicable service metadata so that the provenance and temporal scope of the geospatial inputs are explicit. 
+
+Crop scale and processed resolution. For each frame, the benchmark GPS/IMU pose defines an ego-centred region of 51 .2 m × 51 .2 m . We resize both the satellite crop and the rasterized OSM map to 512 × 512 pixels. The result-ing ground-plane resolution is 0.1 m per pixel. This value describes the processed input rather than the native ground sampling distance of the Mapbox imagery. Both benchmarks use the same crop extent and output resolution. 
+
+GPS/IMU-to-map alignment. Let pmap denote a satellite pixel or OSM primitive in a common metric map coordinate system. The vehicle position and heading from the bench-mark GPS/IMU record are denoted by pego and θego , respec-tively. We transform map coordinates into the vehicle-aligned ground plane as 
+
+pveh = R(−θego ) ( pmap − pego ) , (16) where R(·) denotes a two-dimensional rotation matrix. We then crop both geospatial sources around the vehicle and rasterize them on the SSC grid. 
+
+OSM mapping and missing coverage. Following the pro-cedural parsing strategy, we assign road-related primitives to 
+
+road and closed building footprints to building . Unsupported or unmapped locations are assigned to others . These coarse categories serve only as soft auxiliary priors. An all-zero map represents a crop with no valid road or building prim-itive, whereas partially covered crops retain the available primitives. We do not use ground-truth semantic labels to fill missing map regions. Predictions in these regions therefore rely primarily on onboard observations.           
+
+> Cam. Sat. OSM Geo-mIoU (%) mIoU (%) IoU (%)
+> ✓23.46 15.98 44.13
+> ✓✓25.34 (+1.88) 16.32 (+0.34) 44.35 (+0.22)
+> ✓✓28.44 (+4.98) 17.12 (+1.14) 44.98 (+0.85)
+> ✓✓✓32.56 (+9.10) 18.76 (+2.78) 46.58 (+2.45)
+
+Table 8: Ablation of view transformation. 
+
+Geo-mIoU class definition. Geo-mIoU evaluates se-mantic completion over large-scale static classes that can be meaningfully associated with geospatial structure. Following the class selection used by SGFormer, the SemanticKITTI subset is road ,sidewalk ,parking ,other-ground ,building ,vegetation ,terrain ,whereas the SSCBench-KITTI-360 sub-set is road ,parking ,sidewalk ,other-ground ,building ,vegetation ,terrain ,other-structure .For each benchmark, Geo-mIoU is the unweighted mean of the class-wise IoU values over the corresponding subset. This evaluation subset is distinct from the three-category OSM input representation, which contains only { road , building ,
+
+others }. 
+
+Training Configuration 
+
+We optimize GeoScene with AdamW using an initial learn-ing rate of 10 −4 and a weight decay of 0.01 . A multi-step schedule controls the learning rate. Training proceeds for 24 epochs with a batch size of 4 on two NVIDIA A100 GPUs with 80 GB memory. The SSC volume spans 
+
+51 .2 m × 51 .2 m × 6.4 m and contains 256 × 256 × 32 vox-els. SemanticKITTI and SSCBench-KITTI-360 use 20 and 19 output classes, respectively. Unless stated otherwise, we set r = 1 .5 and o = 1 .0 in the class-aware geospatial scaling term of Eq. (4). This setting assigns greater weight to road and building priors than to other regions. We set the fusion coefficient in Eq. (12) to α = 0 .7, thereby placing greater emphasis on the directly weighted fusion Vw than on the nor-malized fusion Vnorm . We additionally set λbev = 1 .5 and evaluate its sensitivity below. 
+
+Detailed Module Architecture 
+
+Figure 4 complements the overview in Figure 2 by detailing the information flow within each module. The observation stream preserves geometry supported by onboard evidence. The geospatial stream provides satellite and OSM cues for weakly observed regions. DPWC estimates the soft reliabil-ity fields that control the voxel-wise contributions of both streams in WGVR. 
+
+## Additional Ablation Studies 
+
+Complementarity of geospatial sources. Table 8 isolates the contribution of each geospatial source. Adding satellite imagery to the camera-only model increases Geo-mIoU by 1.88 points. Adding OSM alone yields a larger gain of 4.98 points. Combining both sources achieves 32.56% Geo-mIoU, 18.76% mIoU, and 46.58% IoU. These results show that Proposal          
+
+> FStreet
+> Q
+> KV
+> Context Net
+> Depth Net
+> Depth Map Fgeo
+> Voxel
+> Deformable
+> Cross-Attention
+> Proposal
+> Geo Weights
+> Obs Weights
+> Weight Net Weight Net
+> Observation
+> Unobservation
+> One-Hot （Road Building ）
+> （Oth ers ）
+> OSM Seg
+> Alignment
+> Observation
+> Processor
+> Geospatial
+> Processor
+> Global 3D Harmonizer
+> Wobs Wgeo
+> Wsum = (W obs +Wgeo )
+> 𝐀 obs 𝐀 geo
+
+𝐀 obs = Wobs /W sum 𝐀 geo = Wgeo /W sum   
+
+> 𝐀 obs 𝐀 geo
+> Vobs Vgeo
+> Vnorm
+> Vw
+> Vnorm
+> Vw
+> Vfine
+
+(c) Weights-Guided Voxel Refiner 
+
+(b) Dual-Priors Weighted Classifier 
+
+(a) Geo -Aware View Transformation Figure 4: Detailed architecture of GeoScene. (a) Geo-Aware View Transformation projects observation and geospatial features into the voxel representation. (b) The Dual-Priors Weighted Classifier learns separate soft reliability fields for observation and geospatial cues. (c) The Weights-Guided Voxel Refiner uses these fields to refine and fuse the two feature streams. 
+
+λbev Geo-mIoU (%) mIoU (%) IoU (%) 
+
+0 30.96 17.45 45.44 0.5 30.36 17.78 45.96 1.0 30.98 18.15 45.87 1.5 32.56 18.76 46.58 
+
+2.0 31.43 18.09 46.06 2.5 30.98 17.87 45.38 
+
+Table 9: Sensitivity to the BEV loss weight λbev .satellite appearance and structured map semantics provide complementary cues. Figure 6 shows the corresponding qualitative differences. Satellite-only predictions recover the broad scene layout but retain ambiguous boundaries. OSM-only predictions better preserve roads and buildings but lack appearance context. Combining both sources improves the continuity of large static structures and their agreement with the reference lay-out. 
+
+BEV supervision strength. Table 9 examines the strength of BEV supervision. Performance peaks at λbev = 1 .5 and decreases slightly at larger values. Excessive BEV supervi-sion may therefore compete with voxel-level SSC supervi-sion. 
+
+Class-aware scaling coefficients. Table 10 evaluates the coefficients r and o, which control the relative contribution 
+
+r o Geo-mIoU (%) mIoU (%) IoU (%) 
+
+0.5 2.0 30.98 18.09 45.98 1.0 1.5 32.12 18.53 46.36 
+
+1.5 1.0 32.56 18.76 46.58 
+
+3.0 0.5 32.32 18.23 46.23 
+
+Table 10: Sensitivity to the class-aware scaling coefficients 
+
+r and o in Eq. (4). The default setting is highlighted in bold. 
+
+α Geo-mIoU (%) mIoU (%) IoU (%) 
+
+0.3 31.33 17.99 46.03 0.5 31.64 18.25 46.15 
+
+0.7 32.56 18.76 46.58 
+
+0.9 32.18 18.30 46.32 
+
+Table 11: Sensitivity to the fusion coefficient α in Eq. (12). The default setting is highlighted in bold. of road/building priors and other regions. Assigning a larger weight to road and building regions consistently improves performance over the reversed setting (r, o ) = (0 .5, 2.0) . The default setting (1 .5, 1.0) achieves the best results, reaching 32.56% Geo-mIoU, 18.76% mIoU, and 46.58% IoU. Increas-ing r further to 3.0 reduces the three metrics by 0.24, 0.53, and 0.35 points, respectively. These results suggest that em-phasizing structured static categories is beneficial, whereas Geospatial BEV Projection Heighest BEV Projection Majority BEV Projection Figure 5: Qualitative comparison of BEV target projection strategies. The geospatial-priority strategy retains stable static structures while suppressing time-inconsistent labels.             
+
+> Setting Geo-mIoU (%) mIoU (%) IoU (%)
+> Hard weights 29.32 17.32 44.79 Soft weights 30.21 17.54 44.85 DPWC (ours) 32.56 18.76 46.58
+
+Table 12: Ablation of soft reliability weighting strategies.                
+
+> Setting Geo-mIoU (%) mIoU (%) IoU (%)
+> Concatenation 29.76 17.12 44.79 Addition 29.98 17.65 44.43 Attention 30.45 17.87 45.32 WGVR (ours) 32.56 18.76 46.58
+
+Table 13: Ablation of voxel-level fusion and refinement strategies. excessive scaling can suppress complementary information from other regions. 
+
+Fusion coefficient. Table 11 examines the balance between the directly weighted fusion Vw and the normalized fusion 
+
+Vnorm . Performance improves as α increases from 0.3 to 0.7, with Geo-mIoU, mIoU, and IoU increasing by 1.23, 0.77, and 0.55 points, respectively. The default value α = 0 .7 achieves the best performance across all three metrics. Increasing α
+
+to 0.9 causes a moderate decline, indicating that retaining a contribution from the normalized fusion is important for balancing the two feature streams. 
+
+Soft reliability modeling. Table 12 compares hard gat-ing, generic soft weighting, and the proposed Dual-Priors Weighted Classifier (DPWC). Hard gating restricts adap-tive feature modulation. Generic soft weighting does not distinguish observation reliability from geospatial guidance. DPWC performs best by learning a separate soft reliability field for each source.             
+
+> Setting Geo-mIoU (%) mIoU (%) IoU (%)
+> Highest-point 31.02 17.54 46.01 Majority 31.43 17.31 45.92 Geospatial-priority 32.56 18.76 46.58
+
+Table 14: Ablation of BEV target projection strategies. 
+
+Voxel refinement. Table 13 compares WGVR with con-catenation, addition, and attention-based fusion. WGVR achieves the highest scores across the three metrics. This result supports weight-guided dual-branch refinement over a single generic fusion operator. 
+
+BEV target construction. Table 14 compares highest-point, majority, and geospatial-priority projections. The pro-posed strategy prioritizes stable static structures and sup-presses time-inconsistent dynamic labels. It consequently produces BEV targets that are more compatible with over-head geospatial inputs. Figure 5 illustrates the differences among the three strategies. 
+
+## Robustness and Class-wise Analysis 
+
+Spatial misalignment. Tables 6 and 7 assess sensitivity to translation and heading errors. Performance declines pro-gressively as either perturbation increases. Errors of 0.5 m 
+
+or 1◦ have a limited effect, whereas larger perturbations re-duce Geo-mIoU more markedly. GeoScene therefore toler-ates mild localization noise but remains sensitive to severe map–vehicle misalignment. 
+
+Inference-time geospatial dropout. We further assess missing geospatial inputs without retraining. At inference time, satellite and OSM inputs are randomly replaced with zeros. As shown in Table 15, mIoU decreases from 18.76 at 0% dropout to 18.37, 18.04, and 17.51 at dropout ratios of 10%, 20%, and 40%, respectively. This gradual decline sug-gests that the observation branch provides a fallback when Drop ratio 0% 10% 20% 40% SGFormer CGFormer mIoU (%) 18.76 18.37 18.04 17.51 16.68 16.87 
+
+Table 15: Inference-time geospatial dropout without retraining, with SGFormer and CGFormer included as reference baselines. with Satellite+Osm   
+
+> Satellite only
+> w/o Satellite+Osm OSM
+> Satellite OSM only
+
+Figure 6: Qualitative ablation of geospatial inputs. Satel-lite imagery provides coarse appearance and layout cues, whereas OSM specifies road and building structure. Combin-ing both priors improves completion in occluded and weakly observed regions. external priors are intermittently unavailable. The experi-ment uses a separate robustness checkpoint and is reported independently of the final full-model results. 
+
+Dynamic classes. Static geospatial priors are confined to the auxiliary geospatial branch and do not replace observation-driven predictions for dynamic objects. On Se-manticKITTI, GeoScene increases the IoU of car, truck, other-vehicle, and bicyclist from 32.2, 20.3, 11.6, and 1.5 with SGFormer to 34.0, 32.3, 13.9, and 2.1, respectively. These results suggest that stronger static-scene completion does not suppress dynamic visual evidence in the observation branch. 
+
+## Additional Qualitative Results and Limitations 
+
+Figure 8 presents additional comparisons in challenging out-door scenes. Compared with CGFormer and SGFormer, GeoScene generally reconstructs more continuous roads, clearer building extents, and fewer fragmented static re-gions. These differences are most evident outside the camera-observed region and for large, spatially persistent structures. Fine and dynamic objects remain primarily determined by onboard visual evidence. 
+
+Failure under missing map coverage. Figure 7 shows a sequence with incomplete OSM coverage. Available neigh-bouring map primitives provide partial guidance for roads and buildings. When the OSM crop becomes empty, the model relies on onboard observations, and distant roads be-come more fragmented. Building boundaries also become Missing OSM Data   
+
+> T-1 TT+1
+
+Figure 7: Failure case under missing OSM coverage. High-lighted regions show fragmented roads and unstable distant building boundaries when structured map guidance is un-available. less stable. Structural coherence improves when valid map information reappears. Thus, soft reliability weighting re-duces dependence on unreliable priors but cannot replace global structure absent from both the map and onboard view. 
+
+Limitations. GeoScene depends on external geospatial re-sources whose coverage, temporal consistency, and image quality vary across regions. Satellite imagery may differ from the driving scene because of seasonal change, illu-mination, or construction. OSM may likewise be incomplete or outdated. The method primarily models static structure and does not explicitly represent temporary road closures or other dynamic map changes. The dual-weighting and voxel-refinement modules also add computation relative to purely image-based SSC models. Future work could incorporate timestamped geospatial snapshots, explicit map-change de-tection, and fallback training with missing or corrupted pri-ors. CGFormer [NIPS’2024] Ours GT SGFormer [CVPR’2025] Figure 8: Additional qualitative comparisons on the SemanticKITTI validation set. GeoScene produces more continuous large-scale static structures, particularly beyond the directly observed camera region.

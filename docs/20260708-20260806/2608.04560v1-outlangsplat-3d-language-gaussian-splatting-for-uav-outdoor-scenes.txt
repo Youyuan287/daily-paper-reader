@@ -1,0 +1,448 @@
+Title: OutLangSplat: 3D Language Gaussian Splatting for UAV Outdoor Scenes
+
+URL Source: https://arxiv.org/pdf/2608.04560v1
+
+Published Time: Thu, 06 Aug 2026 00:37:56 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# OutLangSplat: 3D Language Gaussian Splatting for UAV Outdoor Scenes 
+
+# Xia Yan 1, He Wu 1, Yanghui Xu 1, Zizhao Wu 2, Jiazhou Chen 1 ∗
+
+> 1
+
+Zhejiang University of Technology 
+
+> 2
+
+Hangzhou Dianzi University 
+
+Abstract 
+
+3D Language Gaussian Splatting embeds open-vocabulary language features into 3D Gaussian Splatting, providing an efficient explicit representation for text-driven 3D scene un-derstanding. However, existing methods are limited to indoor or small-scale scenes, and tend to fail in Unmanned Aerial Vehicle (UAV) outdoor scenes, where severe occlusions and long distance viewpoints often lead to incorrect semantic acti-vations and missing target responses. In this paper, we present OutLangSplat which adapts language Gaussian representa-tions to UAV outdoor scenes by improving feature representa-tion and aggregation reliability. For the feature representation, a 2D-3D dual-branch representation with region-based align-ment and fusion is designed to improve spatial consistency, reducing incomplete target responses and background misac-tivations. For the feature aggregation, we introduce a training-free contribution and consistency-aware Gaussian feature ag-gregation strategy that leverages pixel contribution reliability and cross-view semantic consistency to suppress unreliable re-sponses from noisy viewpoints. A new dataset is provided by manually annotating various objects on four real-world public UAV outdoor scene datasets. To the best of our knowledge, it is the first accessible dataset of open-vocabulary 3D scene understanding for UAV outdoor scenes. Quantitative evalua-tions and ablation studies demonstrate that OutLangSplat out-performs SOTA methods on both open-vocabulary semantic segmentation and instance localization tasks. The datasets and codes will be open-sourced. 
+
+# Introduction 
+
+Open-vocabulary 3D scene understanding aims to associate natural-language queries with corresponding spatial regions in 3D environments, enabling flexible recognition, local-ization, and interaction beyond predefined semantic cate-gories (Choy, Gwak, and Savarese 2019; Qi et al. 2016; Thomas et al. 2019). This capability is particularly impor-tant for Unmanned Aerial Vehicle (UAV) outdoor scenes, where applications such as urban monitoring, land resource management, and emergency response require a fine-grained understanding of buildings, roads, vegetation, and other ge-ographic objects. Compared with indoor scenes, UAV out-door scenes typically cover larger spatial extents, contain more complex object layouts, and exhibit greater diversity in semantic granularities. In addition, severe occlusions, 
+
+> ∗
+
+Corresponding author: cjz@zjut.edu.cn 
+
+long-range observations, and cross-view variations from low-altitude aerial viewpoints make open-vocabulary 3D under-standing in UAV outdoor scenes particularly challenging. Recent advances in 3D Gaussian Splatting (3DGS) (Kerbl et al. 2023) have enabled efficient and photorealistic repre-sentations of real-world 3D scenes, facilitating its widespread adoption across various 3D applications. By attaching or lift-ing language features to 3D Gaussians, existing methods have further extended 3DGS to support open-vocabulary query-ing of reconstructed scenes (Cheng et al. 2024; Qin et al. 2023; Wu et al. 2024; Jun-Seong et al. 2025). However, most language-embedded 3DGS approaches are primarily designed for indoor environments. When directly applied to low-altitude UAV outdoor scenes, these methods are prone to incomplete target responses, blurred object boundaries, and semantic misactivations in irrelevant regions. Existing methods predominantly rely on 2D vision-language features (Radford et al. 2021) and directly aggregate multi-view features into 3D Gaussian representations (Jun-Seong et al. 2025; Marrie et al. 2024; Wang et al. 2025). Although 2D vision-language models provide strong open-vocabulary semantic priors, their features lack explicit 3D structural constraints and are vulnerable to occlusions, view-point changes, and boundary mixing. Moreover, a pixel or region is typically rendered by multiple Gaussians, and ignor-ing their contribution differences may cause semantic mis-matches at object boundaries and semantic boundary am-biguity. Existing aggregation methods also tend to treat all pixels and views as equally reliable, overlooking observa-tion variations caused by occlusions, noises, and cross-view semantic inconsistency, thereby propagating unreliable se-mantic features into 3D Gaussian representations. To address these challenges, we propose OutLangSplat, an open-vocabulary 3D scene understanding framework for UAV outdoor scenes. The framework includes the following key designs. (1) We use 2D semantic regions as alignment anchors and perform projection pooling and region-level fu-sion of the corresponding local 3D structural features. This improves the spatial consistency and completeness of seman-tic representations while reducing the semantic bias caused by relying solely on 2D features. (2) We assess feature re-liability from pixel-level Gaussian contributions and view-level semantic consistency, and accordingly aggregate multi-view semantic features. This suppresses the propagation of arXiv:2608.04560v1 [cs.CV] 5 Aug 2026 unreliable features caused by occlusions, boundary mix-ing, noise, and cross-view semantic conflicts. Consequently, OutLangSplat produces more complete and robust language Gaussian representations. Furthermore, we construct a new open-vocabulary 3D dataset from four real-world publicly available UAV scenes, covering diverse semantic categories and varying semantic granularities. Experiments show that our method outperforms SOTA approaches on both localiza-tion and semantic segmentation tasks. The main contributions of this work include: 
+
+• A 2D-3D dual-branch feature fusion framework with region-level alignment, which enhances the open-vocabulary semantic representation capability for UAV outdoor scenes. 
+
+• A training-free pixel-level contribution and consistency-aware Gaussian feature aggregation strategy, which im-proves the robustness of multi-view feature aggregation. 
+
+• The first open-vocabulary 3D scene understanding dataset for UAV real-world outdoor environments, filling the gap that existing evaluation benchmarks are mostly limited to indoor or small-scale scenes. 
+
+# Related Work 
+
+Open-Vocabulary 3D Scene Representations 
+
+Combining 3D representations with semantic information is essential for object localization, recognition, and se-mantic segmentation. Early studies primarily relied on NeRF (Mildenhall et al. 2021) based representations, where pretrained 2D vision-language features are distilled into neural radiance fields for text-driven querying and open-vocabulary 3D segmentation. Representative methods, in-cluding N3F (Tschernezki et al. 2022), DFF (Kobayashi, Matsumoto, and Sitzmann 2022), LERF (Kerr et al. 2023), and OpenNeRF (Engelmann et al. 2024), demonstrated the potential of transferring 2D foundation-model knowledge to 3D representations. However, NeRF-based semantic fields require computationally expensive volumetric rendering and scene-specific optimization, limiting their efficiency and scalability in large-scale real-world scenes. The emergence of 3D Gaussian Splatting (3DGS) (Kerbl et al. 2023) has further advanced research on integrating lan-guage features into efficient and explicit 3D representations. Existing methods (Ye et al. 2023; Marrie et al. 2024; Zhai et al. 2025) combine pretrained models such as CLIP (Rad-ford et al. 2021), DINO (Caron et al. 2021), SAM (Kir-illov et al. 2023), and diffusion models with 3DGS to sup-port semantic segmentation, language-driven localization, object retrieval, and scene editing. However, vision-language models typically produce high-dimensional semantic embed-dings, and explicitly storing full language features for each Gaussian incurs substantial GPU memory and computational overhead. To alleviate this issue, prior methods (Qin et al. 2023; Shi et al. 2023; Chen et al. 2024; Shorinwa, Sun, and Schwager 2024) learn compact per-Gaussian seman-tic representations via autoencoder based compression, low-dimensional feature fields, quantization, or hash-based rep-resentations. More recently, Lang3D-XL (Krakovsky et al. 2025) introduces low-dimensional semantic bottleneck fea-tures and a multi-resolution feature hash encoder for large-scale scenes, reducing the runtime and memory costs of lan-guage feature embedding. Despite large progresses in language feature embedding, existing open-vocabulary 3D scene understanding methods are still mainly focused on indoor or small-scale scenes. Al-though Lang3D-XL (Krakovsky et al. 2025) targets large-scale scenes, primarily focuses on buildings and their lo-cal structures, leaving the geographic objects in UAV out-door scenes insufficiently explored. To this end, we extend open-vocabulary 3D scene understanding to UAV outdoor scenes and construct a corresponding dataset, providing a unified evaluation basis for semantic segmentation and multi-instance localization. 
+
+Gaussian Feature Distillation and Aggregation 
+
+To enable open-vocabulary understanding in 3D Gaussian scenes, recent studies have embedded 2D vision-language features into 3D Gaussian representations. LangSplat (Qin et al. 2023) extracts multi-level CLIP features using SAM and compresses them with an autoencoder, whereas Fea-ture3DGS (Zhou et al. 2023) learns a mapping from low-dimensional Gaussian features to high-dimensional semantic embeddings. Other methods (Jiang et al. 2025; Li et al. 2024; Liang et al. 2024; Qu et al. 2024; Piekenbrinck et al. 2025) first group Gaussian primitives into semantically meaningful clusters and then assign language embeddings to individual clusters. However, these approaches remain computationally expensive and rely on feature distillation with learnable lan-guage embeddings, which may propagate noises from 2D supervision into the learned 3D representations. More recent studies explore more efficient feature aggrega-tion strategies. Occam’s LGS (Cheng et al. 2024) directly in-jects 2D language features into 3D Gaussians. Dr.Splat (Jun-Seong et al. 2025) employs Top-K truncation to improve aggregation efficiency, but this strategy may discard many low-contribution Gaussians, weakening semantic responses and reducing foreground-background discriminability. LUD-VIG (Marrie et al. 2024) aggregates 2D features according to multi-view rendering contributions and further incorporates 3D geometric information through graph diffusion. Although these methods avoid scene-specific semantic-field optimiza-tion, they remain vulnerable to noisy 2D observations, occlu-sions, and cross-view semantic inconsistency. VALA (Wang et al. 2025) introduces visibility-aware gating and robust aggregation to suppress low-quality observations and cross-view outliers. However, its contribution-based gating mech-anism tends to filter out low-contribution yet valid surface Gaussians in UAV outdoor scenes, leading to incomplete semantic coverage and missing local responses. To address these limitations, we enhance truncated semantic represen-tations with 3D structural features and design a training-free aggregation framework that improves robustness in UAV out-door scenes by pixel-level contribution reliability and cross-view semantic consistency. Figure 1: Overview of our OutLangSplat framework. Region-level 2D semantic and 3D structural features are fused, and then aggregated onto 3D Gaussians using pixel-level contribution reliability and cross-view semantic consistency, enabling open-vocabulary rendering, segmentation, and localization. 
+
+# Methodology 
+
+As illustrated in Fig. 1, OutLangSplat consists of three main modules: 1) we construct region-based 2D-3D features. The 2D semantic branch extracts region-level open-vocabulary features from multi-view images using multimodal vision-language encoders, while the 3D structural branch extracts local structural features from the 3D Gaussian scene. The two feature types are then aligned and fused at the region level to form enhanced semantic representations. 2) We in-troduce a training-free robust Gaussian feature aggregation strategy that evaluates reliability using pixel-level Gaussian rendering contributions and improves cross-view seman-tic consistency through consistency-aware iterative aggrega-tion. 3) The aggregated language Gaussian features support open-vocabulary semantic rendering, segmentation, and text-driven localization of geographic objects. We will review the 3D Gaussian representation and open-vocabulary querying as a background, and then introduce carefully region-based 2D-3D feature fusion, and the proposed Gaussian feature aggregation strategy in the remainder of this section. 
+
+3D Gaussian Splatting (3DGS) represents a scene as a set of 3D Gaussian primitives (Kerbl et al. 2023). Each Gaussian 
+
+Gi is parameterized by its center position μi, covariance matrix Σi, opacity oi, and appearance information encoded by spherical harmonics ci. The i-th Gaussian is defined as: 
+
+Gi(x) = exp 
+
+
+
+− 12 (x − μi)⊤Σ−1 
+
+> i
+
+(x − μi)
+
+
+
+, (1) During rendering, Gaussians are projected onto the image plane, and the color of a pixel v is obtained by alpha blending: 
+
+C(v) = X 
+
+> i∈N (v)
+
+ci(v)α2D  
+
+> i
+
+(v) Y
+
+> j<i
+
+ 1 − α2D  
+
+> j
+
+(v) , (2) where N (v) denotes the set of all Gaussians that cover v,and α2D  
+
+> i
+
+(v) is the effective opacity of the i-th Gaussian at v.
+
+Open-Vocabulary Query. The open-vocabulary semantic understanding task aims to generate semantic responses in a 3D scene according to arbitrary natural-language text queries 
+
+q. First, the text query q is mapped into the semantic feature space by the text encoder ϕT (·) of a vision-language model, producing a normalized text embedding: eq = ϕT (q)  
+
+> ∥ϕT(q)∥2
+
+,where eq ∈ Rdand d denotes the feature dimension. During semantic rendering, each Gaussian is assigned a semantic feature fi ∈ Rd. Following the alpha blending weights used in RGB rendering, the semantic feature of the pixel v is: 
+
+F(v) = 
+
+P  
+
+> i∈N (v)
+
+Ti(v)α2D  
+
+> i
+
+(v) · fi
+
+P  
+
+> i∈N (v)
+
+Ti(v)α2D  
+
+> i
+
+(v) + ϵ , (3) where Ti(v) = Qi−1
+
+> j=1
+
+ 1 − α2D  
+
+> j
+
+(v) denotes the accumu-lated transmittance. The semantic similarity between the pixel v and text query q is computed by cosine similarity between the rendered feature and text embedding: 
+
+Hq (v) = F(v)⊤eq
+
+∥F(v)∥2∥eq ∥2
+
+, (4) Based on this heatmap Hq , we further generate binary tar-get regions and localization results for evaluating open-vocabulary 3D scene understanding performance. 
+
+Region-based 2D-3D Feature Fusion 
+
+UAV outdoor 3D scenes contain diverse geographic objects, posing challenges for open-vocabulary semantic understand-ing. Although 2D vision-language features provide strong se-mantic representations, they lack 3D spatial information and are susceptible to multi-view inconsistency and segmentation noise. 3D structural features offer better spatial consistency, but lack direct alignment with natural language queries. Ex-isting 2D-3D fusion methods still suffer from mismatched representation granularities and feature spaces, making di-rect fusion ineffective in compensating for semantic response degradation caused by Top-K truncation. We therefore de-sign a region-based 2D-3D dual-branch representation that integrates local 3D structural information into corresponding 2D semantic regions, enhancing the semantic discriminabil-ity and completeness of open-vocabulary features. 
+
+2D semantic feature branch. Geographic objects in UAV outdoor scenes exhibit substantial scale variations and di-verse boundaries. Accordingly, we use multi-level semantic regions as the basic units for feature extraction and represen-tation, preserving target region integrity while integrating complementary semantic information from different vision-language encoders. As shown in Fig. 1, given an image Iv
+
+from view v, we first partition it into multi-level regions, yielding Rv = SLℓ=1 {Rℓv,r }M ℓv
+
+> r=1
+
+, where Rℓv,r denotes the r-th semantic region at segmentation level ℓ in view v, and 
+
+M ℓv is the number of regions at the level ℓ. For each region, we extract two complementary vision-language features and combine them through a weighted fusion: 
+
+f 2D  
+
+> v,r,ℓ
+
+= λ2D ϕR(Rℓv,r ) + (1 − λ2D )ϕS (Rℓv,r ), (5) where λ2D controls the fusion of the two semantic sources, and ϕR(·) and ϕS (·) denote the corresponding vision-language encoders. By exploiting their complementary strengths in category recognition and geographic attribute representation, this design produces more complete region-level features for UAV outdoor scenes. In our implementa-tion, RemoteCLIP (Liu et al. 2023) and RS5M (Zhang et al. 2023) are used as the two vision-language encoders. 
+
+3D structural feature branch. To introduce 3D geomet-ric information, we export Gaussians from the optimized 3D Gaussian scene and filter unreliable Gaussians according to opacity. Let G = {gi}Ni=1 denote the set of 3D Gaus-sians, where each Gaussian has a center position μi and opacity oi. We retain Gaussians satisfying oi > τ o and apply voxel downsampling to obtain a compact point set: 
+
+P = {(pk, id k)}Kk=1 where pk = μid k is the sampled 3D point coordinate, and id k denotes the index of its corre-sponding original Gaussian. The downsampled point cloud is then converted into sparse convolutional input. For each point pk, its voxel coordinate is computed as ck =  pk
+
+> s
+
+ ,
+
+where s is the voxel size. We concatenate the normalized 3D coordinate with the corresponding Gaussian opacity to form the point feature: 
+
+xk = [ bpk, o id k ] ∈ R4. The sparse input S = {(ck, xk)}Kk=1 
+
+is then fed into a MinkUNet initialized with SegContrast-pretrained (Nunes et al. 2022) weights. The encoder takes the sparse voxel coordinates and point features as input. After sparse convolutional encoding, it produces a 96-dimensional 3D structural feature for each sampled point: {zk}Kk=1 =
+
+ψ3D (S), zk ∈ R96 , where ψ3D (·) denotes the 3D sparse convolutional encoder. zk mainly captures local geometric structure and spatial neighborhood relationships, providing a 3D structural prior for semantic fusion. 
+
+Region-level 2D-3D alignment and feature fusion. To align 3D structural features with 2D semantic regions, we project 3D points onto each 2D view and perform region-level pooling according to SAM (Kirillov et al. 2023) masks. For the v-th view, let Πv (·) denote the camera projection function. The projected position of point pk on the image plane is given by uv,k = Π v (pk). For each region Rℓv,r , we define its valid projected point set as Ωℓv,r = {k | Πv (pk) ∈
+
+Rℓv,r }. The corresponding region-level 3D structural feature is obtained by average pooling: 
+
+f 3D  
+
+> v,r,ℓ
+
+= 1
+
+Ωℓv,r 
+
+X
+
+> k∈Ωℓv,r
+
+zk, (6) Since f 3D  
+
+> v,r,ℓ
+
+∈ R96 and the 2D semantic feature f 2D  
+
+> v,r,ℓ
+
+∈
+
+R512 lie in different feature spaces, we learn a lightweight mapping function hθ (·) to distill the 3D structural feature into the vision-language feature space: ef 3D  
+
+> v,r,ℓ
+
+= hθ (f 3D 
+
+> v,r,ℓ
+
+) ∈
+
+R512 . Here, hθ (·) is implemented as a two-layer MLP and trained using the region-level 2D semantic feature as the teacher signal. The distillation objective is defined as a cosine loss: Ldistill = 1 − cos 
+
+
+
+hθ (f 3D 
+
+> v,r,ℓ
+
+), f 2D 
+
+> v,r,ℓ
+
+
+
+.
+
+Finally, we fuse the original 2D open-vocabulary semantic feature with the mapped 3D structure enhanced feature: 
+
+fv,r,ℓ = λf f 2D  
+
+> v,r,ℓ
+
++ (1 − λf )ef 3D 
+
+> v,r,ℓ
+
+, (7) where λf controls the fusion ratio between the 2D semantic feature and the 3D structure enhanced feature. The fused feature fv,r,ℓ provides a more reliable semantic input for subsequent Gaussian aggregation and text-driven querying. 
+
+Consistency-aware Gaussian Feature Aggregation 
+
+Feature aggregation integrates multi-view features into the corresponding 3D Gaussians to construct semantically ex-pressive Gaussian representations. Although the fused re-gion feature fv,r,ℓ contains both 2D semantics and 3D struc-tural cues, conventional average aggregation (Marrie et al. 2024) ignores reliability variations across pixels and views. VALA (Wang et al. 2025) improves robustness through visibility-aware gating but suppresses low-contribution yet valid surface Gaussians, causing semantic loss. We therefore propose a training-free aggregation method that evaluates ob-servation reliability using pixel-level Gaussian contributions and multi-view semantic consistency. 
+
+Pixel-level contribution reliability. As shown in Fig. 1(a), for each pixel p in view v, we rank the Gaussians whose pro-jected footprints cover the pixel in descending order of their alpha-blending contributions to form an adaptive Top-K set, where K ranges from 16 to 32, our selection stops once 90% of the total contribution is covered. Let id v,p,k denote the index of the k-th candidate Gaussian, and wv,p,k denote its alpha blending weight, normalize the Top-K weights within each pixel: πv,p,k = wv,p,k /(PKk=1 wv,p,k + ϵ).
+
+As illustrated in Fig. 2, after Top-K selection, Gaussian contribution distributions vary across pixels: contributions are concentrated on a few Gaussians in visible regions but become more dispersed in multi-layer gaussian mixtures, weakening pixel-Gaussian correspondences. Therefore, we Figure 2: Pixel reliability measured by the inverse Simpson index Ev (p): concentrated contributions indicate high relia-bility, while dispersed contributions indicate low reliability. use the inverse Simpson index to quantify contribution dis-persion and assess the aggregation reliability of each pixel: 
+
+Ev (p) = 1
+
+PKk=1 π2 
+
+> v,p,k
+
++ ϵ . (8) where Ev (p) can be interpreted as the effective number of contributing Gaussians. A small Ev (p) indicates that the pixel is mainly explained by a small number of dominant Gaussians, leading to a clearer semantic assignment. In con-trast, a large Ev (p) suggests dispersed contributions, which often occur near boundaries, occlusions, or mixed regions. To suppress unreliable pixel features, we define the pixel quality weight as qv (p) = qsum (p) · qeff (p), where 
+
+qsum (p) = clip( PKk=1 wv,p,k , q min , 1) , measures how com-pletely the selected Top-K Gaussians explain the pixel, and 
+
+qeff (p) = exp ( − max( Ev (p) − τE , 0) /κ ) penalizes pixels with overly dispersed contributions. τE is the threshold for the effective number of Gaussians, and κ controls the decay strength. We set τE = 12 and κ = 8 in all of our experi-ments.The final effective semantic contribution weight from pixel p to Gaussian id v,p,k is defined as 
+
+ewv,p,k = wv,p,k · Mv (p) · qsum (p) · qeff (p). (9) where Mv (p) denotes the valid mask of semantic features. With the pixel-level quality weights, we aggregate all pixel observations within each view into Gaussian-level observa-tions. For Gaussian gi, its observation feature in view v is: 
+
+fi,v =
+
+P 
+
+> p,k
+
+I[id v,p,k = i] · ewv,p,k · fv (p)
+
+P 
+
+> p,k
+
+I[id v,p,k = i] · ewv,p,k + ϵ , (10) where fv (p) denotes the fused semantic feature assigned to pixel p. The corresponding visibility, or observation strength, is defined as di,v = P 
+
+> p,k
+
+I[id v,p,k = i] · ewv,p,k .
+
+When the visibility di,v is too small, the Gaussian is only weakly observed in the current view and is likely to be af-fected by noise. Therefore, we retain only reliable view-level observations: Oi = {(fi,v , d i,v ) | di,v > τ d}.
+
+Consistency-aware iterative aggregation. As shown in Fig. 1(b), we further introduce an iterative view-level seman-tic consistency refinement. For Gaussian gi, we first compute its initial semantic feature by weighted averaging all valid view-level observations: 
+
+F(0)  
+
+> i
+
+=
+
+P 
+
+> v∈V i
+
+di,v · fi,v 
+
+P 
+
+> v∈V i
+
+di,v + ϵ , (11) where Vi denotes the set of valid views for Gaussian gi.At iteration t, we compute the cosine consistency between the view-level observation fi,v and the aggregated feature from the previous iteration: c(t) 
+
+> i,v
+
+= cos( fi,v , F(t−1)  
+
+> i
+
+).
+
+Based on this consistency score, the robust view-level weight is defined as ρ(t) 
+
+> i,v
+
+= di,v · exp( βtc(t) 
+
+> i,v
+
+), where βt
+
+is a sharpening coefficient. Observations consistent with the current aggregated feature are assigned larger weights, while inconsistent observations are automatically down-weighted. The Gaussian semantic feature is then updated as 
+
+F(t) 
+
+> i
+
+=
+
+P 
+
+> v∈V i
+
+ρ(t) 
+
+> i,v
+
+· fi,v 
+
+P 
+
+> v∈V i
+
+ρ(t) 
+
+> i,v
+
++ ϵ . (12) After T iterations, the final semantic feature of Gaussian gi
+
+is obtained as fi = F(T ) 
+
+> i
+
+, which is stored as the language feature of the Gaussian for subsequent semantic rendering. Finally, for a text query q, Eqs. 3 and 4 render the ag-gregated Gaussian features and compute similarity with eq ,producing semantic heatmaps for open-vocabulary recogni-tion and localization. 
+
+# Experiments and Discussion 
+
+Experimental Setup 
+
+Dataset. To evaluate text-driven understanding of geo-graphic objects in real-world UAV outdoor 3D scenes, we construct an open-vocabulary 3D scene understanding dataset. As shown in Table 1, it comprises four public real-world scenes from InstanceBuilding (Buildings1 and 2) (Chen et al. 2021) and UrbanScene3D (Polytech and Cam-pus) (Lin et al. 2021). Reconstructed from real UAV imagery, these scenes vary substantially in spatial coverage, building layout, object density, and occlusions, and contain diverse ge-ographic objects such as buildings, roads, lawns, and trees. In total, the dataset includes 660 annotated target regions. Using a self-developed annotation script, we manually de-lineate the visible regions of each target across multiple views with pixel-level polygons and assign corresponding attribute labels, producing annotations for semantic segmen-tation and object localization. The annotation process took approximately one month and followed consistent labeling and boundary criteria to ensure annotation quality. Table 1: Statistics of the proposed UAV outdoor open-vocabulary 3D scene understanding datasets.                  
+
+> Scenes Area ( m2) Height ( m) Gaussians Regions
+> Buildings1 22,000 64.1 2.02M #204 Buildings2 21,000 67.5 4.65M #197 Polytech 15,000 113.4 3.53M #150 Campus 56,000 119.3 3.77M #109
+
+Figure 3: Qualitative comparison of open-vocabulary semantic segmentation. Our method produces more complete regions, clearer boundaries, and fewer false activations.    
+
+> LangSplat LUDVIG Lang3D-XL Ours
+> White Buildings Lawn Buildings
+
+Figure 4: Qualitative comparison on open-vocabulary queries. Our method produces more accurate target local-ization and cleaner object boundaries. Table 2: Localization accuracy comparison under coverage thresholds of 40% / 50% / 60%.             
+
+> Scenes LangSplat LUDVIG Lang3D-XL Ours
+> Buildings1 85.3/83.8/80.3 61.3/59.8/57.8 56.4/46.6/38.2 93.6 /91.7/86.3
+> Buildings2 86.2/84.7/83.2 72.1/69.5/65.4 53.8/45.2/39.1 89.8 /86.8 /85.2
+> Polytech 92.0/89.3/86.6 73.3/72.0/69.3 76.0/69.3/68.0 93.3 /91.3 /89.3
+> Campus 87.1 /84.4/83.4 69.7/66.9/62.3 80.7/80.7/76.1 87.1 /85.3 /84.4
+> Overall 87.7/85.6/83.4 69.1/67.1/63.7 66.7/60.5/55.4 90.9 /88.8 /86.3
+
+Evaluation metrics. We use mIoU and mAcc to evalu-ate region overlap and target recognition accuracy. For large and spatially distributed objects in UAV outdoor scenes, we further report Loc@40, Loc@50, and Loc@60, where an instance is correctly localized if the predicted region covers more than the specified proportion of its annotated area. 
+
+Evaluation on datasets. We compare our method with three representative approaches: LangSplat (Qin et al. 2023), Lang3D-XL (Krakovsky et al. 2025), and LUDVIG (Mar-rie et al. 2024), representing 2D feature lifting, large-scale language-embedded 3D Gaussian Splatting, and training-free feature lifting. All experiments run on NVIDIA 3090, more results are in the supplementary material. Table 3: Quantitative comparison on 3D semantic segmenta-tion over the proposed dataset with mIoU (%) & mAcc (%). 
+
+Scenes LangSplat Ludvig Lang3D-XL Ours        
+
+> mIoU mAcc mIoU mAcc mIoU mAcc mIoU mAcc
+
+Buildings1 45.7 82.4 43.9 72.9 41.3 64.5 68.3 86.6 
+
+Buildings2 51.4 84.8 38.9 80.9 41.1 64.7 72.9 88.1 
+
+Polytech 70.3 96.2 47.1 69.2 54.3 76.1 82.9 93.9 Campus 54.8 82.2 49.7 72.4 58.9 82.0 72.4 85.9 
+
+Quantitative and Qualitative Comparison. As shown in Figs. 3 and 4, LangSplat suffers from boundary leakage and false background activations, while LUDVIG produces in-complete target regions and local confusion. Lang3D-XL exhibits substantial noise. In contrast, our method produces more complete target regions and clearer boundaries while effectively suppressing non-target activations. As shown in Table 2, our method achieves a Loc@50 of 88 .8% and consis-tently outperforms competing methods across Loc@{40, 50, 60}, demonstrating its ability to localize multiple spatially distributed instances in outdoor scenes. Table 3 show that our method achieves the best overall mIoU and mAcc, reaching 
+
+82 .9% mIoU and 93 .9% mAcc on Polytech. It also obtains the highest IoU across selected open-vocabulary queries in Table 4, with a peak IoU of 91 .5% for ‘white buildings’. Moreover, our training-free aggregation strategy com-pletes feature aggregation achieving runtime comparable to LUDVIG while avoiding the costly optimization required by LangSplat and Lang3D-XL. This substantially reduces pro-cessing time and computational overhead while maintaining superior localization and segmentation performance, which makes our method more suitable for UAV outdoor scenes. Table 4: Category-level 3D semantic segmentation compar-ison on selected open-vocabulary queries with IoU (%).                                      
+
+> Methods Tree Road Lawn Buildings White Buildings Red Roof Buildings Blue Roof Buildings
+> LangSplat 47.5 44.1 59.4 77.2 79.7 42.6 26.4 LUDVIG 40.1 38.6 33.3 69.4 65.2 42.4 32.8 Lang3D-XL 51.8 52.3 40.1 64.5 60.1 30.9 24.3 Ours 69.2 67.3 68.1 85.5 91.5 78.1 59.3 RemoteCLIP RS5M w/o 3D Fusion 2D–3D Fusion GT
+
+Figure 5: Ablation study on feature fusion for the queries “buildings” and “road.” From left to right: ground truth, RemoteCLIP only, RS5M only, without 3D region fusion, and the proposed 2D–3D fusion. 
+
+Ablation Studies 
+
+We conduct ablation studies on the region-based 2D-3D fea-ture fusion and consistency-aware Gaussian feature aggrega-tion modules to evaluate their effectiveness. 
+
+Ablation on feature fusion. Figure 5 compares different feature configurations for the queries “buildings” and “road”. RemoteCLIP alone provides more stable semantic responses for buildings, whereas RS5M responds more strongly to structurally salient regions such as roads and vegetation. Weighted 2D fusion combines their complementary seman-tic cues and reduces local response missing. However, with-out 3D region fusion, Top-K aggregation still weakens re-sponses in some target regions, resulting in lower activations and reduced spatial continuity.By further incorporating 3D structural features, the proposed 2D-3D region fusion pro-duces stronger, more concentrated, and spatially continuous target responses while suppressing noisy activations in non-target regions. Table 7 show that 2D-3D fusion achieves the best mIoU and mAcc, confirming the benefit of 3D struc-tural information for open-vocabulary geographic object un-derstanding. We further evaluate λ2D ∈ { 0.5, 0.6, 0.7} and 
+
+λf ∈ { 0.6, 0.7, 0.8}. As shown in Table 5, the best overall performance is obtained when λ2D = 0 .6 and λf = 0 .7.
+
+Ablation on feature aggregation. As shown in Fig. 6, (a) direct projection aggregation accumulates noisy observa-tions caused by occlusion and boundary mixing, resulting in incomplete target responses, boundary semantic confusion, and background false activations. (b) VALA suppresses some noise but discards low-contribution yet semantically valid surface Gaussians, causing local response loss. In contrast, (c) our method combines pixel-level Gaussian contribution reliability with cross-view semantic consistency, producing more continuous, concentrated, and boundary-preserving re-sponses. The quantitative results in Table 6 further validate the effectiveness of our aggregation strategy. Table 5: Ablation study on feature fusion parameters λ2D
+
+and λf . We report mIoU, mAcc, and mLoc@50 (%).                    
+
+> λ2DλfmIoU ↑mAcc ↑mLoc@50 ↑
+> 0.5 0.6/0.7/0.8 64.9/67.5/63.7 84.9/85.2/85.2 82.8/88.2/86.2 0.6 0.6/0.7/0.8 66.2/ 68.3 /62.4 86.8 /86.6/81.6 89.7/ 91.6 /86.2 0.7 0.6/0.7/0.8 64.6/64.1/62.3 80.5/82.4/86.5 86.7/87.2/89.2
+
+Table 6: Comparison of different Gaussian feature aggrega-tion strategies with mIoU (%) & mAcc (%).            
+
+> Metrics Projection Agg. VALA Agg. Our Agg.
+> mIoU ↑65.44 62.87 68.31
+> mAcc ↑84.00 82.04 86.61
+
+Table 7: Ablation study of different feature configurations on semantic segmentation with mIoU (%) & mAcc (%).                 
+
+> Metrics RemoteCLIP RS5M w/o3D fusion 2D-3D fusion
+> mIoU ↑49.91 58.99 63.90 68.31
+> mAcc ↑66.89 78.69 77.41 86.61
+> (a) Projection aggregation (b) VALA aggregation (c) Our aggregation
+
+Figure 6: Aggregation ablation for the query “blue roof build-ings”. Projection aggregation produces incomplete and noisy responses, VALA aggregation causes local response loss, and our aggregation yields more complete results. 
+
+Limitations and Future Works 
+
+Our method depends on the quality of the underlying 3DGS reconstruction, as it does not explicitly optimize the recon-struction process. Reconstruction artifacts, incomplete ge-ometry, or inaccurate Gaussian placement may affect 2D-3D feature alignment and semantic aggregation. Future work will explore joint optimization of 3D reconstruction and language-aware representations to improve small-object un-derstanding from UAV viewpoints. 
+
+# Conclusion 
+
+We propose a 3D Language Gaussian Splatting method for UAV outdoor scenes, OutLangSplat. It aligns and fuses region-based vision-language features to improve spatial consistency, reducing incomplete target responses and back-ground misactivations. We further introduce a training-free pixel-level contribution and consistency-aware Gaussian fea-ture aggregation strategy to suppress unreliable responses caused by occlusions, boundary ambiguity, and noisy view-points. In addition, we construct the first accessible open-vocabulary 3D scene understanding datasets using four pub-lic UAV outdoor scenes. Experiments demonstrate superior performance in open-vocabulary localization and semantic segmentation, while ablation studies validate the effective-ness of the proposed components. References 
+
+Caron, M.; Touvron, H.; Misra, I.; Jégou, H.; Mairal, J.; Bojanowski, P.; and Joulin, A. 2021. Emerging properties in self-supervised vision transformers. In Proceedings of the IEEE/CVF international conference on computer vision ,9650–9660. Chen, J.; Xu, Y.; Lu, S.; Liang, R.; and Nan, L. 2021. 3D In-stance Segmentation of MVS Buildings. IEEE Transactions on Geoscience and Remote Sensing , PP: 1–1. Chen, K.; Dai, B.; Qin, M.; Zhang, D.; Li, P.; Zou, Y.; and Wang, H. 2024. SLGaussian: Fast Language Gaussian Splat-ting in Sparse Views. Proceedings of the 33rd ACM Interna-tional Conference on Multimedia .Cheng, J.; Zaech, J.-N.; van Gool, L.; and Paudel, D. P. 2024. Occam’s LGS: An Efficient Approach for Language Gaussian Splatting. Choy, C. B.; Gwak, J.; and Savarese, S. 2019. 4D Spatio-Temporal ConvNets: Minkowski Convolutional Neural Net-works. 2019 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 3070–3079. Engelmann, F.; Manhardt, F.; Niemeyer, M.; Tateno, K.; Pollefeys, M.; and Tombari, F. 2024. OpenNeRF: Open Set 3D Neural Scene Segmentation with Pixel-Wise Features and Rendered Novel Views. ArXiv , abs/2404.03650. Jiang, M.; Jia, S.; Gu, J.; Lu, X.; Zhu, G.; Dong, A.; and Zhang, L. 2025. Votesplat: Hough Voting Gaussian Splatting for 3D Scene Understanding. 2025 IEEE/CVF International Conference on Computer Vision (ICCV) , 6456–6465. Jun-Seong, K.; Kim, G.; Kim, Y.-J.; Wang, Y.-C. F.; Choe, J.; and Oh, T.-H. 2025. Dr. Splat: Directly Referring 3D Gaussian Splatting via Direct Language Embedding Regis-tration. 2025 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 14137–14146. Kerbl, B.; Kopanas, G.; Leimkuehler, T.; and Drettakis, G. 2023. 3D Gaussian Splatting for Real-Time Radiance Field Rendering. ACM Transactions on Graphics (TOG) , 42: 1 – 14. Kerr, J.; Kim, C. M.; Goldberg, K.; Kanazawa, A.; and Tan-cik, M. 2023. LERF: Language Embedded Radiance Fields. 
+
+2023 IEEE/CVF International Conference on Computer Vi-sion (ICCV) , 19672–19682. Kirillov, A.; Mintun, E.; Ravi, N.; Mao, H.; Rolland, C.; Gustafson, L.; Xiao, T.; Whitehead, S.; Berg, A. C.; Lo, W.-Y.; Dollár, P.; and Girshick, R. B. 2023. Segment Anything. 
+
+2023 IEEE/CVF International Conference on Computer Vi-sion (ICCV) , 3992–4003. Kobayashi, S.; Matsumoto, E.; and Sitzmann, V. 2022. De-composing NeRF for Editing via Feature Field Distillation. 
+
+ArXiv , abs/2205.15585. Krakovsky, S.; Fiebelman, G.; Benaim, S.; and Averbuch-Elor, H. 2025. Lang3D-XL: Language Embedded 3D Gaus-sians for Large-scale Scenes. Proceedings of the SIGGRAPH Asia 2025 Conference Papers .Li, H.; Wu, Y.; Meng, J.; Gao, Q.; Zhang, Z.; Wang, R.; and Zhang, J. 2024. InstanceGaussian: Appearance-Semantic Joint Gaussian Representation for 3D Instance-Level Per-ception. 2025 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 14078–14088. Liang, S.; Wang, S.; Li, K.; Niemeyer, M.; Gasperini, S.; Navab, N.; and Tombari, F. 2024. SuperGSeg: Open-Vocabulary 3D Segmentation with Structured Super-Gaussians. 2026 International Conference on 3D Vision (3DV) , 1650–1659. Lin, L.; Liu, Y.; Hu, Y.; Yan, X.; Xie, K.; and Huang, H. 2021. Capturing, Reconstructing, and Simulating: The Ur-banScene3D Dataset. In European Conference on Computer Vision .Liu, F.; Chen, D.; Guan, Z.-R.; Zhou, X.; Zhu, J.; and Zhou, J. 2023. RemoteCLIP: A Vision Language Foundation Model for Remote Sensing. IEEE Transactions on Geoscience and Remote Sensing , 62: 1–16. Marrie, J.; M’en’egaux, R.; Arbel, M.; Larlus, D.; and Mairal, J. 2024. LUDVIG: Learning-Free Uplifting of 2D Visual Features to Gaussian Splatting Scenes. 2025 IEEE/CVF In-ternational Conference on Computer Vision (ICCV) , 7440– 7450. Mildenhall, B.; Srinivasan, P. P.; Tancik, M.; Barron, J. T.; Ramamoorthi, R.; and Ng, R. 2021. Nerf: Representing scenes as neural radiance fields for view synthesis. Commu-nications of the ACM , 65(1): 99–106. Nunes, L.; Marcuzzi, R.; Chen, X.; Behley, J.; and Stachniss, C. 2022. SegContrast: 3D Point Cloud Feature Representa-tion Learning Through Self-Supervised Segment Discrim-ination. IEEE Robotics and Automation Letters , 7: 2116– 2123. Piekenbrinck, J.; Schmidt, C.; Hermans, A.; Vaskevicius, N.; Linder, T.; and Leibe, B. 2025. OpenSplat3D: Open-Vocabulary 3D Instance Segmentation using Gaussian Splat-ting. 2025 IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops (CVPRW) , 5246–5255. Qi, C.; Su, H.; Mo, K.; and Guibas, L. J. 2016. PointNet: Deep Learning on Point Sets for 3D Classification and Seg-mentation. 2017 IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 77–85. Qin, M.; Li, W.; Zhou, J.; Wang, H.; and Pfister, H. 2023. LangSplat: 3D Language Gaussian Splatting. 2024 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 20051–20060. Qu, Y.; Dai, S.; Li, X.; Lin, J.; Cao, L.; Zhang, S.; and Ji, R. 2024. GOI: Find 3D Gaussians of Interest with an Optimizable Open-vocabulary Semantic-space Hyperplane. 
+
+Proceedings of the 32nd ACM International Conference on Multimedia .Radford, A.; Kim, J. W.; Hallacy, C.; Ramesh, A.; Goh, G.; Agarwal, S.; Sastry, G.; Askell, A.; Mishkin, P.; Clark, J.; Krueger, G.; and Sutskever, I. 2021. Learning Transferable Visual Models From Natural Language Supervision. ArXiv ,abs/2103.00020. Shi, J.-C.; Wang, M.; Duan, H.-B.; and Guan, S.-H. 2023. Language Embedded 3D Gaussians for Open-Vocabulary Scene Understanding. 2024 IEEE/CVF Conference on Com-puter Vision and Pattern Recognition (CVPR) , 5333–5343. Shorinwa, O.; Sun, J.; and Schwager, M. 2024. FAST-Splat: Fast, Ambiguity-Free Semantics Transfer in Gaussian Splat-ting. ArXiv , abs/2411.13753. Thomas, H.; Qi, C.; Deschaud, J.-E.; Marcotegui, B.; Goulette, F.; and Guibas, L. J. 2019. KPConv: Flexi-ble and Deformable Convolution for Point Clouds. 2019 IEEE/CVF International Conference on Computer Vision (ICCV) , 6410–6419. Tschernezki, V.; Laina, I.; Larlus, D.; and Vedaldi, A. 2022. Neural Feature Fusion Fields: 3D Distillation of Self-Supervised 2D Image Representations. Proceedings. Inter-national Conference on 3D Vision , 2022. Wang, S.; Li, K.; Liang, S.; Alegret, E.; Ma, J.; Navab, N.; and Gasperini, S. 2025. Visibility-Aware Language Aggregation for Open-Vocabulary Segmentation in 3D Gaussian Splat-ting. 2026 International Conference on 3D Vision (3DV) ,1791–1800. Wu, Y.; Meng, J.; Li, H.; Wu, C.; Shi, Y.; Cheng, X.; Zhao, C.; Feng, H.; Ding, E.; Wang, J.; and Zhang, J. 2024. OpenGaus-sian: Towards Point-Level 3D Gaussian-based Open Vocab-ulary Understanding. ArXiv , abs/2406.02058. Ye, M.; Danelljan, M.; Yu, F.; and Ke, L. 2023. Gaussian Grouping: Segment and Edit Anything in 3D Scenes. In 
+
+European Conference on Computer Vision .Zhai, H.; Li, H.; Li, Z.; Pan, X.; He, Y.; and Zhang, G. 2025. PanoGS: Gaussian-based Panoptic Segmentation for 3D Open Vocabulary Scene Understanding. 2025 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 14114–14124. Zhang, Z.; Zhao, T.; Guo, Y.; and Yin, J. 2023. RS5M and GeoRSCLIP: A Large-Scale Vision- Language Dataset and a Large Vision-Language Model for Remote Sensing. IEEE Transactions on Geoscience and Remote Sensing , 62: 1–23. Zhou, S.; Chang, H.; Jiang, S.; Fan, Z.; Zhu, Z.; Xu, D.; Chari, P.; You, S.; Wang, Z.; and Kadambi, A. 2023. Feature 3DGS: Supercharging 3D Gaussian Splatting to Enable Distilled Feature Fields. 2024 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 21676–21685.
