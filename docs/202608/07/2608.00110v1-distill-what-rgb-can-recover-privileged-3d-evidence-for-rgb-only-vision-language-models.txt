@@ -1,0 +1,460 @@
+Title: Distill What RGB Can Recover: Privileged 3D Evidence for RGB-Only Vision-Language Models
+
+URL Source: https://arxiv.org/pdf/2608.00110v1
+
+Published Time: Tue, 04 Aug 2026 00:04:10 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# Distill What RGB Can Recover: Privileged 3D Evidence for RGB-Only Vision-Language Models 
+
+## Yanbin Hu 1,3 ∗, Jin Cui 2,3 ∗, Jun Ye 1,3 , Jiepeng Zhou 4,Jiangcheng Song 2,3 , Boran Zhao 1,3 †, Pengju Ren 2,3 
+
+> 1
+
+School of Software, Xi’an Jiaotong University 
+
+> 2
+
+School of Artificial Intelligence, Xi’an Jiaotong University 
+
+> 3
+
+State Key Laboratory of Human-Machine Hybrid Augmented Intelligence, Institute of Artificial Intelligence and Robotics, Xi’an Jiaotong University 
+
+> 4
+
+The Hong Kong University of Science and Technology (Guangzhou) yanbinhu@stu.xjtu.edu.cn; {boranzhao, pengjuren}@xjtu.edu.cn 
+
+Abstract 
+
+3D scene understanding requires reasoning about entity ex-istence, spatial layout, and object relations, yet RGB images alone often provide insufficient 3D cues. Existing 3D-VLMs commonly rely on depth or 3D-position-aware inputs at in-ference time, introducing additional acquisition, reconstruc-tion, or annotation costs that limit RGB-only deployment. We therefore study how training-time 3D evidence can be con-verted into spatial reasoning capabilities retained under RGB-only inference. We propose a privileged-evidence distillation framework that constructs a distillable teacher through a uni-fied evidence interface and controlled residual injection, and transfers its knowledge to a deployable student receiving only RGB images and questions through logit and structured rep-resentation distillation. To avoid imitating teacher signals un-supported by RGB, we further introduce evidence-sensitivity-guided distillation , which uses corrupted evidence to iden-tify highly evidence-dependent targets and down-weight their supervision. We also define a recoverability decomposition based on the matched baseline, teacher, and student, sepa-rating privileged gains into RGB-recoverable improvements and residual teacher advantages. Across four benchmarks, the teacher achieves the best result on 7 of 11 reported metrics 
+
+among the compared methods. The RGB-only student outper-forms its matched baseline on all 11 metrics , including gains of 10.4 ScanQA CIDEr and 19.1 Scan2Cap CIDEr@0.5, with-out additional inference-time inputs. These results validate the effectiveness of training-time privileged 3D evidence distilla-tion for both teacher performance and deployable RGB-only spatial reasoning. Separately, our matched baseline–teacher– student analysis characterizes privileged-gain transfer across evidence types and spatial skills. 
+
+## Introduction 
+
+Multimodal large language models have made substantial progress in vision-language understanding (Liu et al. 2023; Li et al. 2023), yet visual question answering in real-world 3D scenes still requires reasoning about depth, spatial lay-outs, object locations, and inter-object relations (Azuma et al. 2022; Ma et al. 2022). Tasks in 3D question answering, vi-sual grounding, and embodied navigation show that spatially grounded answers require jointly interpreting appearance, 
+
+> ∗
+
+These authors contributed equally. 
+
+> †
+
+Corresponding author. Teacher T 
+
+> RGB+ 3D Evidence
+> Student S
+> RGB-only
+> Baseline B
+> RGB-only
+> Distillation
+
+Increasing Spatial Reasoning Performance 
+
+Privileged-Evidence Distillation   
+
+> Training-Time
+> Privileged Evidence
+> Transferred
+> Gain
+> depth object relation
+> Remaining
+> Gap
+> Total Privileged Gain
+
+Figure 1: Conceptual overview of privileged-evidence dis-tillation. The teacher (T) uses training-time depth, object, and relation evidence, while the student (S) learns trans-ferable spatial reasoning from RGB only. Relative to the matched RGB-only baseline (B), the student recovers part of the privileged gain, while the remaining gap represents knowledge not transferred to RGB-only inference. scene geometry, object locations, directional relations, and viewer- or agent-centric context (Azuma et al. 2022; Chen, Chang, and Nießner 2020; Ma et al. 2022; Anderson et al. 2018). RGB-only VLMs provide rich appearance, semantic, and contextual cues, but observe 3D structure only through 2D projections, making depth ordering, local relations, and scene-level layouts difficult to model reliably (Hong et al. 2023; Zhu et al. 2025). To improve 3D scene understanding, recent studies intro-duce point clouds, 3D position embeddings, or structured ge-arXiv:2608.00110v1 [cs.CV] 31 Jul 2026 ometric priors during training or inference (Hong et al. 2023; Zhu et al. 2025; Chen et al. 2024). These signals provide di-rect geometric and relational constraints for spatial cues that are implicit and unstable in RGB, improving 3D question an-swering, grounding, and reasoning. However, inference-time dependence on point clouds, reconstructed scenes, depth sen-sors, or structured evidence restricts deployment to environ-ments where such inputs are available. Privileged modality learning and cross-modal distillation instead allow additional modalities to supervise training while deployment relies only on the target modality (Vapnik and Vashist 2009; Luo et al. 2018; Dai, Das, and Bremond 2021). A deployable RGB-only 3D-VLM should therefore exploit 3D evidence during training without requiring it at inference time. This motivates a teacher–student paradigm in which the teacher accesses RGB and privileged 3D evidence during training, while the student receives only RGB and distills the teacher’s RGB-supported spatial reasoning ability (Hin-ton, Vinyals, and Dean 2015; Lopez-Paz et al. 2015; Gar-cia, Morerio, and Murino 2018). Depth, object, and rela-tion evidence thus serve as training-time supervision rather than inference-time inputs, helping the student learn stronger scene representations (Liu, Qi, and Fu 2021; Dai, Das, and Bremond 2021). However, 3D gains are not uniformly recov-erable from RGB: relative depth, coarse layouts, and some relations may have monocular cues, whereas metric distances or invisible relations often lack visual support. Fully imi-tating an evidence-dependent teacher may therefore trans-fer unrecoverable answer biases. The central challenge is to construct a distillable teacher and selectively transfer spatial reasoning gains supported by RGB. To this end, we propose a privileged-evidence injection and recoverability-decomposed distillation framework for RGB-only 3D-VLMs. It contains three models with the same VLM backbone: an RGB-only baseline (B), a teacher (T) with training-time access to RGB and privileged 3D evi-dence, and a distilled student (S) using only RGB at in-ference time (Hinton, Vinyals, and Dean 2015; Lopez-Paz et al. 2015). Through a unified type-agnostic interface, the teacher compresses geometric, object, and relation evidence into tokens and injects compact residuals into router-selected backbone layers. Motivated by findings that task-relevant in-formation and contextual knowledge are distributed differ-ently across Transformer depths (Ciernik et al. 2026; Ju et al. 2024), layer-wise injection lets evidence directly update rep-resentations at selected depths. Compared with input-only prefix fusion, it reduces single-sequence RGB–evidence– question alignment difficulty and the context overhead of long object–relation prefixes. Controlled residuals further limit deviation from the original RGB representation. The student receives no 3D evidence and learns RGB-recoverable gains through logit and structural hidden-state distillation. We use corrupted evidence to estimate teacher dependence and down-weight highly evidence-sensitive samples, reduc-ing the transfer of unrecoverable information. Comparing (T), (S), and (B) then reveals recoverable gains and remain-ing residuals across evidence types and spatial reasoning skills. Our contributions are summarized as follows: 
+
+• Privileged-evidence distillation for RGB-only 3D-VLMs. We study a deployment-oriented setting where 3D evidence is available during training but absent at inference, and introduce a framework that leverages geo-metric, object, and relational evidence without additional 3D inputs or processing during deployment. 
+
+• Injection–distillation co-design for selective knowl-edge transfer. A unified evidence interface and controlled residual injection construct a strong yet distillable teacher, while logit distillation, structural representation transfer, and counterfactual evidence-sensitivity weighting selec-tively transfer RGB-supported spatial reasoning. 
+
+• Privileged-gain transfer analysis. We quantify trans-ferred gains and remaining residuals through the per-formance relationships among a matched RGB baseline, privileged teacher, and distilled student. Across multi-ple 3D scene understanding benchmarks, the privileged teacher achieves leading or competitive performance on a broad range of metrics, while the RGB-only student consistently outperforms its matched baseline. 
+
+## Related Work 
+
+3D vision-language understanding. 3D vision-language understanding is motivated by practical demands for object grounding, referring expression comprehension, question an-swering, and spatial relation reasoning in 3D scenes. Com-pared with 2D image understanding, it requires models not only to recognize object categories, but also to model ob-ject existence, viewpoint changes, spatial layouts, relative positions, and inter-object relations. With the increasing rea-soning and instruction-following abilities of large language models, recent methods further connect 3D scene represen-tations with LLMs. For example, 3D-LLM, LLaVA-3D, and 3D-LLaVA exploit point clouds, 3D position embeddings, scene tokens, or superpoint representations to enhance 3D dialogue and spatial reasoning (Hong et al. 2023; Zhu et al. 2025; Deng et al. 2025). However, these methods usually require explicit 3D inputs, 3D encoders, or reconstructed scene representations at inference time, introducing addi-tional acquisition, reconstruction, and alignment costs when only RGB images are available. Since RGB images still con-tain perspective, occlusion, relative scale, and semantic con-text cues that partially reveal spatial structure, training-time 3D supervision can serve as an auxiliary signal for improv-ing RGB-based spatial representations without necessarily retaining 3D inputs during deployment. 
+
+Geometry-aware VLMs. Recent studies also improve spa-tial reasoning under standard VLMs or lighter 3D-input settings. SpatialRGPT enhances region-level spatial per-ception and reasoning by curating regional data from 3D scene graphs and introducing a depth-aware plugin mod-ule (Cheng et al. 2024). VLM-3R targets monocular videos, deriving spatial tokens and view tokens with a geome-try encoder and using 3D reconstructive instruction tun-ing to improve spatial-temporal reasoning (Fan et al. 2026). GASP injects geometric priors into VLM transformer layers through point-correspondence and depth-consistency super-vision (Yeh et al. 2026). SpatialStack synchronizes multi-level geometric features with the language backbone to al-leviate the bottleneck of fusing only deep-layer geometry features (Zhang et al. 2026). These methods indicate that VLM spatial ability can be improved through geometric su-pervision, implicit 3D representations, or hierarchical fusion. 
+
+Privileged evidence distillation. Learning using privi-leged information and knowledge distillation provide re-lated foundations for using additional evidence during train-ing while keeping model inputs constrained at inference time (Vapnik and Vashist 2009; Hinton, Vinyals, and Dean 2015). In 3D scene understanding, depth, object annotations, and relation graphs can provide more direct spatial evidence than RGB images, but such evidence is often unavailable in standard RGB-only deployment. Therefore, the relevant problem is not merely to compress a larger teacher, but to transfer the benefits induced by training-time 3D evidence to an RGB-only student, while avoiding forcing the student to imitate teacher behaviors that are unrecoverable from RGB inputs. This makes teacher construction, distillation targets, and sample-level evidence dependency important factors in privileged distillation for 3D understanding. 
+
+## Method 
+
+Problem Formulation and Framework Overview 
+
+Given an RGB input I, a question q, and a target answer y,we assume access to privileged 3D evidence E = {D, O, R }
+
+during training, where D, O, and R denote depth, object, and relation evidence. Our framework contains an RGB-only baseline B, a privileged teacher T , and an RGB-only distilled student S, all built on the same vision-language architecture: 
+
+pB (y | I, q ), pT (y | I, q, E), pS (y | I, q ). (1) The baseline and student share the same inputs, backbone, and trainable capacity, while only the student receives teacher supervision. The teacher incorporates privileged evidence through modality encoders, a question-conditioned router, a unified projector, and sparse residual injection. Our goal is to construct a strong yet distillable teacher and transfer the gains supported by RGB cues to the student. Training proceeds through two teacher phases and one student-distillation phase. Phase A freezes the teacher LoRA and learns the evidence interface; Phase B freezes the evi-dence encoders and adapts the teacher LoRA and injection modules. The frozen teacher then supervises the student. The baseline is trained independently with the same initializa-tion, data, trainable-parameter configuration, and optimiza-tion steps as the student. 
+
+Unified Privileged Evidence Interface 
+
+For each scene, we use an RGB-aligned depth map, cached object descriptors, and pairwise relations computed from selected objects, which respectively encode geometry, en-tity semantics, and inter-object structure. For video inputs, the depth map corresponds to the middle sampled frame. Lightweight modality-specific encoders map the evidence into a shared space: 
+
+Zd = fd(D), Zo = fo(O), Zr = fr (R), (2) where D, O, and R denote the depth, object, and relation inputs. Rather than directly concatenating the three streams, a question-conditioned router predicts their contributions to 
+
+Lv virtual fusion slots: 
+
+A = Softmax  froute 
+
+ [¯ q; ¯Zd; ¯Zo; ¯Zr ] , A ∈ RLv ×3, (3) and the routed features are aggregated as 
+
+F = ModalityFusion ( Zd, Z o, Z r ; A) , F ∈ RLv ×de , (4) where de is the shared evidence dimension. Learnable queries extract a fixed number of Unified Evi-dence Tokens through Q-Former-style cross-attention: 
+
+U = Wp CrossAttn ( Qu, F, F ) , U ∈ RNu×dL , (5) where Qu contains Nu learnable queries, Wp projects to the language feature space, and dL is the language hidden dimension. Instead of prepending U to the input sequence, we expose it to a sparse set of language layers through controlled residual cross-attention: 
+
+HTk = Hk + γk CrossAttn (LN( Hk), U, U ) , k ∈ S L, (6) where SL is a backbone-specific injection set and γk con-trols evidence strength. This sparse multi-layer design lets different reasoning stages access shared evidence and adapts naturally to backbones of different depths. 
+
+Distillable Privileged Teacher 
+
+The teacher is used only during training. Its predictions and intermediate representations supervise the student after ev-idence injection. Small-initialized residual scales and low-probability evidence dropout encourage evidence use while preserving the original evidence-free RGB pathway. 
+
+Teacher Phase A: Evidence-Interface Learning. We freeze the teacher LoRA and optimize the evidence encoders, router, unified projector, and residual injection modules: 
+
+LAT = LT 
+
+> task
+
++ λdepth Ldepth , (7) where LT 
+
+> task
+
+is autoregressive cross-entropy. The auxiliary depth loss combines value reconstruction and local gradient consistency on the encoded depth representation, does not pass through the language backbone, and is disabled after Phase A. 
+
+Teacher Phase B: Privileged-Teacher Adaptation. We freeze the evidence encoders and optimize the teacher LoRA and residual injection modules: 
+
+LBT = LT 
+
+> task
+
++ λevi Levi , (8) where Levi contrasts clean and corrupted evidence by favor-ing lower answer negative log-likelihood under clean evi-dence and preserving separation between their evidence rep-resentations. This discourages gains arising only from addi-tional module capacity. RGB-only 
+
+> Student S
+
+Stage I: Unified Privileged Evidence Interface  
+
+> RGB frames + Question
+> What color couch is
+> next to the footrest?
+> Depth frames
+> Object evidence
+> Relation evidence
+> ...
+> ...
+> ...
+> Depth Evidence
+> Tokens
+> Object Evidence
+> Tokens
+> Relation Evidence
+> Tokens
+> Question
+> Embedding Privileged
+> Teacher T
+> Layer1
+> Layer6
+> Layer13
+> Layer20
+> LayerN
+> ...
+> ...
+> ...
+> ...
+
+Stage II: RGB-only Student Distillation 
+
+> Question-Conditioned
+> Router
+> Layer-wise Structured
+> Evidence Memory
+> Layer1
+> Layer6
+> Layer13
+> Layer20
+> LayerN
+> ...
+> ...
+> ...
+> ...
+> RGB Frames + Question
+> Structural
+> Distillation
+> Logit
+> Distillation
+
+Stage III: RGB-only Distilled Student Inference      
+
+> RGB Frames +
+> Question Vision Encoder
+> RGB-only Student backbone
+> Decoder + LoRA LM Head
+> Answer
+> dark blue
+> dark blue
+> > black > red
+> red
+> > dark blue > black
+> GT aliases:
+> {dark blue, black}
+> Internalized Relation Reasoning
+> #0 couch ( dark blue) →next to #2 footrest
+> Unified Evidence Projector
+> LLM
+> Backbone
+> Gated Residual Injection
+> L6
+> L13
+> L20
+
+Figure 2: Overview of our privileged-evidence distillation framework. During training, depth, object, and relation evidence is fused into Unified Evidence Tokens and injected into selected language layers to construct the privileged teacher T . The RGB-only student S learns from the teacher through logit and structural distillation while retaining the original RGB-only input pathway. At inference, all evidence modules are removed and the student uses only RGB frames and the question. Layer indices are illustrated using LLaVA-Video and can be adapted to other backbones. 
+
+RGB-Only Student Distillation 
+
+The student shares the teacher backbone but receives no Uni-fied Evidence Tokens and disables evidence injection. After teacher training, the frozen teacher produces stop-gradient targets from an evidence-enabled forward pass, while the student receives only RGB and the question. We distill output distributions and intermediate token-interaction structures in the language backbone, but do not apply intermediate supervision to the visual encoder to avoid simultaneously moving visual and language representations. Let ℓT and ℓS denote teacher and student logits. Their temperature-scaled distributions are 
+
+pτT = Softmax( ℓT /τ ), pτS = Softmax( ℓS /τ ), (9) and the logit distillation loss is 
+
+Lkd = τ 2DKL (sg( pτT ) ∥ pτS ) , (10) where sg( ·) denotes stop-gradient. For structural distillation, we align pairwise token relations rather than hidden states dimension by dimension: 
+
+Φ( H) = Softmax 
+
+ HH ⊤
+
+√d
+
+
+
+, (11) where softmax is applied row-wise. At each selected layer, 
+
+RTk = Φ( HTk ), RSk = Φ  Ak(HSk ) , (12) where Ak is a lightweight student adapter. The loss is 
+
+Lstr = 1
+
+|S D |
+
+X
+
+> k∈S D
+
+DKL 
+
+ sg( RTk ) ∥ RSk
+
+ , (13) where SD denotes the distillation layers. This transfers token-interaction structure without requiring the student to recon-struct privileged evidence. 
+
+Evidence-Sensitivity Weighted Distillation. Teacher tar-gets that strongly depend on inaccessible evidence may be poorly transferable. We therefore compare predictions un-der the original evidence E and a counterfactually perturbed counterpart eE:
+
+pE 
+
+> T
+
+= pT (· | I, q, E),p eE 
+
+> T
+
+= pT (· | I, q, eE). (14) We replace depth with sample-mismatched features and independently shuffle object and relation features, approxi-mately preserving feature scale and marginal statistics while disrupting their semantic correspondence. The evidence sensitivity and distillation weight are 
+
+s(x) = DJS 
+
+
+
+pE 
+
+> T
+
+∥ p eE
+
+> T
+
+
+
+,w(x) = exp ( −κs (x)) ,
+
+(15) where κ controls attenuation. Larger s(x) indicates stronger dependence on privileged evidence and thus a less directly transferable target. The complete student objective is 
+
+LS = LS 
+
+> task
+
++ w(x) ( λkd Lkd + λstr Lstr ) . (16) The weight w(x) applies only to teacher-derived supervision; the ground-truth task loss remains unweighted. The matched baseline is independently optimized using 
+
+LB = LB
+
+> task
+
+. (17) 
+
+Privileged-Gain Transfer Analysis. For any metric cM
+
+oriented such that larger is better, the teacher gain over the matched RGB baseline decomposes as 
+
+cM (T ) − cM (B)
+
+| {z }
+
+∆priv 
+
+= cM (S) − cM (B)
+
+| {z }
+
+∆trans 
+
++ cM (T ) − cM (S)
+
+| {z }
+
+∆res 
+
+.
+
+(18) Here, ∆priv is the total privileged gain, ∆trans is the portion retained by the student, and ∆res is the remaining teacher– student gap. We define the privileged-gain transfer ratio and normalized residual as 
+
+RM = cM (S) − cM (B)
+
+cM (T ) − cM (B) = ∆trans 
+
+∆priv 
+
+,
+
+UM = 1 − R M = ∆res 
+
+∆priv 
+
+,
+
+(19) where RM measures the retained teacher gain and UM the normalized residual. We report them only when ∆priv > ϵ 
+
+to exclude negligible teacher improvements. We apply this analysis across geometry, object, relation, and combined evidence configurations, as well as relative depth, directional relations, object existence, counting, and metric distance. It separates the original evidence benefit, the portion retained by the RGB-only student, and the remaining capability gap. 
+
+## Experiments 
+
+Experimental Setup 
+
+Benchmarks and Metrics. We evaluate our method on four complementary benchmarks covering 3D scene question answering, situated spatial reasoning, referring-expression grounding, and dense 3D captioning. On ScanQA (Azuma et al. 2022), we report CIDEr, BLEU-4, METEOR, and ROUGE-L. On SQA3D (Ma et al. 2022), we report ex-act match (EM). ScanRefer (Chen, Chang, and Nießner 2020) is evaluated using Acc@0.25 and Acc@0.5. For 
+
+Scan2Cap (Chen et al. 2021), we report CIDEr, BLEU-4, METEOR, and ROUGE-L at IoU@0.5. 
+
+Comparison Protocol. All of our models are initialized from the same vision-language backbone. The RGB-only baseline B and distilled student S use the same training data, model initialization, trainable-parameter budget, and number of optimization steps; S additionally receives dis-tillation supervision from the fixed teacher T . The teacher accesses depth, object, and relation evidence during training and full-model evaluation, whereas B and S receive only RGB frames and the question at inference time. The visual encoder remains frozen in all settings, and ScanRefer and Scan2Cap use task heads with the same architecture. 
+
+Implementation Details. The teacher is trained in two stages. We first optimize the evidence encoders, question-conditioned router, unified evidence projector, and residual injection modules. We then freeze the evidence encoders and jointly adapt the teacher LoRA and injection modules. Dur-ing student distillation, the teacher remains fixed, while only the student LoRA and distillation-specific modules are up-dated. We use LLaVA-Video-7B-Qwen2 (Zhang et al. 2024) as the default backbone, compress the privileged inputs into 80 evidence tokens, and inject them at layers 6, 13, and 20. Training uses AdamW for 1,500 optimization steps with a learning rate of 2 × 10 −5.To examine whether evidence injection and distillation supervision induce object-existence hallucinations, we ad-ditionally evaluate the key mechanism ablations on 3D-POPE (Yang et al. 2025). We report F1 and the affirmative-answer ratio (Yes%) in the main text, which characterize overall classification performance and affirmative bias, re-spectively. We use 3D-POPE solely as a mechanism-oriented diagnostic and not as a training objective or a primary task benchmark. 
+
+Main Results 
+
+Overall Comparison. Table 1 summarizes the main results on ScanQA, SQA3D, ScanRefer, and Scan2Cap. B is the independently trained RGB-only baseline, T is the privileged teacher evaluated with complete depth, object, and relation evidence, and S is the deployable RGB-only student. The improvements of T over B quantify the benefit avail-able from privileged evidence, whereas the improvements of S over B measure how much of this benefit is retained without 3D inputs at inference time. On ScanQA CIDEr and ScanRefer Acc@0.5, T improves over B by 11.5 and 3.9 points, respectively, showing that the unified evidence interface benefits both open-ended question answering and precise spatial grounding. On the same metrics, S reaches 107.2 and 54.3, respectively, and consistently outperforms B
+
+while preserving RGB-only inference. Using the privileged-gain recovery, and taking ScanQA CIDEr, SQA3D EM, ScanRefer Acc@0.5, and Scan2Cap CIDEr@0.5 as the corresponding primary metrics, S retains 90.4%, 16.0%, 43.6%, and 52.6% of the teacher improve-ment, respectively. Recovery is highest on ScanQA and low-est on SQA3D, revealing clear task-dependent differences in how much privileged improvement can be retained by the RGB-only student. 
+
+Ablation Studies 
+
+We study three questions directly related to the proposed de-sign: where privileged evidence should be injected, whether evidence-sensitivity weighting improves effective student transfer, and how much each evidence branch contributes to the teacher. ScanQA serves as the shared task benchmark across ablations, with SQA3D, ScanRefer, Scan2Cap, or 3D-POPE additionally reported where relevant to the mechanism under study. 
+
+Evidence Injection Position. We compare input-prefix fu-sion, injection into a single intermediate layer, sparse multi-Table 1: Quantitative comparison on ScanQA, SQA3D, ScanRefer, and Scan2Cap. All Scan2Cap metrics are evaluated at IoU@0.5. ScanRefer results are reported as Acc@0.25 and Acc@0.5. Underlining denotes the best overall result, while bold denotes the best result among our variants. 
+
+Method ScanQA (val) SQA3D ScanRefer (val) Scan2Cap (val) C B-4 M R EM A@.25 A@.5 C@.5 B-4@.5 M@.5 R@.5 
+
+Task-specific models 
+
+ScanQA (Azuma et al. 2022) 64.9 10.1 13.1 33.3 47.2 – – – – – –3D-VisTA (Zhu et al. 2023) 69.6 10.4 13.9 35.7 48.5 – – 61.6 34.1 26.8 55.0 ScanRefer (2020) – – – – – 37.3 24.3 – – – –BUTD-DETR (Jain et al. 2022) – – – – – 52.2 39.8 – – – –Scan2Cap (Chen et al. 2021) – – – – – – – 39.1 23.3 22.0 44.8 Vote2Cap-DETR (Chen et al. 2023) – – – – – – – 61.8 34.5 26.2 54.4 
+
+Video-input spatial models 
+
+LLaVA-Video-7B (Zhang et al. 2024) 88.7 3.1 17.7 44.6 48.5 – – – – – –VLM-3R (Fan et al. 2026) 101.9 15.5 19.7 49.1 60.7 – – – – – –
+
+Generalist 3D and geometry-assisted models 
+
+Chat-Scene (Huang et al. 2024) 87.7 14.3 18.0 41.6 54.6 55.5 50.2 77.2 36.3 28.0 58.1 LLaVA-3D (Zhu et al. 2025) 91.7 14.5 20.7 50.1 55.6 50.1 42.7 79.2 41.1 30.2 63.4 3D-LLaVA (Deng et al. 2025) 92.6 17.1 18.4 43.1 54.5 – – 78.8 36.9 27.1 57.7 Video-3D-LLM (2025) 102.1 16.2 19.8 49.0 58.6 58.1 51.7 83.8 41.3 28.9 62.3 3DRS (Huang et al. 2026) 104.8 17.2 20.5 49.8 60.6 62.9 56.1 86.1 41.6 29.0 62.3 CVP (Chen et al. 2026) 107.1 17.8 20.8 50.9 62.3 62.0 55.4 90.5 41.7 28.9 62.2 VEGA-3D (Wu et al. 2026) 106.3 – – – 61.3 63.2 56.2 83.2 42.2 – –PAR3D (Dai et al. 2026) 95.7 15.9 18.9 45.0 54.6 – – 81.4 37.3 27.5 57.9 
+
+Our models 
+
+Ours-Baseline 96.8 14.7 15.0 39.6 53.9 53.0 52.6 43.4 37.9 27.3 66.2 Ours-Student 107.2 15.1 18.1 46.1 54.3 55.5 54.3 62.5 41.6 28.8 67.5 
+
+Ours-Teacher 108.3 16.9 21.6 52.3 56.4 58.9 56.5 79.7 45.7 30.4 69.1 
+
+Table 2: Ablation of teacher injection positions. Sparse multi-layer injection excluding the final layer achieves the best bal-ance between task performance and hallucination robustness. C and EM denote ScanQA CIDEr and SQA3D exact match, respectively; F1 and Yes% are measured on 3D-POPE.                     
+
+> Injection strategy ScanQA C SQA3D EM 3D-POPE F1 Yes%
+> Input prefix 103.4 54.9 72.4 72.9 Single intermediate layer 106.2 55.7 76.9 64.8 Sparse multi-layer, with final 107.6 56.1 66.7 100.0
+> Sparse multi-layer, w/o final 108.3 56.4 80.8 56.2
+
+layer injection excluding the final language layer, and sparse multi-layer injection including the final layer. This experi-ment changes only the teacher injection positions and reports both task performance and 3D-POPE, allowing us to exam-ine whether interventions close to the output distribution introduce an affirmative-answer bias. Sparse multi-layer injection excluding the final language layer achieves 108.3 ScanQA CIDEr and 56.4 SQA3D EM, outperforming both input-prefix fusion and single-layer in-jection on both metrics. Extending injection to the final lan-guage layer does not improve either task metric and increases Yes% to 100.0, indicating that overly late evidence interven-tion can directly bias the answer distribution. We therefore use sparse multi-layer injection without the final layer in subsequent experiments. 
+
+Evidence-Sensitivity-Guided Distillation. To isolate evidence-sensitivity weighting, we fix the same full teacher and train both student variants with identical task, logit-distillation, and structural-distillation objectives. The only difference is whether the distillation weight is adjusted according to the teacher’s dependence on privileged evi-dence, avoiding confounding changes in teacher quality with changes in student supervision. With the teacher fixed, uniform distillation yields an av-erage recovery of 48.9%, with 3D-POPE F1 and Yes% of 68.9 and 83.7. Evidence-sensitivity weighting further im-proves recovery to 67.0%, increases F1 by 8.7 points, and reduces Yes% by 24.8 percentage points. Weighting supervi-sion by privileged-evidence dependence therefore improves task transfer while reducing affirmative-answer bias. Table 3: Ablation of evidence-sensitivity weighting. Sensi-tivity weighting improves transferable-gain recovery and re-duces affirmative-answer bias relative to uniform distillation. 
+
+R averages recoverability on ScanQA CIDEr and ScanRefer Acc@0.5; F1 and Yes% are measured on 3D-POPE. 
+
+Variant C A@.5 R (%) F1 Yes% 
+
+B: task supervision 96.8 52.6 – 71.8 69.4 
+
+S: w/o sensitivity weighting 104.8 53.7 48.9 68.9 83.7 
+
+S: sensitivity-weighted 107.2 54.3 67.0 77.6 58.9 
+
+Table 4: Leave-one-evidence-out analysis reveals comple-mentary modality roles: object cues contribute most to open-ended QA and captioning, relation cues are particularly im-portant for situated reasoning and grounding, and combining all evidence yields the strongest overall performance.                                           
+
+> Available evidence ScanQA C SQA3D EM ScanRefer A@.5 Scan2Cap C@.5
+> O+R(w/o depth) 106.8 55.7 54.9 71.3
+> D+R(w/o object) 103.6 55.6 55.3 65.1
+> D+O(w/o relation) 104.7 54.9 54.5 68.5 Evidence off 97.2 54.1 53.0 44.8 RGB-only baseline B96.8 53.9 52.6 43.4
+> D+O+R108.3 56.4 56.5 79.7
+
+Contribution of Privileged Evidence. We estimate the marginal contribution of each privileged evidence type by removing the depth, object, or relation branch at evaluation time. The removed branch is replaced using the same cor-ruption operator employed for sensitivity estimation. This analysis measures each branch’s contribution within the full teacher rather than its standalone capability under separate training. The leave-one-evidence-out results show that removing object evidence causes the largest drops on ScanQA CIDEr and Scan2Cap CIDEr@0.5, by 4.7 and 14.6 points, respec-tively, whereas removing relation evidence causes the largest drops on SQA3D EM and ScanRefer Acc@0.5, by 1.5 and 2.0 points. Depth evidence provides smaller but consistent complementary gains, with its clearest effect also observed on Scan2Cap, where removal reduces CIDEr@0.5 by 8.4 points. The complete evidence configuration achieves the best result on all four benchmarks, indicating that the three evidence types provide complementary information rather than a single branch accounting for the entire teacher gain. 
+
+Evidence- and Skill-Wise Recoverability 
+
+Aggregate benchmark scores do not show whether spatial capabilities supported by different evidence types are equally recoverable. For each example, we therefore measure the change in teacher loss after removing each evidence branch and use it as the evidence-importance score for that example. We then evaluate B, T , and S over relative-depth, directional-relation, object-existence, counting, occlusion, and metric-distance subsets and compute privileged-gain recovery. To form the evidence–skill matrix, each example is as-signed to the evidence type with the largest positive impor-Depth-dominant                                     
+
+> Object-dominant
+> Relation-dominant
+> All samples
+> (a) Privileged Gain Δ = T−B
+> +8.2 +4.4 +2.5 +3.0 +9.0
+> +3.5 +4.8 +7.1 +6.8 +5.2
+> +4.0 +7.5 +3.8 +0.3 +5.4
+> +5.1 +5.5 +4.7 +3.7 +6.5
+> 0
+> 5
+> 10
+> Gain
+> (pp)
+> Relative
+> Depth
+> Directional
+> Relation
+> Object
+> Existence
+> Counting
+> Metric
+> Distance
+> Depth-dominant
+> Object-dominant
+> Relation-dominant
+> All samples
+> (b) Gain Recovery 
+> 62% 79% 100% 70% 45%
+> 78% 55% 83% 91% 57%
+> 70% 88% 65% --39%
+> 68% 74% 84% 85% 47%
+> 0
+> 50
+> 100
+> Recovery
+> (%)
+
+Figure 3: Evidence- and skill-wise privileged gain and re-coverability. The upper heatmap reports the teacher improve-ment over the RGB-only baseline, and the lower heatmap re-ports the fraction of that improvement retained by the student. Rows correspond to depth, object, relation, and aggregate ev-idence groups; columns correspond to spatial-skill subsets. Blank cells indicate teacher gains below ϵ.tance score; the aggregate row includes all evaluated exam-ples. Recovery is omitted when the teacher improvement in a cell is below ϵ, preventing unstable ratios caused by a near-zero denominator. Figure 3 jointly presents teacher gains and student re-covery across evidence–skill cells. Cells with high teacher gains but low recovery identify capabilities that remain more dependent on explicit 3D inputs, whereas cells with both high gains and high recovery indicate improvements that can be substantially internalized by the RGB-only student. This analysis distinguishes whether an evidence type is useful from whether the resulting improvement can be internalized from RGB and complements the aggregate benchmark re-sults with a finer-grained view. 
+
+## Conclusion 
+
+We present a privileged-evidence distillation framework for RGB-only 3D-VLMs. Training-time depth, object, and re-lation evidence is encoded as Unified Evidence Tokens and incorporated through question-conditioned residual in-jection, while an RGB-only student learns through logit, structural, and sensitivity-weighted distillation. Experiments show that the student consistently outperforms the matched RGB baseline while narrowing the gap to the privileged teacher. Ablations validate sparse multi-layer injection, sen-sitivity weighting, and complementary evidence branches, while privileged-gain analysis characterizes transfer across evidence types and spatial skills. 
+
+## References 
+
+Anderson, P.; Wu, Q.; Teney, D.; Bruce, J.; Johnson, M.; Sünderhauf, N.; Reid, I.; Gould, S.; and Van Den Hengel, A. 2018. Vision-and-language navigation: Interpreting visually-grounded navigation instructions in real environments. In 
+
+Proceedings of the IEEE conference on computer vision and pattern recognition , 3674–3683. Azuma, D.; Miyanishi, T.; Kurita, S.; and Kawanabe, M. 2022. Scanqa: 3d question answering for spatial scene un-derstanding. In proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 19129–19139. Chen, D. Z.; Chang, A. X.; and Nießner, M. 2020. Scanre-fer: 3d object localization in rgb-d scans using natural lan-guage. In European conference on computer vision , 202–221. Springer. Chen, S.; Chen, X.; Zhang, C.; Li, M.; Yu, G.; Fei, H.; Zhu, H.; Fan, J.; and Chen, T. 2024. Ll3da: Visual interactive instruction tuning for omni-3d understanding reasoning and planning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 26428–26438. Chen, S.; Zhu, H.; Chen, X.; Lei, Y.; Yu, G.; and Chen, T. 2023. End-to-end 3d dense captioning with vote2cap-detr. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 11124–11133. Chen, Z.; Gholami, A.; Nießner, M.; and Chang, A. X. 2021. Scan2cap: Context-aware dense captioning in rgb-d scans. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 3193–3203. Chen, Z.; Zhang, X.; Xu, H.; Xie, J.; and Tu, Z. 2026. Cvp: Central-peripheral vision-inspired multimodal model for spatial reasoning. In Proceedings of the IEEE/CVF Win-ter Conference on Applications of Computer Vision , 2295– 2305. Cheng, A.-C.; Yin, H.; Fu, Y.; Guo, Q.; Yang, R.; Kautz, J.; Wang, X.; and Liu, S. 2024. Spatialrgpt: Grounded spatial reasoning in vision-language models. Advances in Neural Information Processing Systems , 37: 135062–135093. Ciernik, L.; Morik, M.; Thede, L.; Eyring, L.; Nakajima, S.; Akata, Z.; and Muttenthaler, L. 2026. Beyond the final layer: Attentive multilayer fusion for vision transformers. arXiv preprint arXiv:2601.09322 .Dai, R.; Das, S.; and Bremond, F. 2021. Learning an augmented rgb representation with cross-modal knowledge distillation for action detection. In Proceedings of the IEEE/CVF International Conference on Computer Vision ,13053–13064. Dai, S.; Qu, Y.; Shen, Y.; Zhang, S.; and Cao, L. 2026. PAR3D: A Unified 3D-MLLM with Part-Aware Representation for Scene Understanding. arXiv preprint arXiv:2606.06485 .Deng, J.; He, T.; Jiang, L.; Wang, T.; Dayoub, F.; and Reid, I. 2025. 3d-llava: Towards generalist 3d lmms with omni superpoint transformer. In Proceedings of the Computer Vision and Pattern Recognition Conference , 3772–3782. Fan, Z.; Zhang, J.; Li, R.; Zhang, J.; Chen, R.; Hu, H.; Wang, K.; Wang, P.; Qu, H.; Zhou, S.; et al. 2026. Vlm-3r: Vision-language models augmented with instruction-aligned 3d re-construction. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 31054–31065. Garcia, N. C.; Morerio, P.; and Murino, V. 2018. Modality distillation with multiple stream networks for action recog-nition. In Proceedings of the European Conference on Com-puter Vision (ECCV) , 103–118. Hinton, G.; Vinyals, O.; and Dean, J. 2015. Distill-ing the knowledge in a neural network. arXiv preprint arXiv:1503.02531 .Hong, Y.; Zhen, H.; Chen, P.; Zheng, S.; Du, Y.; Chen, Z.; and Gan, C. 2023. 3d-llm: Injecting the 3d world into large language models. Advances in Neural Information Process-ing Systems , 36: 20482–20494. Huang, H.; Chen, Y.; Wang, Z.; Huang, R.; Xu, R.; Wang, T.; Liu, L.; Cheng, X.; Zhao, Y.; Pang, J.; et al. 2024. Chat-scene: Bridging 3d scene and large language models with object identifiers. Advances in Neural Information Process-ing Systems , 37: 113991–114017. Huang, X.; Wu, J.; Xie, Q.; and Han, K. 2026. 3drs: Mllms need 3d-aware representation supervision for scene under-standing. Advances in Neural Information Processing Sys-tems , 38: 67961–67988. Jain, A.; Gkanatsios, N.; Mediratta, I.; and Fragkiadaki, K. 2022. Bottom up top down detection transformers for lan-guage grounding in images and point clouds. In European Conference on Computer Vision , 417–433. Springer. Ju, T.; Sun, W.; Du, W.; Yuan, X.; Ren, Z.; and Liu, G. 2024. How large language models encode context knowl-edge? a layer-wise probing study. In Proceedings of the 2024 Joint International Conference on Computational Linguis-tics, Language Resources and Evaluation (LREC-COLING 2024) , 8235–8246. Li, J.; Li, D.; Savarese, S.; and Hoi, S. 2023. Blip-2: Boot-strapping language-image pre-training with frozen image en-coders and large language models. In International confer-ence on machine learning , 19730–19742. PMLR. Liu, H.; Li, C.; Wu, Q.; and Lee, Y. J. 2023. Visual instruction tuning. Advances in neural information processing systems ,36: 34892–34916. Liu, Z.; Qi, X.; and Fu, C.-W. 2021. 3d-to-2d distillation for indoor scene parsing. In Proceedings of the IEEE/CVF con-ference on computer vision and pattern recognition , 4464– 4474. Lopez-Paz, D.; Bottou, L.; Schölkopf, B.; and Vapnik, V. 2015. Unifying distillation and privileged information. arXiv preprint arXiv:1511.03643 .Luo, Z.; Hsieh, J.-T.; Jiang, L.; Niebles, J. C.; and Fei-Fei, L. 2018. Graph distillation for action detection with privileged modalities. In Proceedings of the European conference on Computer Vision (ECCV) , 166–183. Ma, X.; Yong, S.; Zheng, Z.; Li, Q.; Liang, Y.; Zhu, S.-C.; and Huang, S. 2022. Sqa3d: Situated question answering in 3d scenes. arXiv preprint arXiv:2210.07474 .Vapnik, V.; and Vashist, A. 2009. A new learning paradigm: Learning using privileged information. Neural networks ,22(5-6): 544–557. Wu, X.; Liang, D.; Feng, T.; Xia, K.; Zhang, Y.; Li, X.; Tan, X.; and Bai, X. 2026. Generation Models Know Space: Un-leashing Implicit 3D Priors for Scene Understanding. arXiv preprint arXiv:2603.19235 .Yang, J.; Chen, X.; Madaan, N.; Iyengar, M.; Qian, S.; Fouhey, D. F.; and Chai, J. 2025. 3d-grand: A million-scale dataset for 3d-llms with better grounding and less halluci-nation. In Proceedings of the Computer Vision and Pattern Recognition Conference , 29501–29512. Yeh, C.-H.; Qian, S.; Wang, M.; Ma, Y.; Tighe, J.; and Xiao, F. 2026. Beyond 3D VQAs: Injecting 3D Spatial Priors into Vision-Language Models for Enhanced Geometric Rea-soning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 16723–16733. Zhang, J.; Zhou, S.; Liu, B.; Kadambi, A.; and Fan, Z. 2026. Spatialstack: Layered geometry-language fusion for 3d vlm spatial reasoning. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition , 38678– 38688. Zhang, Y.; Wu, J.; Li, W.; Li, B.; Ma, Z.; Liu, Z.; and Li, C. 2024. Llava-video: Video instruction tuning with synthetic data. arXiv preprint arXiv:2410.02713 .Zheng, D.; Huang, S.; and Wang, L. 2025. Video-3d llm: Learning position-aware video representation for 3d scene understanding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 8995–9006. Zhu, C.; Wang, T.; Zhang, W.; Pang, J.; and Liu, X. 2025. Llava-3d: A simple yet effective pathway to empowering lmms with 3d capabilities. In Proceedings of the IEEE/CVF International Conference on Computer Vision , 4295–4305. Zhu, Z.; Ma, X.; Chen, Y.; Deng, Z.; Huang, S.; and Li, Q. 2023. 3d-vista: Pre-trained transformer for 3d vision and text alignment. In Proceedings of the IEEE/CVF International Conference on Computer Vision , 2911–2921.
