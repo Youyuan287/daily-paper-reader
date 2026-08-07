@@ -1,0 +1,625 @@
+Title: Hi-Token: Hierarchical Coordinate Tokenization for Generative Visual Grounding
+
+URL Source: https://arxiv.org/pdf/2608.03471v1
+
+Published Time: Wed, 05 Aug 2026 00:55:13 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# Hi-Token: Hierarchical Coordinate Tokenization for Generative Visual Grounding 
+
+Xiuyuan Zhu 1,2 , Ke Lu 1,3 , Kun Dong 1,2 , Siwen Jiao 4,Hao Wu 1,2 , Zijin Du 1, Shun Mao 1,2 , Dongming Zhang 2, Jian Xue 1,* 
+
+> 1
+
+University of Chinese Academy of Sciences, Beijing, China 
+
+> 2
+
+State Key Laboratory of Communication Content Cognition, Beijing, China 
+
+> 3
+
+Peng Cheng Laboratory, Shenzhen, Guangdong, China 
+
+> 4
+
+National University of Singapore, Singapore 
+
+> *Correspondence: xuejian@ucas.ac.cn
+
+Abstract 
+
+Generative Vision-Language Models (VLMs) commonly treat bounding-box coordinates as independent output symbols, leaving numerical order and axis semantics implicit. We iden-tify this representation as an important source of error in visual grounding. Hi-Token en-codes each coordinate with axis-specific tokens for the hundreds, tens, and ones digits, which adds coarse-to-fine structure and increases to-ken reuse while retaining the existing VLM architecture. Hi-GAR complements this rep-resentation with a geometry-based reward for Group Relative Policy Optimization (GRPO), using box overlap and coordinate accuracy at multiple scales. Controlled comparisons un-der matched training conditions show that Hi-Token improves localization throughout the evaluated IoU range. Hi-GAR further reduces low-overlap predictions and is used only dur-ing training. Experiments on three VLM back-bones and the RefCOCO family show consis-tent gains across models and benchmarks. Hi-R1 achieves higher values than strong specialist baselines on most reported metrics. Analyses of token frequency, digit boundaries, object scale, and IoU distributions explain the effects of coordinate representation and reward train-ing. The results show that structured coordinate generation provides an effective approach to generative visual grounding. 
+
+1 Introduction 
+
+Visual grounding connects linguistic expressions to image regions and is a basic capability of mul-timodal assistants and embodied systems. Gen-erative Vision-Language Models (VLMs) (Ope-nAI, 2025; Comanici et al., 2025; Bai et al., 2023, 2025b; Liu et al., 2023b,a, 2024a) perform this task through the same autoregressive interface used for other multimodal tasks, expressing a box as a se-quence of coordinate tokens. Performance across IoU thresholds reflects both target identification and boundary alignment. Figure 2 illustrates the distinction. For a query referring to one zebra in a group, existing generative models locate the rele-vant area but produce boxes that include adjacent animals or miss part of the target. Reliable ground-ing therefore depends on the model’s ability to gen-erate a geometrically coherent coordinate sequence after it has understood the query and image. Coordinate representation directly shapes this generation problem. Existing methods express boxes as absolute pixel coordinates (Chen et al., 2022, 2023; Shen et al., 2025; Bai et al., 2023), nor-malized coordinates (Bai et al., 2025a; Guo et al., 2025b), or atomic location tokens such as <0> , . . . ,
+
+<999> (Jiang et al., 2025). These formats usually treat each coordinate as one independent value. In a flat location-token vocabulary, nearby positions such as <323> and <324> share no representation, and training observations are distributed over many coordinate types. A vocabulary shared by both axes also leaves horizontal and vertical roles im-plicit. The model must learn numerical proximity, scale, and axis usage entirely from the grounding examples. Our goal is to make coordinate generation easier to learn while preserving the standard autoregres-sive VLM architecture and an exactly parseable output format. This requires solving two related problems. First, the representation must expose nu-merical scale and axis roles while remaining com-pact. Second, the training signal must reflect the geometric effect of coordinate errors. Supervised fine-tuning assigns likelihood to individual tokens, although equal token errors can produce different changes in box overlap. A box-level IoU reward provides useful global feedback but gives limited information about coordinate accuracy at different scales. Both problems must be addressed to im-prove localization across the full IoU range without introducing a task-specific localization head. We address the representation problem with Hi-1arXiv:2608.03471v1 [cs.CV] 4 Aug 2026 Token. Each normalized coordinate is decomposed into separate axis tokens for the hundreds, tens, and ones digits. A box is represented by 12 to-kens drawn from 60 coordinate types. The digit order exposes coarse-to-fine numerical structure, and the small vocabulary increases the number of training observations available to each token type. Hi-Token changes only the output vocabulary and sequence. We address the training problem with Hi-GAR, a reward for Group Relative Policy Op-timization (GRPO) (Shao et al., 2024; Guo et al., 2025a). Hi-GAR combines box IoU with coordi-nate checks at several tolerances and bonuses at multiple IoU thresholds. A validity gate disables coordinate-level rewards when the predicted box has negligible overlap with the target. Hi-GAR is used only during training. We refer to the model trained with both components as Hi-R1. We evaluate the representation and reward stages separately. Under the same backbone, data, opti-mization, decoding, and evaluator, Hi-Token im-proves RefCOCO mIoU, P@0.5, and P@0.95 by 14.1, 14.9, and 8.7 points over flat coordinate to-kens. A flat-specific tuning stress test narrows the gap but remains below Hi-Token on the reported comparisons. Cross-backbone comparisons on two Qwen3-VL models also favor Hi-Token. Token counts show substantially denser supervision per coordinate type, which provides a plausible expla-nation for the gain while leaving the effects of digit decomposition, axis vocabularies, and vocabulary size coupled. Hi-GAR then reduces low-IoU pre-dictions and improves results across the evaluated IoU range. Hi-R1 obtains the highest value in eight of the nine benchmark columns reported for the Re-fCOCO family, and its inference latency remains close to that of the SFT model. Our contributions are summarized as follows: 1. We introduce Hi-Token, an axis-specific digit representation that gives coordinate genera-tion a coarse-to-fine structure within a stan-dard autoregressive VLM (Section 3.2). 2. We introduce Hi-GAR, a training reward that combines box overlap and coordinate accu-racy at multiple scales. Its validity gate sup-presses coordinate-level rewards for near-zero-overlap boxes (Sections 3.3 and 3.4). 3. Through matched comparisons, we show that Hi-Token improves localization across IoU thresholds and transfers to three VLM back-bones. Token-frequency and diagnostic re-sults characterize supervision density, digit boundaries, object-scale effects, and the sepa-rate contribution of reward training (Section 4 and Appendix B). 
+
+2 Related Work 
+
+Visual grounding paradigms. Visual ground-ing methods are commonly divided into regression-based and generation-based ap-proaches. Regression-based methods, such as DETR (Carion et al., 2020), Grounding DINO (Liu et al., 2024b), OWLv2 (Minderer et al., 2023), and YOLO-World (Cheng et al., 2024), predict boxes with task-specific localization heads. They often provide accurate localization, but are less flexible than general-purpose VLMs for open-ended multimodal interaction. Generation-based methods, including Shikra (Chen et al., 2023), Kosmos (Peng et al., 2023), Qwen-VL (Bai et al., 2023), Qwen2.5-VL (Bai et al., 2025b), and LLaVA-style models (Liu et al., 2023b,a, 2024a), formulate localization as autoregressive sequence generation. This formulation unifies grounding with instruction following, but recent studies (Jiang et al., 2025) show that such models remain limited under strict localization metrics. Hi-Token follows the generation-based paradigm and improves its coordinate representation. 
+
+Coordinate representation in VLMs. Coordi-nate representation is a central design choice for generative visual grounding. Existing methods commonly use absolute pixel coordinates (Chen et al., 2022, 2023; Shen et al., 2025; Bai et al., 2023, 2025b), normalized coordinates (Bai et al., 2025a; Guo et al., 2025b), or dedicated location tokens such as <0> , . . . , <999> (Jiang et al., 2025). Ab-solute coordinates are simple but can be sensitive to image resolution and numeric-token fragmenta-tion. Normalized coordinates improve resolution invariance, while dedicated location tokens avoid fragmentation and provide a cleaner localization vocabulary. However, these representations are still mostly flat: each coordinate is treated as an atomic value, and the representation itself provides limited structure for numerical hierarchy or axis-specific spatial patterns. Hi-Token differs by decompos-ing each coordinate into axis-specific hundreds, tens, and ones tokens. This keeps compatibility 2GRPO 
+
+Optimization 
+
+Hierarchical Spatial Tokenization          
+
+> Gate Closed
+> (IoU <= 0.01)
+> Gate Open
+> (IoU > 0.01)
+> Input
+> Precision
+> Bonus
+> (𝑅 !"#$% )
+> IoU ≥0.5
+> IoU ≥0.9
+> IoU ≥0.95
+> Step -wise CoT
+> Verification
+> (𝑅 !"#$ )
+> Coarse 5%
+> Medium 1%
+> Fine 0.3%
+> X-Coordinat
+> Y-Coordinat
+> 12 -Token Sequence
+> [<x_hundreds_ 4><x_tens_ 7><x_ones_ 8>,
+> <y_hundreds_ 1><y_tens_ 2><y_ones_ 5>,
+> <x_hundreds_ 6><x_tens_ 9><x_ones_ 0>,
+> <y_hundreds_ 9><y_tens_ 1><y_ones_ 4>]
+> Anti -Hacking Gate
+> 𝕀 %&'#
+> Hundreds
+> (Anchoring)
+> Tens
+> (Adjusting)
+> Ones
+> (Aligning)
+> Hundreds
+> (Anchoring)
+> Tens
+> (Adjusting)
+> Ones
+> (Aligning)
+> <x_hundreds >
+> <x_ ten s>
+> <x_ one s>
+> <y_hundreds>
+> <y_ten s>
+> <y_one s>
+> Standard VLM s
+> [478, 125, 690, 914] ∈0~H/W
+> [478, 125, 690, 914] ∈0~999
+> Specialists VLMs
+> [<478>,<125>,<690>,<914>]
+> ∈<0>……<999 >
+
+Verifiable Geometry -Aware Reward    
+
+> Format
+> Consistency
+> (𝑅 &'( )
+> Geometric
+> Fidelity
+> (IoU, 𝑅 )"$ )
+> Total
+> Reward
+> (𝑅 ("(*+ )
+
+𝑅 "#"$% = 𝑅 &'" + 𝑅 (#) + 𝕀 *$"+ ⋅ 𝑅 ,(+- + 𝑅 .#/)0  
+
+> Polic y Model (πθ)
+> Group Sampling
+> &Advantage Calc.
+> Update
+
+Figure 1: Overview of Hi-Token and the geometry-aware post-training framework. Left: Hi-Token represents each bounding box as a 12-token sequence by decomposing each coordinate into axis-specific hundreds, tens, and ones tokens. Right: The model is optimized with GRPO using the Hi-GAR reward. The reward combines format validity, IoU feedback, tiered coordinate verification, and strict-IoU bonuses: Rtotal = Rfmt + Riou + Igate · (Rhier +
+
+Rbonus ). The validity gate Igate applies coordinate-level rewards only when the predicted box has sufficient overlap with the target. 
+
+with autoregressive generation while introducing a coarse-to-fine structure into coordinate prediction. We directly compare Hi-Token with a Rex-Omni-style flat location-token baseline under the same backbone, data, and training recipe. 
+
+Reinforcement learning for VLMs. Reinforce-ment learning has recently been used to improve LVLM reasoning and grounding. Following verifi-able rewards and Group Relative Policy Optimiza-tion (GRPO) in language reasoning (Shao et al., 2024; Guo et al., 2025a), methods such as VLM-R1 (Shen et al., 2025), Visual-RFT (Liu et al., 2025b), Perception-R1 (Yu et al., 2025), Vision-Reasoner (Liu et al., 2025a), UniVG-R1 (Bai et al., 2025c), No-Thinking-RL (Li et al., 2025), Deep-Grounder (Zhang et al., 2026) and Smooth Oper-ator (Jiao et al., 2026) apply RL-style objectives to multimodal perception or localization. Most RL-based grounding methods define rewards at the box level, such as binary IoU success or raw IoU. These rewards are useful for coarse localization but provide limited feedback on coordinate-level errors under strict IoU thresholds. In our work, RL is used as a post-training refinement mechanism for Hi-Token. Hi-GAR combines IoU feedback, tiered coordinate verification, strict-IoU bonuses, and va-lidity gating, improving strict localization without adding any inference-time reasoning module. Hi -R1(Ours): 0.95 Ground Truth                   
+
+> Base Model: 0.4 Rex -Omni: 0.55
+> asmall zebra in the front of the pack of zebras looking at the camera .
+
+Figure 2: Qualitative comparison. For a query with overlapping targets, Qwen2.5-VL-7B and Rex-Omni produce less accurate boxes with IoU scores of 0.40 and 0.55, respectively. The full Hi-R1 model localizes the referred zebra more accurately, reaching an IoU of 0.95. 
+
+3 Method 
+
+3.1 Overview 
+
+Hi-Token aims to improve the coordinate represen-tation used by generative visual grounding mod-els. Existing autoregressive VLMs usually repre-sent a coordinate as either a numeric string or an atomic location token. Such flat representations provide limited structure for numerical hierarchy and often share the same coordinate vocabulary 3across the horizontal and vertical axes. This sec-tion introduces Hi-Token, a hierarchical and axis-decoupled coordinate representation, and Hi-GAR, a geometry-aware GRPO reward designed to opti-mize this representation. As shown in Figure 1, our method has two com-ponents. First, Hi-Token represents each coor-dinate with three axis-specific tokens correspond-ing to hundreds, tens, and ones digits. This con-verts each bounding box into a 12-token sequence and introduces a coarse-to-fine structure into co-ordinate generation. Second, Hi-GAR provides geometry-aware post-training feedback through box-level IoU, tiered coordinate verification, strict-IoU bonuses, and validity gating. We denote the final model trained with both Hi-Token and Hi-GAR as Hi-R1 .
+
+3.2 Hierarchical Coordinate Tokenization Motivation. Flat coordinate tokenization treats each coordinate as an atomic category. For exam-ple, in a flat location-token vocabulary, <323> and 
+
+<350> are two independent tokens, although the corresponding coordinates are spatially close. In addition, a shared coordinate vocabulary for both x
+
+and y axes does not explicitly encode axis-specific spatial patterns. Hi-Token addresses these issues by decomposing each coordinate into a small se-quence of axis-specific digit tokens. 
+
+Axis-decoupled coordinate vocabu-laries. We define a bounding box as 
+
+B = [xmin , y min , x max , y max ] in the normal-ized coordinate space [0 , 1] 2. For each axis 
+
+a ∈ { x, y }, we construct a separate token vocabu-lary Va. Each vocabulary contains digit tokens for three levels: hundreds, tens, and ones. This gives the model separate token spaces for horizontal and vertical coordinates. Given a continuous coordinate v ∈ [0 , 1] on axis 
+
+a, we first quantize it into an integer index: 
+
+Iv = ⌊v(M − 1) ⌋ , M = 1000 . (1) We then decompose Iv into three digits: 
+
+τ av = ( wah, w at , w ao ), (2) where wah, wat , and wao denote the hundreds, tens, and ones tokens on axis a, respectively. The cor-responding normalized coordinate is reconstructed as: 
+
+ˆv = 100 · val( wah) + 10 · val( wat ) + val( wao )
+
+M − 1 .
+
+(3) where val( ·) extracts the digit value from a token. For example, val( <x_tens_7> ) = 7 .
+
+Bounding-box sequence. A bounding box is rep-resented by concatenating the hierarchical tokens of its four coordinates: 
+
+Sbox = [ τ xxmin , τ yymin , τ xxmax , τ yymax ]. (4) Since each τ contains three tokens, the full box sequence contains 12 tokens. For example, the point (102 , 71) is tokenized as: 
+
+[<x_hundreds_1><x_tens_0><x_ones_2>, <y_hundreds_0><y_tens_7><y_ones_1>] .
+
+Coarse-to-fine coordinate generation. Hi-Token factorizes coordinate generation into three ordered decisions: 
+
+P (τ av | I, T ) = P (wah | I, T )
+
+· P (wat | wah, I, T )
+
+· P (wao | wah, w at , I, T ),
+
+(5) where I and T denote the input image and text query. The hundreds token selects a coarse region on a specific axis, the tens token refines the local in-terval, and the ones token determines the final quan-tized coordinate. This structure does not make the representation globally topology-preserving, but it provides a useful local coarse-to-fine bias for coor-dinate prediction. It also keeps the output format compatible with standard autoregressive VLMs. 
+
+3.3 Geometry-Aware GRPO Training 
+
+Hi-Token improves the representation of bounding boxes, but standard supervised fine-tuning (SFT) still optimizes token likelihood rather than geomet-ric quality. A prediction with a small coordinate error and a prediction with a large coordinate er-ror can receive similar token-level penalties if both differ from the target token. We therefore use re-inforcement learning to provide direct geometric feedback after supervised fine-tuning (SFT). We adopt Group Relative Policy Optimization (GRPO) (Shao et al., 2024; Guo et al., 2025a). For a prompt q = ( I, T ), the policy πθ samples a group of G outputs O = {o1, . . . , o G}. The objective is: 
+
+JGRPO (θ) = E
+
+ 1
+
+G
+
+> G
+
+X
+
+> i=1
+
+1
+
+|oi|·
+
+> |oi|
+
+X
+
+> t=1
+
+
+
+Lclip  
+
+> i,t
+
+− βDKL 
+
+
+
+.
+
+(6) 4where DKL = DKL (πθ∥πref ) is the KL divergence. The clipped surrogate term is: 
+
+Lclip  
+
+> i,t
+
+= min  ri,t Ai, clip( ri,t , 1 − ϵ, 1 + ϵ)Ai
+
+,
+
+(7) where ri,t is the probability ratio and Ai is the standardized advantage computed from the reward of output oi.
+
+3.4 Geometry-Aware Reward Design 
+
+Hi-GAR is a reward function tailored to the hierar-chical structure of Hi-Token. It combines box-level overlap, coordinate-level accuracy, strict-IoU mile-stones, and a validity gate. The total reward is defined as: 
+
+Rtotal =λfmt Rfmt + λiou Riou 
+
++ Igate (λhier Rhier + λbonus Rbonus ) .
+
+(8) The gate Igate activates coordinate-level rewards only when the predicted box has sufficient overlap with the target. 
+
+Format reward. Rfmt checks whether the model output follows the required 12-token Hi-Token for-mat with valid axis prefixes. It is defined as: 
+
+Rfmt =
+
+(
+
+1, if the output format is valid ,
+
+0, otherwise . (9) This term prevents invalid text outputs and enforces the axis-specific coordinate format. 
+
+IoU reward. Riou is the standard Intersection over Union between the predicted box and the ground-truth box: 
+
+Riou = IoU( Bpred , B gt ). (10) It provides a continuous box-level reward for local-ization quality. 
+
+Validity gate. Coordinate-level rewards can be misleading when the predicted box has almost no overlap with the target. For example, a degenerate prediction may match one corner coordinate but fail to form a valid target box. We therefore use a validity gate: 
+
+Igate = I (IoU( Bpred , B gt ) > 0.01) . (11) When the gate is closed, Rhier and Rbonus are dis-abled. This prevents coordinate-level rewards from dominating invalid or non-overlapping predictions. 
+
+Tiered coordinate verification. Rhier measures coordinate accuracy at multiple tolerances. Let 
+
+v(k)pred and v(k)gt denote the reconstructed integer co-ordinates of the predicted and ground-truth boxes for dimension k. We define: 
+
+Rhier = 14
+
+> 4
+
+X
+
+> k=1
+
+X
+
+> l∈{ h,t,o }
+
+αlI
+
+
+
+v(k)pred − v(k)gt < τ l
+
+
+
+.
+
+(12) Here, l ∈ { h, t, o } denotes the hundreds, tens, and ones levels. We set τh = 50 , τt = 10 , and τo = 3 
+
+on the 1000-bin scale, corresponding to error mar-gins of 5% , 1% , and 0.3% . These thresholds pro-vide coarse-to-fine feedback for coordinate predic-tion. 
+
+Strict-IoU bonus. Rbonus rewards predictions that reach strict IoU milestones. We use M =
+
+{0.5, 0.9, 0.95 } as the milestone set: 
+
+Rbonus = X
+
+> m∈M
+
+bmI(IoU ≥ m). (13) This term encourages the policy to improve not only coarse localization but also strict-threshold accuracy. 
+
+4 Experiments 
+
+4.1 Experimental Setup Datasets and metrics. We evaluate our method on three widely used visual grounding benchmarks: RefCOCO (Yu et al., 2016), RefCOCO+ (Yu et al., 2016), and RefCOCOg (Mao et al., 2016). We re-port mean IoU (mIoU), Precision@0.5 (P@0.5), and Precision@0.95 (P@0.95). P@0.5 measures coarse localization, while P@0.95 is used as the main strict-localization metric. All values are re-ported in percentage. 
+
+Baselines. We compare with three groups of mod-els. The first group contains open-vocabulary detection models, including OWLv2 (Minderer et al., 2023) and Grounding DINO (Liu et al., 2024b). The second group contains general-purpose VLMs, including Qwen2.5-VL (Bai et al., 2025b), DeepSeek-VL2 (Wu et al., 2024), and GLM-family models (Hong et al., 2025; Zeng et al., 2025). The third group contains specialist ground-ing VLMs, including VLM-R1 (Shen et al., 2025) and Rex-Omni (Jiang et al., 2025). For evaluation, all predicted boxes are normalized and rescaled to the canonical [0 , 999] coordinate space. 5Table 1: Comparison with existing models on RefCOCO, RefCOCO+, and RefCOCOg. All values are reported in percentage. The best result in each column is shown in bold. 
+
+Method RefCOCO RefCOCO+ RefCOCOg mIoU P@.5 P@.95 mIoU P@.5 P@.95 mIoU P@.5 P@.95 
+
+Open-set detection models 
+
+OWLv2 41.5 40.2 10.1 37.3 35.1 7.1 30.2 29.2 6.4 Grounding DINO 56.2 57.5 25.7 56.7 57.2 23.7 58.8 59.8 24.7 
+
+Open-source VLMs 
+
+Qwen2.5-VL-3B 55.6 60.2 3.8 52.6 62.3 2.1 49.8 44.1 3.2 Qwen2.5-VL-7B 60.7 67.7 6.1 58.2 64.8 5.6 50.6 53.4 5.9 Qwen2.5-VL-72B 62.5 70.4 8.1 58.9 66.1 7.3 55.1 59.7 7.9 DeepSeek-VL2 51.1 56.2 1.1 44.6 46.6 0.7 38.8 34.2 0.3 GLM-4.1V-9B 83.5 91.6 28.9 80.2 87.6 27.8 80.1 83.6 26.3 GLM-4.6V-106B 82.0 88.5 32.9 75.6 80.9 32.8 80.2 86.2 34.4 
+
+Specialist VLMs based on Qwen2.5-VL-3B 
+
+VLM-R1 63.1 69.8 14.4 64.4 71.5 13.6 66.7 73.4 13.7 Rex-Omni 81.9 88.2 31.1 77.5 83.4 33.3 77.3 86.1 36.3 Hi-R1 84.3 93.1 33.4 81.8 89.9 32.9 80.3 86.4 39.4 
+
+> Table 2: Controlled representation and reward analysis on RefCOCO. All values are percentages. The extra-tuning Flat result is a conservative stress test and is not a matched training comparison.
+
+Setting mIoU P@.5 P@.95 Flat SFT, fixed recipe 58.3 64.1 23.0 Flat SFT, extra tuning 68.5 74.0 26.3 Hi-Token SFT 72.4 79.0 31.7 IoU-only GRPO 76.1 89.0 30.3 Full Hi-GAR, gate off 80.4 91.9 31.3 Full Hi-GAR, gate on 84.3 93.1 33.4 
+
+Implementation details. We use Qwen2.5-VL-3B (Bai et al., 2025b) as the base model. Training follows a two-stage pipeline. In the first stage, the model is fine-tuned with 80k RefCOCO training samples to adapt it to the Hi-Token output format. In the second stage, the SFT model is further op-timized with GRPO (Shao et al., 2024; Guo et al., 2025a) on the same 80k training split using the Hi-GAR reward. We denote the final model trained with both Hi-Token and Hi-GAR as Hi-R1 . Addi-tional implementation details and hyperparameters are provided in the Appendix. 
+
+4.2 Separating Representation and Refinement Gains 
+
+Table 2 separates the controlled representation com-parison from the reward-stage comparison. With the backbone, 80k training samples, optimizer, schedule, decoding, and evaluator fixed, Hi-Token SFT improves RefCOCO P@0.95 from 23.0 to 31.7 over Flat SFT. We also give the Flat representation a dedicated stress test over learning rate, schedule, and token-embedding initialization. This additional tuning raises P@0.95 to 26.3 but changes the train-ing recipe, so it is reported as a conservative check rather than a causal comparison. The best tested Flat configuration remains below fixed-recipe Hi-Token SFT on RefCOCO, RefCOCO+, and Ref-COCOg; full values are reported in Appendix B. The compact vocabulary provides one plausible mechanism for the data-limited setting. Across the same 80k paired examples, Flat emits four coordinate tokens per box over 1,000 types, whereas Hi-Token emits 12 tokens over 60 types. The mean supervision-density ratio is therefore 
+
+(12 N/ 60) /(4 N/ 1000) = 50 for N training boxes. Figure 3(a) shows the complete per-type frequency distributions rather than only these means. The median count increases from 272 to 14,472; 985 of 1,000 Flat types occur fewer than 1,000 times, whereas every Hi-Token type occurs at least 10,615 times. Hi-Token is also more evenly super-vised, with a lower Gini coefficient (0.130 versus 0.237) and higher normalized entropy (0.991 versus 0.954). Counting distinct training examples instead of raw occurrences gives 15,426 versus 318 exam-ples per type on average, a 48.5-fold difference, so 60 25 50 75 100                        
+
+> Token-type percentile
+> 10 2
+> 10 3
+> 10 4
+> Occurrences per type (log scale)
+> Mean density: 320 → 16,000 (50 × )
+> (a) Supervision density
+> Flat (1,000 types)
+> Hi-Token (60 types)
+> 20 25 30 35
+> RefCOCO P@0.95 (%)
+> Qwen2.5-VL-3B
+> Qwen3-VL-2B
+> Qwen3-VL-4B
+> +8.7
+> +9.0
+> +2.6
+> (b) Representation transfer
+> Flat Hi-Token
+> 025 50 75 100
+> Predictions in IoU interval (%)
+> Base
+> Hi-Token SFT
+> Hi-R1
+> 20.4 54.6 21.3
+> 20.5 21.6 21.7 31.6
+> 27.7 25.6 33.7
+> (c) Stage-wise IoU distribution
+> <0.5 0.5--0.7 0.7--0.9 0.9--0.95 ≥0.95
+
+Figure 3: Hi-Token receives denser and more even token supervision, transfers across backbones, and separates representation gains from RL refinement. Panel (a) plots the complete per-type frequency distributions on a logarithmic scale; the 50-fold mean-density difference decomposes into 16.7-fold fewer types and threefold more coordinate tokens per box. Panel (b) compares fixed-recipe Flat and Hi-Token SFT on RefCOCO across three backbones. Panel (c) reports the percentage of RefCOCO predictions in each IoU interval for the Base model, Hi-Token SFT, and Hi-R1. The Base-to-SFT change is descriptive, while the SFT-to-Hi-R1 comparison isolates the RL stage under the same representation. 
+
+the result is not explained by repeated digits within one output. This analysis establishes substantially denser and more even token reuse, but it does not causally separate reuse from hierarchical position and axis-specific vocabularies. Figure 3(b) shows that the strict-metric bene-fit transfers beyond the original backbone. Hi-Token improves RefCOCO P@0.95 by 8.7 points on Qwen2.5-VL-3B, 9.0 points on Qwen3-VL-2B, and 2.6 points on Qwen3-VL-4B under the same fixed-recipe comparison. The effect is positive across all three models, although its magnitude varies. Hi-GAR has a narrower role. Relative to Hi-Token SFT, it improves mIoU by 11.9 points and P@0.5 by 14.1 points, but P@0.95 by only 1.7 points. Generic IoU-only GRPO lowers P@0.95 to 30.3, whereas the full reward reaches 33.4. Turning off the validity gate reduces mIoU from 84.3 to 80.4 and P@0.95 from 33.4 to 31.3. Figure 3(c) explains this pattern: Hi-GAR reduces the IoU < 0.5 mass from 20.5% to 7.0%, increases the combined 0.7–
+
+0.95 mass from 43.3% to 53.3%, and increases the 
+
+≥ 0.95 bin from 31.6% to 33.7%. We therefore interpret Hi-GAR as broad geometric refinement that avoids the strict-metric regression of generic IoU-only GRPO, rather than as the primary source of strict localization. 
+
+4.3 Comparison with Existing Methods 
+
+Table 1 compares Hi-R1 with existing detection models, general-purpose VLMs, and specialist grounding VLMs. The groups have different train-ing regimes, so comparisons across groups should be interpreted as contextual evidence rather than controlled data-efficiency comparisons. The most relevant comparisons are with specialist grounding VLMs. Hi-R1 achieves strong performance on the Re-fCOCO family. Compared with VLM-R1, Hi-R1 improves all reported metrics by a large margin. Compared with Rex-Omni, Hi-R1 obtains higher mIoU and P@0.5 on all three datasets. For strict lo-calization, Hi-R1 improves P@0.95 on RefCOCO from 31.1 to 33.4 and on RefCOCOg from 36.3 to 39.4. On RefCOCO+, Rex-Omni obtains a slightly higher P@0.95 score, 33.3 versus 32.9, while Hi-R1 still improves mIoU and P@0.5. We therefore do not claim uniform dominance on every strict metric. Instead, the results show that Hi-Token with Hi-GAR provides competitive or leading strict-localization performance while using a compact 3B backbone and 80k grounding samples. The mea-sured inference cost remains comparable to the SFT model because Hi-GAR is training-only; complete latency and time-per-token results are provided in Appendix A.5. 7−3 −2 −1 0 1                   
+
+> ΔP@0.95 vs. interior (pts)
+> Near tens
+> Near hundreds
+> +0.6
+> -2.4
+> (a) Boundary effect vs. interior
+> mIoU P@.50 P@.80 P@.90
+> Localization metric
+> Small (n=375)
+> Medium (n=7,953)
+> Large (n=22,641)
+> 58.0 67.5 39.5 14.7
+> 74.1 83.6 62.9 37.5
+> 82.4 88.9 76.6 61.6
+> (b) Localization quality by scale
+> 0246
+> IoU reduction (%)
+> 1-bin error
+> 3-bin error
+> 0.9 2.0
+> Small/Large = 2.2 ×
+> 2.8 6.1
+> Small/Large = 2.2 ×
+> (c) Scale-dependent sensitivity
+> Small Large
+
+Figure 4: Hi-Token remains stable at tens transitions and retains useful small-object localization at moderate thresholds, while hundreds transitions and deterministic perturbations reveal localized geometric sensitivities. Panel (a) reports RefCOCO P@0.95 changes relative to the interior group (33.2) for two disjoint boundary groups. Panel (b) gives a value-labeled matrix of mIoU and representative threshold accuracies through P@0.9 for Small (< 5% GT area), Medium ( 5% –10% ), and Large ( > 10% ) objects aggregated across five held-out splits; complete P@0.95 values remain in Appendix Table 12. Panel (c) pairs the IoU reductions for Small and Large boxes under deterministic one-bin and three-bin perturbations to every ground-truth coordinate; the ratio annotation divides the Small-object reduction by the Large-object reduction at the same perturbation. 
+
+4.4 Boundary and Small-Object Diagnostics 
+
+We next examine where the hierarchical representa-tion remains weak. For the digit-boundary analysis, coordinates near a hundreds boundary are assigned first, the remaining coordinates near a tens bound-ary are assigned second, and all other coordinates form the interior group. Figure 4(a) expresses each boundary group’s P@0.95 as a change from the interior result of 33.2. Near-tens coordinates differ by only +0 .6 points, whereas near-hundreds coor-dinates drop by 2.4 points and have a higher mean coordinate error of 44.1 bins, compared with 32.8 bins for interior coordinates. Because the hundreds group also contains image-edge coordinates, this diagnostic does not isolate digit rollover from edge effects. It therefore identifies a residual weakness rather than establishing global topology preserva-tion. The localization-quality matrix in Figure 4(b) ag-gregates all five held-out splits, giving 375 Small, 7,953 Medium, and 22,641 Large examples. For Small objects, Hi-R1 obtains mIoU of 58.0, P@0.5 of 67.5, P@0.8 of 39.5, and P@0.9 of 14.7. These results show that the model often identifies the cor-rect small-object region at moderate thresholds, al-though performance remains scale dependent as the localization criterion tightens. For completeness, Appendix Table 12 retains P@0.95 for every scale; the Small-object value is 1.30, so ultra-strict local-ization remains open rather than being claimed as resolved. The paired comparison in Figure 4(c) provides a geometric sensitivity check without implying a continuous trend between the two measured pertur-bation levels. Perturbing each ground-truth coor-dinate by one bin reduces IoU by 2.0% for Small objects and 0.9% for Large objects; a three-bin perturbation reduces IoU by 6.1% and 2.8%, re-spectively. These deterministic perturbations show that the same coordinate error has a larger IoU ef-fect on small boxes, but they do not establish a universal quantization floor. Exact source values, per-dataset scale results, and additional qualitative cases are provided in Appendix C. 
+
+5 Conclusion 
+
+Generative visual grounding depends on reliable coordinate generation. We introduced Hi-Token, which represents each coordinate with axis-specific tokens for the hundreds, tens, and ones digits, providing coarse-to-fine structure and denser to-ken supervision within the existing VLM archi-tecture. Controlled experiments show improve-ments across the evaluated IoU range and three backbones. Hi-GAR further reduces low-overlap predictions through geometry-based training feed-back and adds no inference-time component. Hi-R1 performs strongly against specialist models with la-tency close to that of the SFT model. These results show that coordinate representation is an important design choice for generative visual grounding. 8Limitations 
+
+Hi-Token operates in a fixed 1000-bin coordinate space. While this design provides a uniform rep-resentation across object scales, ultra-strict local-ization is more sensitive for small objects, motivat-ing adaptive-resolution extensions. Our analyses identify denser token supervision and local coarse-to-fine structure as plausible contributors to the observed gains, but the current experiments do not isolate hierarchy, axis-specific vocabularies, and vocabulary size individually. Hi-GAR is evaluated with a fixed reward configuration and a validity-gate ablation; broader sensitivity studies are left to future work. 
+
+Ethical Considerations 
+
+This work studies high-precision visual grounding on standard referring-expression benchmarks. Ac-curate grounding can support assistive perception, human–computer interaction, and fine-grained vi-sual understanding. Incorrect grounding can also cause concrete harms: it may misidentify a person or object in surveillance, point a user to the wrong region in an assistive system, or propagate an in-correct localization into a safety-sensitive decision. The method may also be misused for tracking or privacy-sensitive monitoring. We do not intend it to be used for identifying, tracking, or profiling in-dividuals without consent. Any deployment should use task-specific validation, follow applicable pri-vacy regulations, obtain appropriate consent, and include safeguards against harmful or unauthorized use. 
+
+References 
+
+Jinze Bai, Shuai Bai, Shusheng Yang, Shijie Wang, Sinan Tan, Peng Wang, Junyang Lin, Chang Zhou, and Jingren Zhou. 2023. Qwen-vl: A versatile vision-language model for understanding, localiza-tion, text reading, and beyond. arXiv preprint arXiv:2308.12966 .Shuai Bai, Yuxuan Cai, Ruizhe Chen, Keqin Chen, Xionghui Chen, Zesen Cheng, Lianghao Deng, Wei Ding, Chang Gao, Chunjiang Ge, Wenbin Ge, Zhi-fang Guo, Qidong Huang, Jie Huang, Fei Huang, Binyuan Hui, Shutong Jiang, Zhaohai Li, Mingsheng Li, and 45 others. 2025a. Qwen3-vl technical report. 
+
+Preprint , arXiv:2511.21631. Shuai Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wen-bin Ge, Sibo Song, Kai Dang, Peng Wang, Shi-jie Wang, Jun Tang, Humen Zhong, Yuanzhi Zhu, Mingkun Yang, Zhaohai Li, Jianqiang Wan, Pengfei Wang, Wei Ding, Zheren Fu, Yiheng Xu, and 8 others. 2025b. Qwen2.5-vl technical report. arXiv preprint arXiv:2502.13923 .Sule Bai, Mingxing Li, Yong Liu, Jing Tang, Haoji Zhang, Lei Sun, Xiangxiang Chu, and Yansong Tang. 2025c. Univg-r1: Reasoning guided universal vi-sual grounding with reinforcement learning. arXiv preprint arXiv:2505.14231 .Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander Kirillov, and Sergey Zagoruyko. 2020. End-to-end object detection with transformers. In European conference on computer vision , pages 213–229. Springer. Keqin Chen, Zhao Zhang, Weili Zeng, Richong Zhang, Feng Zhu, and Rui Zhao. 2023. Shikra: Unleashing multimodal llm’s referential dialogue magic. arXiv preprint arXiv:2306.15195 .Ting Chen, Saurabh Saxena, Lala Li, David J Fleet, and Geoffrey Hinton. 2022. Pix2seq: A language model-ing framework for object detection. In International Conference on Learning Representations .Tianheng Cheng, Lin Song, Yixiao Ge, Wenyu Liu, Xinggang Wang, and Ying Shan. 2024. Yolo-world: Real-time open-vocabulary object detection. In Pro-ceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 16901–16911. Gheorghe Comanici, Eric Bieber, Mike Schaekermann, Ice Pasupat, Noveen Sachdeva, Inderjit Dhillon, Mar-cel Blistein, Ori Ram, Dan Zhang, Evan Rosen, and 1 others. 2025. Gemini 2.5: Pushing the frontier with advanced reasoning, multimodality, long context, and next generation agentic capabilities. arXiv preprint arXiv:2507.06261 .Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Peiyi Wang, Qihao Zhu, Runxin Xu, Ruoyu Zhang, Shirong Ma, Xiao Bi, and 1 others. 2025a. Deepseek-r1 incentivizes reasoning in llms through reinforce-ment learning. Nature , 645(8081):633–638. Dong Guo, Faming Wu, Feida Zhu, Fuxing Leng, Guang Shi, Haobin Chen, Haoqi Fan, Jian Wang, Jianyu Jiang, Jiawei Wang, Jingji Chen, Jingjia Huang, Kang Lei, Liping Yuan, Lishu Luo, Pengfei Liu, Qinghao Ye, Rui Qian, Shen Yan, and 178 oth-ers. 2025b. Seed1.5-vl technical report. Preprint ,arXiv:2505.07062. Wenyi Hong, Wenmeng Yu, Xiaotao Gu, Guo Wang, Guobing Gan, Haomiao Tang, Jiale Cheng, Ji Qi, Junhui Ji, Lihang Pan, and 1 others. 2025. Glm-4.1 v-thinking: Towards versatile multimodal reasoning with scalable reinforcement learning. arXiv preprint arXiv:2507.01006 .Qing Jiang, Junan Huo, Xingyu Chen, Yuda Xiong, Zhaoyang Zeng, Yihao Chen, Tianhe Ren, Junzhi Yu, and Lei Zhang. 2025. Detect anything via next point prediction. Preprint , arXiv:2510.12798. 
+
+9Siwen Jiao, Tianxiong Lv, Kangan Qian, Chenxu Zhao, Xiuyuan Zhu, Tianlun Li, Xiaolong Cheng, Jinyu Li, Zhihao Liao, and Yang Cai. 2026. Smooth operator: Smooth verifiable reward activates spatial reason-ing ability of vision-language model. arXiv preprint arXiv:2601.07695 .Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin Zheng, Cody Hao Yu, Joseph E. Gonzalez, Hao Zhang, and Ion Stoica. 2023. Effi-cient memory management for large language model serving with pagedattention. In Proceedings of the ACM SIGOPS 29th Symposium on Operating Systems Principles .Ming Li, Jike Zhong, Shitian Zhao, Yuxiang Lai, Hao-quan Zhang, Wang Bill Zhu, and Kaipeng Zhang. 2025. Think or not think: A study of explicit think-ing in rule-based visual reinforcement fine-tuning. 
+
+arXiv preprint arXiv:2503.16188 .Haotian Liu, Chunyuan Li, Yuheng Li, and Yong Jae Lee. 2023a. Improved baselines with visual instruc-tion tuning. Haotian Liu, Chunyuan Li, Yuheng Li, Bo Li, Yuanhan Zhang, Sheng Shen, and Yong Jae Lee. 2024a. Llava-next: Improved reasoning, ocr, and world knowledge. Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. 2023b. Visual instruction tuning. Shilong Liu, Zhaoyang Zeng, Tianhe Ren, Feng Li, Hao Zhang, Jie Yang, Qing Jiang, Chunyuan Li, Jianwei Yang, Hang Su, and 1 others. 2024b. Grounding dino: Marrying dino with grounded pre-training for open-set object detection. In European conference on computer vision , pages 38–55. Springer. Yuqi Liu, Tianyuan Qu, Zhisheng Zhong, Bohao Peng, Shu Liu, Bei Yu, and Jiaya Jia. 2025a. Vision-reasoner: Unified reasoning-integrated visual per-ception via reinforcement learning. arXiv preprint arXiv:2505.12081 .Ziyu Liu, Zeyi Sun, Yuhang Zang, Xiaoyi Dong, Yuhang Cao, Haodong Duan, Dahua Lin, and Jiaqi Wang. 2025b. Visual-rft: Visual reinforcement fine-tuning. 
+
+arXiv preprint arXiv:2503.01785 .Ilya Loshchilov and Frank Hutter. 2017. Decou-pled weight decay regularization. arXiv preprint arXiv:1711.05101 .Junhua Mao, Jonathan Huang, Alexander Toshev, Oana Camburu, Alan L. Yuille, and Kevin Murphy. 2016. Generation and comprehension of unambiguous ob-ject descriptions. In Proceedings of the IEEE Con-ference on Computer Vision and Pattern Recognition (CVPR) .Matthias Minderer, Alexey Gritsenko, and Neil Houlsby. 2023. Scaling open-vocabulary object detection. Ad-vances in Neural Information Processing Systems ,36:72983–73007. OpenAI. 2025. Gpt-5 technical overview. https:// openai.com/index/introducing-gpt-5/ .Zhiliang Peng, Wenhui Wang, Li Dong, Yaru Hao, Shaohan Huang, Shuming Ma, and Furu Wei. 2023. Kosmos-2: Grounding multimodal large language models to the world. arXiv preprint arXiv:2306.14824 .Zhihong Shao, Peiyi Wang, Qihao Zhu, R. Xu, Jun-Mei Song, Mingchuan Zhang, Y. K. Li, Yu Wu, and Daya Guo. 2024. Deepseekmath: Pushing the limits of mathematical reasoning in open language models. 
+
+ArXiv , abs/2402.03300. Haozhan Shen, Peng Liu, Jingcheng Li, Chunxin Fang, Yibo Ma, Jiajia Liao, Qiaoli Shen, Zilun Zhang, Kangjia Zhao, Qianqian Zhang, and 1 oth-ers. 2025. Vlm-r1: A stable and generalizable r1-style large vision-language model. arXiv preprint arXiv:2504.07615 .Guangming Sheng, Chi Zhang, Zilingfeng Ye, Xibin Wu, Wang Zhang, Ru Zhang, Yanghua Peng, Haibin Lin, and Chuan Wu. 2024. Hybridflow: A flexible and efficient rlhf framework. arXiv preprint arXiv: 2409.19256 .Zhiyu Wu, Xiaokang Chen, Zizheng Pan, Xingchao Liu, Wen Liu, Damai Dai, Huazuo Gao, Yiyang Ma, Chengyue Wu, Bingxuan Wang, and 1 oth-ers. 2024. Deepseek-vl2: Mixture-of-experts vision-language models for advanced multimodal under-standing. arXiv preprint arXiv:2412.10302 .En Yu, Kangheng Lin, Liang Zhao, Jisheng Yin, Yuang Peng, Haoran Wei, Jianjian Sun, Chunrui Han, Zheng Ge, Xiangyu Zhang, Daxin Jiang, Jingyu Wang, and Wenbing Tao. 2025. Perception r1: Pioneering per-ception policy with reinforcement learning. arXiv preprint arXiv:2504.07954 .Licheng Yu, Patrick Poirson, Shan Yang, Alexander C Berg, and Tamara L Berg. 2016. Modeling context in referring expressions. In European conference on computer vision , pages 69–85. Springer. Aohan Zeng, Xin Lv, Qinkai Zheng, Zhenyu Hou, Bin Chen, Chengxing Xie, Cunxiang Wang, Da Yin, Hao Zeng, Jiajie Zhang, and 1 others. 2025. Glm-4.5: Agentic, reasoning, and coding (arc) foundation mod-els. arXiv preprint arXiv:2508.06471 .Jiafan Zhang, Keyan Chen, Chenyang Liu, Baihong Lin, Zhengxia Zou, and Zhenwei Shi. 2026. Deep-grounder: Generalized reasoning for mllm-based re-mote sensing visual grounding. IEEE Transactions on Geoscience and Remote Sensing .
+
+10 A Training and Reproducibility Details 
+
+> Table 3: Inference latency and time per token (TPT), in milliseconds.
+
+Method Dataset Latency TPT Base RefCOCO 9.08 0.37 RefCOCO+ 10.50 0.37 RefCOCOg 19.16 0.72 Hi-Token SFT RefCOCO 8.37 0.47 RefCOCO+ 7.87 0.44 RefCOCOg 18.61 1.03 Hi-R1 RefCOCO 8.09 0.45 RefCOCO+ 8.10 0.45 RefCOCOg 19.58 1.09 
+
+A.1 Training Configuration 
+
+All primary experiments use Qwen2.5-VL-3B-Instruct as the base model. The model is first adapted to the target coordinate format through supervised fine-tuning on 80k RefCOCO training samples. The GRPO stage is initialized from the SFT model and trained on the same 80k split with the Hi-GAR reward. GRPO is implemented with the verl (Sheng et al., 2024) framework. Training uses 4 nodes with 8 NVIDIA H800 GPUs per node, for a total of 32 GPUs. We train for 2 epochs, correspond-ing to 156 optimization steps. The global batch size is 1024, and the group size G is 16 rollouts per prompt. We use AdamW (Loshchilov and Hut-ter, 2017) with a learning rate of 5 × 10 −6 and bfloat16 mixed precision. Tensor parallelism is 4, and rollout-worker memory utilization is capped at 80%. The full GRPO stage takes approximately 8 hours under this setup. 
+
+A.2 Coordinate Formats and Baselines 
+
+The fixed-recipe Flat baseline follows a Rex-Omni-style atomic location-token representation. Each coordinate in [0 , 999] is mapped to one of 1,000 dedicated location tokens. The backbone, 80k train-ing split, optimizer, schedule, decoding, and evalu-ator are the same as for fixed-recipe Hi-Token SFT. This is a controlled representation comparison, not a reproduction of Rex-Omni’s complete 22M multi-task training recipe. The grounding-only size of the Rex-Omni corpus is not publicly specified. For a coordinate quantized to 478 , the Flat format uses one atomic token, <478> . Hi-Token instead uses the axis-specific sequence 
+
+<x_hundreds_4> , <x_tens_7> , and <x_ones_8> .The same value on the y axis uses a separate token set. 
+
+A.3 Reward Configuration and Prompt 
+
+The reward weights are λfmt = 0 .5, λiou = 1 .0,
+
+λhier = 0 .5, and λbonus = 2 .0. The coordinate tolerances are τh = 50 , τt = 10 , and τo = 3 
+
+on the 1,000-bin scale, corresponding to 5%, 1%, and 0.3% errors. The strict-IoU milestone set is 
+
+M = {0.5, 0.9, 0.95 }, and the validity-gate thresh-old is 0.01 IoU. These values were selected as in-terpretable geometric margins rather than through test-set optimization. The gate ablation in Table 2 does not constitute a complete sensitivity sweep over all reward weights and thresholds. SFT and GRPO use the same prompt: 
+
+Please provide the bounding box coordinate of the region this sentence describes: <expr>. 
+
+The placeholder <expr> is replaced by the refer-ring expression. During reward computation, we set skip_special_tokens=False so that the axis-specific coordinate tokens remain available to the parser. 
+
+A.4 Evaluation Protocol 
+
+Predicted boxes are converted to the normalized 
+
+[0 , 999] coordinate space. For Hi-Token, the parser reconstructs each integer coordinate from the axis-specific hundreds, tens, and ones tokens. For Flat outputs, each location token maps directly to its integer coordinate. The reconstructed boxes are evaluated with IoU. Unless otherwise stated, mIoU and P@threshold use the same parser and evaluator for every compared model. Object-scale groups use ground-truth area on the normalized 1000 × 1000 
+
+canvas: Small is < 5% , Medium is 5% –10% , and Large is > 10% .
+
+A.5 Inference Latency 
+
+Latency is measured with the same decoding con-figuration and vLLM (Kwon et al., 2023) backend. The base tokenizer already splits a three-digit nu-meric coordinate into three digit tokens. Hi-Token also uses three tokens for a three-digit coordinate; extra output tokens mainly arise for one- or two-digit coordinates that are padded to hundreds, tens, and ones. Hi-GAR is training-only and adds no inference-time module. 11 Table 4: Fixed-recipe representation comparison and Flat-specific tuning stress test. All values are percentages. 
+
+Setting RefCOCO P@.95 mIoU P@.5 P@.95 RefCOCO+ RefCOCOg Flat SFT, fixed recipe 58.3 64.1 23.0 21.7 10.5 Flat SFT, extra tuning 68.5 74.0 26.3 25.6 21.1 Hi-Token SFT, fixed recipe 72.4 79.0 31.7 29.8 37.0 
+
+> Table 5: RefCOCO P@0.95 across backbones.
+
+Backbone Flat Hi-Token Gain Qwen2.5-VL-3B 23.0 31.7 8.7 Qwen3-VL-2B 18.8 27.8 9.0 Qwen3-VL-4B 29.6 32.2 2.6 
+
+B Additional Controlled Results 
+
+B.1 Flat-Baseline Stress Test 
+
+Table 4 separates the matched comparison from the additional Flat-specific tuning stress test. The extra-tuning configuration changes learning rate, schedule, and token-embedding initialization, so it cannot be used as a matched causal estimate. It is included to test whether the fixed-recipe result is explained entirely by an under-tuned Flat baseline. 
+
+B.2 Backbone Transfer and Supervision Density 
+
+Table 5 provides the exact values plotted in Fig-ure 3(b). All rows use the same fixed-recipe Flat-versus-Hi SFT comparison for the corresponding backbone. The effect is positive for all three mod-els, although the gain is smaller for Qwen3-VL-4B. Tables 6 and 7 report the token-frequency di-agnostic on the same 80k paired training exam-ples. The two JSONL files match exactly by sam-ple identifier, image, query, and decoded coordi-nates; all 160,000 rows parse without error and no paired-coordinate mismatch is observed. Every coordinate token is observed in both representa-tions. The full per-type occurrence and unique-example counts used in Figure 3(a) are provided in 
+
+token_supervision_counts.csv .The exact 50-fold mean ratio is the product of a 16.7-fold smaller coordinate vocabulary and three times as many supervised coordinate tokens per box. The distinct-example ratio remains 48.5-fold, showing that within-example token repetition is not the main explanation. Lower Gini and higher normalized entropy further show that the increased supervision is broadly distributed across Hi-Token types rather than concentrated in a few frequent dig-its. These statistics directly characterize reuse and coverage, not a causal decomposition of hierarchy, axis specificity, and vocabulary size. 
+
+B.3 SFT Initialization and Data Scale 
+
+The initialization study is secondary to the con-trolled representation result and is therefore moved from the main ablation table to the Appendix. With a 30k SFT initialization, GRPO substantially im-proves P@0.5 but leaves P@0.95 low. The 80k SFT model learns the hierarchical output format more effectively before RL and yields a stronger final model. 
+
+C Diagnostic Source Tables 
+
+C.1 Stage-Wise IoU Distribution 
+
+Table 10 provides the exact values plotted in Fig-ure 3(c). The Base-to-SFT change combines super-vised adaptation with the new representation and is descriptive. The SFT-to-Hi-R1 comparison isolates the RL stage under Hi-Token. 
+
+C.2 Digit-Boundary Analysis 
+
+Table 11 reports the complete source values for Fig-ure 4(a). Groups are disjoint: hundreds-boundary cases are assigned first, then the remaining tens-boundary cases, followed by interior coordinates. The hundreds group also includes edge coordinates, so the observed reduction cannot be attributed only to digit rollover. 
+
+C.3 Object Scale and Coordinate Sensitivity 
+
+Table 12 provides the complete source values for Figure 4(b). The five held-out splits contain 30,969 examples in total. Intervals are defined using ground-truth area on the normalized canvas. The training-stage comparison in Table 13 shows that Hi-GAR improves moderate-threshold Small-object localization but not the ultra-strict regime. 12 Table 6: Coordinate-token supervision budget and independent-example coverage on the 80k training split. 
+
+Representation Types Tok./box Total Avg./type Avg. ex./type Flat atomic 1,000 4 320k 320 318 Hi-Token 60 12 960k 16,000 15,426    
+
+> Table 7: Distribution of occurrence counts across coordinate-token types. All statistics use the complete vocabulary;
+> H/ log |V| is normalized entropy.
+
+Representation Min. Q1 Median Q3 Max. CV Gini H/ log |V| 
+
+Flat atomic 142 235 272 312 15,293 1.844 0.237 0.954 Hi-Token 10,615 13,560 14,472 15,753 33,052 0.284 0.130 0.991 
+
+> Table 8: Source summary for Figure 5. Delta is the last-10-step mean minus the first-10-step mean.
+
+Series Step 1 Step 156 First 10 mean Last 10 mean Delta Overall 6.2218 6.8186 6.3696 6.7044 0.3348 Format 0.4834 0.4987 0.4948 0.4986 0.0038 IoU 0.7557 0.8117 0.7799 0.8074 0.0275 Hierarchical 0.6531 0.7541 0.6689 0.7461 0.0773 Strict-IoU bonus 2.3281 2.5655 2.3802 2.5127 0.1324 
+
+> Table 9: SFT initialization and GRPO results across the RefCOCO family. All values are percentages.
+
+Setting RefCOCO RefCOCO+ RefCOCOg mIoU P@.5 P@.95 mIoU P@.5 P@.95 mIoU P@.5 P@.95 SFT, 30k initialization 66.0 77.9 5.4 63.6 74.8 5.3 62.1 73.6 4.3 GRPO from 30k SFT 78.6 93.0 6.5 75.7 89.1 5.8 73.3 86.2 5.9 SFT, 80k initialization 72.4 79.0 31.7 70.2 76.6 29.8 70.8 75.8 37.0 GRPO from 80k SFT 84.3 93.1 33.4 81.8 89.9 32.9 80.3 86.4 39.4 
+
+> Table 10: Percentage of RefCOCO predictions in each IoU interval. Rows sum to 100% up to rounding.
+
+Stage IoU < 0.5 0.5–0.7 0.7–0.9 0.9–0.95 IoU ≥ 0.95 
+
+Base 20.4 54.6 21.3 2.5 1.2 Hi-Token SFT 20.5 4.6 21.6 21.7 31.6 Hi-R1 7.0 6.0 27.7 25.6 33.7  
+
+> Table 11: RefCOCO performance by coordinate-boundary group. Mean error is measured in bins on the 1,000-bin scale.
+
+Group Ratio Mean err. mIoU P@.95 Near tens 32.6 31.1 80.9 33.8 Near hundreds 14.7 44.1 77.2 30.8 Interior 52.7 32.8 80.2 33.2 Table 14 reports the deterministic source val-ues for Figure 4(c). Each ground-truth coordinate is perturbed by the stated number of bins. These values quantify geometry sensitivity and are not a measurement of model errors or unavoidable round-ing. For completeness, Table 15 retains the original per-dataset scale analysis that was moved out of the main paper. The five-split aggregate above is used for the revised discussion because it provides a larger Small-object sample. 13 Table 12: Five-split performance by object scale. All metrics except N are percentages. 
+
+Scale N mIoU P@.5 P@.7 P@.8 P@.9 P@.95 Small 375 58.0 67.5 51.2 39.5 14.7 1.30 Medium 7,953 74.1 83.6 73.1 62.9 37.5 17.5 Large 22,641 82.4 88.9 83.0 76.6 61.6 39.0  
+
+> Table 13: Small-object performance across training stages.
+
+Setting mIoU P@.5 P@.9 P@.95 Hi-Token SFT 51.5 61.3 13.6 1.07 Hi-R1 58.0 67.5 14.7 1.30 
+
+> Table 14: IoU reduction under coordinate perturbations, in percentage.
+
+Scale 1 bin 3 bins Small 2.0 6.1 Large 0.9 2.8 
+
+> Table 15: Per-dataset performance by object scale. Ratio is the percentage of samples in each dataset group.
+
+Dataset Scale Ratio mIoU P@.5 P@.95 RefCOCO Small 1.0 66.1 72.7 0.0 Medium 19.9 79.0 90.0 16.5 Large 79.1 86.1 94.1 37.6 All 100.0 84.3 93.1 33.4 RefCOCO+ Small 1.0 62.7 72.4 0.0 Medium 19.6 76.0 86.9 16.7 Large 79.3 83.4 90.9 37.3 All 100.0 81.8 89.9 32.9 RefCOCOg Small 0.1 71.2 85.7 7.1 Medium 32.1 73.6 82.6 19.8 Large 67.7 83.2 88.1 48.9 All 100.0 80.3 86.4 39.4 
+
+D Hi-GAR Training Dynamics 
+
+Figure 5 replaces the raster dashboard export with a vector rendering. The overall reward rises over the run, and the IoU, hierarchical, and strict-IoU bonus components show corresponding upward trends. The format component approaches its plateau early, indicating that later changes are driven mainly by geometric quality rather than output validity. Table 8 summarizes the exact raw series. Each row contains one logged batch-average reward at every optimization step. The first-window and last-window columns are arithmetic means over steps 1–10 and 147–156, respectively. 
+
+E Additional Qualitative Results 
+
+Figure 6 illustrates boundary refinement after Hi-GAR. These examples are qualitative and do not es-tablish the aggregate contribution of RL; the stage-wise distribution in Figure 3(c) provides the quanti-tative evidence. Figure 7 contains additional Hi-R1 predictions over a range of IoU values. Low-IoU examples include ambiguous boundaries, part-versus-whole references, and genuine localization errors. 
+
+F Artifact Use and Licenses 
+
+This work uses publicly available research artifacts, including Qwen2.5-VL-3B (Bai et al., 2025b), the RefCOCO benchmarks (Yu et al., 2016; Mao et al., 2016), verl (Sheng et al., 2024), and vLLM (Kwon et al., 2023). We use official referring-expression grounding benchmarks based on natural images and English expressions, without introducing new datasets, human annotations, or redistributing the original data. Released code, checkpoints, and derived artifacts should follow the licenses of the underlying datasets, models, and software. The accompanying repository provides the complete training pipeline, supervision-density analysis, per-token source counts, and scripts for reproducing all vector figures. 14 1 40 80 120 156 
+
+> 6.1
+> 6.2
+> 6.3
+> 6.4
+> 6.5
+> 6.6
+> 6.7
+> 6.8
+> 6.9
+> Overall reward
+
+(a) Overall   
+
+> Per-step reward
+> 15-step moving average
+> 180 156
+> 0.485
+> 0.490
+> 0.495
+> 0.500
+> Format reward
+
+(b) Format   
+
+> 180 156
+> 0.74
+> 0.76
+> 0.78
+> 0.80
+> 0.82
+> IoU reward
+
+(c) IoU   
+
+> 180 156
+> 0.650
+> 0.675
+> 0.700
+> 0.725
+> 0.750
+> Hierarchical reward
+
+(d) Hierarchical   
+
+> 180 156
+> 2.3
+> 2.4
+> 2.5
+> 2.6
+> Bonus reward
+
+(e) Strict-IoU bonus 
+
+GRPO optimization step Figure 5: The geometric components of Hi-GAR improve over training, while format compliance stabilizes during the first few steps. Light lines show all 156 logged per-step batch-average rewards from one GRPO run, dark lines show a descriptive 15-step moving average, and orange markers denote the final logged values. The panels use separate vertical scales because the reward components have different numerical ranges. No uncertainty interval or statistical test is implied by the moving average. IoU : 0.45 IoU : 0.96  
+
+> the fourth teddy bear from the left.
+> IoU : 0.95 IoU :0.57
+> a train with a yellow engine is on the tracks.
+
+Figure 6: Qualitative effect of geometry-aware post-training. The SFT-only Hi-Token model covers the tar-get but has boundary errors, whereas Hi-R1 produces tighter boxes in these examples. IoU : 0.27 IoU : 0.54   
+
+> IoU :0.62 IoU : 0.98
+
+Figure 7: Additional Hi-R1 predictions at different IoU levels. The examples include both accurate predictions and representative failure cases. 
+
+15
