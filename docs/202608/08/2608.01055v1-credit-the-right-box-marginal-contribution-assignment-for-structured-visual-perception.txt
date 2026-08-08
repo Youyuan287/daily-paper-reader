@@ -1,0 +1,1340 @@
+Title: Credit the Right Box: Marginal Contribution Assignment for Structured Visual Perception
+
+URL Source: https://arxiv.org/pdf/2608.01055v1
+
+Published Time: Tue, 04 Aug 2026 01:09:53 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# Credit the Right Box: Marginal Contribution Assignment for Structured Visual Perception 
+
+Xinheng Han 1,2 ∗, Jianfei Wang 2, Yu Chen 2, Xiang Wang 2† Shuai Li 2, Weixing Li 1, Feng Pan 1‡
+
+> 1
+
+School of Automation, Beijing Institute of Technology 
+
+> 2
+
+Amap, Alibaba Group {hanxinheng, panfeng}@bit.edu.cn 
+
+Abstract 
+
+Multimodal Large Language Models (MLLMs) are increas-ingly expected to solve structured perception tasks that re-quire visual recognition, language-to-object binding, object cardinality preservation, and precisely localized grounding and segmentation outputs. However, existing group-relative reinforcement learning methods provide only response-level supervision, creating a granularity mismatch for structured multi-object prediction: a single advantage is broadcast to all tokens in a response, without distinguishing individual box contributions. To address this mismatch, we propose MCR-GRPO , a marginal contribution assignment framework that derives box-level credit directly from each sampled response. Specifically, Marginal Contribution Reward (MCR) esti-mates each predicted box’s contribution through a leave-one-out comparison, measuring how the matched set value changes when the box is removed from the response. After within-response normalization, records that improve the set value re-ceive positive credit, while redundant or harmful ones are sup-pressed. To make marginal attribution stable and informative, we further introduce a Continuous Matched Set Value Eval-uator that integrates permutation-invariant matching, count-aware normalization, and graded localization. MCR-GRPO maps normalized box-level marginal advantages to the token spans that generated each box, preserving GRPO’s response-level comparison while enabling box-aware optimization of structured multi-object grounding. Experiments across REC, DOD, segmentation, and counting benchmarks show state-of-the-art performance over prior GRPO-based baselines. 
+
+Introduction 
+
+Multimodal Large Language Models (MLLMs) (Liu et al. 2023; Bai et al. 2025a) have made rapid progress in general visual understanding, but many perception problems require more than a fluent textual answer. In grounding, segmen-tation, and counting tasks, a model cannot merely judge whether the queried objects are present, but must organize its prediction into a set of structured object records, each of which identifies a distinct target instance, preserves its role in the required cardinality, and associates it with a precise spatial output such as a point, box, or mask prompt. This requirement motivates structured visual perception, where 
+
+> ∗
+
+Work done during internship at Amap, Alibaba Group. 
+
+> †
+
+Project Leader 
+
+> ‡
+
+Corresponding author. 
+
+MLLMs are expected to produce object-level visual records that jointly align language, instance identity, cardinality, and spatial localization. Recent work has explored Group Relative Policy Opti-mization (GRPO) (Shao et al. 2024), a reinforcement learn-ing method, to enhance the structured visual perception abil-ity of MLLMs (Bai et al. 2025b; Shen et al. 2025). Repre-sentative methods such as VisionReasoner (Liu et al. 2026c) adopt GRPO to train models to generate structured point-and-box outputs, and further combine these outputs with SAM2 (Ravi et al. 2025) to unify detection (Yu et al. 2026), segmentation (Huang et al. 2026), and counting (Deitke et al. 2025) within a single perception framework. However, GRPO optimizes sampled responses with a sin-gle response-level advantage, which is effective for selecting better answers at the response level but is too coarse for structured perception. A structured perception response is not a monolithic decision, since one response may contain a correctly localized object, a duplicated prediction, a missing instance, and a near-miss box. Broadcasting one response-level advantage to all generated tokens therefore creates a mismatch between the reward signal and the object record structure of the actual prediction, because the model is not told which individual box or object record improves the struc-tured output and which one degrades it. As a result, correct object spans and harmful object spans can be reinforced to-gether. To resolve this mismatch, the core question is whether object-local credit can be derived directly from the original structured response, without introducing additional rollouts, auxiliary trajectories, or a separate box-level objective. We answer this question with MCR-GRPO , a GRPO framework that assigns credit to individual boxes by reusing the matched set value of each response. Its core component, Marginal Contribution Reward (MCR) , estimates each prediction’s contribution through a leave-one-out comparison. Given a structured response, MCR treats it as a set of object records, evaluates the matched set value of the whole set, removes one predicted record at a time, and measures how the matched set value changes. After within-response normalization, this produces signed, box-specific credit, where beneficial boxes receive positive credit, while redundant, distracting, or harm-ful boxes receive negative credit. To make these marginal contributions smoother and more arXiv:2608.01055v1 [cs.CV] 2 Aug 2026 response 
+
+d3 
+
++
+
+d3 
+
++ d4 
+
+## -
+
+d4 
+
+## -
+
+d2 
+
++
+
+d2 
+
++
+
+d1 
+
++
+
+d1 
+
++ d3 
+
++ d4 
+
+## -
+
+d2 
+
++
+
+d1 
+
++
+
+Response Supervision  Trajectory Supervision  Object -record Supervision   
+
+> one score for the whole structured answer compare or revise generated paths signed credit inside one structured response
+> continuous
+> evaluator
+> margin
+> advantage
+> map to token span credit
+> supervision unit: whole answer
+> sequence granularity
+> supervision unit: whole trajectory
+> high compute cost with sequence mismatch
+> supervision unit: individual boxes
+> native response -internal credit assignment
+> revision revision
+> response 2 response 2
+> score 2
+> response 2
+> score 2
+> score 1 score 1
+
+single response advantage single response advantage 
+
+> extra interaction
+> simple assignment
+
++
+
+> response 1
+
++
+
++correct  near miss  duplicate  positive advantage  negative advantage - di  a predict object record +correct  near miss  duplicate  positive advantage  negative advantage - di  a predict object record               
+
+> d1 d2 d3 d1 d2 d3 d4 d1 d2 d3 d4 d1 d2 d3
+> d1 d2 d3 d1 d2 d3
+> response
+
+d3 
+
++ d4 
+
+## -
+
+d2 
+
++
+
+d1 
+
++
+
+Response Supervision  Trajectory Supervision  Object -record Supervision   
+
+> one score for the whole structured answer compare or revise generated paths signed credit inside one structured response
+> continuous
+> evaluator
+> margin
+> advantage
+> map to token span credit
+> supervision unit: whole answer
+> sequence granularity
+> supervision unit: whole trajectory
+> high compute cost with sequence mismatch
+> supervision unit: individual boxes
+> native response -internal credit assignment
+> revision
+> response 2
+> score 2
+> score 1
+
+single response advantage 
+
+> extra interaction
+> simple assignment
+
++
+
+> response 1
+
++
+
++correct  near miss  duplicate  positive advantage  negative advantage - di  a predict object record        
+
+> d1 d2 d3 d4 d1 d2 d3
+> d1 d2 d3
+
+Figure 1: Three Paradigms of Supervision for Structured Visual Perception. Response supervision scores the whole structured answer with a single advantage. Trajectory supervision revises entire generated paths, recovering feedback at the cost of extra rollouts, and still updates at sequence granularity. Object-record Supervision (MCR-GRPO) supervises at the object-record level, providing native response-internal credit assignment without auxiliary trajectories or extra rollouts. informative, we further introduce a Continuous Matched Set Value Evaluator that respects the unordered and count-sensitive nature of structured multi-object prediction. It com-putes pairwise scores between predicted and ground-truth objects, solves a Hungarian matching, and normalizes the matched score by the larger set size. It also incorporates con-tinuous IoU scores rather than binarized localization labels, reducing the instability caused by borderline boxes near a hard threshold. The resulting value provides a permutation-invariant, count-aware, and localization-sensitive substrate for measuring marginal contribution. These marginal credits are normalized within each response and mapped to the token spans that generated the corresponding boxes. In this way, MCR-GRPO preserves GRPO’s response-level comparison while enabling box-aware optimization for unified structured multi-object grounding. The main contributions are summarized as follows: 
+
+• We propose MCR-GRPO, a GRPO framework for box-level credit assignment, which derives response-internal credit without auxiliary trajectories while pre-serving response-level comparison. 
+
+• We introduce Marginal Contribution Reward (MCR) to estimate signed box-specific contributions by mea-suring the leave-one-out change in set value, capturing duplication and substitution effects that independent pair-wise scoring cannot express. 
+
+• We design a Continuous Matched Set Value Evaluator, 
+
+providing a smooth substrate that makes leave-one-out marginal attribution stable and informative. 
+
+• Experiments on REC, DOD, segmentation, and count-ing demonstrate that MCR-GRPO achieves state-of-the-art performance over prior methods in unified structured visual perception, while preserving general VQA ability. 
+
+Related Work 
+
+Structured Visual Perception with MLLMs. Structured visual perception has progressed from language-conditioned detection, grounding, and segmentation to MLLMs that di-rectly express boxes, regions, points, or masks in a language interface (Li et al. 2022; Liu et al. 2025a; Peng et al. 2024; Ma et al. 2024). Pixel-level and promptable MLLMs further connect language reasoning to dense masks through special tokens, visual prompts, and segmentation decoders (Lai et al. 2024; Wang et al. 2025b; Qian, Yin, and Dou 2025; Kirillov et al. 2023; Ravi et al. 2025). Recent unified models extend this interface across grounding, segmentation, OCR, count-ing, and VQA-style perception by sharing backbones, output formats, or task mixtures (Xiao et al. 2024; Bai et al. 2025a; Li et al. 2024). The remaining bottleneck is the structure of the prediction itself: a response is an unordered, count-sensitive object set where correct instances, duplicates, omis-sions, and near-threshold boxes may coexist (Liu, Ding, and Jiang 2023; Xie et al. 2023). Thus, beyond enabling MLLMs to emit coordinates, structured visual perception requires training signals that can identify which object records pre-serve instance identity, cardinality, and localization quality. 
+
+Learning Structured Perception. Supervised fine-tuning (SFT) teaches output formats and visual tool interfaces, but strong structured-perception systems still rely on large cu-rated grounding, mask, and instruction mixtures (Liu et al. 2023; Ren et al. 2024; Ma et al. 2024). Reinforcement fine-tuning (RFT) reduces this dependence by replacing dense annotations with verifiable rewards, and recent visual RL methods use IoU, point, mask, format, or external-segmenter feedback for grounding, detection, segmentation, OCR, and counting (Liu et al. 2025b; Shen et al. 2025; Bai et al. 2025b; Yu et al. 2026; Liu et al. 2026b; Huang et al. 2026; You and Wu 2025). VisionReasoner advances toward unified vi-sual perception, but it still follows GRPO’s response-level supervision: one scalar reward and one relative advantage update the whole sampled response, even when the reward is Input Image 
+
+Please find 
+
+“players on the field ”
+
+with bboxs and points.  
+
+> Compare the difference between
+> object(s) and find the most closely
+> matched object(s). Output the
+> thinking process in <think> </think>
+> and final answer in <answer>
+> </answer> tags. Output the bbox(es)
+> and point(s) inside the interested
+> object(s) in JSON format.
+> i.e. <think> thinking process here
+> </think><answer>[{"bbox_2d":
+> [10,100,200,210], "point_2d" [30,110]},
+> {"bbox_2d": [225,296,706,786],
+> "point_2d": [302,410]}]</answer>
+
+Text Query 
+
+MLLM 
+
+(a) Predicted Bboxes&Points (S) S = (d 1, d 2, d 3, d 4)
+
+(b) Hungarian Matching to Ground Truth G = (g 1, g 2, g 3)
+
+(c) Leave -One -Out (LOO) Computation 
+
+(d) MCR Credit (Box -Level Advantages) 
+
+Token  -> Box Mapping 
+
+## ... 
+
+Iterative Training (Update Model Parameters) 
+
+Rollouts 
+
+Negative (harmful)  0 Positive (helpful) Negative (harmful)  0 Positive (helpful) 
+
+INPUT  INFERENCE  TOKEN -BOX MAPPING  MCR CREDIT ASSIGNMENT  MCR -GRPO UPDATE 
+
+Token  -> Box Mapping 
+
+Token  -> Box Mapping 
+
+Token  -> Box Mapping 
+
+<think>  … </think> 
+
+<answer> 
+
+[ {"bbox_2d": [0, 116, 78, 459], 
+
+"point_2d": [32, 231]} ,
+
+{"bbox_2d": [88, 68, 292, 584], 
+
+"point_2d": [212, 232]} ,
+
+{"bbox_2d": [370, 140, 545, 545], 
+
+"point_2d": [500, 350]} ,
+
+{"bbox_2d": [540, 85, 750, 535], 
+
+"point_2d": [690, 295]} ]
+
+</answer>  
+
+> after ΔVi
+> z-score in the rollout
+
+g1  g2  g3 g1  g2  g3 
+
+Token Response 
+
+(Example Rollout) 
+
+d1 d1  d2 d2  d3 d3  d4 d4     
+
+> ΔVi= V(S,G) -V(S\{d i},G)
+> Remove d 2Remove d 1Remove d 4Remove d 3
+
+V(S,G) 
+
+V(S\{d 1},G)  V(S\{d 2},G)  V(S\{d 3},G)  V(S\{d 4},G)  
+
+> Remove d 2Remove d 1Remove d 4Remove d 3
+
+V(S,G) 
+
+V(S\{d 1},G)  V(S\{d 2},G)  V(S\{d 3},G)  V(S\{d 4},G) 
+
+= + 1.166 mcr t 2 A ，= + 1.166 mcr t 2 A ，= + 0.319 mcr t 3 A ，= + 0.319 mcr t 3 A ，= + 0.105 mcr t 4 A ，= + 0.105 mcr t 4 A ，= - 1.590 mcr t 1 A ，= - 1.590 mcr t 1 A ， = + 1.166 mcr t 2 A ，= + 0.319 mcr t 3 A ，= + 0.105 mcr t 4 A ，= - 1.590 mcr t 1 A ，
+
+Policy Update Policy Update 
+
+Response -level Advantages             
+
+> T1 T9 T4 T6 T7 T8 T2 T3 T5 T1 T9 T4 T6 T7 T8 T2 T3 T5
+
+MCR -GRPO 
+
+Token -level Advantages                        
+
+> T1 T9 T4 T6 T7 T8 T2 T3 T5 T1 T9 T4 T6 T7 T8 T2 T3 T5 T1 T9 T4 T6 T7 T8 T2 T3 T5 MCR-GRPO seq mcr m,t mmcr m,t
+
+A = A +λ A
+
+MCR -GRPO 
+
+Token -level Advantages            
+
+> T1 T9 T4 T6 T7 T8 T2 T3 T5 MCR-GRPO seq mcr m,t mmcr m,t
+
+A = A +λ A
+
+MCR -GRPO 
+
+Overall Training Objective ( )           
+
+> MCR-GRPO MCR-GRPO ,,,,KL ClipGRPO ,m t m t m t m t AD
+> =−
+
+MCR -GRPO 
+
+Overall Training Objective ( )           
+
+> MCR-GRPO MCR-GRPO ,,,,KL ClipGRPO ,m t m t m t m t AD
+> =−
+
+Box -level Advantages Box -level Advantages             
+
+> T1 T9 T4 T6 T7 T8 T2 T3 T5 T1 T9 T4 T6 T7 T8 T2 T3 T5 mcr m,t
+
+A
+
+Box -level Advantages       
+
+> T1 T9 T4 T6 T7 T8 T2 T3 T5 mcr m,t
+
+Aseq mAFigure 2: Overview of MCR-GRPO. Given an image-query pair, the policy samples structured responses and parses each response into box-indexed object records with their generated token spans. MCR-GRPO matches the predicted records to ground-truth objects, computes the matched set value, and estimates each object-record’s leave-one-out contribution to box-level MCR advantages. The advantages are mapped back to the token spans and combined with the response-level GRPO advantage, reinforcing helpful records while suppressing harmful or redundant ones. computed by multi-object matching (Liu et al. 2026c). This granularity mismatch can reinforce both correct and harmful boxes within the same structured answer. Trajectory feedback provides another route by scor-ing intermediate steps, revised candidates, or generated paths (Lightman et al. 2024; Wang et al. 2024). Group Re-vision adapts this idea to object grounding by revising an initial response and using revision gains for reward shap-ing and advantage scaling (Liu et al. 2026a). It recovers supervision on hard cases, but its feedback unit is still a re-vised trajectory rather than an individual box, and the extra revision prompts and rollouts increase training cost. MCR-GRPO instead keeps the original GRPO responses and de-rives response-internal box-level credit from each predicted box’s leave-one-out marginal contribution to the matched set value, without auxiliary trajectories, extra rollouts, or a separate box-level objective. 
+
+Method 
+
+Problem Formulation 
+
+Given an image x ∈ X and a language query q ∈ Q , the policy model πθ is optimized to generate a structured visual perception response. The ground truth is an unordered object set G = {gj }Nj=1 , where N is the number of target objects. Each ground-truth object gj contains spatial supervision, such as a bounding box b⋆j ∈ R4 and a mask m⋆j .During RL training, multiple responses are sampled for the same image-query pair. Following GRPO, the old pol-icy πθold samples a group of responses {ym}Mm=1 ∼ πθold (· | 
+
+x, q ), where M is the group size. For each sampled response, we omit the response index when discussing its internal pre-dicted set. A deterministic parser extracts the predicted object set S = {di}Ki=1 , where K is the number of predicted ob-ject records. Each predicted record di contains a predicted bounding box ˆbi ∈ R4, a predicted point ˆpi ∈ R2, and the generated token span τi that produces this record. A conventional response-level reward Rseq 
+
+m is assigned to each sampled response ym, and the group-normalized advantage is computed as: 
+
+Aseq 
+
+m = Rseq 
+
+m − μx,q 
+
+σx,q + ϵ , (1) where μx,q and σx,q are the mean and standard deviation of the response rewards within the sampled group. This advan-tage compares different responses, but it is applied uniformly to all valid tokens in the same response. Such response-level optimization cannot distinguish the object records inside one structured answer, even though different records may be correct, duplicated, mislocalized, or harmful. Therefore, our goal is to augment response-level GRPO with response-internal credit assignment over the predicted object set S.Continuous Matched Set Value Evaluator 
+
+To measure the quality of a structured prediction, we in-troduce a continuous matched set value evaluator. Given a predicted object set S = {di}Ki=1 and the ground-truth set 
+
+G = {gj }Nj=1 , the evaluator produces a scalar value V (S, G )
+
+that reflects set-level grounding quality. For each predicted record di and ground-truth object gj ,we compute a continuous pair score: 
+
+s(di, g j ) = αs iou (ˆbi, b ⋆j ) + βs box (ˆbi, b ⋆j )+ γs point (ˆ pi, m ⋆j ). (2) where siou measures box overlap, sbox measures coordinate-level localization closeness, and spoint measures point qual-ity. The weights α, β, γ control the relative importance of these spatial cues. Unlike prior binary reward designs that threshold local-ization correctness, our evaluator keeps the spatial quality continuous whenever possible. Specifically, the IoU term is directly defined as: siou (ˆbi, b ⋆j ) = IoU( ˆbi, b ⋆j ).For coordinate-level box quality, we first compute the mean absolute coordinate distance in pixel space: ℓbox  
+
+> ij
+
+= 
+
+> 14
+
+ˆbi − b⋆j 1
+
+, and convert it into a truncated exponential score: 
+
+sbox (ˆbi, b ⋆j ) = 
+
+exp( −ℓbox  
+
+> ij
+
+/10) , ℓbox  
+
+> ij
+
+≤ 40 ,
+
+0, otherwise . (3) For point quality, we do not use the distance to a reference point as the main criterion. In the downstream SAM-based segmentation setting, a point is useful when it lies on the target object, while a point closer to a reference point is not necessarily better. Therefore, we define the point score using the ground-truth object mask m⋆j and bounding box b⋆j :
+
+spoint (ˆ pi, m ⋆j ) = 
+
+
+
+1.0, ˆpi ∈ b⋆j and ˆpi ∈ m⋆j ,
+
+0.3, ˆpi ∈ b⋆j and ˆpi /∈ m⋆j ,
+
+0, otherwise .
+
+(4) Among the three terms, IoU provides the primary estimate of region-level set quality, while the box-distance and point-validity terms provide auxiliary localization and promptabil-ity cues. We therefore set α = 2 , β = γ = 1 in our evaluator. Since both S and G are unordered sets, we use Hungar-ian matching to compute an optimal one-to-one assignment between predicted records and ground-truth objects: 
+
+M ⋆ = arg max  
+
+> M′∈M (S,G )
+
+X 
+
+> (i,j )∈M′
+
+s(di, g j ), (5) where M(S, G ) denotes the set of valid one-to-one match-ings. In implementation, this maximum-weight bipartite matching is solved by the Hungarian algorithm. The continuous matched set value is defined as: 
+
+V (S, G ) = 1max( K, N )
+
+X 
+
+> (i,j )∈M⋆
+
+s(di, g j ). (6) This evaluator is permutation-invariant since it depends on Hungarian matching rather than object order. It is count-aware because the denominator penalizes extra predictions and missing targets and is continuous because near-correct boxes can receive partial credit instead of being collapsed into a binary failure. This value V (S, G ) provides the set-level basis for computing marginal contribution rewards. 
+
+Marginal Contribution Reward 
+
+Given the continuous matched set value V (S, G ), we esti-mate response-internal object credit through leave-one-out comparison. The core idea is to measure how the set-level value changes when one predicted object record is removed from the structured prediction. For each predicted record 
+
+di ∈ S, we compute the leave-one-out value difference as: 
+
+∆Vi = V (S, G ) − V (S \ { di}, G ). (7) Here, ∆Vi is the raw marginal contribution of di before normalization. When ∆Vi ≫ 0, removing di substantially decreases the set value, so di is a helpful record that con-tributes to the structured prediction. When ∆Vi ≪ 0, re-moving di improves the set value, so di is harmful, often due to duplication, false positives, count inflation, or mis-leading localization. This can occur only when the response over-predicts ( K > N ), whereas for K ≤ N every raw con-tribution is non-negative and poorly localized records are instead suppressed in relative terms after the normalization. When ∆Vi ≈ 0, di has little marginal effect under the current evaluator, either because it is weakly matched or because its contribution is redundant with other records. This leave-one-out formulation captures interactions that independent pairwise scoring cannot. A duplicated predic-tion may obtain a reasonable local matching score, but it can still reduce the set value by increasing the predicted count. Conversely, a near-correct prediction can receive positive marginal credit if it improves the optimal matching. Thus, 
+
+∆Vi attributes each record according to its effect on the whole predicted set S, rather than its isolated similarity to a sin-gle ground-truth object. A single Hungarian matching costs 
+
+O(max( K, N )3). Since MCR computes one full-set value and K leave-one-out values, the per-response matching cost is O(( K + 1) max( K, N )3), which is small compared with VLM rollout generation and policy optimization. The raw sign of ∆Vi is regime-dependent. Under over-prediction (K > N ), an unmatched record provably re-ceives strictly negative raw credit, so duplicate suppression follows from the count-aware normalization rather than a hand-designed penalty. Under K ≤ N every raw contribu-tion is non-negative, so harmful must be defined relative to a reference point. Absolute set quality is already carried by 
+
+V (S, G ) through the response-level reward, and centering makes MCR zero-sum and hence orthogonal to that signal. The z-score is strictly increasing, so it preserves the ranking by marginal contribution, and unmatched or perfectly substi-tutable records provably occupy the lowest credits. Finally, 
+
+¯Amcr  
+
+> i
+
+≤ √K − 1, so the composite advantage keeps the sign of Aseq whenever λmcr 
+
+√K − 1 < |Aseq |. MCR there-fore guarantees a strict within-response ordering rather than an absolute sign per box, which is analyzed in Appendix .We then normalize the raw value differences within the same rollout. This normalization is computed only over Method Referring Expression Comprehension (Acc@0.5) Avg. DOD (AP) ReasonG RefCOCO RefCOCO+ RefCOCOg D3
+
+Val Test Val TestA TestB Val TestA TestB Val Test Full Pres. Abs. 
+
+Supervised Fine-Tuning Based Methods 
+
+PerceptionGPT-7B - - 88.6 92.5 84.6 82.1 88.6 74.2 84.1 85.2 - - - -VistaLLM-7B - - 88.1 91.5 83.0 82.9 89.8 74.8 83.6 84.4 - - - -Elysium-7B - - 89.1 92.1 85.0 82.9 88.9 75.6 82.9 83.6 - - - -Groma-7B - - 89.5 92.1 86.3 83.9 88.9 78.1 86.3 87.0 - 16.0 15.9 16.3 
+
+Open-Source MLLM and Reinforcement Fine-Tuning Based Methods 
+
+Qwen2.5-VL-7B 68.9 59.8 88.8 91.7 81.4 82.3 88.2 69.2 84.7 85.7 80.1 19.6 19.4 20.3 SegZero-7B 69.3 64.6 89.3 91.5 81.9 82.0 87.6 74.7 86.1 86.3 81.3 - - -VisionReasoner-7B 80.1 78.5 88.6 90.6 84.7 83.6 87.9 80.2 86.1 87.5 84.8 22.0 21.2 24.1 GroupRevision-7B 83.7 81.2 89.5 91.6 85.1 84.4 88.3 77.6 88.4 88.3 85.8 - - -MCR-GRPO (ours) 84.0 83.3 90.2 91.6 86.2 85.2 87.8 80.6 89.1 89.9 86.8 23.1 22.5 24.8 
+
+Table 1: Comparison with SOTA Methods on REC and DOD Tasks. The best results are highlighted in bold .the predicted object records in S; tokens outside the struc-tured object records, such as reasoning tokens or other non-structural text, do not participate in this normalization. For 
+
+K > 1, we compute: 
+
+μ∆ = 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+∆Vi, σ∆ =
+
+vuut 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+(∆ Vi − μ∆)2, (8) and obtain the normalized object-level MCR credit as: 
+
+¯Amcr  
+
+> i
+
+= ∆Vi − μ∆
+
+σ∆ + ϵ . (9) The normalization is rollout-local, so MCR compares ob-ject records inside the same structured response rather than across different sampled responses. For the special case where a rollout contains only one predicted object record, there is no response-internal com-parison to perform. We therefore set its normalized MCR credit to zero: ¯Amcr 1 = 0 , if K = 1 . With this convention, the normalized object-level MCR credits within each rollout have zero algebraic sum PKi=1 ¯Amcr  
+
+> i
+
+= 0 . MCR is thus a zero-sum redistribution at the object-record level. It injects no net preference for or against the whole response, but real-locates credit among the records inside it, while the ranking across rollouts remains determined by the response advan-tage Aseq . After mapping to token spans, exact cancellation holds at the record level rather than the token level, since spans differ in length; in practice structured records have near-uniform span lengths. Finally, the normalized MCR credit is delivered to the tokens that generate the corresponding object record. Let τi
+
+denote the generated token span of di. We define the token-level MCR term for record di as: 
+
+Amcr  
+
+> t,i
+
+=
+
+ ¯Amcr  
+
+> i
+
+, t ∈ τi,
+
+0, t / ∈ τi. (10) Thus, only the tokens belonging to the structured span of 
+
+di receive its MCR credit. Tokens that are not assigned to any predicted object record have zero MCR term and are affected only by the response-level GRPO advantage in the final policy update. 
+
+MCR-GRPO Optimization 
+
+MCR-GRPO combines the response-level GRPO signal with the token-span MCR residual. For each sampled response 
+
+ym, we first compute its response-level reward. Let Fm ∈{0, 1} denote whether ym satisfies all required structural rules, including the reasoning tags, answer tags, valid JSON format, and valid bbox _2d and point _2d fields. These checks follow the format-reward design in VisionReasoner, but we use an all-pass rule: if any condition fails, Fm = 0 .The response-level reward is: 
+
+Rseq  
+
+> m
+
+= Fm (4 + 1 .5 Rnr  
+
+> m
+
++ V (S, G )) , (11) where Rnr  
+
+> m
+
+∈ {0, 1} is the non-repetition reward, and 
+
+V (S, G ) is the accuracy reward computed by the continu-ous matched set value evaluator. Since α = 2 , β = γ = 1 ,the maximum value of V (S, G ) is 4. The constant 4 provides a fixed base reward for format-valid responses so that, af-ter group normalization, any response failing the structural checks receives a strongly negative advantage. Following Vi-sionReasoner, the non-repetition reward Rnr  
+
+> m
+
+is set to 1 unless the response contains repeated predictions. We then obtain the response-level advantage Aseq  
+
+> m
+
+by ap-plying the group z-score normalization in Eq. (1) to Rseq  
+
+> m
+
+.The final token-level advantage is: 
+
+AMCR -GRPO  
+
+> m,t
+
+= Aseq  
+
+> m
+
++ λmcr Amcr  
+
+> t,i
+
+, t ∈ τi, (12) where Aseq  
+
+> m
+
+preserves GRPO’s response-level comparison, while Amcr  
+
+> t,i
+
+adds localized residual credit only to the token spans that generate predicted object records. We optimize the policy with a clipped GRPO objective. The token-level likelihood ratio is: 
+
+ρm,t (θ) = πθ (ym,t | x, q, y m,<t )
+
+πθold (ym,t | x, q, y m,<t ) . (13) For compact notation, we define the clip and KL terms: 
+
+Lm,t (θ) = min  ρm,t (θ)AMCR -GRPO  
+
+> m,t
+
+,
+
+clip( ρm,t (θ), 1 − ϵc, 1 + ϵc)AMCR -GRPO 
+
+> m,t
+
+. (14) 
+
+DKL  
+
+> m,t
+
+= DKL (πθ (· | x, q, y m,<t ) ∥ πref (· | z, q, y m,<t )) .
+
+(15) Method Segmentation (gIoU & cIoU) Avg. Counting (Acc) Avg. ReasonSeg RefCOCO RefCOCO+ RefCOCOg Pixmo Count Val Test TestA TestB TestA TestB Test Val Test Test                                                                                                                                                 
+
+> Supervised Fine-Tuning Based Methods
+> LLaVA-OV-7B --58.1 -47.1 -55.6 -----LISA-7B 44.4 36.8 79.1 72.3 70.8 58.1 70.6 -----PixelLM-7B --78.6 68.2 71.7 58.3 70.5 -----PerceptionGPT-7B --78.6 71.7 73.9 61.3 71.7 -----SEGLLM 57.2 52.4 81.5 75.4 73.0 62.5 73.6 67.9 ----Read-7B 59.8 56.8 80.2 73.2 73.7 60.4 71.4 67.9 ----
+> Open-Source MLLM and Reinforcement Fine-Tuning Based Methods
+> Qwen2.5-VL-7B 56.9 52.1 77.9 66.5 74.0 55.6 70.9 64.8 63.3 67.9 76.0 69.1 Seg-R1-7B 58.6 56.7 78.7 67.6 70.9 57.9 71.4 66.0 ----Seg-Zero-7B 62.6 57.5 80.3 72.2 76.2 62.3 72.6 69.1 ----VisionReasoner-7B 66.3 63.6 77.4 67.6 71.1 55.8 68.3 67.2 70.1 69.5 87.6 75.7 GroupRevision-7B 67.5 66.7 78.0 69.5 73.3 59.3 71.1 69.4 75.9 73.0 91.0 80.0 MCR-GRPO (ours) 69.4 67.2 78.0 69.2 72.1 59.5 71.6 69.6 75.7 76.4 92.7 81.6
+
+Table 2: Comparison with SOTA on Segmentation and Counting Tasks. We use SAM2 if necessary in segmentation tasks. The best results are highlighted in bold .The final objective of MCR-GRPO is: 
+
+JMCR -GRPO (θ) = 
+
+E
+
+ 1
+
+M
+
+> M
+
+X
+
+> m=1
+
+1
+
+|ym|
+
+> |ym|
+
+X
+
+> t=1
+
+ Lm,t (θ) − βD KL 
+
+> m,t
+
+ . (16) 
+
+Experiment 
+
+Training Data. We train MCR-GRPO on VisionRea-soner7K (Liu et al. 2026c), a compact multi-object visual per-ception corpus comprising 7,099 object-record-supervised examples that span category-level localization, referring comprehension, and reasoning instructions. To avoid intro-ducing additional supervision, we use the ground-truth boxes and points as SAM2 prompts to generate masks, rather than relying on human-annotated masks. These sources do not in-clude the held-out DOD, counting, or VQA sets used below. 
+
+Evaluation Benchmarks. We evaluate the models across five task families: referring expression comprehension (REC), described object detection (DOD), segmentation, ob-ject counting, and visual question answering (VQA). For REC, we report results on RefCOCO(+/g) (Yu et al. 2016) and additionally evaluate on ReasonG, which is derived by converting ReasonSeg (Lai et al. 2024) masks into bound-ing boxes. For described object detection, we use the D3
+
+benchmark (Xie et al. 2023). For segmentation, we evalu-ate referring segmentation on RefCOCO(+/g) and reasoning segmentation on ReasonSeg. For counting, we use PixMo-Count (Deitke et al. 2025) and CountBench (Paiss et al. 2023). We further include standard VQA benchmarks as auxiliary probes to examine whether structured-perception training preserves general multimodal ability. 
+
+Implementation Details. We initialize the MLLM from Qwen2.5-VL-7B-Instruct (Bai et al. 2025a) and use pre-trained SAM2 (Ravi et al. 2025) weights to generate seg-mentation masks when mask outputs are required. Training is implemented with the VeRL (Sheng et al. 2025) frame-work, and rollout generation is accelerated by vLLM (Kwon et al. 2023). Unless otherwise specified, we train with a learn-ing rate of 1 × 10 −6, a KL coefficient of 5 × 10 −3, gradient accumulation of 2, and a global batch size of 16. For each prompt, we sample 8 rollouts for group-relative optimization. 
+
+Evaluation Metrics. Following standard evaluation pro-tocols, we adopt Acc@0.5 for REC, where a prediction is correct if its prediction has an IoU of least 0.5. For DOD, we report the standard detection AP. We use generalized Intersection over Union (gIoU) for reasoning segmentation and cumulative IoU (cIoU) for referring segmentation. For counting, we report accuracy based on predicted box count. 
+
+REC and DOD. We compare MCR-GRPO with current state-of-the-art methods on REC and DOD tasks, including PerceptionGPT-7B (Pi et al. 2024), VistaLLM-7B (Praman-ick et al. 2024), Elysium-7B (Wang et al. 2025a), Groma-7B (Ma et al. 2024), Qwen2.5-VL-7B (Bai et al. 2025a), SegZero-7B (Liu et al. 2026b), VisionReasoner-7B (Liu et al. 2026c), and GroupRevision-7B (Liu et al. 2026a). As shown in Table 1, our method achieves the best average REC ac-curacy of 86 .8% . On the DOD benchmark D3, MCR-GRPO also consistently outperforms previous methods, achieving the best AP with 23 .1% , 22 .5% , and 24 .8% , respectively. 
+
+Segmentation and Counting. We further compare MCR-GRPO with state-of-the-art methods on segmentation and counting tasks, including LLaVA-OV-7B (Li et al. 2024), LISA-7B (Lai et al. 2024), PixelLM-7B (Ren et al. 2024), PerceptionGPT-7B (Pi et al. 2024), SEGLLM (Wang et al. 2025b), Read-7B (Qian, Yin, and Dou 2025), Qwen2.5-VL-7B (Bai et al. 2025a), and Seg-R1-7B (You and Wu 2025) besides the baselines discussed above. As shown in Table 2, MCR-GRPO achieves the best average performance on both segmentation and counting, reaching 69 .6% on segmenta-tion and 81 .6% on counting. These indicate that, by assigning Model OCRBench ChartQA SimpleVQA Num Acc Acc Qwen2.5-VL-7B 858 83.8 26.4 MCR-GRPO (ours) 874 87.7 26.5            
+
+> Model DUDE MMStar MME-Realworld Acc Acc Acc (Lite) Qwen2.5-VL-7B 47.9 62.0 43.3 MCR-GRPO (ours) 48.9 62.6 48.2
+
+Table 3: Evaluation results on VQA benchmarks.                                    
+
+> MCR Cont REC DOD Seg Count RefCOCOg D3ReasonSeg Pixmo Val Test Full Val Val
+> ××86.1 87.5 22.0 66.3 70.1
+> ✓×88.9 89.4 22.9 68.4 67.1
+> ×✓88.1 88.3 22.0 68.5 69.5
+> ✓✓89.1 89.9 23.1 69.4 75.7
+
+Table 4: Ablation Study of Our Approach on the Vi-sionReasoner baseline with Marginal Contribution Reward (MCR) and Continuous Matched Set Value Evaluator (Cont). marginal contribution rewards to box-level spatial structures, our method strengthens the model’s ability to preserve ob-ject identity, distinguish target instances, and maintain count consistency without introducing additional trajectory. 
+
+Visual QA Ability. To evaluate whether MCR-GRPO pre-serves and improves general visual question answering abil-ity, we compare it with Qwen2.5-VL-7B on six widely used VQA benchmarks, including DUDE (Van Landeghem et al. 2023), ChartQA (Masry et al. 2022), SimpleVQA (Cheng et al. 2025), OCRBench (Liu et al. 2024), MMStar (Chen et al. 2024), and MME-Realworld-Lite (Zhang et al. 2025). As shown in Table 3, MCR-GRPO consistently improves the model across all evaluated benchmarks. These results indi-cate that our training does not degrade the model’s general VQA ability. Instead, by improving structured visual percep-tion, MCR-GRPO brings consistent gains to VQA scenarios beyond the tasks directly optimized during training. 
+
+Ablation of the Key Components. We conduct ablation studies on four representative tasks, including REC, DOD, segmentation, and counting, to analyze the effect of the two key designs in MCR-GRPO, namely Marginal Contribution Reward (MCR) and the Continuous Matched Set Value Eval-uator (Cont). We use VisionReasoner as the baseline. When Cont is removed, the value function used by MCR is Vision-Reasoner’s original Accuracy Reward. Table 4 disentangles the two designs. Adding the continuous evaluator alone im-proves REC ( +2 .0% / +0 .8% on RefCOCOg) and reason-ing segmentation ( +2 .2% ) by making response-level ranking smoother, but it leaves DOD unchanged and slightly lowers counting ( 69 .5% vs. 70 .1% ): a smoother scalar is still broad-cast over all boxes and cannot tell the model which box to drop. Applying MCR alone on top of the thresholded value                          
+
+> MCR Ratio REC DOD Seg Count RefCOCOg D3ReasonSeg Pixmo Val Test Full Val Val 0.05 88.1 88.7 22.9 68.8 72.9 0.10 89.1 89.9 23.1 69.4 75.7 0.20 89.6 89.6 22.9 67.0 75.9
+
+Table 5: Ablation of MCR Ratio ( λmcr ). improves REC and DOD, yet degrades counting below the baseline: on a discretized value, removing a box either leaves the score unchanged or changes it abruptly, so marginal con-tributions become sparse and noisy, and the resulting credit misleads cardinality-sensitive behavior. Only the combina-tion improves all four tasks, with the largest margin exactly on counting ( +5 .6% over baseline and +8 .6% over MCR alone). The two designs are therefore complementary rather than in-dependently additive: the continuous matched set value is the substrate that makes leave-one-out attribution informa-tive, and box-level attribution is the mechanism that converts graded set-level feedback into cardinality-aware learning. 
+
+Ablation of MCR Ratio. We further study the effect of the MCR ratio ( λmcr ), which controls the strength of the box-level MCR advantage in the final policy update. As shown in Table 5, a small ratio of 0.05 already brings competitive performance, but the MCR signal is not strong enough to fully exploit response-internal box-level credit. Increasing the ratio to 0.10 gives the best overall trade-off, achieving the highest REC accuracy, DOD AP, and Segmentation gIoU, while maintaining strong counting accuracy. When the ratio is further increased to 0.20, the model obtains slightly higher RefCOCOg Val and PixMo Val results, but its performance drops on D3 and ReasonSeg. This suggests that overly em-phasizing box-level residual credit may weaken the balance with the original response-level GRPO objective. Therefore, we set the MCR ratio to 0.10 by default, as it provides a sta-ble balance between response-level preference optimization and fine-grained object-record credit assignment. Additional qualitative results are provided in the Appendix .
+
+Conclusion 
+
+This paper addresses the response-internal credit assign-ment problem in GRPO-based structured visual perception. We propose MCR-GRPO, a GRPO framework that assigns box-level marginal contribution rewards to structured object records while preserving the original response-level pref-erence comparison. The core idea is to evaluate the pre-dicted object set with a continuous matched set value and then estimate each box’s contribution through leave-one-out comparison, so that helpful, redundant, and harmful object records can receive different learning signals. Experiments on REC, DOD, segmentation, counting, and VQA show that MCR-GRPO improves structured visual perception across multiple benchmarks. MCR-GRPO enables object-level vi-sual records to serve as the basic units for learning, credit as-signment, and multi-object understanding in MLLMs, which offers a new perspective for structured visual perception. References 
+
+Bai, S.; Chen, K.; Liu, X.; Wang, J.; Ge, W.; Song, S.; Dang, K.; Wang, P.; Wang, S.; Tang, J.; Zhong, H.; Zhu, Y.; Yang, M.; Li, Z.; Wan, J.; Wang, P.; Ding, W.; Fu, Z.; Xu, Y.; Ye, J.; Zhang, X.; Xie, T.; Cheng, Z.; Zhang, H.; Yang, Z.; Xu, H.; and Lin, J. 2025a. Qwen2.5-VL Technical Report. arXiv:2502.13923. Bai, S.; Li, M.; Liu, Y.; Tang, J.; Zhang, H.; Sun, L.; Chu, X.; and Tang, Y. 2025b. UniVG-R1: Reasoning Guided Universal Visual Grounding with Reinforcement Learning. arXiv:2505.14231. Chen, L.; Li, J.; Dong, X.; Zhang, P.; Zang, Y.; Chen, Z.; Duan, H.; Wang, J.; Qiao, Y.; Lin, D.; et al. 2024. Are We on the Right Way for Evaluating Large Vision-Language Mod-els? Advances in Neural Information Processing Systems ,37: 27056–27087. Cheng, X.; Zhang, W.; Zhang, S.; Yang, J.; Guan, X.; Wu, X.; Li, X.; Zhang, G.; Liu, J.; Mai, Y.; Zeng, Y.; Wen, Z.; Jin, K.; Wang, B.; Zhou, W.; Lu, Y.; Ji, H.; Li, T.; Huang, W.; and Li, Z. 2025. SimpleVQA: Multimodal Factuality Evaluation for Multimodal Large Language Models. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 4637–4646. Deitke, M.; Clark, C.; Lee, S.; Tripathi, R.; Yang, Y.; Park, J. S.; Salehi, M.; Muennighoff, N.; Lo, K.; Soldaini, L.; et al. 2025. Molmo and PixMo: Open Weights and Open Data for State-of-the-Art Vision-Language Models. In Proceedings of the Computer Vision and Pattern Recognition Conference ,91–104. Huang, J.; Xu, Z.; Zhou, J.; Liu, T.; Xiao, Y.; Ou, M.; Ji, B.; Li, X.; and Yuan, K. 2026. SAM-R1: Leveraging SAM for Reward Feedback in Multimodal Segmentation via Rein-forcement Learning. Advances in Neural Information Pro-cessing Systems , 38: 138362–138383. Kirillov, A.; Mintun, E.; Ravi, N.; Mao, H.; Rolland, C.; Gustafson, L.; Xiao, T.; Whitehead, S.; Berg, A. C.; Lo, W.-Y.; Dollar, P.; and Girshick, R. 2023. Segment Anything. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 4015–4026. Kwon, W.; Li, Z.; Zhuang, S.; Sheng, Y.; Zheng, L.; Yu, C. H.; Gonzalez, J.; Zhang, H.; and Stoica, I. 2023. Efficient Memory Management for Large Language Model Serving with Pagedattention. In Proceedings of the 29th symposium on operating systems principles , 611–626. Lai, X.; Tian, Z.; Chen, Y.; Li, Y.; Yuan, Y.; Liu, S.; and Jia, J. 2024. LISA: Reasoning Segmentation via Large Lan-guage Model. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 9579–9589. Li, B.; Zhang, Y.; Guo, D.; Zhang, R.; Li, F.; Zhang, H.; Zhang, K.; Zhang, P.; Li, Y.; Liu, Z.; and Li, C. 2024. LLaVA-OneVision: Easy Visual Task Transfer. arXiv:2408.03326. Li, L. H.; Zhang, P.; Zhang, H.; Yang, J.; Li, C.; Zhong, Y.; Wang, L.; Yuan, L.; Zhang, L.; Hwang, J.-N.; Chang, K.-W.; and Gao, J. 2022. Grounded Language-Image Pre-Training. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 10965–10975. Lightman, H.; Kosaraju, V.; Burda, Y.; Edwards, H.; Baker, B.; Lee, T.; Leike, J.; Schulman, J.; Sutskever, I.; and Cobbe, K. 2024. Let 's Verify Step by Step. In Kim, B.; Yue, Y.; Chaudhuri, S.; Fragkiadaki, K.; Khan, M.; and Sun, Y., eds., 
+
+International Conference on Learning Representations , vol-ume 2024, 39578–39601. Liu, C.; Ding, H.; and Jiang, X. 2023. GRES: General-ized Referring Expression Segmentation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 23592–23601. Liu, H.; Li, C.; Wu, Q.; and Lee, Y. J. 2023. Visual Instruction Tuning. Advances in neural information processing systems ,36: 34892–34916. Liu, S.; Zeng, Z.; Ren, T.; Li, F.; Zhang, H.; Yang, J.; Jiang, Q.; Li, C.; Yang, J.; Su, H.; Zhu, J.; and Zhang, L. 2025a. Grounding DINO: Marrying DINO with Grounded Pre-training for Open-Set Object Detection. In Computer Vi-sion – ECCV 2024 , 38–55. Cham: Springer Nature Switzer-land. ISBN 978-3-031-72970-6. Liu, Y.; Ji, Y.; Le, A.; Zhu, J.; Pan, J.; Peng, C.; Deng, J.; Liu, F.; and Wu, J. 2026a. From Failure to Feedback: Group Revision Unlocks Hard Cases in Object-Level Grounding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 4816–4828. Liu, Y.; Li, Z.; Huang, M.; Yang, B.; Yu, W.; Li, C.; Yin, X.-C.; Liu, C.-L.; Jin, L.; and Bai, X. 2024. OCRBench: on the hidden mystery of OCR in large multimodal models. 
+
+Science China Information Sciences , 67(12). Liu, Y.; Peng, B.; Zhong, Z.; Yue, Z.; Lu, F.; Yu, B.; and Jia, J. 2026b. Seg-Zero: Reasoning-Chain Guided Segmentation via Cognitive Reinforcement. arXiv:2503.06520. Liu, Y.; Qu, T.; Zhong, Z.; Peng, B.; Liu, S.; Yu, B.; and Jia, J. 2026c. VisionReasoner: Unified Reasoning-Integrated Visual Perception via Reinforcement Learning. In The Four-teenth International Conference on Learning Representa-tions .Liu, Z.; Sun, Z.; Zang, Y.; Dong, X.; Cao, Y.; Duan, H.; Lin, D.; and Wang, J. 2025b. Visual-RFT: Visual Reinforcement Fine-Tuning. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 2034–2044. Ma, C.; Jiang, Y.; Wu, J.; Yuan, Z.; and Qi, X. 2024. Groma: Localized visual tokenization for grounding mul-timodal large language models. In European Conference on Computer Vision , 417–435. Springer. Masry, A.; Tan, J. Q.; Joty, S.; Hoque, E.; et al. 2022. ChartQA: A Benchmark for Question Answering about Charts with Visual and Logical Reasoning. In Findings of the association for computational linguistics: ACL 2022 , 2263– 2279. Paiss, R.; Ephrat, A.; Tov, O.; Zada, S.; Mosseri, I.; Irani, M.; and Dekel, T. 2023. Teaching CLIP to Count to Ten. In 
+
+Proceedings of the IEEE/CVF international conference on computer vision , 3170–3180. Peng, Z.; Wang, W.; Dong, L.; Hao, Y.; Huang, S.; Ma, S.; Ye, Q.; and Wei, F. 2024. Grounding Multimodal Large Language Models to the World. In International Conference on Learning Representations , volume 2024, 51575–51598. Pi, R.; Yao, L.; Gao, J.; Zhang, J.; and Zhang, T. 2024. Per-ceptionGPT: Effectively Fusing Visual Perception into LLM. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 27124–27133. Pramanick, S.; Han, G.; Hou, R.; Nag, S.; Lim, S.-N.; Ballas, N.; Wang, Q.; Chellappa, R.; and Almahairi, A. 2024. Jack of All Tasks Master of Many: Designing General-Purpose Coarse-to-Fine Vision-Language Model. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 14076–14088. Qian, R.; Yin, X.; and Dou, D. 2025. Reasoning to At-tend: Try to Understand How <SEG> Token Works. In 
+
+2025 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 24722–24731. Ravi, N.; Gabeur, V.; Hu, Y.-T.; Hu, R.; Ryali, C.; Ma, T.; Khedr, H.; Rädle, R.; Rolland, C.; Gustafson, L.; et al. 2025. SAM 2: Segment Anything in Images and Videos. In Inter-national Conference on Learning Representations , volume 2025, 28085–28128. Ren, Z.; Huang, Z.; Wei, Y.; Zhao, Y.; Fu, D.; Feng, J.; and Jin, X. 2024. PixelLM: Pixel Reasoning with Large Mul-timodal Model. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition (CVPR) ,26374–26383. Shao, Z.; Wang, P.; Zhu, Q.; Xu, R.; Song, J.; Bi, X.; Zhang, H.; Zhang, M.; Li, Y. K.; Wu, Y.; and Guo, D. 2024. DeepSeekMath: Pushing the Limits of Mathematical Rea-soning in Open Language Models. arXiv:2402.03300. Shen, H.; Liu, P.; Li, J.; Fang, C.; Ma, Y.; Liao, J.; Shen, Q.; Zhang, Z.; Zhao, K.; Zhang, Q.; Xu, R.; and Zhao, T. 2025. VLM-R1: A Stable and Generalizable R1-style Large Vision-Language Model. arXiv:2504.07615. Sheng, G.; Zhang, C.; Ye, Z.; Wu, X.; Zhang, W.; Zhang, R.; Peng, Y.; Lin, H.; and Wu, C. 2025. Hybridflow: A Flexible and Efficient RLHF Framework. In Proceedings of the Twentieth European Conference on Computer Systems ,1279–1297. Van Landeghem, J.; Tito, R.; Borchmann, Ł.; Pietruszka, M.; Jurkiewicz, D.; Powalski, R.; Józiak, P.; Biswas, S.; Coustaty, M.; and Stanisławek, T. 2023. ICDAR 2023 Competition on Document UnderstanDing of Everything (DUDE). In 
+
+Document Analysis and Recognition - ICDAR 2023 , 420– 434. Cham: Springer Nature Switzerland. Wang, H.; Ye, Y.; Wang, Y.; Nie, Y.; and Huang, C. 2025a. Elysium: Exploring Object-Level Perception in Videos via MLLM. In Computer Vision – ECCV 2024 , 166–185. Cham: Springer Nature Switzerland. ISBN 978-3-031-72670-5. Wang, P.; Li, L.; Shao, Z.; Xu, R.; Dai, D.; Li, Y.; Chen, D.; Wu, Y.; and Sui, Z. 2024. Math-Shepherd: Verify and Reinforce LLMs Step-by-step without Human Annotations. In Proceedings of the 62nd Annual Meeting of the Associa-tion for Computational Linguistics (Volume 1: Long Papers) ,9426–9439. Wang, X.; Zhang, S.; Li, S.; Li, K.; Kallidromitis, K.; Kato, Y.; Kozuka, K.; et al. 2025b. SegLLM: Multi-round Rea-soning Segmentation with Large Language Models. In Inter-national Conference on Learning Representations , volume 2025, 56526–56547. Xiao, B.; Wu, H.; Xu, W.; Dai, X.; Hu, H.; Lu, Y.; Zeng, M.; Liu, C.; and Yuan, L. 2024. Florence-2: Advancing a Unified Representation for a Variety of Vision Tasks. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 4818–4829. Xie, C.; Zhang, Z.; Wu, Y.; Zhu, F.; Zhao, R.; and Liang, S. 2023. Described Object Detection: Liberating Object De-tection with Flexible Expressions. In Oh, A.; Naumann, T.; Globerson, A.; Saenko, K.; Hardt, M.; and Levine, S., eds., Advances in Neural Information Processing Systems ,volume 36, 79095–79107. Curran Associates, Inc. You, Z.; and Wu, Z. 2025. Seg-R1: Segmentation Can Be Surprisingly Simple with Reinforcement Learning. arXiv:2506.22624. Yu, E.; Lin, K.; Zhao, L.; Wei, Y.; Peng, Y.; Wei, H.; Sun, J.; Han, C.; Ge, Z.; Zhang, X.; et al. 2026. Perception-R1: Pi-oneering Perception Policy with Reinforcement Learning. 
+
+Advances in Neural Information Processing Systems , 38: 94827–94853. Yu, L.; Poirson, P.; Yang, S.; Berg, A. C.; and Berg, T. L. 2016. Modeling Context in Referring Expressions. In Euro-pean conference on computer vision , 69–85. Springer. Zhang, Y.; Zhang, H.; Tian, H.; Fu, C.; Zhang, S.; Wu, J.; Li, F.; Wang, K.; Wen, Q.; Zhang, Z.; Wang, L.; and Jin, R. 2025. MME-RealWorld: Could Your Multimodal LLM Challenge High-Resolution Real-World Scenarios that are Difficult for Humans? In Yue, Y.; Garg, A.; Peng, N.; Sha, F.; and Yu, R., eds., International Conference on Learning Representations ,volume 2025, 89655–89701. Supplementary Material Credit the Right Box: Marginal Contribution Assignment for Structured Visual Perception 
+
+Xinheng Han 1,2 ∗, Jianfei Wang 2, Yu Chen 2, Xiang Wang 2† Shuai Li 2, Weixing Li 1, Feng Pan 1‡
+
+> 1
+
+School of Automation, Beijing Institute of Technology 
+
+> 2
+
+Amap, Alibaba Group {hanxinheng, panfeng}@bit.edu.cn 
+
+A Implementation Details 
+
+We initialize the MLLM from Qwen2.5-VL-7B-Instruct (Bai et al. 2025) and use pretrained SAM2 (Ravi et al. 2025) weights to generate segmentation masks when mask outputs are required. Training is implemented with the VeRL (Sheng et al. 2025) framework, and rollout generation is accelerated by vLLM (Kwon et al. 2023). We train on a single node with eight NVIDIA H20 GPUs, each with 141 GB of memory, and set vLLM’s gpu memory utilization to 0.6.We train for one epoch on the 7, 099 -sample VisionRea-soner7K (Liu et al. 2026b) training set with a rollout batch size of 16 and drop last is true, resulting in 443 steps. We empirically find that checkpoints around 400 training steps are sufficiently optimized and yield stronger performance. Therefore, our evaluation mainly focuses on this training stage. Unless otherwise specified, we use AdamW as the optimizer, training with a learning rate of 1 × 10 −6, a KL coefficient of 5 × 10 −3, gradient accumulation of 2, a global batch size of 16 , and gradient clipping with a maximum norm of 1.0.For each prompt, we sample 8 rollouts for group-relative optimization. The maximum number of generated tokens per rollout is 2000 . Rollout sampling uses a temperature of 1.0,top-p of 1.0, and disabled top-k sampling. Notably, all images are resized to 840 × 840 before infer-ence in both training and testing. 
+
+B Reward and Evaluator Details 
+
+Before computing the response-level reward, we first validate whether a sampled response can be deterministically parsed into structured object records. This validation is necessary because both the continuous matched set value and the MCR attribution require a well-defined predicted object set S. If the response format is invalid, the object records cannot be re-liably extracted, and the subsequent matching-based reward computation becomes undefined. A response is treated as structurally valid only when all required components are present. Specifically, it must 
+
+> ∗Work done during internship at Amap, Alibaba Group.
+> †Project Leader
+> ‡Corresponding author.
+
+contain a complete reasoning region and a complete an-swer region, delimited by <think>...</think> and 
+
+<answer>...</answer> , respectively. The content in-side <answer>...</answer> must be parseable as a JSON array, where each element is a dictionary represent-ing one predicted object record. For every predicted object record, the bbox_2d field must be present and contain ex-actly four numerical values, and the point_2d field must be present and contain exactly two numerical values. These re-quirements ensure that each predicted item can be converted into a box-indexed object record with a valid point. We use a conjunctive all-pass rule for format validation. Let Fm ∈ { 0, 1} denote the structural validity indicator for the sampled response ym. We set Fm = 1 only if the reasoning-answer structure, JSON parsing, array structure, dictionary format, and all required object fields are valid simultaneously. If any requirement fails, we set Fm = 0 .This differs from partial format scoring: an invalid response does not receive separate partial rewards for individual fields, because a single malformed component can prevent the con-struction of the predicted object set S and thus block the evaluator and MCR computation. Given this structural gate, the response-level reward is defined as: 
+
+Rseq  
+
+> m
+
+= Fm (4 + 1 .5Rnr  
+
+> m
+
++ V (S, G )) , (B1) where Rnr  
+
+> m
+
+∈ { 0, 1} is the non-repetition reward and V (S, G )
+
+is the continuous matched set value. Following VisionRea-soner, Rnr  
+
+> m
+
+is set to 1 unless the response contains repeated predictions. The constant 4 serves two purposes. First, it creates a clear reward separation between structurally valid and invalid responses after group-relative normalization, so responses that cannot be parsed receive a strongly negative advantage. Second, it aligns the base reward scale with the accuracy term. Since the evaluator uses α = 2 and β = γ = 1 ,the maximum pair score is 4, and the matched set value satisfies V (S, G ) ≤ 4. Therefore, the base reward has the same scale as the maximum accuracy reward, making format validity and structured prediction quality comparable within the response-level reward. Thus, format-valid responses are rewarded on a scale that can still be refined by non-repetition and matched-set accuracy, while format-invalid responses Method Supervision Stages Test-Time Qwen2.5-VL base MLLM 1 Initial VisionReasoner Response 1 Initial Struct GroupRevision Trajectory 2 Revised Struct MCR-GRPO Object-record 1 Initial Struct 
+
+Table C1: Comparison of Supervision Strategies and In-ference Stages. VisionReasoner uses response supervision, GroupRevision introduces trajectory supervision through an additional revision pass, and MCR-GRPO performs object-record supervision within a single structured response. receive zero response-level reward and no object-level MCR attribution. 
+
+C Protocol and Prompt Comparison 
+
+We compare the supervision strategies and inference proto-cols of different models. As shown in Table C1, Qwen2.5-VL (Bai et al. 2025) serves as the base MLLM and di-rectly generates the initial response. VisionReasoner (Liu et al. 2026b) follows response supervision, where a single response-level signal is assigned to the whole structured an-swer. GroupRevision (Liu et al. 2026a) uses trajectory super-vision by adding a second-stage revision pass conditioned on the initial prediction. In contrast, MCR-GRPO performs object-record supervision within the original structured re-sponse, assigning box-level credit during training while pre-serving a single-stage inference protocol. Table C2 lists the prompt templates used in our com-parison. VisionReasoner and MCR-GRPO use the same structured-output prompt, while GroupRevision additionally uses a second-stage revision prompt. 
+
+D Additional Experiments on COCO 
+
+We further evaluate MCR-GRPO on COCO to examine whether response-internal box-level credit assignment gen-eralizes to a standard object detection benchmark. We com-pare our model with Qwen2.5-VL (Bai et al. 2025), Vision-Reasoner (Liu et al. 2026b), and GroupRevision (Liu et al. 2026a). We evaluate on COCO val2017 using the standard COCO detection protocol. All methods are evaluated with the same image resizing, decoding configuration, prompt format, and post-processing rules. As shown in Table D3, MCR-GRPO achieves the best COCO AP among the com-pared methods. Compared with Qwen2.5-VL, MCR-GRPO improves AP from 29 .2% to 39 .7% . Compared with Vision-Reasoner, MCR-GRPO improves AP from 37 .7% to 39 .7% .Notably, MCR-GRPO also slightly outperforms GroupRevi-sion, while using only a single inference stage and requiring no additional revision pass. To further compare inference protocols, Table D4 reports detailed COCO metrics for GroupRevision and MCR-GRPO. GroupRevision uses a two-stage inference procedure, where the model first generates an initial response and then performs an additional revision stage. In contrast, MCR-GRPO keeps the inference pipeline single-stage: it derives box-level su-pervision during training, but does not require an additional                          
+
+> Qwen2.5-VL Prompt
+> Locate "{ query }", report the bboxes coordinates in JSON format.
+> MCR-GRPO & VisionReasoner Prompt
+> Please find “{ query }” with bboxs and points. Compare the difference between object(s) and find the most closely matched object(s). Output the thinking process in
+> <think> </think> and final answer in <answer> </answer> tags. Output the bbox(es) and point(s) inside the interested object(s) in JSON format. i.e. <think> thinking process here </think> <answer> {example }</answer>
+> GroupRevision Stage I (Init) Prompt
+> Please find "{ query }" with bounding boxes and points. Compare the difference between object(s) and identify the most closely matched one(s). Output the thinking process in <think> ... </think> and the final answer in
+> <answer> ... </answer> tags. Return the bbox(es) and point(s) of the referenced object(s) in JSON format. i.e., <think> thinking process here </think> <answer> {example }</answer>
+> GroupRevision Stage II (Revision) Prompt
+> You previously predicted bounding box(es) ({ box }) and point(s) ({ points }) for the question "{ query }", with the reasoning { think }. Rethink whether the previous bbox(es) and point(s) match the target object(s). – If yes: keep the same object(s); tighten each bbox to the object boundary and set the point to the object center. – If no: discard previous predictions and output the correct object(s), each with one bbox and one point inside it. Respond with exactly:
+> <think> thinking process here </think> <answer> {example }</answer>
+
+Table C2: Prompt Comparison Across Methods. MCR-GRPO, Qwen2.5-VL, and VisionReasoner use a single initial prompt, while GroupRevision adds a second-stage revision prompt. response generation or revision trajectory at test time. Despite this simpler inference protocol, MCR-GRPO obtains higher AP, AP 50 , AP 75 , AR 10 , and AR 100 than GroupRevision-7B. These results suggest that the gain of MCR-GRPO does not rely on test-time revision. Instead, MCR-GRPO improves the model during training by assigning marginal contribution rewards to box-level object records, allowing the final model to produce stronger detections in a single inference pass. 
+
+E Qualitative Comparison 
+
+We qualitatively compare our MCR-GRPO with VisionRea-soner (Liu et al. 2026b) across Described Object Detection (DOD), Segmentation, Referring Expression Comprehen-sion (REC), and Counting. Figures E1–E3 show the query, the prediction from each model, and the ground truth under the same task-specific visualization protocol. These exam-ples complement the aggregate results in the main paper by illustrating differences in instance selection, localization, and Method Extra Stage COCO AP 50:95         
+
+> Qwen2.5-VL-7B ×29.2 VisionReasoner-7B ×37.7 GroupRevision-7B ✓39.2 MCR-GRPO (Ours) ×39.7
+
+Table D3: Additional COCO Results. MCR-GRPO achieves the best COCO AP without introducing an extra inference stage. The best results are highlighted in bold .                        
+
+> Method Extra Stage AP AP 50 AP 75
+> GroupRevision-7B ✓39.2 57.9 40.7 MCR-GRPO (Ours) ×39.7 59.2 40.8
+> Method Extra Stage AR 1AR 10 AR 100
+> GroupRevision-7B ✓35.5 49.5 50.1 MCR-GRPO (Ours) ×35.0 49.7 50.2
+
+Table D4: Detailed COCO Comparison Between GroupRevision-7B and MCR-GRPO. MCR-GRPO uses a single-stage inference protocol and achieves stronger over-all detection performance. The best results are highlighted in 
+
+bold .cardinality. 
+
+Described object detection. Figure E1 presents examples from the D3 benchmark (Xie et al. 2023), whose queries contain attributes, relations, and negated descriptions. In the displayed cases, MCR-GRPO more accurately identifies the complete set of objects satisfying the description while ex-cluding visually similar distractors. This distinction is es-pecially visible for multi-object queries, which require both description-consistent localization and correct cardinality. 
+
+Segmentation and REC. Figure E2 shows reasoning seg-mentation examples from ReasonSeg (Lai et al. 2024) and re-ferring segmentation examples from RefCOCO, RefCOCO+, and RefCOCOg (Yu et al. 2016). All samples can also be used as REC examples. These queries require spatial-relation rea-soning, ordinal disambiguation, or recognition from an indi-rect description. In the displayed cases, MCR-GRPO more reliably selects the intended instance and produces spatial outputs that align more closely with the target extent. For seg-mentation, both methods use the same SAM2-based mask-generation pipeline described in the main paper. 
+
+Counting. Figure E3 compares the two models on PixMo-Count (Deitke et al. 2025) and CountBench (Paiss et al. 2023). As in the main experiments, the predicted count is obtained from the number of generated object records, with-out additional counting-specific supervision. In the displayed scenes, MCR-GRPO more closely matches the ground-truth cardinality by reducing missed targets and redundant pre-dictions while retaining a localized box for each counted instance. 
+
+F Formal Analysis of Marginal Contributions 
+
+In this section, we provide a formal analysis of the leave-one-out MCR credit used in the main text. The analysis separates the raw value difference ∆Vi from the normalized resid-ual credit ¯Amcr  
+
+> i
+
+. The raw value captures how removing one predicted record changes the count-normalized matched set value, while the subsequent within-response normalization converts these value differences into signed object-record credits for policy optimization. This analysis explains why unmatched records receive negative raw credit under over-prediction, and why redundant or weak records can be sup-pressed by negative normalized credit within the same re-sponse. 
+
+Setting. Let S = {di}Ki=1 be the predicted object records and G = {gj }Nj=1 be the ground-truth objects. Pair scores satisfy s(di, g j ) ≥ 0. For any predicted subset T ⊆ S, let 
+
+M(T, G ) denote the set of valid one-to-one matchings be-tween T and G. Following the matching objective in the main text, define: 
+
+M ⋆T = arg max  
+
+> M′∈M (T,G )
+
+X 
+
+> (r,j )∈M′
+
+s(dr , g j ). (F2) The matched set value for T is: 
+
+V (T, G ) = 1max( |T |, N )
+
+X 
+
+> (r,j )∈M⋆T
+
+s(dr , g j ). (F3) In particular, the raw leave-one-out value used by MCR is: 
+
+∆Vi = V (S, G ) − V (S \ { di}, G ). (F4) For compactness, we write M ⋆S for the optimal matching on S, and M ⋆ 
+
+> −i
+
+for the optimal matching on S \ { di}. A predicted record di is called unmatched if there exists an optimal matching M ⋆S that does not include di.
+
+Lemma 1 (Removal bounds) . For any di ∈ S: (a) Removing 
+
+di cannot increase the optimal matched sum: 
+
+X 
+
+> (r,j )∈M⋆
+> −i
+
+s(dr , g j ) ≤ X 
+
+> (r,j )∈M⋆S
+
+s(dr , g j ). (F5) 
+
+(b) If di is matched to gj(i) in an optimal matching M ⋆S ,then: 
+
+X 
+
+> (r,j )∈M⋆
+> −i
+
+s(dr , g j ) ≥
+
+ X 
+
+> (r,j )∈M⋆S
+
+s(dr , g j )
+
+ − s(di, g j(i)).
+
+(F6) 
+
+(c) If di is unmatched in some optimal matching M ⋆S , then: 
+
+X 
+
+> (r,j )∈M⋆
+> −i
+
+s(dr , g j ) = X 
+
+> (r,j )∈M⋆S
+
+s(dr , g j ). (F7) 
+
+Proof. (a) Any matching after removing di remains feasible for the original predicted set by leaving di unused. Since all pair scores are non-negative, the maximum matched sum cannot increase after removal. (b) If di is matched, deleting the pair (i, j (i)) from M ⋆S gives a feasible matching after removing di with the stated weight. (c) If di is unmatched in an optimal matching, the same matching remains feasible after removal, and the bound (a) gives equality. mailbox not 
+
+marked with 
+
+numbers 
+
+a plastic toy 
+
+a doctor or nurse 
+
+wearing green 
+
+surgical clothes 
+
+helicopter  not 
+
+flying  in  the  air 
+
+a seal not in 
+
+the water 
+
+a billiard ball 
+
+with no numbers 
+
+or patterns on 
+
+its surface on the 
+
+table 
+
+a lion  dance 
+
+that  is  not 
+
+upright 
+
+a soccer player 
+
+with a soccer 
+
+at his feet on 
+
+the green field  
+
+> Query VisionReasoner -7B MCR -GRPO (ours) Ground Truth
+
+Figure E1: Qualitative Comparison with VisionReasoner on Described Object Detection. Examples are drawn from the D3
+
+benchmark. The displayed queries cover attribute-rich, relational, and negated descriptions. We present visualizations of the model-predicted boxes and points overlaid on the images. the area that is first impacted when 
+
+a car is moving forward and crashes 
+
+3rd from right guy 
+
+Flowers need sunlight to grow and 
+
+bloom. What in the picture can 
+
+provide the necessary light for the 
+
+flowers to thrive? 
+
+airplane 3rd in the row 
+
+Birds often find their food in the 
+
+water, and they have a specific body 
+
+part to help them catch the food. 
+
+What part is likely to be used by the 
+
+bird in the picture to catch its food? 
+
+smaller animal next to red shirt  
+
+> Query VisionReasoner -7B MCR -GRPO (ours) Ground Truth
+
+The middle police motorcycle 
+
+in a line of them on the street Figure E2: Qualitative comparison with VisionReasoner on Segmentation and Referring Expression Comprehension. 
+
+Examples are drawn from ReasonSeg and RefCOCO(+/g). The displayed queries involve reasoning-dependent descriptions, spatial relations, and ordinal cues. We present visualizations of the model-predicted boxes and points, as well as the masks generated by SAM2, overlaid on the images. flags 
+
+How many 
+
+people are  there 
+
+in  the image ?
+
+How many 
+
+children  are  there 
+
+in  the image ?
+
+pigs 
+
+books 
+
+people 
+
+How many 
+
+people are  there 
+
+in  the image ?
+
+people  
+
+> Query VisionReasoner -7B MCR -GRPO (ours) Ground Truth
+
+Figure E3: Qualitative Comparison with VisionReasoner on Counting. Examples are drawn from PixMo-Count and Count-Bench. The predicted count is the number of localized object records. We present visualizations of the model-predicted boxes and points, as well as the masks generated by SAM2, overlaid on the images. In addition, we visualize the model’s counting process and the resulting counts on the images. Proposition 1 (Regime-dependent raw sign) . (a) If K ≤ N ,then ∆Vi ≥ 0 for every di ∈ S. (b) If K > N and di is unmatched in some optimal matching, then: 
+
+∆Vi = − 1
+
+K(K − 1) 
+
+X 
+
+> (r,j )∈M⋆S
+
+s(dr , g j ) ≤ 0. (F8) 
+
+The inequality is strict whenever the matched sum is pos-itive. Proof. (a) When K ≤ N , both values use denominator N ,so: 
+
+∆Vi = 1
+
+N
+
+ X 
+
+> (r,j )∈M⋆S
+
+s(dr , g j ) − X 
+
+> (r,j )∈M⋆
+> −i
+
+s(dr , g j )
+
+ ≥ 0
+
+(F9) by Lemma 1. (b) When K > N and di is unmatched, the matched sum is unchanged after removal, while the denomi-nator changes from K to K − 1. Hence: 
+
+∆Vi = 1
+
+K
+
+X 
+
+> (r,j )∈M⋆S
+
+s(dr , g j ) − 1
+
+K − 1
+
+X 
+
+> (r,j )∈M⋆S
+
+s(dr , g j )= − 1
+
+K(K − 1) 
+
+X 
+
+> (r,j )∈M⋆S
+
+s(dr , g j ),
+
+(F10) with strict negativity whenever the matched sum is positive. Finally, within-response normalization preserves the or-dering of raw marginal contributions. When the within-response standard deviation is nonzero, ¯Amcr  
+
+> i
+
+is a strictly increasing affine transformation of ∆Vi. Therefore, for any two records di and dj ,
+
+∆Vi > ∆Vj ⇒ ¯Amcr  
+
+> i
+
+> ¯Amcr  
+
+> j
+
+. (F11) Thus, MCR guarantees response-relative ordering rather than an absolute helpful-or-harmful sign per box. If all records have identical raw marginal contributions, the variance is zero and we set all normalized MCR credits to zero. 
+
+Proposition 2 (Relative Credit After Normalization ). For 
+
+K > 1 and σ∆ > 0 in Eqs. (8)–(9), normalized MCR credit is: 
+
+¯Amcr  
+
+> i
+
+= ∆Vi − μ∆
+
+σ∆ + ϵ . (F12) 
+
+Thus ¯Amcr  
+
+> i
+
+preserves the ordering of ∆Vi, and its sign is determined by whether ∆Vi is above or below the within-response mean μ∆.Proof. The denominator σ∆ +ϵ is positive when σ∆ > 0 and 
+
+ϵ ≥ 0. Therefore normalization is a strictly increasing affine map of ∆Vi. Centering makes records below the response mean receive negative residual credit, even when their raw 
+
+∆Vi is non-negative. If σ∆ = 0 , MCR sets all normalized credits to zero. 
+
+Proposition 3 (Lowest Credits Under Over-Prediction ).
+
+Let K > N . For any record dk ∈ S and any unmatched record di,
+
+∆Vk ≥ ∆Vi. (F13) 
+
+Equality holds iff: 
+
+X 
+
+> (r,j )∈M⋆
+> −k
+
+s(dr , g j ) = X 
+
+> (r,j )∈M⋆S
+
+s(dr , g j ). (F14) 
+
+Thus unmatched records and perfectly substitutable records occupy the lowest normalized MCR credits whenever σ∆ >
+
+0.Proof. For the unmatched record di,
+
+∆Vi = 1
+
+K
+
+X 
+
+> (r,j )∈M⋆S
+
+s(dr , g j ) − 1
+
+K − 1
+
+X 
+
+> (r,j )∈M⋆S
+
+s(dr , g j ).
+
+(F15) For any record dk,
+
+∆Vk = 1
+
+K
+
+X 
+
+> (r,j )∈M⋆S
+
+s(dr , g j ) − 1
+
+K − 1
+
+X 
+
+> (r,j )∈M⋆
+> −k
+
+s(dr , g j ).
+
+(F16) Lemma 1 gives: 
+
+X 
+
+> (r,j )∈M⋆
+> −k
+
+s(dr , g j ) ≤ X 
+
+> (r,j )∈M⋆S
+
+s(dr , g j ), (F17) so ∆Vk ≥ ∆Vi. Since normalization is strictly increasing when σ∆ > 0, the same ordering holds after normalization. 
+
+Proposition 4 (Bounded Residual Credit ). For K ≥ 2 and 
+
+ϵ = 0 in Eq. (9), 
+
+| ¯Amcr  
+
+> i
+
+| ≤ √K − 1. (F18) 
+
+With ϵ > 0, the magnitude can only decrease. Therefore, for object tokens t ∈ τi with 
+
+AMCR -GRPO  
+
+> m,t
+
+= Aseq  
+
+> m
+
++ λmcr Amcr  
+
+> t,i
+
+, (F19) 
+
+the composite token advantage has the same sign as Aseq 
+
+> m
+
+whenever 
+
+λmcr 
+
+√K − 1 < |Aseq  
+
+> m
+
+|. (F20) 
+
+Proof. For object tokens t ∈ τi, Eq. (10) gives Amcr  
+
+> t,i
+
+=¯Amcr  
+
+> i
+
+. Let zi = ¯Amcr  
+
+> i
+
+with ϵ = 0. By the population-standard-deviation normalization in Eq. (8), we have P 
+
+> i
+
+zi = 0 and P 
+
+> i
+
+z2 
+
+> i
+
+= K. Hence: 
+
+z2 
+
+> i
+
+=
+
+X 
+
+> k̸=i
+
+zk
+
+
+
+> 2
+
+≤ (K − 1) X 
+
+> k̸=i
+
+z2 
+
+> k
+
+= ( K − 1)( K − z2 
+
+> i
+
+),
+
+(F21) which gives |zi| ≤ √K − 1. If ϵ > 0, each normalized value is multiplied by σ∆/(σ∆ + ϵ) ≤ 1. The sign statement follows from the triangle inequality. These results explain how MCR turns leave-one-out value changes into box-level training signals. The raw value dif-ference ∆Vi measures how much a predicted record con-tributes to the count-normalized matched set value. Under over-prediction, removing an unmatched or redundant record can improve the set value, yielding negative raw credit. When K ≤ N , raw contributions are non-negative, but within-response centering can assign negative normalized residual credit to records whose marginal contributions fall below the response mean. Thus, weak, redundant, or poorly localized records can still be suppressed in the policy update, while records with stronger marginal contributions receive larger MCR credits and are encouraged. In this way, MCR real-izes the positive-and-negative box-level credit assignment described in the main text while preserving the original response-level GRPO comparison. 
+
+G Additional Qualitative Examples 
+
+Figure G4 visualizes representative MCR-GRPO inference outputs across the task families evaluated in the main paper. The examples cover DOD on D3 (Xie et al. 2023), seg-mentation and REC on ReasonSeg (Lai et al. 2024) and RefCOCO(+/g) (Yu et al. 2016), and counting on PixMo-Count (Deitke et al. 2025) and CountBench (Paiss et al. 2023). For each input, the figure displays an excerpt from the gen-erated <think> content together with the final prediction. The reasoning identifies visual evidence used to distinguish the target from distractors or enumerate the queried cate-gory, while the final output expresses the decision as local-ized boxes, segmentation masks, or a count. These examples show how the same structured inference interface supports different task-specific outputs. 
+
+Supplementary References 
+
+Bai, S.; Chen, K.; Liu, X.; Wang, J.; Ge, W.; Song, S.; Dang, K.; Wang, P.; Wang, S.; Tang, J.; Zhong, H.; Zhu, Y.; Yang, M.; Li, Z.; Wan, J.; Wang, P.; Ding, W.; Fu, Z.; Xu, Y.; Ye, J.; Zhang, X.; Xie, T.; Cheng, Z.; Zhang, H.; Yang, Z.; Xu, H.; and Lin, J. 2025. Qwen2.5-VL Technical Report. arXiv:2502.13923. Deitke, M.; Clark, C.; Lee, S.; Tripathi, R.; Yang, Y.; Park, J. S.; Salehi, M.; Muennighoff, N.; Lo, K.; Soldaini, L.; et al. 2025. Molmo and PixMo: Open Weights and Open Data for State-of-the-Art Vision-Language Models. In Proceedings of the Computer Vision and Pattern Recognition Conference ,91–104. Kwon, W.; Li, Z.; Zhuang, S.; Sheng, Y.; Zheng, L.; Yu, C. H.; Gonzalez, J.; Zhang, H.; and Stoica, I. 2023. Efficient Memory Management for Large Language Model Serving with Pagedattention. In Proceedings of the 29th symposium on operating systems principles , 611–626. Lai, X.; Tian, Z.; Chen, Y.; Li, Y.; Yuan, Y.; Liu, S.; and Jia, J. 2024. LISA: Reasoning Segmentation via Large Lan-guage Model. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 9579–9589. Liu, Y.; Ji, Y.; Le, A.; Zhu, J.; Pan, J.; Peng, C.; Deng, J.; Liu, F.; and Wu, J. 2026a. From Failure to Feedback: Group Revision Unlocks Hard Cases in Object-Level Grounding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 4816–4828. Liu, Y.; Qu, T.; Zhong, Z.; Peng, B.; Liu, S.; Yu, B.; and Jia, J. 2026b. VisionReasoner: Unified Reasoning-Integrated Visual Perception via Reinforcement Learning. In The Four-teenth International Conference on Learning Representa-tions .Paiss, R.; Ephrat, A.; Tov, O.; Zada, S.; Mosseri, I.; Irani, M.; and Dekel, T. 2023. Teaching CLIP to Count to Ten. In 
+
+Proceedings of the IEEE/CVF international conference on computer vision , 3170–3180. Ravi, N.; Gabeur, V.; Hu, Y.-T.; Hu, R.; Ryali, C.; Ma, T.; Khedr, H.; Rädle, R.; Rolland, C.; Gustafson, L.; et al. 2025. SAM 2: Segment Anything in Images and Videos. In Inter-national Conference on Learning Representations , volume 2025, 28085–28128. Sheng, G.; Zhang, C.; Ye, Z.; Wu, X.; Zhang, W.; Zhang, R.; Peng, Y.; Lin, H.; and Wu, C. 2025. Hybridflow: A Flexible and Efficient RLHF Framework. In Proceedings of the Twentieth European Conference on Computer Systems ,1279–1297. Xie, C.; Zhang, Z.; Wu, Y.; Zhu, F.; Zhao, R.; and Liang, S. 2023. Described Object Detection: Liberating Object De-tection with Flexible Expressions. In Oh, A.; Naumann, T.; Globerson, A.; Saenko, K.; Hardt, M.; and Levine, S., eds., Advances in Neural Information Processing Systems ,volume 36, 79095–79107. Curran Associates, Inc. Yu, L.; Poirson, P.; Yang, S.; Berg, A. C.; and Berg, T. L. 2016. Modeling Context in Referring Expressions. In Euro-pean conference on computer vision , 69–85. Springer. ...In the image, there is  a person in the 
+
+foreground  wearing a graduation gown 
+
+and cap, and there are  a few individuals 
+
+in the background ... 
+
+Counting -Pixmo 
+
+”People ”
+
+Answer 
+
+：4
+
+...The containers are uniform in 
+
+shape and size, and  there are no 
+
+overlapping or hidden objects 
+
+that could be mistaken  for 
+
+additional canisters... 
+
+Counting -Count 
+
+Answer 
+
+：8
+
+”How many canisters are there in the image? ”
+
+In the image, there is a  bicycle in the 
+
+background , which aligns with the 
+
+description of  a convenient mode of 
+
+transportation  that can  also help 
+
+with exercise .
+
+Seg&REC -ReasonSeg 
+
+DOD -D3 
+
+”woman in the right of the stands, with her hands crossed ”
+
+”a person standing on the edge of a funicular ”
+
+Seg&REC -RefCOCO(+/g) 
+
+...In the image, there are multiple individuals in the 
+
+background, but  the one who matches the 
+
+description is a woman seated with her hands 
+
+folded, positioned towards the right side of the 
+
+image,  behind the fence . The presence of other 
+
+individuals in the background does not align with 
+
+the specific description of the object to be identified. 
+
+”I feel my commute is too slow now 
+
+and I'm hoping to find a convenient 
+
+mode of transportation that can also 
+
+help me exercise.  Can you help me find 
+
+the corresponding part in the picture? ”
+
+...is indicated by their 
+
+position near the front 
+
+of the vehicle, where 
+
+they are  not seated 
+
+but rather standing ,
+
+and they are positioned 
+
+at the edge of the car, ... Figure G4: Cross-Task Reasoning and Prediction Examples from MCR-GRPO. Representative examples cover DOD on D3,segmentation and REC on ReasonSeg and RefCOCO(+/g), and counting on PixMo-Count and CountBench. Each example pairs an excerpt from the generated <think> content with the final prediction, showing how attribute, relational, and cardinality reasoning is connected to task-appropriate boxes, masks, and counts.

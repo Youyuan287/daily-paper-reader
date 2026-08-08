@@ -1,0 +1,319 @@
+Title: On the Efficacy of Self-Supervised Point Cloud Encoders for Efficient 3D Large Language Models
+
+URL Source: https://arxiv.org/pdf/2607.29136v1
+
+Published Time: Mon, 03 Aug 2026 00:34:41 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# On the Efficacy of Self-Supervised Point Cloud Encoders for Efficient 3D Large Language Models 
+
+## Yao Zheng 1 Tian Zhang 11Beijing University of Posts and Telecommunications  
+
+> {3448961153, ztian }@bupt.edu.cn
+
+## Abstract 
+
+Large 3D point cloud-language models (3D-LLMs) have demonstrated remarkable capabilities in 3D understand-ing by integrating point cloud encoders with large lan-guage models. However, existing 3D-LLMs rely on multi-modal pre-trained encoders ( e.g ., ULIP-2) that require ex-pensive image-text-point cloud alignment with 8 × A100-scale computing, raising the barrier for research and de-ployment. In this work, we conduct a systematic empirical study to investigate whether low-cost self-supervised point cloud encoders—specifically PCP-MAE and Point-MAE— can serve as effective alternatives. Using MiniGPT-3D as the testbed, we pre-train and evaluate 7 encoder initializa-tion / pre-training configurations (1 multi-modal baseline + 5 self-supervised pre-training + 1 random initialization), evaluated under 2 fine-tuning strategies (frozen vs. un-frozen) for a total of 12 experimental groups, spanning 2 ar-chitectures (MaskTransformer vs. PointTransformer), 3 pre-training objectives (PCP-MAE, Point-MAE, random initial-ization), and 2 pre-training datasets (Objaverse 660K vs. ShapeNet55-34 ∼50K). Our experiments reveal three prin-cipal findings: (1) The four-stage MiniGPT-3D training pipeline is remarkably capable of training a 3D encoder from random initialization —a randomly initialized en-coder trained end-to-end achieves 52.50% open-vocabulary accuracy and 44.45 captioning score, approaching the best pre-trained variants; (2) Architecture and pre-training ob-jective exhibit a strong crossover interaction —PCP-MAE with MaskTransformer achieves 59.00% accuracy (the best self-supervised result), while Point-MAE with MaskTrans-former drops to 46.50%, and the pattern inverts for Point-Transformer; (3) Closed-set ModelNet40 classification re-mains a fundamental weakness of all purely geometric encoders , achieving only ∼13–18% accuracy compared to 
+
+∼62% for the multi-modal baseline, even after end-to-end fine-tuning. Our findings provide actionable guidelines for building cost-effective 3D-LLMs and reveal interaction pat-terns between self-supervised pre-training objectives and downstream encoder architectures. 
+
+Keywords: 3D-LLM; self-supervised learning; point cloud encoder; multi-modal pre-training; feature alignment 
+
+## 1. Introduction 
+
+Large Language Models (LLMs) have driven remarkable advancements across multiple domains, benefiting from their extensive world knowledge and instruction-following capabilities [7, 11]. Building upon LLMs, large 2D vision-language models (2D-LLMs) successfully bridge visual and textual modalities through learned projectors, enabling comprehensive visual understanding [3, 6]. Inspired by these successes, large 3D point cloud-language models (3D-LLMs) have emerged to equip LLMs with the ability to per-ceive and reason about 3D geometry [9, 10, 12]. A critical component in 3D-LLMs is the point cloud encoder, which transforms raw 3D point clouds into fea-ture representations. State-of-the-art 3D-LLMs such as PointLLM [12] and ShapeLLM [9] employ point cloud en-coders pre-trained with multi-modal objectives ( e.g ., ULIP-2 [13]) that align point clouds with images and text. While effective, such multi-modal pre-training is computationally expensive and data-intensive, requiring carefully curated tri-modal datasets of ∼1.2TB. MiniGPT-3D [10] proposed an efficient alternative by leveraging 2D-LLM priors to re-duce the cost of vision-language alignment, but it still de-pends on the ULIP-2 pre-trained Point-BERT [14] encoder. In parallel, self-supervised learning methods for 3D point clouds—such as Point-MAE [8] and PCP-MAE [16]—have demonstrated strong representation learning ca-pabilities through masked autoencoding and geometric re-construction, requiring only unlabeled point cloud data. However, their effectiveness as encoder backbones in 3D-LLM pipelines remains unexplored. In this work, we conduct a systematic empirical study us-ing MiniGPT-3D [10] as our testbed, pre-training and eval-uating 7 encoder initialization / pre-training configurations (1 multi-modal baseline + 5 self-supervised pre-training + 1 random initialization), evaluated under 2 fine-tuning 1arXiv:2607.29136v1 [cs.CV] 31 Jul 2026 strategies (frozen vs. unfrozen) for a total of 12 experimen-tal groups. Our study is guided by three questions: (Q1) 
+
+Can self-supervised encoders match multi-modal encoders when the downstream pipeline is allowed to fine-tune them? 
+
+(Q2) How do architecture choice (MaskTransformer vs. PointTransformer) and pre-training objective (PCP-MAE vs. Point-MAE) interact? (Q3) What is the marginal benefit of self-supervised pre-training over random initialization in this setup? 
+
+Our main contributions are: 
+
+1. We discover that the MiniGPT-3D pipeline can train a 3D encoder from random initialization to nearly match pre-trained variants. A randomly ini-tialized encoder, trained end-to-end through the four stages, achieves 52.50% open-vocabulary classifica-tion accuracy—matching the PCP-MAE pre-trained V2 (52.50%) and closely approaching the best self-supervised variant (59.00%). This suggests that the strong 2D-LLM priors and cascaded training largely compensate for the absence of 3D pre-training. 2. We reveal a previously undocumented crossover interaction between architecture and pre-training objective. PCP-MAE center prediction synergizes with MaskTransformer’s cross-attention (59.00% accu-racy), while pure masked reconstruction (Point-MAE) performs best with PointTransformer’s self-attention (55.50%). The optimal architecture flips depending on the pre-training objective—a finding with significant im-plications for future 3D representation learning. 3. We characterize the hard ceiling of geometric pre-training for closed-set classification. All self-supervised variants, regardless of architecture, objective, data scale, or fine-tuning strategy, plateau at 13–18% on ModelNet40 (vs. 62% baseline), confirming that seman-tic category boundaries require multi-modal signals that geometric reconstruction alone cannot provide. 
+
+## 2. Related Work 
+
+2.1. Large 3D Point Cloud-Language Models 
+
+Large 3D point cloud-language models (3D-LLMs) inte-grate point cloud understanding into LLMs, enabling rea-soning and conversation about 3D objects [1, 4, 9, 10, 12]. Early work by 3D-LLM [4] renders 3D objects into multi-view 2D images and leverages 2D-LLM priors as an in-termediary between LLMs and 3D data. Subsequent ap-proaches [1, 12] encode point clouds directly using 3D en-coders and align them with LLMs through trainable projec-tors. PointLLM [12] and ShapeLLM [9] demonstrate that fully fine-tuning 3D-LLMs with large LLM backbones (7B–13B parameters) yields strong performance but re-quires substantial computational resources. MiniGPT-3D [10] addresses efficiency by proposing a four-stage cas-caded training strategy that leverages 2D-LLM priors, achieving strong performance with only 26.8 hours of train-ing on a single RTX 3090 GPU. Despite this efficiency gain, MiniGPT-3D still relies on the ULIP-2 [13] pre-trained Point-BERT [14] encoder, which itself requires expensive multi-modal pre-training. All existing 3D-LLMs default to multi-modal pre-trained encoders, leaving the feasibility of cheaper geometric-only encoders largely unexplored. 
+
+2.2. Self-Supervised Point Cloud Representation Learning 
+
+Self-supervised learning for 3D point clouds has advanced rapidly, with masked autoencoding emerging as a dominant paradigm. Point-BERT [14] adapts BERT-style masked modeling to point clouds using a discrete tokenizer. Point-MAE [8] simplifies this by directly reconstructing masked point coordinates through an asymmetric encoder-decoder architecture. PCP-MAE [16] extends Point-MAE with an auxiliary center prediction task that predicts the centroid of masked point patches. Two encoder architectures are commonly used: Point-Transformer (self-attention over all patches, used in Point-BERT/Point-MAE) and MaskTransformer (cross-attention between visible and masked patches, used in PCP-MAE). Their compatibility with downstream 3D-LLM pipelines has not been systematically compared. 
+
+2.3. Efficient Vision-Language Alignment 
+
+Parameter-efficient fine-tuning (PEFT) techniques such as LoRA [5] have been widely adopted in vision-language models. TinyGPT-V [15] and MobileVLM [2] demon-strate that efficient 2D-LLMs can be built by combin-ing pre-trained vision modules with LoRA-adapted LLMs. MiniGPT-3D [10] extends this to 3D by employing LoRA and Norm fine-tuning, achieving up to 260 × fewer train-able parameters. Our work extends this efficiency research upstream, exploring whether the encoder itself can be made cheaper to pre-train. 
+
+## 3. Methodology 
+
+3.1. Preliminaries: MiniGPT-3D 
+
+MiniGPT-3D [10] aligns 3D point clouds with LLMs us-ing 2D priors. Its architecture consists of: a point cloud encoder, a point cloud projection layer (MLP), a Q-Former [6], a mixture of query experts (MQE), a modality projector, and a large language model (Phi-2, 2.7B). The training pro-ceeds in four stages: (I) training the point cloud projection layer; (II) fine-tuning the Q-Former, modality projector, and LLM; (III) fine-tuning on complex instructions and detailed captions; (IV) training the MQE module. In the original MiniGPT-3D, the point cloud encoder is 2Point-BERT pre-trained with ULIP-2 on Objaverse, kept frozen throughout all stages. We replace this encoder with self-supervised alternatives and examine both frozen and unfrozen configurations. 
+
+3.2. Self-Supervised Encoder Variants 
+
+We pre-train 7 encoder initialization / pre-training config-urations (1 multi-modal baseline + 5 self-supervised pre-training + 1 random initialization), evaluated under both frozen and unfrozen strategies for a total of 12 experimental groups. All accept 8,192 points with 6-dimensional features (xyz + rgb; RGB zero-padded for datasets lacking color). Pre-training is halted when the reconstruction loss enters a stable plateau (24–71 epochs). The pre-training loss is Ltotal = Lchamf er + η · L center ,where η controls the center prediction weight. For Point-MAE, η = 0 .
+
+3.2.1. V1 Hybrid: PCP-MAE + MaskTransformer 
+
+Uses the original PCP-MAE MaskTransformer architecture with cross-attention between visible and masked tokens. Lacks a native [cls] token; we copy these parameters from the Baseline. Pre-trained on Objaverse 660K for 24 epochs (Chamfer loss: 1095 →0.57; center loss: 24.35 →1.41). We refer to this variant as “hybrid” because it combines the MaskTransformer backbone (from PCP-MAE) with the cls token parameters copied from the Baseline. 
+
+3.2.2. V2: PCP-MAE + PointTransformer 
+
+Replaces MaskTransformer with PointTransformer (self-attention + native cls token), matching the Baseline ar-chitecture. Pre-trained on Objaverse 660K for 32 epochs (Chamfer loss: 815 →0.82; center loss: 34.5 →0.046). 
+
+3.2.3. Point-MAE: Ablation of Center Prediction ( η = 0 )
+
+Identical to V2 but with η = 0 , reducing the objective to pure Point-MAE reconstruction. Pre-trained on Objaverse 660K for 35 epochs. 
+
+3.2.4. Mask Point-MAE: Pure Reconstruction with MaskTransformer 
+
+Identical to V1 hybrid but with η = 0 . Pre-trained on Obja-verse 660K for 31 epochs. 
+
+3.2.5. ShapeNet55-34: Cross-Dataset Comparison 
+
+PCP-MAE MaskTransformer pre-trained on ShapeNet55-34 ( ∼50K samples, 13 × smaller than Objaverse, no color). Pre-trained for 71 epochs. 
+
+3.2.6. Random Unfrozen: No Pre-training Baseline 
+
+A PointTransformer with randomly initialized weights, serving as the lower bound for end-to-end training. 
+
+3.3. Training and Evaluation Protocol 
+
+We first fully reproduce the Baseline (MiniGPT-3D with ULIP-2 pre-trained Point-BERT encoder) by re-running the complete four-stage training pipeline, obtaining results con-sistent with the official weights evaluation (Table A1 in Ap-pendix). All subsequent variant experiments are compared against this reproduced Baseline, ensuring that any perfor-mance differences stem solely from the encoder itself rather than the training procedure. All variants undergo the identical MiniGPT-3D four-stage pipeline on a single RTX 3090. Frozen variants keep the encoder fixed; unfrozen variants allow encoder weight updates during stages II–IV. Three evaluation tasks follow the standard MiniGPT-3D protocol: • Open-Vocabulary Classification (Objaverse, 200 sam-ples): Generate text descriptions and evaluate accuracy via Qwen-Flash API. Two prompts: “What is this?” (In-struction) and “This is an object of” (Completion). • Closed-Set Classification (ModelNet40, 2,468 samples, 40 classes): Generate responses and map to 40 classes via Qwen-Flash API evaluation. Report raw accuracy and clean accuracy (excluding invalid responses, defined as responses that cannot be mapped to any of the 40 prede-fined classes). • 3D Object Captioning (Objaverse, 200 samples): 
+
+“Caption this 3D model in detail.” Captions scored by Qwen-Flash API (0–100). All subjective evaluations use the Alibaba Cloud Bail-ian Qwen-Flash API with consistent parameters (tempera-ture, max tokens, prompt templates) across all variants. The LLM judge evaluates responses against the ground truth label to determine correctness for classification tasks, and scores caption quality holistically on a 0–100 scale. All variants use identical evaluation prompts, API parameters, and scoring criteria, ensuring that relative comparisons be-tween variants are valid even though absolute scores differ from GPT-4-based evaluations in prior work. 
+
+3.4. Encoder Quality Diagnosis 
+
+Prior to MiniGPT-3D training, we analyze each encoder’s feature space on 2,468 ModelNet40 samples: 1. Cross-encoder cosine similarity at multiple representa-tion levels (cls, global, router) 2. kNN classification accuracy on ModelNet40 3. Intra-class vs. inter-class cosine similarity to quantify class separability 3Figure 1. Complete MiniGPT-3D Pipeline Architecture. The framework consists of: (1) Input layer accepting 8,192 points × 6D features; (2) Replaceable Point Cloud Encoder (innovation hub) with 7 encoder variants spanning 2 architectures (MaskTransformer vs. PointTransformer), 3 pre-training objectives (PCP-MAE/Point-MAE/Random Init), and 2 datasets (Objaverse 660K/ShapeNet55-34 50K); (3) Downstream pipeline: MLP Projection → Q-Former → MQE → Modality Projector → LLM (Phi-2 2.7B); (4) Four training stages with frozen/unfrozen strategies; (5) Three evaluation tasks: Open-Vocab Classification, ModelNet40 Closed-Set, and 3D Captioning; (6) Five key findings with supporting data; (7) Cost comparison: 8 ×A100 (ULIP-2) vs. 1 ×RTX 3090 (self-supervised). 
+
+## 4. Experiments 
+
+4.1. Main Results 
+
+4.1.1. Open-Vocabulary 3D Object Classification Finding 1: The frozen → unfrozen gap is large and uni-versal. Unfreezing consistently boosts all variants: V1 hy-brid +9.75pp, V2 +11.00pp, Point-MAE +16.50pp, Mask Point-MAE +13.50pp, ShapeNet55-34 +3.50pp. 
+
+Finding 2: Random initialization matches two pre-trained variants. The Random unfrozen encoder (52.50%) exactly matches V2 unfrozen (52.50%), and narrowly trails V1 hybrid unfrozen (59.00%) by only 6.50pp. This is a striking result: the MiniGPT-3D pipeline’s four-stage training, combined with strong 2D-LLM priors, can train a 3D encoder from random initialization to match a PCP-MAE pre-trained PointTransformer, and reach 88% of the best self-supervised variant’s performance. Finding 3: A strong crossover interaction between ar-chitecture and pre-training objective emerges. In the un-frozen setting: • PCP-MAE (with center prediction): MaskTransformer (59.00%) ≫ PointTransformer (52.50%) • Point-MAE (pure reconstruction): PointTransformer (55.50%) ≫ MaskTransformer (46.50%) This complete inversion reveals that the center prediction task synergizes with MaskTransformer’s cross-attention mechanism, while pure masked reconstruction is better served by PointTransformer’s uniform self-attention. We analyze this phenomenon in detail in Section 4.2.2. 
+
+Finding 4: ShapeNet55-34 (50K samples) is com-petitive with Objaverse (660K). ShapeNet55-34 unfrozen (53.50%) exceeds V2 unfrozen (52.50%) and approaches V1 hybrid unfrozen (59.00%), despite a 13 × disadvantage in data volume. 
+
+4.1.2. Closed-Set Classification on ModelNet40 Finding: A hard ceiling at ∼18%. All self-supervised variants cluster tightly between 10% and 18% clean ac-curacy, regardless of architecture, pre-training objective, dataset scale, or fine-tuning strategy. Even unfreezing provides only marginal gains ( e.g ., V1 hybrid 14.62% →
+
+18.41%). The Baseline achieves 61–64%, a gap of 43– 4Table 1. Encoder variants evaluated in this study. The “Cls Token” column reflects a fundamental architectural distinction between the two encoder backbones. PointTransformer (used in V2, Point-MAE, Random unfrozen, and the Baseline) is designed for down-stream fine-tuning: it prepends a learnable [cls] token to the sequence of all patch tokens and applies uniform self-attention over the full sequence, allowing the [cls] token to aggregate global information—analogous to the [cls] token in ViT/BERT. MaskTransformer (used in V1 hybrid, Mask Point-MAE, ShapeNet55-34) is designed purely for masked autoencoding: it splits tokens into visible and masked groups, processes only visible patches through self-attention, and lets masked tokens attend to visible ones via cross-attention. There is no [cls] token because the pre-training objective is local patch reconstruction, not global classification. However, because MiniGPT-3D’s encoder interface (the PointTransformer class in point encoder.py ) always expects cls token and cls pos parameters, MaskTransformer variants that lack these native parameters must obtain them by copying from the Baseline checkpoint (V1 hybrid, Mask Point-MAE) or by random initialization (ShapeNet55-34, Random unfrozen). This grafting is necessary for compatibility but provides no meaningful global representation, as confirmed by the near-orthogonal cls features reported in Section 4.3.1. 
+
+Variant Objective Architecture Pre-training Data Cls Token 
+
+Baseline ULIP-2 (multi-modal) PointTransformer Objaverse 660K Native V1 hybrid PCP-MAE MaskTransformer Objaverse 660K Copied from Baseline V1 hybrid unfrozen PCP-MAE MaskTransformer Objaverse 660K Copied from Baseline V2 PCP-MAE PointTransformer Objaverse 660K Native V2 unfrozen PCP-MAE PointTransformer Objaverse 660K Native Point-MAE Point-MAE ( η = 0 ) PointTransformer Objaverse 660K Native Point-MAE unfrozen Point-MAE ( η = 0 ) PointTransformer Objaverse 660K Native Mask Point-MAE Point-MAE ( η = 0 ) MaskTransformer Objaverse 660K Copied from Baseline Mask Point-MAE unfrozen Point-MAE ( η = 0 ) MaskTransformer Objaverse 660K Copied from Baseline ShapeNet55-34 PCP-MAE MaskTransformer ShapeNet55-34 ( ∼50K) Random init ShapeNet55-34 unfrozen PCP-MAE MaskTransformer ShapeNet55-34 ( ∼50K) Random init Random unfrozen None (random init) PointTransformer – Random init 
+
+Figure 2. Main Experimental Results Across 12 Variant Groups. Three sub-figures present: (a) Open-Vocabulary Classification ac-curacy, (b) 3D Captioning scores, and (c) ModelNet40 Closed-Set accuracy. Each of the 12 variant nodes is annotated with raw metrics from Tables 2–4. PERFORMANCE IN edges link each variant to each sub-figure with value and group tags. Frozen/Unfrozen grouping enables side-by-side comparison. Delta analysis nodes quantify frozen →unfrozen gains (avg +10.9pp OV, +15.2 caption, +1.9 MN40). Key insights: universal unfreezing benefit, random init competitiveness, ModelNet40 ceiling, and data quality vs. scale trade-off. 
+
+47 percentage points that no geometric pre-training method can bridge. 
+
+Two complementary perspectives explain this ceiling: 
+
+Invalid response perspective: The self-supervised vari-ants produce substantially higher invalid response rates (20– 30%, i.e., responses that do not map to any of the 40 classes) 5Table 2. Open-vocabulary classification accuracy (%) on Objaverse. I = Instruction; C = Completion. Variants grouped by frozen / unfrozen strategy. Best self-supervised result in bold. Encoder Prompt 0 (I) Prompt 1 (C) Avg Frozen 
+
+Baseline (ULIP-2 Point-BERT) 67.00% 66.00% 66.50% V1 hybrid (PCP-MAE, MaskTransformer) 47.50% 51.00% 49.25% V2 (PCP-MAE, PointTransformer) 39.00% 44.00% 41.50% Point-MAE (Point-MAE, PointTransformer) 36.00% 42.00% 39.00% Mask Point-MAE (Point-MAE, MaskTransformer) 34.00% 32.00% 33.00% ShapeNet55-34 (PCP-MAE, MaskTransformer) 49.50% 50.50% 50.00% 
+
+Unfrozen 
+
+V1 hybrid (PCP-MAE, MaskTransformer) 59.00% 59.00% 59.00% 
+
+V2 (PCP-MAE, PointTransformer) 52.50% 52.50% 52.50% Point-MAE (Point-MAE, PointTransformer) 54.50% 56.50% 55.50% Mask Point-MAE (Point-MAE, MaskTransformer) 46.50% 46.50% 46.50% ShapeNet55-34 (PCP-MAE, MaskTransformer) 54.50% 52.50% 53.50% Random (PointTransformer) 52.50% 52.50% 52.50% Table 3. Closed-set classification accuracy (%) on ModelNet40. “acc” = raw accuracy; “clean” = accuracy excluding invalid responses (responses that cannot be mapped to any of the 40 predefined classes). Variants grouped by frozen / unfrozen strategy. Best self-supervised clean accuracy in bold. Encoder Prompt 0 (acc / clean) Prompt 1 (acc / clean) Frozen 
+
+Baseline (ULIP-2 Point-BERT) 61.35% / 63.83% 59.08% / 61.06% V1 hybrid (PCP-MAE, MaskTransformer) 10.98% / 14.62% 13.17% / 15.77% V2 (PCP-MAE, PointTransformer) 10.21% / 12.72% 9.93% / 12.55% Point-MAE (Point-MAE, PointTransformer) 11.10% / 14.14% 12.20% / 15.71% Mask Point-MAE (Point-MAE, MaskTransformer) 8.43% / 9.96% 10.45% / 12.06% ShapeNet55-34 (PCP-MAE, MaskTransformer) 10.45% / 12.84% 10.70% / 12.89% 
+
+Unfrozen 
+
+V1 hybrid (PCP-MAE, MaskTransformer) 13.29% / 18.41% 13.41% / 17.25% 
+
+V2 (PCP-MAE, PointTransformer) 10.05% / 12.50% 9.85% / 12.22% Point-MAE (Point-MAE, PointTransformer) 13.98% / 17.11% 13.70% / 16.01% Mask Point-MAE (Point-MAE, MaskTransformer) 10.13% / 13.10% 10.25% / 12.63% ShapeNet55-34 (PCP-MAE, MaskTransformer) 12.16% / 16.94% 12.03% / 15.65% Random (PointTransformer) 10.45% / 13.67% 9.16% / 10.74% 
+
+compared to the Baseline ( ∼3%). This indicates that the model cannot extract clear semantic category boundaries from purely geometric features, causing the LLM to pro-duce outputs outside the predefined class set. 
+
+Feature margin perspective: As analyzed in Sec-tion 4.3.3, the self-supervised encoders have ∼23–26% lower class separability margin (0.087–0.089 vs. 0.116). The ∼26% reduction in feature-level margin cascades through the downstream alignment layers, ultimately re-sulting in a ∼70% absolute accuracy drop on ModelNet40 (62% → 18%). This establishes a clear causal chain from feature representation to closed-set classification perfor-mance. 
+
+Interpretation: Precise categorization across 40 pre-defined classes requires semantic boundaries that only multi-modal (image-text-point cloud) alignment pro-vides. 4.1.3. 3D Object Captioning Finding 1: Unfreezing dramatically improves caption-ing. Gains range from +13.39 (V1 hybrid) to +18.38 (V2) and +17.39 (ShapeNet55-34). V1 hybrid unfrozen closes 72% of the gap to Baseline (36.24 → 49.63 vs. Baseline 53.37). 
+
+Finding 2: Random initialization is remarkably com-petitive. Random unfrozen (44.45) surpasses V2 unfrozen (43.94) and trails V1 hybrid unfrozen (49.63) by only 5.18 points. This confirms that generative captioning tasks are more resilient to encoder quality than discriminative classi-fication. 6Table 4. 3D object captioning scores (0–100) on Objaverse, eval-uated by Qwen-Flash API. Variants grouped by frozen / unfrozen strategy. Best self-supervised result in bold. Encoder Average Score Frozen             
+
+> Baseline (ULIP-2 Point-BERT) 53.37 V1 hybrid (PCP-MAE, MaskTransformer) 36.24 V2 (PCP-MAE, PointTransformer) 25.56 Point-MAE (Point-MAE, PointTransformer) 33.46 Mask Point-MAE (Point-MAE, MaskTransformer) 28.62 ShapeNet55-34 (PCP-MAE, MaskTransformer) 29.19
+> Unfrozen V1 hybrid (PCP-MAE, MaskTransformer) 49.63
+> V2 (PCP-MAE, PointTransformer) 43.94 Point-MAE (Point-MAE, PointTransformer) 45.26 Mask Point-MAE (Point-MAE, MaskTransformer) 43.56 ShapeNet55-34 (PCP-MAE, MaskTransformer) 46.58 Random (PointTransformer) 44.45
+
+Table 5. Summary of frozen → unfrozen gains across metrics.           
+
+> Metric Avg frozen →unfrozen gain Random unfrozen vs. Baseline gap
+> Open-vocab avg +10.9pp −14.00pp ModelNet40 clean avg +1.9pp −50.24pp Captioning +15.2 −8.92
+
+Finding 3: The center prediction bias reverses the advantage compared to classification. In classifica-tion, PCP-MAE slightly helps; in captioning, Point-MAE (pure reconstruction) consistently outperforms PCP-MAE (with center prediction) across both architectures (frozen: 33.46 vs. 25.56 for PointTransformer; 28.62 vs. 36.24 for MaskTransformer—note the opposite trend). The center prediction bias toward global structure appears to interfere with the fine-grained geometric detail needed for descrip-tive captioning. 
+
+4.2. Ablation Studies 
+
+4.2.1. Unfreezing is Necessary but Not Sufficient 
+
+Unfreezing consistently improves all metrics, but the im-provement magnitude varies by task and architecture: The larger captioning gains (+15.2 on average) sug-gest generative tasks are where unfreezing most effectively bridges the semantic gap. The small ModelNet40 gain (+1.9pp on average) confirms that closed-set classification is fundamentally limited by the encoder’s representational capacity. 
+
+Crucially, unfreezing alone cannot close the gap for PointTransformer-based self-supervised encoders: 
+
+V2 unfrozen (52.50%) is identical to Random unfrozen (52.50%), indicating no benefit from pre-training. 
+
+Table 6. Open-vocabulary classification accuracy (%) showing the crossover interaction between architecture and pre-training objec-tive (unfrozen).         
+
+> Architecture PCP-MAE (with center pred) Point-MAE (pure recon)
+> MaskTransformer 59.00% (V1 hybrid) 46.50% (Mask Point-MAE) PointTransformer 52.50% (V2) 55.50% (Point-MAE)
+
+4.2.2. Architecture × Pre-training Objective Crossover Interaction 
+
+This is the most novel finding of our study. Table 6 presents the interaction matrix for unfrozen open-vocabulary classi-fication: The pattern is striking: • PCP-MAE benefits from MaskTransformer (+6.50pp) 
+
+• Point-MAE benefits from PointTransformer (+9.00pp) 
+
+This crossover can be understood by examining precisely where the center prediction head attaches. In both architec-tures, the center prediction head ( pred pos proj ) is ap-plied directly to the masked token features xmask produced by the encoder. The critical difference lies in how those masked token features are computed: • MaskTransformer maintains two separate token groups throughout its transformer blocks: xvis (visible) under-goes self-attention among visible patches, while xmask 
+
+(masked) receives cross-attention from masked to visi-ble patches only —it never sees other masked tokens. To predict its own center, xmask must infer it indirectly by querying visible patches and reasoning about their spa-tial arrangement. This genuinely challenging task forces the encoder to learn rich relational representations of visi-ble geometry. The auxiliary center loss thereby reinforces a representation that matches MaskTransformer’s cross-attention strength: reasoning about spatial relationships between a query token and a context set. • PointTransformer (the encoder used in V2, Point-MAE, and Random) processes all G patch tokens plus a [cls] to-ken through full self-attention over the entire sequence, then post-hoc splits into xvis and xmask by indexing. Con-sequently, xmask has already attended to every visible to-ken (and every other masked token) via standard self-attention, so it possesses rich global context before the center prediction head is reached. Predicting the center becomes nearly trivial—the network can simply look up positional information already present in the self-attended features. The added center loss thus provides little train-ing signal and, in the worst case, biases the backbone toward learning easily regressed global positions rather than locally discriminative geometry. When coupled with PointTransformer, removing the center loss (i.e., Point-MAE) yields strictly better performance (55.50% vs. 52.50%). 7Figure 3. Architecture × Pre-training Objective Crossover Interaction. A 2×2 matrix with 4 condition bars: PCP-MAE+MaskTransformer=59.00%, PCP-MAE+PointTransformer=52.50%, Point-MAE+PointTransformer=55.50%, Point-MAE+MaskTransformer=46.50%. The CrossoverPattern node documents the inversion: optimal architecture flips depending on pre-training objective. Four CrossoverArrows provide detailed mechanism explanations (green for wins, red for losses). The Mechanis-mDetail node explains why center prediction has opposite effects based on how masked token features are computed (cross-attention in MaskTransformer vs. self-attention in PointTransformer). Cross-task validation confirms the crossover is consistent across all 3 tasks. Includes 4 practical recommendations for 3D-LLM design. 
+
+Conversely, when the simpler reconstruction objective is paired with MaskTransformer, the cross-attention bottle-neck between xvis and xmask may restrict gradient flow to the visible-path encoder, explaining why Mask Point-MAE un-derperforms Point-MAE on PointTransformer (46.50% vs. 55.50%). This crossover interaction has significant practical im-plications: choosing the wrong architecture for a given pre-training objective can cost 6.50–9.00pp in accuracy. 4.2.3. Pre-training vs. Random Initialization Finding: The marginal benefit of self-supervised pre-training over random initialization varies by architec-ture and objective. For PointTransformer, Point-MAE (pure reconstruction) shows a consistent advantage over random initialization: +3.00pp on open-vocab (55.50% vs. 52.50%), +4.35pp on ModelNet40 clean (16.56% vs. 12.21%), and +0.81 on captioning. However, PCP-MAE on PointTransformer (V2) shows no gain, performing iden-tically to Random (52.50%). For MaskTransformer, PCP-MAE (V1 hybrid) provides a notable advantage (+6.50pp over Random), while Point-MAE (Mask Point-MAE) un-derperforms Random. Only the MaskTransformer + PCP-MAE combination (V1 hybrid) provides a consistent and substantial advantage across all metrics. This finding suggests that the dominant source of per-formance in MiniGPT-3D is the cascaded four-stage training pipeline and the strong 2D-LLM priors, but Point-MAE pre-training on PointTransformer provides a meaningful—if modest—additional benefit (3–4pp) over random initialization. 4.2.4. Pre-training Dataset: Scale vs. Quality 
+
+ShapeNet55-34 ( ∼50K CAD models, 3-channel xyz only) performs competitively with Objaverse (660K real-world objects, 6-channel xyz+rgb): Despite 13 × fewer samples and no color, ShapeNet55-34 unfrozen comes within 5.50pp of V1 hybrid on classi-fication and within 3.05 on captioning, while surpassing or matching V2 and Random. This indicates that high-quality CAD models from ShapeNet provide geometric signals comparable in utility to large-scale real-world scans , es-pecially when the downstream pipeline can adapt the en-coder. 8Table 7. Performance comparison of pre-trained vs. random initialization (all unfrozen). 
+
+Variant (all unfrozen) Open-vocab avg Captioning ModelNet40 clean avg 
+
+Random 52.50% 44.45 12.21% V2 (PCP-MAE, PointTransformer) 52.50% 43.94 12.36% Point-MAE (PointTransformer) 55.50% 45.26 16.56% 
+
+ShapeNet55-34 (MaskTransformer) 53.50% 46.58 16.30% V1 hybrid (MaskTransformer) 59.00% 49.63 17.83% 
+
+Table 8. ShapeNet55-34 vs. best Objaverse variant comparison.           
+
+> Setting ShapeNet55-34 Best Objaverse variant
+> Frozen open-vocab 50.00% 49.25% (V1 hybrid) Unfrozen open-vocab 53.50% 59.00% (V1 hybrid) Unfrozen captioning 46.58 49.63 (V1 hybrid) Unfrozen ModelNet40 clean 16.30% 17.83% (V1 hybrid)
+
+Table 9. Center prediction effects by architecture (unfrozen).                  
+
+> Task PointTransformer MaskTransformer PCP-MAE Point-MAE PCP-MAE Point-MAE
+> Open-vocab avg 52.50% 55.50% 59.00% 46.50% Captioning 43.94 45.26 49.63 43.56 ModelNet40 clean avg 12.36% 16.56% 17.83% 12.87%
+
+4.2.5. Center Prediction: Mixed Effects 
+
+With PointTransformer, Point-MAE (no center predic-tion) outperforms PCP-MAE on all three tasks. With MaskTransformer, PCP-MAE (with center prediction) outperforms Point-MAE on all three tasks. This asym-metry aligns with the crossover interaction described in Sec-tion 4.2.2: center prediction is only beneficial when paired with an architecture designed for cross-patch interaction. 
+
+4.3. Encoder Feature Space Analysis 
+
+4.3.1. Cross-Encoder Feature Similarity Finding 1: cls features are nearly orthogonal to the Baseline for all variants (cosine ≤ 0.054). Even V1 hy-brid, which copies the Baseline’s cls token and cls pos, achieves only 0.0346 cosine—confirming that cls output is determined by the full backbone’s self-attention dynamics. This explains why cls parameter copying is ineffective. 
+
+Finding 2: Global features show moderate alignment (0.15–0.47). V2’s PointTransformer achieves the highest global cosine (0.4722), indicating that architecture match-ing with the Baseline helps global feature alignment. How-ever, V2’s downstream performance is worse than V1 hy-brid’s, proving that global feature alignment is not a reli-able predictor of downstream 3D-LLM performance. Finding 3: Mask Point-MAE shows the lowest align-ment with the Baseline (global 0.1492, router 0.0779), cor-relating with its poor downstream performance. 
+
+Finding 4: Point-MAE’s global feature similarity (0.4330) is comparable to V2 (0.4722) despite its higher downstream performance, further confirming that feature alignment alone does not determine 3D-LLM task perfor-mance. 
+
+4.3.2. kNN Classification on ModelNet40 
+
+All self-supervised encoders achieve 60–64% kNN accu-racy, confirming that self-supervised features encode dis-criminative geometric information in their own rep-resentational space —the issue is misalignment with the space that the downstream LLM modules expect, not ab-sence of discriminability. However, the gap between Base-line (72–80%) and the best self-supervised variant (61– 77%) is substantial (5–13pp). The gap between cls kNN and global kNN varies by variant: PointTransformer-based variants (V2, Point-MAE) show ∼10pp gap favoring global features, while MaskTransformer-based variants (Pre-V1, V1 hybrid) show a smaller gap ( ∼3pp). This suggests that the cls token is not the optimal representation for PointTransformer-based encoders, supporting the use of global pooling as an alter-native. 
+
+4.3.3. Intra-Class vs. Inter-Class Separability Finding: Self-supervised encoders have ∼23–26% lower class separability margin (0.087–0.089 vs. 0.116). The V2 encoder has higher intra-class similarity than the Base-line (0.9162 vs. 0.8465) but also much higher inter-class similarity (0.8293 vs. 0.7303), collapsing the margin. This confirms that geometric self-supervision learns to map all objects into a compact feature space where within-class and between-class variations are poorly distinguished—a direct consequence of the reconstruction objective that treats all points equally regardless of semantic category. The ∼26% margin reduction explains the ∼70% ab-solute drop in ModelNet40 closed-set accuracy (62% →
+
+18%). Small differences in initial feature separability are amplified through the frozen alignment layers, and even un-freezing cannot fully recover discriminability. 9Table 10. Cosine similarity between variant and Baseline encoder features (measured on 2,468 ModelNet40 samples). Note: Point-MAE data uses the updated max samples=2468 setting for consistency with other variants.                                        
+
+> Encoder cls global router
+> Pre-V1 (PCP-MAE, MaskTransformer, no cls) 0.0541 0.3917 0.2711 V1 hybrid (PCP-MAE, MaskTransformer, cls copied) 0.0346 0.3915 0.2617 V2 (PCP-MAE, PointTransformer, native cls) 0.0289 0.4722 0.2998 Point-MAE (Point-MAE, PointTransformer, native cls) −0.0125 0.4330 0.2606 Mask Point-MAE (Point-MAE, MaskTransformer, no cls) −0.0019 0.1492 0.0779 Table 11. kNN accuracy on ModelNet40 using frozen features. The baseline row shows the multi-modal encoder’s own kNN performance for reference; variant rows show each self-supervised encoder’s actual kNN performance.
+> Encoder cls global router
+> Baseline (ULIP-2 Point-BERT) 72.67% 79.35% 78.54% Pre-V1 (PCP-MAE, MaskTransformer) 60.93% 76.32% 72.27% V1 hybrid (PCP-MAE, MaskTransformer) 60.93% 77.33% 67.41% V2 (PCP-MAE, PointTransformer) 63.56% 74.49% 70.85% Point-MAE (Point-MAE, PointTransformer) 61.74% 68.22% 68.22% Mask Point-MAE (Point-MAE, MaskTransformer) 60.73% 61.94% 61.13% Table 12. Intra-class vs. inter-class cosine similarity and class sep-arability margin.
+
+Encoder Intra-class Inter-class Margin 
+
+Baseline (cls) 0.8465 0.7303 0.1162 V1 hybrid (cls) 0.8349 0.7457 0.0892 V2 (cls) 0.9162 0.8293 0.0869 
+
+## 5. Discussion 
+
+5.1. When Can Self-Supervised Encoders Replace Multi-Modal Pre-training? 
+
+Our results paint a nuanced picture across three dimensions: 
+
+For open-vocabulary tasks (classification and cap-tioning): Self-supervised encoders can approach multi-modal encoder performance, especially with MaskTrans-former + PCP-MAE pre-training and encoder unfreezing (V1 hybrid achieves 88% of Baseline on classification, 93% on captioning). However, this success is largely at-tributable to the downstream pipeline rather than the pre-training itself , as a randomly initialized encoder also reaches 78% and 83% of baseline on these tasks. 
+
+For closed-set classification: Self-supervised encoders fail categorically—all variants plateau at 13–18% vs. 62% baseline. This ceiling is independent of architecture, objec-tive, data scale, and fine-tuning. Multi-modal pre-training’s ability to embed semantic category boundaries is the deci-sive factor. 
+
+On the marginal value of self-supervised pre-training: For PointTransformer architecture, Point-MAE pre-training provides a small but consistent benefit over ran-dom initialization (+3.00pp open-vocab, +4.35pp Model-Net40), while PCP-MAE shows no benefit. For MaskTrans-former, the pattern inverts: PCP-MAE provides a strong ad-vantage (+6.50pp), while Point-MAE is detrimental. Only the correct architecture-objective pairing yields meaningful gains. 
+
+5.2. Cost-Efficiency Analysis 
+
+A key motivation for exploring self-supervised encoders is reducing the computational and data costs of multi-modal pre-training. From a practical cost perspective: • ULIP-2 multi-modal pre-training requires 8 × NVIDIA A100 GPUs for 3–4 days, with total storage requirements of ∼1.2TB (Objaverse point clouds, rendered images, and text descriptions). The data collection and curation pipeline for tri-modal alignment is itself a significant en-gineering effort. • Self-supervised pre-training (PCP-MAE / Point-MAE) requires only a single RTX 3090 GPU for approxi-mately 2 days (Objaverse 660K, 24–35 epochs), with stor-age requirements of ∼800GB (point clouds only, no im-ages or text). Data acquisition is reduced to downloading public point cloud datasets without additional modality processing. This represents an ∼85% reduction in GPU compute cost and ∼33% reduction in storage, while completely elim-inating the need for image rendering and text description pipelines. Even the best self-supervised variant (V1 hybrid unfrozen) achieves up to 88% of Baseline classification and 93% of Baseline captioning performance—a favorable cost-10 performance trade-off for many practical applications. 
+
+5.3. Applicability Boundary 
+
+Our finding that “random initialization approaches pre-trained performance” should not be over-generalized. This conclusion specifically applies to efficient 3D-LLM archi-tectures that leverage strong 2D-LLM priors and cas-caded modality alignment training (MiniGPT-3D’s four-stage pipeline). In such architectures, the LLM already possesses rich visual-semantic knowledge from its 2D pre-training, and the cascaded alignment layers can effectively guide the encoder to learn compatible representations dur-ing fine-tuning. For 3D-LLMs that lack 2D priors and align point clouds directly with text from scratch ( e.g ., training the entire pipeline from random initialization), the benefits of self-supervised encoder pre-training are likely to be sub-stantially larger. 
+
+5.4. Practical Recommendations 
+
+1. Do not assume self-supervised pre-training will help if you plan to fine-tune. Our results show that with PointTransformer (the default in most 3D-LLMs), PCP-MAE pre-training provides no benefit over random ini-tialization when the encoder is trainable, though Point-MAE provides a small benefit ( ∼3pp). Computational resources may be better allocated to the downstream training pipeline. 2. If using PCP-MAE pre-training, pair it with Mask-Transformer. The center prediction and cross-attention mechanisms produce synergistic effects (59.00% vs. 52.50%). 3. If using pure masked reconstruction (Point-MAE), pair it with PointTransformer. The simpler self-attention architecture better serves the reconstruction ob-jective (55.50% vs. 46.50%). 4. Data quality can substitute for data scale. 
+
+ShapeNet55-34’s 50K high-quality CAD models match or exceed Objaverse’s 660K samples when pre-training a MaskTransformer. 5. For closed-set classification tasks, multi-modal pre-training remains irreplaceable. No combination of ge-ometric self-supervision and downstream fine-tuning ap-proached the Baseline’s performance on ModelNet40. 
+
+5.5. Limitations and Future Work 
+
+Limitations. (1) All self-supervised encoders were pre-trained for fewer than the full 300 scheduled epochs (24-35 epochs on Objaverse; 71 epochs on ShapeNet55-34). Early stopping was applied when the reconstruction loss entered a plateau, but it is possible that longer pre-training could yield different results. (2) The study is limited to object-level point clouds on a single 3D-LLM pipeline (MiniGPT-3D). (3) Evaluations use the Qwen-Flash API, which differs from GPT-4 evaluations in prior work. (4) The MiniGPT-3D pipeline uses a 2.7B Phi-2 LLM; larger LLMs with stronger semantic reasoning may narrow the self-supervised gap. (5) ShapeNet55-34 has higher category overlap with ModelNet40 and cleaner geometry than Objaverse, which may partially explain its competitive performance despite smaller scale—the effects of dataset quality and dataset scale have not been fully decoupled. 
+
+Future work. (1) Pre-training self-supervised encoders to full convergence (300 epochs) to measure the upper-bound benefit. (2) Investigating whether pre-training ben-efits re-emerge with larger LLM backbones ( >7B parame-ters). (3) Exploring hybrid objectives that combine geomet-ric reconstruction with lightweight semantic signals ( e.g ., weak supervision from category labels or text descriptions). (4) Extending the study to scene-level 3D-LLMs and other efficient 3D-LLM architectures. 
+
+## 6. Conclusion 
+
+We presented a systematic empirical study on replac-ing multi-modal pre-trained point cloud encoders with self-supervised alternatives in efficient 3D-LLM pipelines. Through 7 encoder initialization / pre-training configura-tions evaluated under 2 fine-tuning strategies (12 experi-mental groups total), 2 architectures, 3 pre-training objec-tives, and 2 pre-training datasets, we characterized the con-ditions under which self-supervised encoders can serve as cost-effective alternatives. Our central findings are: (1) The MiniGPT-3D pipeline is remarkably robust to encoder quality —a randomly ini-tialized encoder achieves competitive performance when fine-tuned, matching some pre-trained variants. (2) Ar-chitecture and pre-training objective exhibit a strong crossover interaction that must be carefully considered: PCP-MAE with MaskTransformer (59.00%) far outper-forms all other combinations, while Point-MAE with Mask-Transformer (46.50%) underperforms Point-MAE with PointTransformer (55.50%). (3) Closed-set classification is a fundamental limitation of all current geometric self-supervision methods , plateauing at ∼18% regardless of configuration, due to the absence of semantic category boundaries in the learned feature space. We hope these findings guide practitioners in building cost-effective 3D-LLMs and inform the design of next-generation self-supervised pre-training methods that can bridge the remaining gap with multi-modal representation learning. 
+
+## References 
+
+> [1] Sijin Chen, Xin Chen, Chi Zhang, Mingsheng Li, Gang Yu, Hao Fei, Hongyuan Zhu, Jiayuan Fan, and Tao Chen. LL3DA: Visual interactive instruction tuning for omni-3d
+
+11 understanding, reasoning, and planning. arXiv preprint ,2023. 2 [2] Xiangxiang Chu, Limeng Qiao, Xinyang Lin, Shuang Xu, Yang Yang, Yiming Hu, Fei Wei, Xinyu Zhang, Bo Zhang, Xiaolin Wei, and Chunhua Shen. MobileVLM: A fast, re-producible and strong vision language assistant for mobile devices. arXiv preprint , 2023. 2 [3] Wenliang Dai, Junnan Li, Dongxu Li, Anthony Tiong, Junqi Zhao, Weisheng Wang, Boyang Li, Pascale Fung, and Steven Hoi. InstructBLIP: Towards general-purpose vision-language models with instruction tuning. In Advances in Neural Information Processing Systems (NeurIPS) , 2023. 1 [4] Yining Hong, Haoyu Zhen, Pehao Chen, Shuhong Zheng, Yilun Du, Zhenfang Chen, and Chuang Gan. 3D-LLM: In-jecting the 3d world into large language models. In Advances in Neural Information Processing Systems (NeurIPS) , 2023. 2[5] Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. LoRA: Low-rank adaptation of large language models. In In-ternational Conference on Learning Representations (ICLR) ,2022. 2 [6] Junnan Li, Dongxu Li, Silvio Savarese, and Steven Hoi. BLIP-2: Bootstrapping language-image pre-training with frozen image encoders and large language models. In Pro-ceedings of the 40th International Conference on Machine Learning (ICML) , pages 20351–20383. PMLR, 2023. 1, 2 [7] OpenAI. GPT-4 technical report. arXiv preprint , 2023. 1 [8] Yatian Pang, Wenxiao Wang, Francis E. H. Tay, Wei Liu, Yonghong Tian, and Li Yuan. Masked autoencoders for point cloud self-supervised learning. In Proceedings of the 17th European Conference on Computer Vision (ECCV) , pages 591–608. Springer, 2022. 1, 2 [9] Zekun Qi, Runpei Dong, Shaochen Zhang, Haoran Geng, Chunrui Han, Zheng Ge, Li Yi, and Kaisheng Ma. ShapeLLM: Universal 3d object understanding for embod-ied interaction. arXiv preprint , 2024. 1, 2 [10] Yuan Tang, Xu Han, Xianzhi Li, Qiao Yu, Yixue Hao, Long Hu, and Min Chen. MiniGPT-3D: Efficiently aligning 3d point clouds with large language models using 2d priors. 
+
+arXiv preprint , 2024. Also appeared in ACM MM 2024. 1, 2 [11] Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timoth´ ee Lacroix, Baptiste Rozi` ere, Naman Goyal, Eric Hambro, Faisal Azhar, Aurelien Rodriguez, Armand Joulin, Edouard Grave, and Guillaume Lample. LLaMA: Open and efficient foundation language models. arXiv preprint , 2023. 1 [12] Runsen Xu, Xiaolong Wang, Tai Wang, Yilun Chen, Jiang-miao Pang, and Dahua Lin. PointLLM: Empowering large language models to understand point clouds. arXiv preprint ,2023. 1, 2 [13] Le Xue, Ning Yu, Shu Zhang, Artemis Panagopoulou, Jun-nan Li, Roberto Mart´ ın-Mart´ ın, Jiajun Wu, Caiming Xiong, Ran Xu, Juan Carlos Niebles, and Silvio Savarese. ULIP-2: Towards scalable multimodal pre-training for 3d understand-ing. In Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition (CVPR) , pages 22945– 22955, 2024. 1, 2 [14] Xumin Yu, Lulu Tang, Yongming Rao, Tiejun Huang, Jie Zhou, and Jiwen Lu. Point-BERT: Pre-training 3d point cloud transformers with masked point modeling. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 19313–19322, 2022. 1, 2[15] Zhengqing Yuan, Zhaoxu Li, and Lichao Sun. TinyGPT-V: Efficient multimodal large language model via small back-bones. arXiv preprint , 2023. Also appeared in ICML 2024 Workshop. 2 [16] Xiangdong Zhang, Shaofeng Zhang, and Junchi Yan. PCP-MAE: Learning to predict centers for point masked autoen-coders. arXiv preprint , 2024. Also appeared in NeurIPS 2024. 1, 2 
+
+12 On the Efficacy of Self-Supervised Point Cloud Encoders for Efficient 3D Large Language Models 
+
+# Supplementary Material 
+
+## 7. Implementation and Reproduction Details 
+
+7.1. Baseline Reproduction Results 
+
+We fully reproduced the MiniGPT-3D Baseline (ULIP-2 pre-trained Point-BERT encoder) by re-running the com-plete four-stage training pipeline from scratch. Table 13 compares our reproduced results with the official weights evaluation. 
+
+Table 13. Comparison of official weights evaluation vs. our repro-duction results.             
+
+> Task Official Weights Our Reproduction
+> Open-vocab classification (Prompt 0) 66.00% 67.00% Open-vocab classification (Prompt 1) 68.00% 66.00% ModelNet40 clean (Prompt 0) 62.66% 63.83% ModelNet40 clean (Prompt 1) 60.75% 61.06% Captioning score 53.57 53.37
+
+The results are closely consistent, confirming that our reproduction is faithful to the original. All variant exper-iments in the main paper are compared against this repro-duced Baseline. 
+
+7.2. Gradient Blocking in PCP-MAE Pre-training 
+
+During initial PCP-MAE pre-training on Objaverse, we en-countered a critical gradient blocking issue. When en-abling automatic mixed precision (AMP), the Chamfer re-construction loss stagnated at approximately 1,000 for over 30 epochs. Investigation revealed that during AMP debug-ging, the following code pattern had been inadvertently in-troduced:        
+
+> with torch.no_grad(): rebuild_points_fp32 =rebuild_points.float() gt_coords_fp32 =gt_coords.float() loss1 =self.loss_func(rebuild_points_fp32, gt_coords_fp32)
+
+The torch.no grad() context completely detached the Chamfer reconstruction loss from the computation graph, preventing gradients from flowing back to the en-coder and decoder. Removing this block restored conver-gence within a single epoch, with the Chamfer loss drop-ping from ∼1,000 to below 1.0. 
+
+7.3. AMP Numerical Stability 
+
+Training with float16 AMP on the RTX 3090 caused NaN/Inf values during the late stages of training (around epoch 15–38 depending on the variant). Analysis identified two root causes: 1. Transformer operations in float16 precision : Large matrix multiplications, Softmax, and LayerNorm oper-ations in Transformer blocks are prone to overflow in float16. 2. Chamfer distance computation : The Chamfer distance involves squared Euclidean distances that can produce large values exceeding the float16 dynamic range. The following measures were applied to resolve the is-sue: • Switched from float16 to bfloat16 AMP : The RTX 3090 supports bfloat16, which provides the same dynamic range as float32 while retaining the memory and through-put benefits of reduced precision. • Forced Chamfer distance computation in float32 : The Chamfer distance loss function was explicitly cast to float32 precision regardless of the AMP setting. • Gradient clipping : Applied gradient clipping with a maximum norm of 1.0 to prevent gradient explosion. These modifications ensured stable training without NaN/Inf occurrences for all remaining experiments. 
+
+7.4. API Model Deprecation and Migration 
+
+The original MiniGPT-3D project relied on the Qwen2-72B-Instruct API for evaluation. During our study, this API was decommissioned, requiring migration to the Al-ibaba Cloud Bailian Qwen-Flash API. Key differences and adaptations: • The Qwen2-72B-Instruct model is no longer available on the Bailian platform; the most recent available model was Qwen2.5-VL-32B-Instruct (which itself was sched-uled for deprecation around May 13, 2026). • We migrated all evaluation scripts to use the 
+
+qwen-flash model endpoint. • API parameters (temperature, max tokens, prompt tem-plates) were kept consistent across all evaluation runs. • Pricing parameters in the evaluation scripts were updated to match Qwen-Flash billing rates. • The evaluation logic was modified to dynamically adapt to different model endpoints, enabling future model changes without code modification. 
+
+7.5. Pre-training Hyperparameters 7.6. Pre-training Loss Curves 
+
+Pre-training was halted when the reconstruction loss entered a stable plateau. The final loss values for each variant at the end of pre-training are summarized in Table 15. 13 Table 14. Pre-training hyperparameters for Objaverse and ShapeNet55-34 datasets. 
+
+Parameter Objaverse 660K ShapeNet55-34 
+
+Batch size 8 8Gradient accumulation steps 8 8Effective batch size 64 64 Peak learning rate 0.005 0.005 Weight decay 0.05 0.05 Warmup epochs 10 10 Total scheduled epochs 300 300 Actual trained epochs 24–35 71 AMP precision bfloat16 bfloat16 Gradient clipping max norm 1.0 1.0 Center prediction weight ( η) 0.0–1.0 1.0 Input points 8,192 8,192 Point features 6 (xyz+rgb) 3 (xyz only) Table 15. Final loss values at pre-training termination.                      
+
+> Variant Epochs Final Chamfer Loss Final Center Loss
+> Pre-V1 (PCP-MAE, MaskTransformer, Objaverse) 24 0.57 1.41 V1 hybrid (PCP-MAE, MaskTransformer, Objaverse) 24 0.57 1.41 V2 (PCP-MAE, PointTransformer, Objaverse) 32 0.82 0.046 Point-MAE (Point-MAE, PointTransformer, Objaverse) 35 0.93 –Mask Point-MAE (Point-MAE, MaskTransformer, Objaverse) 31 0.97 –ShapeNet55-34 (PCP-MAE, MaskTransformer) 71 0.84 4.25
+
+Note: The center loss for ShapeNet55-34 remains higher than Objaverse variants because ShapeNet55-34 lacks color information, making center prediction more challenging due to less discriminative local features. 14

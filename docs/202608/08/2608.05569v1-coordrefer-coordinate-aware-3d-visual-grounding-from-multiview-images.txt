@@ -1,0 +1,544 @@
+Title: CoordRefer: Coordinate-Aware 3D Visual Grounding from Multiview Images
+
+URL Source: https://arxiv.org/pdf/2608.05569v1
+
+Published Time: Fri, 07 Aug 2026 00:31:31 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# CoordRefer: Coordinate-Aware 3D Visual Grounding from Multiview Images 
+
+# Haijie Li 1, Jiaxin Zhang 2, Dave Zhenyu Chen 3,* , Youyu Chen 2, Yanmin Wu 1, Jian Zhang 1,4, †
+
+> 1
+
+School of Electronic and Computer Engineering, Peking University 
+
+> 2
+
+Harbin Institute of Technology 3Huawei 
+
+> 4
+
+Guangdong Provincial Key Laboratory of Ultra High Definition Immersive Media Technology, Shenzhen Graduate School, Peking University 
+
+> *
+
+Project Leader †Corresponding Author Project page: https://lhj-git.github.io/CoordRefer/ 
+
+Figure 1: Left: Resolving box ambiguity for 3D visual grounding. Existing coordinate-agnostic frameworks jointly infer coordinate frames and 3D boxes, causing ambiguous supervision and producing invalid coordinate–box predictions. Our coordinate-aware framework decouples these two objectives by first selecting a coordinate frame and then grounding objects in the selected coordinate system, yielding a unique box representation and improved performance. Right: Performance gains on 3D visual grounding benchmarks. Our framework achieves improvements of 11–14% across multiple benchmarks over baseline. 
+
+Abstract 
+
+Multiview image-based 3D visual grounding predicts a coor-dinate frame to define a coordinate system and then regresses a 3D bounding box for localization. However, existing meth-ods jointly optimize coordinate frame selection and box re-gression, leading to coordinate-relative box ambiguity and degraded grounding performance. This ambiguity arises be-cause the same box admits different numerical representations across coordinate frames, creating multiple optimization tar-gets and yielding invalid compromise predictions. To tackle this challenge, we propose CoordRefer, a coordinate-aware framework that decouples coordinate frame selection from coordinate-conditioned grounding. CoordRefer first selects a reference frame to define the coordinate system and then condi-tions 3D box prediction on the coordinate system. We perform coordinate-aware supervised fine-tuning to establish coordi-nate frame selection and coordinate-conditioned box regres-sion, followed by Group Relative Policy Optimization with 3D IoU-based rewards to align both stages with downstream grounding quality. On ScanRefer with Qwen3-VL-2B, Coor-dRefer achieves gains of +11% Acc@0 .25 and +7% Acc@0 .5
+
+over the coordinate-agnostic baseline, while its geometrically refined variant surpasses methods using explicit 3D inputs. 
+
+# Introduction 
+
+The rapid advancement of multimodal large language models (MLLMs) (Bai et al. 2025b,a; An et al. 2025; Hurst et al. 2024; Li et al. 2024) has significantly broadened their ap-plicability across diverse domains, including complex 3D perception tasks. Among these, 3D visual grounding (Chen, Chang, and Nießner 2020; Achlioptas et al. 2020), requiring the model to understand a natural language description and accurately localize the corresponding object in 3D space, has been extensively studied using explicit 3D inputs (Huang, Zhang, and Tang 2025; Zhu et al. 2025; Chen et al. 2024; Hong et al. 2023; Zheng, Huang, and Wang 2025). Although these methods achieve strong performance, their scalability remains under debate due to the data scarcity of 3D scenes. Recent studies also explore a parallel route to tackle 3D visual grounding by directly producing 3D boxes from the in-put multiview images. This line of work typically formalizes a joint framework by simultaneously identifying a frame to set up a coordinate system and regressing a 3D bounding box within that system (Zhang et al. 2025; Zheng et al. 2025; Hu et al. 2026). Despite their effectiveness, we observe that this arXiv:2608.05569v1 [cs.CV] 6 Aug 2026 prevailing framework suffers from a fundamental weakness: jointly predicting the coordinate frame and the 3D box causes 
+
+coordinate-relative box ambiguity . As illustrated in Fig. 1, this ambiguity induces multiple optimization targets, causing the model to predict an invalid box representation that often does not correspond to any coordinate frame. As illustrated in Fig. 2, the same physical 3D box is represented by differ-ent numerical parameters under different coordinate frames. Jointly predicting the coordinate frame and 3D box therefore introduces multiple equivalent but inconsistent optimization targets. Optimizing over these targets may yield a compro-mise prediction that does not correspond to a valid box in any coordinate frame. Explicitly conditioning box regression on the selected coordinate frame resolves this ambiguity by reducing the optimization to a unique and well-defined target. Based on this observation, we propose a coordinate-aware framework for image-based 3D visual grounding. As illus-trated in Fig. 1, our framework decouples coordinate frame selection from 3D box regression. It first selects a reference frame to define the coordinate system and then explicitly con-ditions box regression on the coordinate system. By fixing the coordinate frame before localization, the model is opti-mized toward a unique box representation, thereby eliminat-ing coordinate-relative box ambiguity. To realize this formu-lation, we adopt a progressive training framework consisting of coordinate-aware supervised fine-tuning (SFT) and rein-forcement learning (RL). During SFT, the model is trained to select an appropriate coordinate frame from the input views and predict the target 3D box conditioned on the selected co-ordinate frame. This establishes an explicit correspondence between the coordinate system and its box representation, enabling stable two-stage grounding. We then apply Group Relative Policy Optimization (GRPO) (Guo et al. 2025) to op-timize both stages with 3D IoU-based rewards. Specifically, box regression is directly rewarded by the 3D IoU between the predicted and ground-truth boxes, while coordinate frame selection is optimized using the downstream 3D IoU achieved under the selected frame as an indirect reward. By directly aligning both stages with localization accuracy, this design reduces the optimization gaps introduced by heuristic frame supervision and token-level cross-entropy training. As a result, our proposed framework achieves improve-ments of 11–14% in Acc@0 .25 and 5-7% in Acc@0 .5 over baseline across multiple 3D visual grounding benchmarks. The RGB-only model achieves competitive performance against methods using explicit 3D inputs, while its geometri-cally refined variant further surpasses them. The main contributions of this work are as follows: 1. We identify coordinate-relative box ambiguity in exist-ing image-based 3D visual grounding frameworks, where jointly predicting the coordinate frame and 3D box intro-duces multiple equivalent optimization targets and may lead to invalid coordinate–box predictions. 2. We propose a coordinate-aware framework that decou-ples coordinate frame selection from 3D box regression and explicitly conditions box prediction on the selected coordinate frame, thereby yielding a unique and stable optimization target during training. 
+
+Figure 2: Coordinate-relative box ambiguity and its resolu-tion through explicit coordinate conditioning. (a) The same physical 3D box has different representations under different coordinate frames. (b) Without coordinate conditioning, mul-tiple equivalent targets may lead to a compromise but invalid solution. (c) Conditioning box regression on the selected co-ordinate frame provides a unique optimization target. 3. We develop a progressive coordinate-aware training strat-egy that first establishes explicit coordinate–box corre-spondence through SFT and then aligns both grounding stages with localization quality through GRPO. Extensive experiments demonstrate consistent improvements across multiple benchmarks, while the geometrically refined vari-ant surpasses methods using explicit 3D inputs. 
+
+# Related Work 
+
+Multimodal Large Language Models 
+
+Recent multimodal large language models (MLLMs) (Bai et al. 2025b,a; An et al. 2025; Hurst et al. 2024; Li et al. 2024; Deng et al. 2025) have demonstrated strong cross-modal reasoning capabilities in diverse vision-language tasks, including perception integration, language understanding, and sequential decision-making. Based on these foundations, recent works (Shen et al. 2025; Li et al. 2025; Xu et al. 2025; Linghu et al. 2026; Zhang et al. 2026) further en-hance MLLMs through post-training optimization (Guo et al. 2025). These approaches significantly improve visual rea-soning, open-vocabulary detection, and multi-step planning performance of MLLMs. In contrast, our method focuses on using MLLMs to solve the 3D visual grounding task. 
+
+3D Visual Grounding 
+
+Specialized 3D Grounding Models Early works (Chen, Chang, and Nießner 2020; Achlioptas et al. 2020) established benchmarks based on ScanNet (Dai et al. 2017) and intro-duced the paradigm where a 3D detector generates candidate proposals that are matched with language descriptions via cross-modal alignment. Subsequent approaches (Wu et al. 2023) improve cross-modal correspondence through dense alignment and phrase modeling. However, these methods rely on predefined 3D proposals as an integral part of their grounding pipeline. In contrast, our core RGB-only frame-work directly predicts 3D bounding boxes without external Figure 3: Coordinate-aware training strategy. In the SFT stage, the pretrained VLM is jointly trained on decoupled coordinate-frame selection and coordinate-conditioned grounding using pseudo frame labels and ground-truth boxes. In the RL stage, GRPO optimizes box prediction with a direct IoU reward and frame selection with an indirect IoU reward computed by a frozen grounding model. The grounding model is periodically updated with the latest policy weights. proposal generators, while geometric refinement is applied only as an optional post-processing step for comparison with methods using explicit 3D information. 
+
+3D Visual Grounding with MLLMs With the emergence of MLLMs, localization objectives can be directly integrated into the decoding process, enabling end-to-end grounding without external proposal generators. Early attempts (Hong et al. 2023; Zhu et al. 2025; Huang, Zhang, and Tang 2025) incorporate explicit 3D information, such as point clouds or depth maps, together with 2D visual inputs to enable mul-timodal reasoning for 3D grounding tasks. Due to the cost and limited availability of point cloud data, recent efforts aim to perform 3D grounding without explicit 3D inputs. Scene-R1 (Yuan et al. 2025) introduces a pipeline that first identifies informative temporal segments and then localizes objects in image space before lifting them to 3D, though it still depends on ground-truth geometry. SPAR (Zhang et al. 2025) predicts coordinate frames and 2.5D bounding boxes directly from video inputs, which are subsequently lifted to 3D using estimated camera parameters. Advances in geomet-ric encoders (Wang et al. 2024a, 2025, 2026) significantly improve camera pose and depth estimation from images. By incorporating such geometric priors, VG-LLM (Zheng et al. 2025) demonstrates that models can directly predict coordi-nate frames and 3D bounding boxes from image sequences. 3D-RFT (Linghu et al. 2026) further introduces reinforce-ment fine-tuning with verifiable frame and 3D IoU rewards, directly aligning optimization with downstream grounding performance. These works indicate that image-based 3D vi-sual grounding is increasingly feasible. However, existing methods largely treat coordinate selection and grounding as a coupled process. In contrast, we explicitly decouple them, enabling more stable and accurate grounding. 
+
+# Method 
+
+Preliminary 
+
+Problem Formulation Given a sequence of RGB images 
+
+I = {It}Tt=1 sampled from a video and a textual query q,where It ∈ Rh×w×3, image-based 3D visual grounding aims to localize the referred object in 3D space without explicit 3D inputs such as depth maps or point clouds. Following prior work (Zhang et al. 2025), the model is required to predict a reference frame f ∈ { 1, . . . , T } and a 9-DoF bounding box 
+
+Bf ∈ R9 represented in the coordinate system of frame f :
+
+(f, B f ) = F(I, q ). (1) Since the numerical representation of the box depends on the reference frame, a valid prediction requires the selected frame and the predicted box to be geometrically consistent. 
+
+Coordinate-Agnostic Framework Most existing image-based 3D visual grounding approaches (Zheng et al. 2025; Hu et al. 2026; Zhang et al. 2025) adopt a coordinate-agnostic formulation that simultaneously predicts the reference frame and the corresponding 3D bounding box: 
+
+(f, B f ) = Fsel _grd (I, q ). (2) However, jointly predicting the reference frame and the 3D box introduces coordinate-relative box ambiguity during op-timization, often causing the model to favor a compromise yet geometrically invalid 3D box prediction. 
+
+Group Relative Policy Optimization Group Relative Pol-icy Optimization (GRPO) (Guo et al. 2025) is a reinforcement learning algorithm that eliminates the need for a separate value critic by estimating advantages through relative com-parisons among grouped responses. Given an input x, the old policy πθold samples a group of G responses {yi}Gi=1 ,each of which receives a task-specific reward Ri. The relative advantage of the i-th response is computed as 
+
+ˆAi = Ri − mean( {Rj }Gj=1 )std( {Rj }Gj=1 ) + ϵ , (3) where ϵ is a small constant for numerical stability. GRPO then optimizes the policy using a clipped likelihood-ratio objective with KL regularization against a reference policy, increasing the likelihood of responses with higher relative rewards while preventing excessive policy deviation. Coordinate-Aware Supervised Fine-Tuning 
+
+As illustrated in Fig. 3, CoordRefer adopts a two-step train-ing pipeline consisting of coordinate-aware supervised fine-tuning and reinforcement fine-tuning. In the first step, we decompose frame selection and box regression into two se-quential tasks with explicit coordinate conditioning: 
+
+f = Fsel (I, q ), (4) 
+
+Bf = Fgrd (Igrd , q | f ), (5) where f denotes the selected reference frame, Igrd denotes the grounding input conditioned on f , and Bf is the 3D bounding box expressed in the coordinate system defined by 
+
+f . By fixing the coordinate frame before localization, each grounding sample is associated with a unique box target, thereby eliminating coordinate-relative box ambiguity. To instantiate this formulation within a unified SFT frame-work, we construct two types of training instructions corre-sponding to Eqs. 4 and 5. For coordinate-frame selection, the instruction presents the image set I and requires the model to predict the index f of the frame used to define the coordinate system. Its pseudo target is selected from visible candidate frames by balancing projected scale and geometric complete-ness. For coordinate-conditioned grounding, the instruction takes Igrd as input, designates f as the coordinate reference, and requires the model to predict the 3D box in its cam-era coordinate system. The supervision target is obtained by transforming the ground-truth box into the same coordinate system. As shown in the upper part of Fig. 3, both types of instructions are jointly optimized using cross-entropy loss, yielding the initial policy for subsequent reinforcement fine-tuning. The prompt templates and pseudo-label construction criterion are detailed in the supplementary material. We fur-ther introduce temporal resampling and suboptimal-frame supervision to improve grounding robustness under insuffi-cient visual observations and imperfect frame selection. 
+
+Temporal Resampling. The uniformly sampled frame set 
+
+I used for coordinate-frame selection provides broad scene coverage but may offer insufficient observations for accurate grounding. We therefore construct the grounding input Igrd 
+
+only after the reference frame f is selected. Specifically, the selected frame is placed first to define the coordinate system, followed by its temporally neighboring frames that provide complementary appearance and geometric cues. Thus, Igrd 
+
+enriches the visual evidence for grounding while preserving 
+
+f as the unique coordinate reference. 
+
+Suboptimal-Frame Supervision. Training the grounding model only on the optimal pseudo reference frame makes it overly dependent on the quality of that frame, potentially degrading grounding performance under imperfect frame se-lection. We therefore use suboptimal yet valid frames as alter-native coordinate references and construct the corresponding grounding samples for additional supervision. This exposes the model to diverse valid coordinate frames and improves its robustness to imperfect frame selection while preserving a unique box target for each sample. 
+
+Coordinate-Aware Reinforcement Learning 
+
+Although coordinate-aware SFT establishes frame selection and coordinate-conditioned grounding capabilities, its su-pervision remains misaligned with downstream localization quality. The heuristic pseudo frame label may not identify the frame that best supports grounding, while token-level cross-entropy loss does not directly optimize box geometry. We therefore apply GRPO to align both tasks with 3D local-ization performance. As illustrated in the lower part of Fig. 3, the policy is initialized from the coordinate-aware SFT check-point, with a frozen copy serving as the reference model for KL regularization. For each instruction, the policy samples a group of responses evaluated by three verifiable rewards: a shared format reward, a direct IoU reward for grounding, and an indirect IoU reward for coordinate frame selection. 
+
+Format Reward. The format reward encourages valid and parseable outputs. A frame-selection response is valid if it contains an input frame index, while a grounding response must contain a complete 9-DoF box: 
+
+R(i)fmt =
+
+1, if the output format is valid ,
+
+0, otherwise . (6) 
+
+Direct IoU Reward for Coordinate-Conditioned Ground-ing. Given a specified reference frame f , the policy predicts a box ˆBf in its coordinate system. Since the corresponding ground-truth box Bf is uniquely defined, we directly use their 3D IoU as the grounding reward: 
+
+Rgrd = IoU 3D
+
+ ˆBf , B f 
+
+. (7) Unparsable predictions receive zero reward. Unlike token-level cross-entropy loss, this reward directly measures the 3D IoU between the predicted and ground-truth boxes. 
+
+Indirect IoU Reward for Coordinate Frame Selection. Aselected frame cannot be directly evaluated by 3D IoU, while rewarding agreement with a pseudo frame label, as in 3D-RFT (Linghu et al. 2026), retains the supervision gap of SFT. We instead evaluate each selected frame by the grounding quality it enables. Given a predicted frame ˆf , we construct 
+
+I ˆf 
+
+> grd
+
+from ˆf and its temporal neighbors. A frozen coordinate-conditioned grounding model FRM predicts 
+
+ˆB ˆf 
+
+> RM
+
+= FRM 
+
+
+
+I ˆf
+
+> grd
+
+, q | ˆf
+
+
+
+, (8) and the frame-selection reward is defined as 
+
+Rsel = IoU 3D
+
+ ˆB ˆf
+
+> RM
+
+, B ˆf 
+
+, (9) where B ˆf denotes the ground-truth box represented in the same coordinate system. This reward measures the down-stream utility of the selected frame, allowing any frame that supports accurate grounding to receive a high reward. 
+
+Periodically Refreshed Grounding Reward Model. The reward model FRM is initialized from the coordinate-aware SFT model and frozen during reward computation. To prevent ScanRefer NR3D SR3D Multi3DRefer Method Acc@0 .25 Acc@0 .5 Acc@0 .25 Acc@0 .5 Acc@0 .25 Acc@0 .5 F1@0 .25 F1@0 .5
+
+SPAR (Zhang et al. 2025) 31.9 12.4 – – – – – –VG-LLM-4B (Zheng et al. 2025) 36.4 11.8 25.3 7.5 28.7 9.8 31.8 11.2 VG-LLM-8B (Zheng et al. 2025) 41.6 14.9 31.5 11.3 37.2 14.1 38.6 14.8 3D-RFT-4B (Linghu et al. 2026) 42.9 15.9 – – – – – –Qwen3-VL-2B † (Bai et al. 2025a) 39.7 16.4 27.4 10.6 31.5 12.8 34.4 14.8 
+
+Ours-2B 51.1 23.6 42.1 17.2 42.6 17.8 45.4 20.8 
+
+Improvement over baseline +11.4 +7.2 +14.7 +6.6 +11.1 +5.0 +11.0 +6.0 
+
+Table 1: In-domain comparison of RGB-only methods. All models are trained and evaluated on the corresponding datasets. Our method consistently outperforms existing RGB-only methods across all benchmarks. † denotes the coordinate-agnostic baseline instantiated with Qwen3-VL-2B and trained under the same experimental setting. ScanRefer Method Acc@0 .25 Acc@0 .5            
+
+> ScanRefer (Chen, Chang, and Nießner 2020) 37.3 24.3 3D-LLM (Hong et al. 2023) 30.3 -Grounded 3D-LLM (Chen et al. 2024) 47.9 44.1 LLaVA-3D (Zhu et al. 2025) 54.1 42.4 Video-3D LLM (Zheng, Huang, and Wang 2025) 58.1 51.7
+> Ours-2B ∗60.0 53.4
+
+Table 2: In-domain comparison with methods using explicit 3D input on ScanRefer. Our 3D-refined variant achieves the best performance among methods using explicit 3D informa-tion. ∗ denotes 3D refinement. it from becoming inconsistent with the improving policy, we periodically update it using the latest policy weights: 
+
+θRM ← θ, every K optimization steps , (10) where K = 100 in our experiments. This provides stable rewards within each interval while adapting frame selection to the evolving grounding capability. 
+
+Joint GRPO Optimization. Frame-selection and coordinate-conditioned grounding instructions are jointly sampled within each batch during reinforcement fine-tuning. The reward for the i-th response is 
+
+R(i) = R(i)fmt +
+
+(
+
+R(i)grd , for grounding ,R(i)sel , for frame selection . (11) Through direct and indirect IoU rewards, both tasks are aligned with accurate 3D grounding. 
+
+# Experiment 
+
+Implementation details. 
+
+We instantiate CoordRefer with Qwen3-VL-2B (Bai et al. 2025a) using a simple RGB-only architecture, without intro-ducing additional geometry encoders such as VGGT (Wang et al. 2025). This minimal design allows us to isolate the effectiveness of the proposed coordinate-aware formulation from the benefits of explicit geometric representations or specialized architectural components. During SFT, we train our model for one epoch on a mixed ScanNet-based dataset following VG-LLM (Zheng et al. 2025), covering detec-tion, captioning, and 3D visual grounding, which consists of coordinate-frame selection and coordinate-conditioned grounding. RL is applied only to the two grounding sub-tasks. At each training step, a mini-batch is randomly sam-pled from one of these tasks. The model is optimized us-ing Adam (Kingma and Ba 2015) with a learning rate of 
+
+1 × 10 −5. During training, the visual encoder is frozen, while the MLLM backbone remains trainable. For coordinate su-pervision, we use visible object annotations from Embodied-Scan (Wang et al. 2024b) together with ScanNet annotations. All SFT experiments are conducted on 16 NPUs, each with 64 GB of memory, using a total batch size of 16. RL experiments are performed on 64 such NPUs with the same batch size, generating 8 responses per input for single-object grounding and 4 responses per input for multi-object grounding. 
+
+Single-object 3D Visual Grounding 
+
+Settings. To evaluate single-object 3D visual grounding, we adopt ScanRefer (Chen, Chang, and Nießner 2020), NR3D and SR3D (Achlioptas et al. 2020), and ARK-itSceneRefer (Kato et al. 2023) as benchmark datasets. We train and evaluate the model on ScanRefer, NR3D, and SR3D for in-domain evaluation. For zero-shot out-of-domain eval-uation, we test the ScanRefer-trained model on the vali-dation split of ARKitSceneRefer without additional fine-tuning. ARKitSceneRefer is constructed from the ARK-itScenes (Baruch et al. 2021) dataset. It therefore represents a more challenging cross-dataset setting, involving simultane-ous shifts in scene geometry, image resolutions, camera intrin-sics and extrinsics, object categories and scales. In particular, many targets occupy only small image regions, making both semantic identification and precise 3D box localization more difficult. We report Acc@0 .25 and Acc@0 .5, corresponding to localization accuracy at 3D IoU thresholds of 0.25 and 0.5. For each query, we select one reference frame, predict a 3D box in its camera coordinate system, transform it to the global coordinate system using the camera extrinsics, and compute its 3D IoU with the ground truth. 
+
+Comparison with State-of-the-Art Methods. As shown in Table 1, our RGB-only model achieves 51.1% Acc@0 .25 
+
+and 23.6% Acc@0 .5 on ScanRefer, substantially outperform-ing all prior methods that rely solely on multiview RGB Figure 4: Qualitative evidence of resolving coordinate-relative box ambiguity. The coordinate-agnostic baseline predicts an inconsistent coordinate–box pair, producing a box misaligned with the target in 3D space. In contrast, our method predicts box representations under coordinates C, C1, and C2, which align with the same object after transformation to a common 3D space. Red, blue, and green denote coordinate-agnostic predictions, coordinate-aware predictions, and ground truth, respectively. images. Compared with the original Qwen3-VL-2B baseline trained under the conventional coordinate-agnostic formula-tion, our method yields absolute improvements of 11.4% and 7.2% at the two IoU thresholds, respectively. Since our model uses the same backbone without introducing additional ge-ometric encoders, these gains cannot be attributed to model scaling or increased architectural capacity. Instead, they vali-date the effectiveness of our coordinate-aware method. Fig. 4 illustrates coordinate-relative box ambiguity and how our method resolves it. Under the coordinate-agnostic formulation, the coordinate C and box BC suffer from coordinate-relative box ambiguity. Consequently, the pre-dicted box is misaligned with the ground-truth box in position and rotation, indicating that the predicted box is inconsistent with its associated coordinate frame. In contrast, our method not only produces an accurate box under the selected coordi-nate C, but also predicts different numerical representations 
+
+BC1
+
+and BC2
+
+when conditioned on coordinates C1 and C2.After transformation into the global 3D space, our coordinate-aware predictions consistently converge on the same physical object. This behavior demonstrates that our framework es-tablishes a stable correspondence between each coordinate condition and its box representation, thereby avoiding invalid compromise predictions caused by multiple equivalent opti-mization targets. Fig. 5 provides further visual evidence of our model’s ability to localize target objects. For a fair comparison with methods that use explicit 3D in-formation, we further apply the geometric refinement (Zhang et al. 2025) to the bounding boxes predicted by the VLM. Under this setting, our method achieves 60.0% Acc@0 .25 
+
+and 53.4% Acc@0 .5, outperforming Video-3D LLM (Zheng, Huang, and Wang 2025) by 1.9% and 1.7%, respectively. This result demonstrates that our framework remains highly competitive under both RGB-only and 3D-refined settings. 
+
+Zero-Shot Out-of-Domain Generalization. Table 3 eval-uates the zero-shot generalization on ARKitSceneRefer of models trained only on ScanRefer. Under this particu-larly challenging cross-dataset setting, our RGB-only model achieves 7.9% Acc@0 .25 and 0.7% Acc@0 .5, outperforming both its Qwen3-VL-2B baseline and previous RGB-based ARKitSceneRefer Method Acc@0 .25 Acc@0 .5          
+
+> VG-LLM-4B (Zheng et al. 2025) 3.4 0.2 VG-LLM-8B (Zheng et al. 2025) 3.7 0.1 Qwen3-VL-2B †
+> (Bai et al. 2025a) 6.2 0.6
+> Ours-2B 7.9 0.7
+> Video-3D LLM (Zheng, Huang, and Wang 2025) 0.2 0.0
+
+Table 3: Out-of-domain comparison on ARKitSceneRe-fer. All models are trained on ScanRefer and evaluated without target-domain fine-tuning. Our method achieves the best out-of-domain performance among all compared methods, demonstrating superior generalization over both RGB-based and explicit 3D-input approaches. † denotes the coordinate-agnostic baseline instantiated with Qwen3-VL-2B and trained under the same experimental setting. methods. Although all approaches experience substantial performance degradation, our method retains the strongest grounding capability, demonstrating superior robustness to unseen scene distributions and acquisition conditions. In contrast, Video-3D LLM obtains only 0.2% Acc@0 .25 
+
+and 0.0% Acc@0 .5, exhibiting almost no cross-dataset gener-alization to ARKitSceneRefer. Since it relies on point-cloud-based proposal extraction, its performance is affected by the data gap between ScanNet and ARKitScenes, which may pre-vent the proposal module from generating reliable candidate boxes. These results highlight the cross-dataset robustness of our image-based, coordinate-aware grounding formulation. 
+
+Multi-object 3D Visual Grounding 
+
+Settings. To evaluate multi-object 3D visual grounding, we train and evaluate our method on Multi3DRefer (Zhang, Gong, and Chang 2023), which extends 3D visual grounding to a variable number of target objects. Multi3DRefer is also built on ScanNet (Dai et al. 2017). Given a 3D scene and a referring query, the model is required to predict all 3D bound-ing boxes that satisfy the description. We report F1 scores at Figure 5: Qualitative results on single- and multi-object 3D visual grounding. For single-object grounding, our method achieves more precise localization. For multi-object grounding, it accurately identifies both the number and locations of referred objects. SFT Components ScanRefer Coord. Suboptimal Temp. Acc@0 .25 Acc@0 .5
+
+– – – 39.7 16.4 
+
+✓ – – 43.4 17.4 
+
+✓ ✓ – 44.4 18.7 
+
+✓ ✓ ✓ 47.1 20.3 
+
+Table 4: Ablation study on SFT components. Coord., Sub-optimal, and Temp. denote the coordinate-aware formula-tion, suboptimal-frame supervision, and temporal resampling. Combining all components achieves the best performance. IoU thresholds of 0.25 and 0.5 as the evaluation metrics. For multi-object grounding, the model selects multiple reference frames and aggregates the resulting coordinate-conditioned predictions in the global coordinate system. During RL, F1 over the aggregated boxes rewards accurate localization while penalizing duplicate predictions. Formal definitions are pro-vided in the supplementary material. 
+
+Comparison on Multi-object Visual Grounding. Table 1 presents the results on Multi3DRefer. Our method achieves 45.4% F1@0 .25 and 20.8% F1@0 .5, outperforming all RGB-based methods. Compared with the Qwen3-VL-2B baseline, it yields absolute improvements of 11.0% and 6.0%, respec-tively, demonstrating the effectiveness of our framework for grounding a variable number of target objects. Fig. 5 provides visual evidence that our model better captures the spatial dis-tribution of objects in 3D space and more reliably localizes all referred instances in multi-object settings. 
+
+Ablation Study 
+
+Ablation on SFT Components. As shown in Table 4, de-coupling the two tasks by first predicting a reference-frame index and then grounding from only the selected image al-ready clearly improves over the coordinate-agnostic baseline, validating our coordinate-aware formulation. Suboptimal-Frame supervision further improves performance by enabling the grounding model to handle imperfect frame selections, while temporal resampling increases the visual evidence in grounding. Combining these components achieves the best performance, demonstrating their complementary effects. 
+
+Ablation on RL Components. Table 5 studies the con-tributions of different RL components. Simply continuing SFT beyond convergence does not improve performance, RL Reward ScanRefer Training Grounding Coordinate Acc@0 .25 Acc@0 .5                    
+
+> SFT ––47.1 20.3 SFT + SFT ––46.2 19.5 SFT + RL IoU –50.7 22.6 SFT + RL IoU IoU 51.1 23.6
+> SFT + RL IoU PL 50.1 23.1
+
+Table 5: Ablation study on RL components. Grounding and Coordinate denote the rewards for coordinate-conditioned grounding and coordinate selection. PL denotes the pseudo-label frame reward in 3D-RFT (Linghu et al. 2026). Using IoU rewards for both tasks achieves the best performance. indicating that the gains are not due to additional training iter-ations. Applying an IoU-based reward to grounding produces clear improvements by directly aligning optimization with localization quality. For frame selection, the pseudo-label reward provides only limited benefits, whereas our indirect IoU reward achieves the best performance by evaluating each selected frame according to the grounding quality it enables. 
+
+# Conclusion 
+
+We revisit image-based 3D visual grounding and iden-tify a structural limitation in existing frameworks, termed coordinate-relative box ambiguity. Jointly predicting the co-ordinate frame and 3D box introduces multiple equivalent optimization targets and may lead to invalid compromise predictions. To address this issue, we propose CoordRefer, a coordinate-aware framework that decouples coordinate-frame selection from 3D box regression and explicitly con-ditions grounding on the selected frame, yielding a unique and stable optimization target. We realize this formulation through a progressive training strategy, where coordinate-aware SFT first establishes explicit coordinate–box corre-spondence, followed by GRPO that aligns both grounding stages with localization quality through direct and indirect IoU rewards. Extensive experiments demonstrate consistent improvements across single- and multi-object grounding benchmarks, together with strong zero-shot cross-dataset generalization. Our RGB-only model substantially outper-forms existing image-based methods, while its geometrically refined variant further surpasses approaches using explicit 3D inputs. We hope this study inspires future research on spatial reasoning and RGB-based 3D perception in MLLMs. Supplementary Material 
+
+# Additional Experimental Details 
+
+For Coordinate-Aware Supervised Fine-Tuning , we uni-formly sample 32 images at equal temporal intervals from each scene to form I for coordinate frame selection, ensur-ing that the target object is visible in at least one frame. We construct 64K training samples for this stage. For coordinate-conditioned grounding, the selected reference frame is placed first, followed by 18 temporally adjacent frames, forming 
+
+Igrd . We construct 64K grounding samples using the optimal pseudo coordinate frames. To enhance robustness to imper-fect coordinate selection, we further construct 64K grounding samples conditioned on valid suboptimal coordinate frames, resulting in 128K grounding samples in total. For Coordinate-Aware Reinforcement Learning , all 64K coordinate frame selection samples and 128K coordinate-conditioned grounding samples are used for optimization. We set the sampling temperature to 0.8, the top _p to 0.95, and top _k to 50. Following the DAPO (Yu et al. 2025), we set ϵhigh to 0.28, ϵ to 0.2, while keeping all other hyperpa-rameters at the default settings of TRL’s GRPOTrainer. 
+
+Software Environment and Reproducibility. All experi-ments are conducted with Python 3.10, PyTorch 2.6.0, and TRL 0.29.0. We use a random seed of 0 for all experiments. 
+
+# Definition of the Pseudo Coordinate-Frame Label 
+
+A reliable pseudo coordinate-frame label should provide suf-ficient visual and geometric evidence for downstream ground-ing. We first use object visibility as a hard constraint to con-struct the candidate-frame set. Among the visible candidate frames, projected scale and geometric completeness are used to select the pseudo coordinate-frame label. 
+
+Candidate-Frame Construction. Let vt ∈ { 0, 1} indicate whether the referred object is visible in frame t. We define the candidate-frame set as 
+
+V = {t ∈ { 1, . . . , T } | vt = 1 } , (12) where vt is obtained from the visible-object annotations from EmbodiedScan (Wang et al. 2024b). Frames in which the target object is not visible are excluded from subsequent scoring and cannot be selected as coordinate frames. 
+
+Scale–Completeness Balanced Selection. As shown in Fig. 6, for each candidate frame t ∈ V , we project the eight corners of the 3D bounding box from world coordinates onto the image plane using the camera extrinsic and intrinsic matrices. Only corners with positive depth in the camera coordinate system are retained, and the projected coordinates are clipped to the image boundaries. We compute two scores for each candidate frame: • Scale score At. The scale score At is defined as the nor-malized projected 2D area after clipping. It measures the amount of geometric evidence contained in the image.               
+
+> ScanRefer
+> τAcc@0 .25 Acc@0 .5
+> 044.9 19.1 0.2 45.3 20.0 0.4 46.0 19.8 0.6 47.1 20.3 0.8 45.8 20.5
+> 146.5 19.7
+
+Table 6: Ablation on threshold τ for coordinate selection. We vary the threshold τ and report grounding performance on ScanRefer. The best results are highlighted in bold, and the second-best results are underlined. • Completeness score Ct. The completeness score Ct is defined using the corners that are both in front of the camera and within the image boundaries. It measures how fully the object is visible in the image. We then construct a high-scale subset: 
+
+S =
+
+
+
+t ∈ V At ≥ τ · max  
+
+> j∈V
+
+Aj
+
+
+
+, (13) where τ ∈ [0 , 1] is a fixed ratio threshold used to exclude frames with insufficient projection scale. Since the frame achieving max Aj always satisfies the condition, S is guar-anteed to be non-empty. The final coordinate frame is selected from S with com-pleteness given higher priority: 
+
+SC =
+
+
+
+t ∈ S | Ct = max  
+
+> k∈S
+
+Ck
+
+
+
+(14) 
+
+f ∗ = arg max 
+
+> t∈S C
+
+At, (15) By balancing scale and completeness, we avoid selecting coordinate frames that are either truncated or too small, pro-viding a more stable geometric reference for grounding. The balancing threshold τ is empirically set to 0.6. The ablation study of τ is reported in Table 6. We observe that τ = 0 .6 pro-vides the best overall trade-off across the two IoU thresholds. Note that when τ = 0 , the definition prioritizes completeness over all candidate frames, while when τ = 1 , it is dominated by projected scale. This ablation is conducted at the SFT stage, before reinforcement learning is introduced. 
+
+# Training Data Examples and Details for the Coordinate-Aware Framework 
+
+We provide the prompt templates for single- and multi-object 3D visual grounding in Tables 7 and 8, respectively. In both settings, each selected reference frame is placed at the be-ginning of its grounding image sequence, followed by the images obtained through temporal resampling. The prompt instructs the model to express its 3D predictions in the cam-era coordinate system of the first frame, which serves as the reference frame. Figure 6: Pseudo coordinate-frame label. We first exclude frames in which the target object is not visible. For each remaining candidate frame, we project the 3D bounding box into the image plane and compute its projected area At and geometric completeness Ct after boundary clipping. The filter module then selects the pseudo coordinate frame by retaining sufficiently large projections and prioritizing geometric completeness. 
+
+# Extension to Multi-Object 3D Visual Grounding 
+
+Multi-Frame Coordinate-Aware Grounding. We extend the coordinate-aware formulation to multi-object 3D visual grounding on Multi3DRefer (Zhang, Gong, and Chang 2023), where a textual query may refer to zero, one, or multiple objects. Since the referred instances may not be sufficiently visible in a single view, the coordinate-frame selection task predicts a duplicate-free set of reference frames: 
+
+ˆSf = Fmulti sel (I, q ) = { ˆfk}Kk=1 , (16) where K is determined by the model and may vary across queries. For each selected frame ˆfk, we construct a ground-ing input I ˆfk 
+
+> grd
+
+using the same temporal resampling strategy as in the single-object setting. The coordinate-conditioned grounding model then predicts a set of 3D bounding boxes in the coordinate system of ˆfk:
+
+ˆB ˆfk = Fmulti grd 
+
+
+
+I ˆfk
+
+> grd
+
+, q | ˆfk
+
+
+
+=
+
+n ˆB ˆfk
+
+> k,j
+
+oNk
+
+> j=1
+
+, (17) where Nk is the number of boxes predicted under the coordi-nate system of frame ˆfk. Predictions from all selected frames are transformed into a common global coordinate system using the corresponding camera extrinsics and aggregated into a single prediction set ˆBg . We then match the aggregated predictions with the ground-truth box set B∗ following the Multi3DRefer evaluation protocol. 
+
+Multi-Object SFT Target Construction. During super-vised fine-tuning, we independently determine an optimal pseudo coordinate frame for each referred object using the same scale–completeness criterion as in the single-object setting. The resulting frame indices are deduplicated to con-struct the multi-object coordinate-frame selection target. For each retained frame, the grounding target contains all referred instances visible in that frame, with their ground-truth boxes transformed into its camera coordinate system. This con-struction improves the coverage of referred instances across different viewpoints. However, the same physical instance may be supervised under multiple coordinate frames and con-sequently predicted multiple times after global aggregation. 
+
+F1-Based Reinforcement Fine-Tuning. To jointly opti-mize instance coverage and duplicate suppression, the reward for the i-th multi-object response is defined as 
+
+R(i)multi = R(i)fmt + F1 0.25 
+
+ ˆBg, (i), B∗
+
++ F1 0.5
+
+ ˆBg, (i), B∗
+
+,
+
+(18) where F1 0.25 and F1 0.5 denote the F1 scores computed at 3D IoU thresholds of 0.25 and 0.5, respectively. Under the official one-to-one matching procedure, missed instances decrease recall, whereas duplicate predictions of the same physical instance are treated as false positives and decrease precision. The F1-based reward therefore encourages the model to cover all referred instances while suppressing dupli-cate predictions across different grounding passes. Single-Object 3D Visual Grounding – Coordinate Frame Selection 
+
+XUser :
+
+Frame-0: <image> Frame-1: <image> Frame-2: <image> Frame-3: <image> . . . 
+
+Text: There is a beige wooden bookshelf placed next to another bookshelf. 
+
+Localize the clearest frame in the video showing the object described in the text. Output a JSON dictionary with a frame index in "frame" .
+
+XAgent : 
+
+> ``` json {"frame": 1}
+> ```
+
+Single-Object 3D Visual Grounding – Coordinate-Conditioned Grounding 
+
+XUser :
+
+Frame-0: <image> Frame-1: <image> Frame-2: <image> Frame-3: <image> . . . 
+
+Text: There is a beige wooden bookshelf placed next to another bookshelf. 
+
+Output a JSON dictionary that matches the description and includes the 3D bounding box of the object, with the bounding box data stored in "bbox_3d" , where the coordinates are based on the coordinate system of the first frame. The 3D bounding box format should be [x_center, y_center, z_center, x_size, y_size, z_size, yaw, pitch, roll] .
+
+XAgent :        
+
+> ``` json {"bbox_3d": [-0.63, -0.83, 2.43, 3.0, 0.59, 2.35, -2.32, 1.18, 3.05]}
+> ```
+
+Table 7: The prompts for Single-Object 3D visual grounding tasks. The output should be in JSON format. 
+
+Reward Computation for the Two Tasks. For coordinate-conditioned grounding instructions, ˆBg, (i) is obtained by transforming and aggregating the policy predictions. For coordinate-frame selection instructions, the selected frame set is evaluated using the periodically refreshed grounding reward model introduced in the single-object setting. The reward model performs grounding under each selected frame, and its predictions are transformed and aggregated to ob-tain ˆBg, (i). The format reward requires a valid duplicate-free frame-index list for coordinate-frame selection and a parseable list of complete 9-DoF bounding boxes for coordinate-conditioned grounding. 
+
+# Efficiency Comparison with the Coordinate-agnostic Baseline 
+
+All experiments are conducted on ScanRefer with Qwen3-VL-2B (Bai et al. 2025a). The training time and computa-tional resources for the two optimization stages are shown in Table 9. The inference efficiency results are reported in Table 10. Our framework increases the per-sample in-ference time from 8.2 s to 10.4 s, mainly due to the addi-tional coordinate-frame selection stage. Nevertheless, the overall overhead is limited. Given the clear performance gains brought by disentangling coordinate frame selection and coordinate-conditioned grounding, we believe this addi-tional cost is justified. 
+
+# Shared versus Task-Specific RL Policies 
+
+Our default implementation uses a single 2B policy for both coordinate-frame selection and coordinate-conditioned grounding. To examine whether sharing the policy causes in-terference between the two tasks during reinforcement learn-ing, we additionally evaluate a task-specific setting with two separate 2B policies. In the task-specific setting, we first optimize the grounding policy using the direct IoU reward. After grounding optimization is completed, the resulting pol-icy is frozen and used as a fixed grounding reward model for training the coordinate-frame selection policy. Unlike the default shared-policy setting, the reward model is not periodically refreshed during frame-selection training. This sequential design provides a stable reward signal, allowing the frame-selection policy to reliably learn the grounding model’s preference over coordinate frames. Both policies are initialized from the same coordinate-aware SFT checkpoint and use the same task-specific training data and RL hyper-parameters as the corresponding stages of the shared-policy setting. As shown in Table 11, separate training slightly improves 
+
+Acc@0 .25 from 51.1% to 51.9%, while Acc@0 .5 marginally decreases from 23.6% to 23.5%. The improvements are there-fore small and inconsistent across metrics, indicating that jointly optimizing the two tasks does not introduce substan-tial negative interference. More importantly, the shared-policy setting achieves comparable grounding performance using only a single 2B model, whereas separate training requires two task-specific 2B models. We therefore adopt the shared Multi-Object 3D Visual Grounding – Coordinate Frame Selection 
+
+XUser :
+
+Frame-0: <image> Frame-1: <image> Frame-2: <image> Frame-3: <image> . . . 
+
+Text: the small white nightstand is situated against the wall. 
+
+Localize the clearest frames in the video showing the objects described in the text. There may be zero, one, or multiple objects matching the text. Output a JSON dictionary whose "frame" field contains a duplicate-free list of selected frame indices 
+
+XAgent :  
+
+> ``` json {"frame": [28, 30]}
+> ```
+
+Multi-Object 3D Visual Grounding – Coordinate-Conditioned Grounding 
+
+XUser :
+
+Frame-0: <image> Frame-1: <image> Frame-2: <image> Frame-3: <image> . . . 
+
+Text: the small white nightstand is situated against the wall. 
+
+Detect all objects in the video that match the textual description. For each detected object, output its 3D bounding box in the camera coordinate system of the first frame. There may be zero, one, or multiple objects matching the text. Output a JSON list where each entry contains its 3D bounding box in "bbox_3d" in the first frame’s coordinate. The 3D bounding box format should be [x_center, y_center, z_center, x_size, y_size, z_size, yaw, pitch, roll] 
+
+XAgent :                  
+
+> ``` json [{"bbox_3d": [0.63, -0.83, 2.43, 3.0, 0.59, 2.35, 2.32, 1.18, 3.05]}, {"bbox_3d": [-0.87, 0.44, 3.53, 0.41, 0.48, 0.49, 0.73, 1.38, 2.92]} ]
+> ```
+
+Table 8: The prompts for Multi-Object 3D visual grounding tasks. The output should be in JSON format.           
+
+> Training Stage NPU Configuration Time (h)
+> SFT 16 ×64 GB NPUs 20 RL 64 ×64 GB NPUs 111
+
+Table 9: Training time and computational resources for SFT and RL. We report the total training time and the correspond-ing NPU configuration for each training stage.          
+
+> Inference per sample (s) Method Frame Ground Total Coord. agnostic ––8.2 Coord. aware (Ours) 4.1 6.3 10.4
+
+Table 10: Inference Efficiency. Per-sample inference latency (s). Despite the additional stage, our coordinate-aware frame-work introduces only modest overhead. policy as the default setting due to its substantially lower model-storage and deployment overhead. 
+
+# Reinforcement Learning Dynamics 
+
+To further analyze the optimization behavior of our coordinate-aware reinforcement learning, we visualize the          
+
+> ScanRefer Policy Setting Model Parm. Acc@0 .25 Acc@0 .5
+> Shared Policy 2B 51.1 23.6
+> Task-Specific Policies 2B + 2B 51.9 23.5
+
+Table 11: Comparison of shared and task-specific RL poli-cies. The shared-policy setting uses a single 2B model for both coordinate-frame selection and coordinate-conditioned grounding, whereas the task-specific setting uses two sepa-rate 2B models. Task-specific policies provide only marginal and inconsistent performance changes while doubling the model-storage and deployment requirements. training reward and policy entropy throughout the RL stage. As shown in Fig. 7, the raw measurements exhibit moder-ate step-wise fluctuations due to stochastic group sampling, while their 10-point moving averages reveal clear and stable optimization trends. The average reward increases steadily from approximately 1.36 at the beginning of training to around 1.45, with the improvement gradually saturating after about 8K steps. This trend indicates that the policy progres-sively learns to generate coordinate-frame selections and grounding predictions that are better aligned with the pro-Reward Entropy 
+
+1.48  
+
+> 1.44
+
+# 州l/ 
+
+1.40 
+
+1.36 
+
+1.32 Raw 
+
+10-point moving average   
+
+> 0.250 Raw
+> 0.225
+
+# 一 10-point moving average 
+
+> 0.200
+> 0.175
+
+0.150 MW m
+
+> 0.125
+
+0 2500 5000 7500 10000 0 2500 5000 7500 10000 
+
+## Training Step Training Step Figure 7: Training dynamics of coordinate-aware reinforce-ment learning. The left panel shows the training reward, while the right panel shows the policy entropy. 
+
+ScanRefer Oracle Frame Box Refinement Acc@0 .25 Acc@0 .5
+
+– – 51.1 23.6 – ✓ 60.0 53.4 
+
+✓ – 83.2 51.3 
+
+✓ ✓ 85.1 76.5 
+
+Table 12: Upper-bound analysis on ScanRefer. Oracle Frame selects the coordinate frame yielding the highest grounding IoU, while Box Refinement denotes the geometric refinement used in our 3D-refined variant. posed IoU-based reward objectives. Meanwhile, the policy entropy decreases rapidly during the early training stage and subsequently stabilizes at approximately 0.13. The decreas-ing entropy suggests that the policy becomes increasingly confident as optimization proceeds, whereas its stable non-zero value indicates that the model retains sufficient output diversity without evident policy collapse. Overall, the steadily increasing reward and smoothly converging entropy demon-strate that the proposed RL optimization is effective and remains stable throughout training. 
+
+# Upper-Bound Analysis of Coordinate Frame Modeling 
+
+We conduct an upper-bound analysis on ScanRefer (Chen, Chang, and Nießner 2020) using Qwen3-VL-2B (Bai et al. 2025a) to investigate the limitations of coordinate frame se-lection and 3D box regression. For each sample, all input frames are treated as candidate coordinate frames, and the frame whose predicted box achieves the highest IoU with the ground truth is selected as the oracle frame . We further apply box refinement to improve the geometric accuracy of the predicted box. As shown in Table 12, using the oracle frame improves Acc@0 .25 /0.5 from 51.1%/23.6% to 83.2%/51.3%, demonstrating that coordinate frame selection remains a ma-jor performance bottleneck. Box refinement (Zhang et al. 2025) improves the CoordRefer to 60.0%/53.4%, indicating that many predictions roughly localize the target but remain geometrically imprecise. Combining the oracle frame and box refinement achieves the best performance of 85.1%/76.5%. The results suggest that coordinate frame selection mainly 
+
+## ScanRefer Pose Source Acc@0 .25 Acc@0 .5
+
+## GT 51.1 23.6 
+
+## π3 (Wang et al. 2026) 49.3 20.7 
+
+Table 13: Influence of camera pose estimation. Ground-truth poses correspond to the standard evaluation setting used in our main experiments and other RGB-based methods.                     
+
+> Method Category Precision @0.25 Recall @0.25 F1 @0.25
+> Coord. agnostic cate8 45.2 41.2 43.1 cate20 38.6 32.7 35.2 cate31 30.5 26.0 27.9 Coord. aware (Ours) cate8 49.0 43.6 46.1
+> cate20 41.0 34.7 37.3
+> cate31 32.2 27.6 29.4
+
+Table 14: Detection performance comparison at an IoU threshold of 0.25. Our method consistently outperforms the coordinate-agnostic framework across different category set-tings, demonstrating that the proposed two-stage design does not compromise detection capability. determines whether the target can be correctly localized, while box refinement primarily improves fine-grained ge-ometric accuracy. Therefore, further improvements require both more reliable coordinate frame modeling and more pre-cise coordinate-conditioned 3D box regression. 
+
+# The source of Camera Pose 
+
+Our main experiments use ground-truth camera poses to trans-form predictions from different coordinate frames into a com-mon 3D space, following the standard setting adopted by existing RGB-based methods. To evaluate the dependence of our method on camera pose accuracy, we replace the ground-truth poses with poses estimated by π3 (Wang et al. 2026) dur-ing inference. As shown in Table 13, using estimated poses decreases Acc@0 .25 from 51.1% to 49.3% and Acc@0 .5
+
+from 23.6% to 20.7%. Although estimated poses introduce a moderate performance drop, the model retains most of its grounding capability. These results indicate that CoordRefer remains effective when ground-truth poses are replaced with estimated poses. 
+
+# Impact on Detection and Captioning 
+
+We further evaluate whether the proposed framework affects other capabilities of the model following VG-LLM (Zheng et al. 2025), including 3D object detection and 3D caption-ing. As shown in Table 14, our method improves detection performance over the coordinate-agnostic baseline across all category settings. Precision, recall, and F1 scores improve consistently across the reported settings. Similarly, Table 15 reports the captioning results. Our method achieves comparable CIDEr, BLEU-4, and ROUGE scores to the coordinate-agnostic baseline, indicating that Figure 8: Qualitative comparison between our two-stage framework and oracle coordinate frame selection. Compared with CoordRefer, the oracle frame often provides more informative viewpoints and leads to more accurate localization, revealing significant room for improvement in coordinate frame selection. 
+
+Figure 9: Qualitative comparison of heuristic and IoU-optimized coordinate-frame selection. The top and bottom rows show the coordinate frames selected by the handcrafted scale–completeness criterion and our indirect IoU reward, respectively. IoU-based optimization selects frames that better support downstream grounding and consequently produces more accurate 3D bounding boxes. Green boxes denote the ground truth, while red and blue boxes denote predictions based on heuristic and IoU-optimized coordinate frames, respectively. ScanCap Method C@0.5 B-4@0.5 R@0.5       
+
+> Coord. agnostic 61.1 36.6 60.5 Coord. aware (Ours) 60.7 36.8 60.8
+
+Table 15: Captioning performance comparison at an IoU threshold of 0.5. Our method achieves captioning perfor-mance comparable to the coordinate-agnostic framework, demonstrating that the proposed design does not compromise captioning capability. the proposed design does not compromise captioning ability. These results demonstrate that the performance gains in 3D visual grounding are achieved without sacrificing detection or captioning performance. 
+
+# Qualitative Analysis of Coordinate-Frame Selection 
+
+Fig. 9 further illustrates the limitation of manually designed selection criteria. The handcrafted procedure first filters frames according to object visibility and then selects the pseudo coordinate frame based on projected scale and geo-metric completeness. However, these proxy criteria do not directly reflect whether a coordinate frame is suitable for downstream 3D grounding. Our reinforcement learning strat-egy instead evaluates each selected frame according to the grounding IoU achieved under that coordinate condition. Con-sequently, the learned selector favors frames containing more useful semantic and geometric cues for localizing the referred object, leading to consistently higher 3D IoU. 
+
+# Limitations 
+
+Despite the strong performance of our framework, two limi-tations remain. First, coordinate frame selection is still imper-fect. The large gap between the predicted and oracle frames indicates that the model may select frames with insufficient target visibility or unfavorable spatial configurations, which limits subsequent grounding performance. Second, the sub-stantial improvement brought by box refinement, especially at 
+
+Acc@0 .5, shows that coordinate-conditioned grounding still struggles with precise 3D box estimation. Therefore, further improvements require both more reliable coordinate frame selection and stronger fine-grained geometric reasoning for accurate 3D localization. 
+
+# References 
+
+Achlioptas, P.; Abdelreheem, A.; Xia, F.; Elhoseiny, M.; and Guibas, L. 2020. ReferIt3D: Neural Listeners for Fine-Grained 3D Object Identification in Real-World Scenes. Eu-ropean Conference on Computer Vision (ECCV) .An, X.; Xie, Y.; Yang, K.; Zhang, W.; Zhao, X.; Cheng, Z.; Wang, Y.; Xu, S.; Chen, C.; Zhu, D.; et al. 2025. LLaVA-OneVision-1.5: Fully Open Framework for Democratized Multimodal Training. arXiv preprint arXiv:2509.23661 .Bai, S.; Cai, Y.; Chen, R.; Chen, K.; Chen, X.; Cheng, Z.; Deng, L.; Ding, W.; Gao, C.; Ge, C.; Ge, W.; Guo, Z.; Huang, Q.; Huang, J.; Huang, F.; Hui, B.; Jiang, S.; Li, Z.; Li, M.; Li, M.; et al. 2025a. Qwen3-VL Technical Report. arXiv preprint arXiv:2511.21631 .Bai, S.; Chen, K.; Liu, X.; Wang, J.; Ge, W.; Song, S.; Dang, K.; Wang, P.; Wang, S.; Tang, J.; et al. 2025b. Qwen2.5-VL Technical Report. arXiv preprint arXiv:2502.13923 .Baruch, G.; Chen, Z.; Dehghan, A.; Dimry, T.; Feigin, Y.; Fu, P.; Gebauer, T.; Joffe, B.; Kurz, D.; Schwartz, A.; and Shulman, E. 2021. ARKitScenes - A Diverse Real-World Dataset for 3D Indoor Scene Understanding Using Mobile RGB-D Data. In Thirty-fifth Conference on Neural Infor-mation Processing Systems Datasets and Benchmarks Track (Round 1) .Chen, D. Z.; Chang, A. X.; and Nießner, M. 2020. ScanRe-fer: 3D Object Localization in RGB-D Scans Using Natural Language. In European Conference on Computer Vision (ECCV) .Chen, Y.; Yang, S.; Huang, H.; Wang, T.; Lyu, R.; Xu, R.; Lin, D.; and Pang, J. 2024. Grounded 3D-LLM with Referent Tokens. arXiv preprint arXiv:2405.10370 .Dai, A.; Chang, A. X.; Savva, M.; Halber, M.; Funkhouser, T.; and Nießner, M. 2017. ScanNet: Richly-annotated 3D Recon-structions of Indoor Scenes. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .Deng, C.; Zhu, D.; Li, K.; Gou, C.; Li, F.; Wang, Z.; Zhong, S.; Yu, W.; Nie, X.; Song, Z.; Shi, G.; and Fan, H. 2025. Emerging Properties in Unified Multimodal Pretraining. 
+
+arXiv preprint arXiv:2505.14683 .Guo, D.; Yang, D.; Zhang, H.; Song, J.; Wang, P.; Zhu, Q.; Xu, R.; Zhang, R.; Ma, S.; Bi, X.; et al. 2025. DeepSeek-R1 incentivizes reasoning in LLMs through reinforcement learning. Nature .Hong, Y.; Zhen, H.; Chen, P.; Zheng, S.; Du, Y.; Chen, Z.; and Gan, C. 2023. 3D-LLM: Injecting the 3D World into Large Language Models. Proceedings of the Advances in Neural Information Processing Systems (NeurIPS) .Hu, J.; Zhao, S.; Chen, Q.-G.; Qiu, X.; Liu, J.; Xu, Z.; Luo, W.; Zhang, K.; and Lu, Y. 2026. Omni-View: Unlocking How Generation Facilitates Understanding in Unified 3D Model based on Multiview images. In International Conference on Learning Representations (ICLR) .Huang, T.; Zhang, Z.; and Tang, H. 2025. 3D-R1: Enhancing Reasoning in 3D VLMs for Unified Scene Understanding. 
+
+arXiv preprint arXiv:2507.23478 .Hurst, A.; Lerer, A.; Goucher, A. P.; Perelman, A.; Ramesh, A.; Clark, A.; Ostrow, A.; Welihinda, A.; Hayes, A.; Rad-ford, A.; et al. 2024. GPT-4o System Card. arXiv preprint arXiv:2410.21276 .Kato, S.; Kurita, S.; Chu, C.; and Kurohashi, S. 2023. ARK-itSceneRefer: Text-based localization of small objects in di-verse real-world 3D indoor scenes. In Findings of the Associ-ation for Computational Linguistics: EMNLP 2023 .Kingma, D. P.; and Ba, J. 2015. Adam: A Method for Stochas-tic Optimization. In International Conference on Learning Representations (ICLR) .Li, B.; Zhang, Y.; Guo, D.; Zhang, R.; Li, F.; Zhang, H.; Zhang, K.; Zhang, P.; Li, Y.; Liu, Z.; and Li, C. 2024. LLaVA-OneVision: Easy Visual Task Transfer. Transactions on Ma-chine Learning Research (TMLR) .Li, W.; Zhang, X.; Zhao, S.; Zhang, Y.; Li, J.; Zhang, L.; and Zhang, J. 2025. Q-Insight: Understanding Image Quality via Visual Reinforcement Learning. Proceedings of the Advances in Neural Information Processing Systems (NeurIPS) .Linghu, X.; Huang, J.; Jia, B.; and Huang, S. 2026. 3D-RFT: Reinforcement Fine-Tuning for Video-based 3D Scene Un-derstanding. In Proceedings of the International Conference on Machine Learning (ICML) .Shen, H.; Liu, P.; Li, J.; Fang, C.; Ma, Y.; Liao, J.; Shen, Q.; Zhang, Z.; Zhao, K.; Zhang, Q.; et al. 2025. VLM-R1: A stable and generalizable R1-style large vision-language model. arXiv preprint arXiv:2504.07615 .Wang, J.; Chen, M.; Karaev, N.; Vedaldi, A.; Rupprecht, C.; and Novotny, D. 2025. VGGT: Visual Geometry Grounded Transformer. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .Wang, S.; Leroy, V.; Cabon, Y.; Chidlovskii, B.; and Revaud, J. 2024a. DUSt3R: Geometric 3D Vision Made Easy. In Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .Wang, T.; Mao, X.; Zhu, C.; Xu, R.; Lyu, R.; Li, P.; Chen, X.; Zhang, W.; Chen, K.; Xue, T.; et al. 2024b. Embodied-Scan: A Holistic Multi-Modal 3D Perception Suite towards Embodied AI. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .Wang, Y.; Zhou, J.; Zhu, H.; Chang, W.; Zhou, Y.; Li, Z.; Chen, J.; Pang, J.; Shen, C.; and He, T. 2026. π3: Permutation-Equivariant Visual Geometry Learning. In International Conference on Learning Representations (ICLR) .Wu, Y.; Cheng, X.; Zhang, R.; Cheng, Z.; and Zhang, J. 2023. EDA: Explicit Text-Decoupling and Dense Alignment for 3D Visual Grounding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .Xu, Z.; Zhang, X.; Li, R.; Tang, Z.; Huang, Q.; and Zhang, J. 2025. FakeShield: Explainable Image Forgery Detection and Localization via Multi-Modal Large Language Models. In International Conference on Learning Representations (ICLR) .Yu, Q.; Zhang, Z.; Zhu, R.; Yuan, Y.; Zuo, X.; Yue, Y.; Dai, W.; Fan, T.; Liu, G.; Liu, L.; et al. 2025. DAPO: An Open-Source LLM Reinforcement Learning System at Scale. Pro-ceedings of the Advances in Neural Information Processing Systems (NeurIPS) .Yuan, Z.; Jiang, S.; Feng, C.-M.; Zhang, Y.; Cui, S.; Li, Z.; and Zhao, N. 2025. Scene-R1: Video-Grounded Large Lan-guage Models for 3D Scene Reasoning without 3D Annota-tions. arXiv preprint arXiv:2506.17545 .Zhang, J.; Chen, Y.; Xu, Y.; Huang, Z.; Mei, J.; Chen, C.; Zhou, Y.; Yuan, Y.-J.; Cai, X.; Huang, G.; Quan, X.; Xu, H.; and Zhang, L. 2025. From Flatland to Space: Teaching Vision-Language Models to Perceive and Reason in 3D. In 
+
+Proceedings of the Advances in Neural Information Process-ing Systems (NeurIPS) .Zhang, X.; Li, W.; Zhao, S.; Li, J.; Zhang, L.; and Zhang, J. 2026. VQ-Insight: Teaching VLMs for AI-Generated Video Quality Understanding via Progressive Visual Reinforcement Learning. Proceedings of the AAAI Conference on Artificial Intelligence (AAAI) .Zhang, Y.; Gong, Z.; and Chang, A. X. 2023. Multi3DRefer: Grounding Text Description to Multiple 3D Objects. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) .Zheng, D.; Huang, S.; Li, Y.; and Wang, L. 2025. Learning from Videos for 3D World: Enhancing MLLMs with 3D Vision Geometry Priors. In Proceedings of the Advances in Neural Information Processing Systems (NeurIPS) .Zheng, D.; Huang, S.; and Wang, L. 2025. Video-3D LLM: Learning Position-Aware Video Representation for 3D Scene Understanding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .Zhu, C.; Wang, T.; Zhang, W.; Pang, J.; and Liu, X. 2025. LLaVA-3D: A Simple yet Effective Pathway to Empower-ing LMMs with 3D Capabilities. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) .
