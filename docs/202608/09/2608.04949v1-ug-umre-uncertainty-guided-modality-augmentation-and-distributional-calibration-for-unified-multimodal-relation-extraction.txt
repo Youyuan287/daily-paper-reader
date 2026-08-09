@@ -1,0 +1,571 @@
+Title: UG-UMRE: Uncertainty-Guided Modality Augmentation and Distributional Calibration for Unified Multimodal Relation Extraction
+
+URL Source: https://arxiv.org/pdf/2608.04949v1
+
+Published Time: Thu, 06 Aug 2026 01:08:14 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# UG-UMRE: Uncertainty-Guided Modality Augmentation and Distributional Calibration for Unified Multimodal Relation Extraction 
+
+## Bo Kong 
+
+Xinjiang University Urumqi, China 107556522202@stu.xju.edu.cn 
+
+## Liruizhi Jia 
+
+Xinjiang University Urumqi, China jlrz@stu.xju.edu.cn 
+
+## Yi Liang 
+
+Xinjiang University Urumqi, China liangyi980826@hotmail.com 
+
+## Chao Liu 
+
+Xinjiang University Urumqi, China 107556522208@stu.xju.edu.cn 
+
+## Dongfang Han 
+
+Xinjiang University Urumqi, China easth@stu.xju.edu.cn 
+
+## Tianwei Yan 
+
+Chongqing Jiaotong University Chongqing, China augusyan@cqjtu.edu.cn 
+
+## Yuan Liu 
+
+Xinjiang University Urumqi, China lyxju@xju.edu.cn 
+
+## Shengquan Liu ∗
+
+Xinjiang University Urumqi, China liu@xju.edu.cn 
+
+Abstract 
+
+Unified Multimodal Relation Extraction (UMRE) aims to identify intra-modal and cross-modal relations between textual entities and visual objects. However, existing UMRE studies still encounter two critical issues: ignoring inherent aleatoric uncertainty causes noise propagation, and deep-seated heterogeneity between distinct modal distributions hinders alignment. To address these issues, we propose the Uncertainty-Guided UMRE Network (UG-UMRE). Specifically, we design an Uncertainty-Driven Unimodal Augmentation (UDUA) module, which models features as Gaussian distributions based on the Variational Information Bottleneck. By incorporating an uncertainty-aware self-supervised contrastive learning mechanism, UDUA effectively filters out noise while maintaining semantic con-sistency. Furthermore, we introduce the Joint Aleatoric Uncertainty Alignment (JAUA) module as a global semantic pre-calibration mechanism. JAUA leverages probabilistic distribution consistency to construct a shared latent space, eliminating the distributional gap by synchronizing cross-modal statistical properties, thereby laying a robust foundation for fine-grained interaction. Experi-ments on three benchmark datasets (UMRE, MORE, and MNRE) demonstrate that UG-UMRE achieves state-of-the-art performance. Further analysis validates the pluggable and effective performance of the proposed UDUA and JAUA modules. 
+
+CCS Concepts 
+
+• Information systems → Information extraction ; • Comput-ing methodologies → Information extraction .
+
+> ∗Corresponding author
+> This work is licensed under a Creative Commons Attribution 4.0 International License.
+> MM ’26, Rio de Janeiro, Brazil
+> © 2026 Copyright held by the owner/author(s). ACM ISBN 979-8-4007-2213-4/2026/11 https://doi.org/10.1145/3767308.3835772
+
+Keywords 
+
+Unified Multimodal Relation Extraction; Uncertainty-Guided Learn-ing; Information Bottleneck; Modal Noise Processing; Multimodal Learning 
+
+ACM Reference Format: 
+
+Bo Kong, Liruizhi Jia, Yi Liang, Chao Liu, Dongfang Han, Tianwei Yan, Yuan Liu, and Shengquan Liu. 2026. UG-UMRE: Uncertainty-Guided Modality Augmentation and Distributional Calibration for Unified Multimodal Rela-tion Extraction. In Proceedings of the 34th ACM International Conference on Multimedia (MM ’26), November 10–14, 2026, Rio de Janeiro, Brazil. ACM, New York, NY, USA, 10 pages. https://doi.org/10.1145/3767308.3835772 
+
+1 Introduction 
+
+With the ubiquity of multimodal learning and deep learning, re-search capabilities relying solely on text have become increasingly limited. Consequently, Multimodal Relation Extraction (MRE) has emerged as a pivotal research direction. Dedicated to extracting relation triplets using both textual and visual information, MRE plays an irreplaceable role in downstream applications such as multimodal knowledge graph construction, biomedical interac-tion modeling [48], visual question answering, and cross-modal retrieval [37, 46]. As illustrated in Figure 1(a), driven by the continuous expan-sion of the relation modeling scope, existing MRE research has evolved through three progressive subtasks. Early studies primarily focused on Multimodal Neural Relation Extraction (MNRE) [3, 4, 12, 13, 15, 28, 32, 41, 43, 47, 49, 51], which utilizes images merely as auxiliary clues to extract relations between entities within the textual modality. Subsequently, Multimodal Object-Entity Rela-tion Extraction (MORE) [11] was proposed to incorporate visual objects into relational triplets, focusing on mining cross-modal relations between textual entities and visual objects. However, mul-timodal interactions in real-world scenarios are inherently more intricate, making it difficult for these isolated task settings to satisfy arXiv:2608.04949v1 [cs.CV] 5 Aug 2026 MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Kong et al. Elon Musk 、                        
+
+> take Tesla private
+> RT @FortuneMagazine ;
+> wants to ;Here 's what
+> you need to know .
+> Positive
+> Semantics
+> Negative
+> Semantics
+> (b)Multi -modal Gaussian distributional representations
+> RT @FortuneMagazine :Elon
+> Musk wants to take Tesla
+> private .Here 's what you need
+> to know .
+> Input Text :Input Image :
+> (a)Examples of different multimodal relation extraction tasks .
+> Head Entity Tail Entity Relation
+> Multimodal relation extraction
+> Elon Musk Tesla /per /org /member _of
+> Tesla /per /org /member _of
+> /per /org /member _of
+> MNRE MORE UMRE
+> √√
+> √
+> √
+> √
+> ×
+> ×
+> ××
+
+Figure 1: (a) Examples of different multimodal relation ex-traction tasks. Symbols ✓and × indicate whether the task successfully extracts the relational triplet or not. (b) Multi-modal Gaussian distributional representations illustrating fuzzy semantics in noisy latent space. 
+
+the requirements for comprehensive data understanding. Conse-quently, Unified Multimodal Relation Extraction (UMRE) [30] emerged. It breaks the boundaries of individual tasks, enabling the simultaneous extraction of both intra-modal and cross-modal rela-tions between textual entities and visual objects within a unified framework. Although UMRE provides a more comprehensive relational mod-eling paradigm that closely aligns with real-world scenarios, this high degree of unification drastically increases the complexity of cross-modal representation learning and semantic reasoning. Con-sequently, existing MRE methods still confront two critical scientific challenges when tackling the UMRE task: 
+
+(1) Modal Noise : Input data from different modalities suffer from inherent aleatoric uncertainty within their respective modal spaces. For instance, social media images often contain irrelevant background clutter, while textual descriptions may use ambiguous slang or abbreviations. Ignoring this inherent randomness leads to the erroneous propagation of noise, causing the model to overfit spurious correlations. 
+
+(2) Modal Gap : Since textual and visual representations origi-nate from heterogeneous encoders, they reside in distinct feature spaces and distributions. This discrepancy hinders mutual semantic understanding between text and images; consequently, feeding un-calibrated features directly into fine-grained interaction inevitably leads to the failure of subsequent cross-modal fusion. Existing methods typically perform cross-modal interactions directly on unfiltered and uncalibrated features, causing complex backend fusion networks to fail under the interference of modal noise and the distributional gap. To overcome this fundamental bottleneck, we propose the Uncertainty-Guided UMRE Network (UG-UMRE) . Our core idea is to model features as probabilistic distributions, strictly adhering to a new paradigm of “denoising first, calibrating second, and fusing last”: 
+
+Input Stage (Denoising & Augmentation) : Inspired by prior work [4, 10, 16], we propose the Uncertainty-Driven Unimodal Aug-mentation (UDUA) module. As illustrated in Figure 1(b), each sam-ple is represented by a multivariate Gaussian distribution, where the mean represents the stable core (corresponding to positive se-mantics), while the variance is explicitly quantified as the sample’s aleatoric uncertainty (corresponding to negative semantics). To ef-fectively leverage this aleatoric uncertainty, we design a reparamete-rization-based self-supervised contrastive learning mechanism: by conducting sampling within the variance-bounded semantic space, this mechanism forces the model to aggregate all potential seman-tic information toward the stable mean center, thereby achieving precise, distribution-aware denoising. 
+
+Alignment Stage (Distributional Calibration) : To mitigate the distributional gap between textual and visual representations induced by heterogeneous encoders, we design the Joint Aleatoric Uncertainty Alignment (JAUA) module. Existing methods typically perform cross-modal interaction directly on uncalibrated features, which is highly susceptible to semantic misalignment and fusion failure. In contrast, the JAUA module advocates for a global cal-ibration of cross-modal features at the distribution level prior to deep interaction. Built upon the uncertainty-aware representations learned by the preceding UDUA module, this calibration step effec-tively eliminates cross-modal mismatches and constructs a highly consistent shared semantic space, thereby laying a solid foundation for subsequent reliable fine-grained feature fusion. Extensive experiments on three public datasets (UMRE, MORE, and MNRE), which cover intra-modal and inter-modal semantic relations between textual entities and visual objects, demonstrate that UG-UMRE not only outperforms previous state-of-the-art base-lines but also possesses excellent plug-and-play capabilities. The contributions of this paper are summarized as follows: 
+
+• We propose the UG-UMRE Network . To the best of our knowledge, it pioneers the integration of uncertainty mod-eling into the UMRE task, providing a novel probabilistic solution to modal noise and distributional heterogeneity. 
+
+• We design the UDUA module, which achieves precise filtra-tion of inherent unimodal noise and feature augmentation through variational Gaussian modeling and self-supervised contrastive learning. 
+
+• We propose the JAUA module, which effectively mitigates deep-seated heterogeneity and achieves fine-grained seman-tic calibration alignment by synchronizing cross-modal prob-abilistic distributions. 
+
+2 Related Work 2.1 Unified Multimodal Relation Extraction 
+
+MRE methods seek fine-grained cross-modal alignment while re-ducing modal noise. For MNRE, MEGA [51] uses scene graphs to locate text-relevant regions; MKGformer [3], HVFormer [32], and IFAformer [28] exploit hierarchical context and cross-modal atten-tion; CGI-MRE [41] and FocalMRE [12] further suppress irrelevant information through noise filtering and refined attention. Related MRE studies emphasize structured interaction and augmented su-pervision. CSMA-CNER [20] combines cross- and self-modal at-tention, MINIGE-MNER [21] performs multi-stage interaction, and REIA [17] jointly learns interaction policies and data augmenta-tion. Efficient vision-language instruction tuning has also explored multi-head adapters and chain-of-thought reasoning [29]. MORE-former [11] introduces MORE and combines spatial and depth cues for object disambiguation, whereas REMOTE [30] introduces UMRE UG-UMRE MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil 
+
+and uses Multilevel Optimal Transport and Mixture-of-Experts mechanisms to model intra- and cross-modal relations. Despite their effectiveness, including REMOTE, these methods generally lack denoising and distributional calibration before cross-modal interaction. Consequently, heterogeneous features from en-coders such as BERT and ViT can be misaligned, while intra-modal aleatoric noise may be amplified during fusion. 
+
+2.2 Uncertainty and Information Bottleneck 
+
+Uncertainty in deep learning is commonly categorized as epistemic uncertainty in model parameters and aleatoric uncertainty inherent in data [10]. The Information Bottleneck (IB) [39] and Variational Information Bottleneck (VIB) [1] learn compact representations that retain task-relevant information. In MRE, MRE-ISE [43] applies Graph IB, and MMIB [4] employs VIB for feature compression and alignment. However, many uncertainty-aware methods use uncertainty mainly for noise estimation or sample weighting [8, 9, 16, 38]. Another line of work models uncertainty and dependencies in the supervision space, including label distribution learning [25], biased and instance-dependent noisy labels [23, 24], label-rank consistency for semi-supervised learning [27], heterogeneous label correlations and annotation quality in federated learning [26, 42], and positive-unlabeled distillation [22]. These methods focus on label ambiguity, correlation, or incompleteness rather than input-level uncertainty. In contrast, UG-UMRE models unimodal features as probabilistic distributions by coupling aleatoric uncertainty with VIB. UDUA uses the resulting uncertainty to drive targeted unimodal denoising, while JAUA exploits distributional properties to globally calibrate heterogeneous text and visual representations before fine-grained interaction. This design reduces both input noise and cross-modal distribution heterogeneity, providing more robust features for mul-timodal fusion. 
+
+3 Our Proposed Method 
+
+In this section, we propose a novel UG-UMRE Network. As shown in Figure 2, the framework consists of three key stages: First, intra-modal aleatoric noise is filtered via UDUA; second, fine-grained semantic calibration alignment is performed using JAUA to eliminate the distributional gap caused by heterogeneous encoders; finally, precise interaction and relation reasoning are achieved via MMoE in the calibrated feature space. 
+
+3.1 Task Definition 
+
+Before detailing the method, we first define the UMRE task. Specifi-cally, given text 𝑇 and the corresponding image 𝐼 , the UMRE task aims to extract entity relation triplets from the text with the aid of the image. The output results can be denoted as {( 𝐸 1, 𝐸 2, 𝑅 12 )𝑖 }𝐶 𝑖 =1,where 𝐸 1, 𝐸 2 ∈ {E 𝑠𝑒𝑡 , O𝑠𝑒𝑡 }. Here, (𝐸 1, 𝐸 2, 𝑅 12 )𝑖 represents the 𝑖 -th relation triplet, 𝐸 1, 𝐸 2 denote two annotated entities, E𝑠𝑒𝑡 is the set of textual entities, and O𝑠𝑒𝑡 is the set of visual object entities. 𝑅 12 is the predefined relation between the entity pair, consisting of three different types: (1) intra-modal relations between textual entities 
+
+(𝑒, 𝑒, 𝑟 ); (2) intra-modal relations between visual objects (𝑜, 𝑜, 𝑟 );and (3) inter-modal relations between textual entities and visual objects (𝑒, 𝑜, 𝑟 ).
+
+3.2 Feature Acquisition 
+
+Textual Features. Following REMOTE [30], we utilize Qwen2.5-VL-7B [2] to generate captions and concatenate them with the text. The sequence is fed into BERT [6] to obtain textual features 
+
+𝐹 𝑇 ∈ R𝑛 ×𝑑 𝑇 , where 𝑛 is sequence length and 𝑑 𝑇 is the hidden dimension. 
+
+Visual Features. Following REMOTE [30], we employ ViT [7] and Depth-Anything [44]. We resize object images to 𝐻 × 𝑊 to generate patch embeddings 𝐸 𝑅𝐺𝐵 , 𝐸 𝐷𝐸𝑃𝑇 𝐻 ∈ R𝑢 ×𝑑 𝑉 (𝑢 = 𝐻 ×𝑊 𝑃 2 ). Concatenated with position embeddings, we obtain visual features 
+
+𝐹 𝑉 ∈ R2𝑢 ×𝑑 𝑉 .
+
+Multilevel Optimal Transport (MOT). To mitigate informa-tion loss in sequential encoding [30, 31, 45], we adopt MOT. Lever-aging Optimal Transport theory [18, 35] and Sinkhorn optimiza-tion [5], it aggregates hierarchical representations to yield enhanced features 𝐹 ′ 
+
+> 𝑇
+
+∈ R𝑛 ×𝑑 𝑇 and 𝐹 ′ 
+
+> 𝑉
+
+∈ R2𝑢 ×𝑑 𝑉 .
+
+3.3 Uncertainty-Driven Unimodal Augmentation Module 
+
+Since data from different modalities contain unique noise in their re-spective feature spaces, traditional deterministic point embeddings cannot effectively characterize the inherent ambiguity of seman-tics. To this end, based on the VIB theory, we propose the UDUA module to model features as probability distributions to quantify aleatoric uncertainty and achieve feature augmentation through distribution-aware contrastive learning. 
+
+3.3.1 VIB-based Uncertainty Quantification. As shown in Step 2 of Figure 2, we utilize the MOT-enhanced feature sequences 𝐹 ′
+
+> 𝑇
+
+and 𝐹 ′ 
+
+> 𝑉
+
+at the holistic granularity . Specifically, we first perform 
+
+global average pooling to obtain holistic vectors, which are then projected via fully connected layers into a shared latent dimension 
+
+𝑑 𝑧 . These projected vectors parameterize the posterior distributions 
+
+𝑝 (𝑍 |𝑇 ) ∼ N ( 𝜇 𝑇 , 𝜎 2 
+
+> 𝑇
+
+𝐼 ) and 𝑝 (𝑍 |𝐼 ) ∼ N ( 𝜇 𝐼 , 𝜎 2 
+
+> 𝐼
+
+𝐼 ), aiming to capture global semantic uncertainty (e.g., scene ambiguity) rather than local token noise. To guide information retention, we introduce modality-specific target variables 𝑈 𝑇 and 𝑈 𝑉 (both set to ground-truth labels 𝑌 ). The objective is to maximally retain information beneficial for these targets while filtering out redundant noise via the Information Bottleneck principle: 
+
+L𝐼 𝐵 = 𝛽 1𝐼 (𝑍 𝑇 ; 𝐹 ′ 
+
+> 𝑇
+
+) + 𝛽 2𝐼 (𝑍 𝑉 ; 𝐹 ′ 
+
+> 𝑉
+
+) − 𝐼 (𝑍 𝑇 ; 𝑈 𝑇 ) − 𝐼 (𝑍 𝑉 ; 𝑈 𝑉 ) (1) We optimize Eq. (2) using variational approximations. The infor-mation compression terms are minimized via KL divergence against a standard Gaussian prior 𝑟 (𝑍 ) ∼ N ( 0, 𝐼 ):
+
+𝐼 (𝑍 𝑇 ; 𝐹 ′ 
+
+> 𝑇
+
+) ≈ D𝐾𝐿 (𝑝 𝜃 𝑇 (𝑍 𝑇 |𝐹 ′ 
+
+> 𝑇
+
+)|| 𝑟 (𝑍 𝑇 )) (2) The information retention terms are converted into cross-entropy losses via variational approximations 𝑞 (𝑈 |𝑍 ):
+
+−𝐼 (𝑍 𝑇 ; 𝑈 𝑇 ) ≈ L 𝐶𝐸 (𝑞 𝜃 𝑇 (𝑈 𝑇 |𝑍 𝑇 ), 𝑈 𝑇 ) (3) This formulation allows the model to effectively filter aleatoric noise through the bottleneck constraint while ensuring the learned features remain discriminative for the final relation extraction task. MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Kong et al. Multilevel Optimal Transport 
+
+Step  1 : Feature Acquisition            
+
+> +Pixel +Depth +Position
+> [OBJ 1]The image shows
+> an adult ... ;
+> [OBJ 2]The image shows a
+> perso n... ;
+> ...
+> What to Expect as the
+> Heat and Celtics Battle to
+> Win the N .B.A.
+> Image Visual Objects Captions Input Text
+> MLLM
+> Textual Encoder Visual Encoder
+
+Step  2 : The  Uncertainty -Driven Unimodal Aug -
+
+mentation  Module     
+
+> Random Sampling
+> Positive
+> Negative
+> Self -Supervised Contrastive
+> Learning Loss
+> Random Sampling
+> Negative
+> Positive
+> Self -Supervised Contrastive
+> Learning Loss
+> Information Bottleneck Learning Loss
+> Information Bottleneck Learning Loss
+
+Step  3 : The  Joint Aleatoric Uncertainty Alignment 
+
+Module 
+
+> Getting Closer
+> Q K V V K Q
+
+Step  4 : Multilevel Cross -Attention  & Multimodal 
+
+Mixture of Experts Module  & Relation Classifier                 
+
+> The MMoE Module
+> Relation Classfier
+> ( N.B.A，Heat ，/org /org /self  )
+> ( ，Celtics ，/per /org /member _of  )
+> ( , ， /per /per /partner )
+> ...
+> Relational Triplets
+> :Visual Representation :Textual Representation :Enhanced Visual Features :Enhanced Text ual Features
+> :Gaussian Distribution Construct :Fully Connected Layer Construct :Optimal Visual Representation :Optimal Text ual Representation
+> :Semantic Alignment :Text -Guided Visual Features :Vision -Guided Text Features :Multimodal Fusion Features :Relation Prediction
+> :Vector Addition
+
+Figure 2: The overall framework of UG-UMRE. 
+
+3.3.2 Uncertainty-Aware Self-Supervised Contrastive Learning. Thr-ough VIB optimization, the obtained mean 𝜇 represents stable core semantics, while the learned variance 𝜎 2 quantifies the aleatoric uncertainty. To utilize this uncertainty for augmentation without introducing meaningless noise, we introduce a reparameterization-based sampling strategy [19]. Specifically, for the 𝑖 -th sample, we use its mean 𝜇 𝑖 as an anchor and sample a “positive sample” 𝑧 +
+
+𝑖 
+
+from its distribution: 
+
+𝑧 +
+
+𝑖 = 𝜇 𝑖 + 𝜎 𝑖 ⊙ 𝜖 (4) Where 𝜖 ∼ N ( 0, 𝐼 ), and the perturbation is explicitly constrained by the learned standard deviation 𝜎 𝑖 (derived from the variance 
+
+𝜎 2
+
+𝑖 in Eq. 4). The model automatically predicts small variances for semantically clear samples and large variances for ambiguous ones. To force the model to maintain semantic consistency in the uncertain latent space, we design the following SCL loss L𝑆𝐶𝐿 
+
+utilizing an InfoNCE-style objective: 
+
+## L𝑆𝐶𝐿 = − log exp (sim (𝜇 𝑖 ,𝑧 +
+
+𝑖 )/ 𝜏 )
+
+exp (sim (𝜇 𝑖 ,𝑧 +
+
+𝑖 )/ 𝜏 )+ Í𝑁 𝑗 ≠𝑖 exp (sim (𝜇 𝑖 ,𝑧 𝑗 )/ 𝜏 ) (5) Where 𝑧 +
+
+𝑖 is the positive sample generated from the anchor 𝜇 𝑖 , and 
+
+{𝑧 𝑗 }𝑁 𝑗 ≠𝑖 denotes the set of negative samples sampled from the dis-tributions of other instances within the same mini-batch. 𝜏 is the temperature factor, and sim is cosine similarity. In contrast to deter-ministic InfoNCE, the positive and negative views are sampled from uncertainty-bounded Gaussian neighborhoods. Thus, the loss regu-larizes semantic consistency over plausible feature perturbations rather than over a fixed point embedding, while the VIB objective constrains these perturbations to remain task-relevant. This pulls semantic variants toward the stable center 𝜇 𝑖 while separating them from unrelated instances. 
+
+3.4 Joint Aleatoric Uncertainty Alignment Module 
+
+Although UDUA provides denoised unimodal features, the textual and visual representations remain in heterogeneous feature spaces. Directly feeding these uncalibrated features into interaction mod-ules inevitably leads to semantic misalignment. To this end, we design the JAUA module for global semantic calibration. Unlike traditional unidirectional alignment, JAUA operates in the dis-tributional domain to synchronize the statistical properties of heterogeneous modalities. This constructs a shared latent space that eliminates the distributional gap while preserving modality-specific details, laying a reliable foundation for subsequent fine-grained interaction. Formally, the bidirectional KL divergence is calculated as follows: 
+
+L𝐽 𝐴𝑈 𝐴 = 12 (D𝐾𝐿 (𝑝 (𝑍 𝑇 |𝐹 ′ 
+
+> 𝑇
+
+)|| 𝑝 (𝑍 𝑉 |𝐹 ′ 
+
+> 𝑉
+
+)) + D𝐾𝐿 (𝑝 (𝑍 𝑉 |𝐹 ′ 
+
+> 𝑉
+
+)|| 𝑝 (𝑍 𝑇 |𝐹 ′ 
+
+> 𝑇
+
+))) (6) For the diagonal Gaussian posteriors produced by UDUA, the KL term has a closed form. Let 𝑞 𝑇 = N ( 𝜇 𝑇 , diag (𝜎 2
+
+𝑇 )) and 𝑞 𝑉 =
+
+N ( 𝜇 𝑉 , diag (𝜎 2
+
+𝑉 )) . Then 
+
+D𝐾𝐿 (𝑞 𝑇 ∥𝑞 𝑉 ) = 12
+
+Í𝑑 𝑧 
+
+𝑘 =1
+
+
+
+log 𝜎 2
+
+𝑉 ,𝑘 
+
+𝜎 2
+
+𝑇 ,𝑘 
+
++ 𝜎 2
+
+𝑇 ,𝑘 +( 𝜇 𝑇 ,𝑘 −𝜇 𝑉 ,𝑘 )2
+
+𝜎 2
+
+𝑉 ,𝑘 
+
+− 1
+
+
+
+. (7) The symmetric objective therefore jointly penalizes disagree-ment between semantic centers and disagreement between un-certainty scales. This distribution-level calibration acts only on UG-UMRE MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil 
+
+holistic latent variables. The multi-level sequences 𝐹 ′ 
+
+> 𝑇
+
+and 𝐹 ′ 
+
+> 𝑉
+
+are retained for the subsequent interaction module, preserving local modality-specific cues instead of overwriting them with a shared representation. 
+
+3.5 Multimodal Mixture-of-Experts Module 
+
+Benefiting from the shared latent space constructed by JAUA, tex-tual and visual features are globally pre-calibrated. To capture fine-grained semantic associations without discarding local cues, we introduce a Hierarchical Cross-Modal Interaction (HCMI) method. Let ¯ 𝐹 𝐴 denote the highest-level feature of source modality 𝐴 , and let 𝐹 ( 𝑗 ) 
+
+> 𝐵
+
+denote the level-𝑗 feature of the complementary modality 
+
+𝐵 , where (𝐴, 𝐵 ) ∈ {( 𝑉 ,𝑇 ), (𝑇 , 𝑉 )} . HCMI uses a high-level source query to attend to each target level through explicit linear projec-tions: 
+
+𝑄 𝐴 →𝐵 𝑗 = ¯𝐹 𝐴 𝑊 𝐴 →𝐵 𝑄,𝑗 , 𝐾 𝐴 →𝐵 𝑗 = 𝐹 ( 𝑗 ) 
+
+> 𝐵
+
+𝑊 𝐴 →𝐵 𝐾,𝑗 ,𝑉 𝐴 →𝐵 𝑗 = 𝐹 ( 𝑗 ) 
+
+> 𝐵
+
+𝑊 𝐴 →𝐵 𝑉 ,𝑗 , 𝐹 𝐴 →𝐵 𝑗 = Softmax 𝑄 𝐴 →𝐵 𝑗 (𝐾 𝐴 →𝐵 𝑗 )⊤
+
+√𝑑 
+
+!
+
+𝑉 𝐴 →𝐵 𝑗 .
+
+(8) Where 𝑊 𝐴 →𝐵 𝑄,𝑗 , 𝑊 𝐴 →𝐵 𝐾,𝑗 , and 𝑊 𝐴 →𝐵 𝑉 ,𝑗 are learnable maps into a com-mon 𝑑 -dimensional attention space. Instantiating the equation for 
+
+(𝐴, 𝐵 ) = (𝑉 ,𝑇 ) and (𝑇 , 𝑉 ) produces the visual-guided textual fea-tures 𝐹 𝑉 →𝑇 𝑗 and the text-guided visual features 𝐹 𝑇 →𝑉 𝑗 , respectively. The MMoE module then dynamically assigns expert weights to optimal textual/visual representations and cross-modal interaction features based on relation triplets to obtain the final fused feature 
+
+𝐻 :
+
+𝐻 = MMoE (𝑍 𝑇 , 𝑍 𝑉 , 𝐹 𝑉 →𝑇 , 𝐹 𝑇 →𝑉 ) (9) 
+
+3.6 Multimodal Relation Extraction 
+
+We select the final representation based on the relation triplet type. For textual entities, we use the text feature separated by ⟨𝑠 ⟩; for visual objects, we use the text feature of the caption separated by 
+
+⟨𝑜 ⟩ combined with the visual feature: 
+
+ℎ =
+
+(𝐻 𝑇 ,𝑉   
+
+> ⟨𝑠 ⟩
+
+if the target is a textual entity 
+
+[𝐻 𝑇 ,𝑉  
+
+> ⟨𝑜 𝑖 ⟩
+
+, 𝐻 𝑉 ,𝑇   
+
+> ⟨𝑜 𝑖 ⟩
+
+] if the target is a visual entity (10) The prediction is made via an MLP: 
+
+𝑃 𝑟 = argmax (MLP ([ ℎℎ𝑒𝑎𝑑 , ℎ 𝑡𝑎𝑖𝑙 ])) (11) We minimize the cross-entropy loss between the prediction and ground truth: 
+
+L𝑢𝑚𝑟𝑒 = −∑︁ 𝑦 𝑟 log (𝑃 𝑟 ) (12) 
+
+3.7 Joint Training 
+
+The final objective combines the primary task with the fine-grained alignment optimization: 
+
+L = L𝑢𝑚𝑟𝑒 + 𝜆 1 L𝐼 𝐵 + 𝜆 2 L𝑆𝐶𝐿 + 𝜆 3 L𝐽 𝐴𝑈 𝐴 (13) Where 𝜆 1, 𝜆 2, 𝜆 3 are hyperparameters balancing the contribu-tions of unimodal IB loss, SCL loss, and JAUA alignment loss. 
+
+Table 1: Detailed statistics of the MNRE, MORE, and UMRE datasets used in our experiments. Dataset Images Sentences Visual Objects Triplets Relations 
+
+MNRE 9,201 9,201 - 15,485 23 MORE 3,559 3,559 13,520 20,264 21 UMRE 12,737 12,737 20,978 55,021 28 
+
+4 Experiments 4.1 Experimental Setup 
+
+Datasets & Metrics. We evaluate on MNRE [50], MORE [11], and UMRE [30] (statistics in Table 1). We report Precision (P), Recall (R), and F1-score (F1). 
+
+Implementation Details. All experiments were conducted on a single NVIDIA RTX 4090 GPU, utilizing BERT-base and ViT-B/32 as the backbone encoders. Feature dimensions are 768 (text) and 4096 (visual objects). The models were optimized using the AdamW op-timizer [34] for 30 epochs (batch size 16, lr 1e-5). Hyperparameters: 
+
+𝛽 1 = 𝛽 2 = 1, 𝜏 = 0.175, 𝜆 1 = 1𝑒 − 3, 𝜆 2 = 1𝑒 − 5, 𝜆 3 = 1𝑒 − 3. 
+
+4.2 Main Results 
+
+Baselines. We compare UG-UMRE with two categories of state-of-the-art methods: (1) MRE Models: MEGA [51], MKGFormer [3], IFAformer [28], MRE-ISE [43] MOREformer [11], MMIB [4], HV-Former [32], CGI-MRE [41], FocalMRE [12], and REMOTE [30]. (2) 
+
+MLLMs: Qwen2-VL-7B [40], Qwen2.5-VL-7B [2], and Llama-3.2-11B-Vision [33]. 
+
+Fairness & Adaptability Setup: We evaluate the proposed mod-ules through two controlled integrations (marked with †). For the primary comparison, REMOTE and REMOTE+UG-UMRE use iden-tical visual (Depth+RGB) and textual (Caption+Text) inputs, includ-ing the same Depth-Anything features and Qwen2.5-VL-generated captions. For the additional control, FocalMRE and FocalMRE+UG-UMRE use the same native FocalMRE inputs, without these added features. This differentiated setup verifies consistent gains across diverse input configurations without relying on a particular feature-engine-ering recipe. Methods such as TMR [49], ES-MRE [15], HGMAF [13], and CAMIM [47] adopt text-to-image generation [36] for augmentation. However, this modifies the original layout and positional semantics, rendering it inappropriate for unified relation extraction which demands strict spatial preservation. Thus, methods involving gen-erative augmentation are not included. 
+
+Overall Performance. We integrated UG-UMRE into the cur-rent SOTA model, REMOTE, for comprehensive evaluation. As shown in Table 2, our method outperforms all baselines on the UMRE, MORE, and MNRE datasets. Specifically, compared to the original REMOTE model, UG-UMRE improves the F1-score by 
+
+2.34% , 3.95% , and 2.25% , reaching new SOTA levels of 69.98% ,
+
+66.76% , and 89.59% , respectively. Based on the results, we make the following observations: (1) Limitations of General Multimodal Large Language Models (MLLMs) : MLLMs (e.g., Qwen2.5-VL) generally perform MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Kong et al. 
+
+Table 2: Overall performance comparison on UMRE, MORE, and MNRE datasets. Bold indicates the best result, underline indicates the second best. † denotes results reproduced by us. "-" indicates missing values in baseline papers. Methods Venue UMRE MORE MNRE 
+
+P (%) R (%) F1 (%) P (%) R (%) F1 (%) P (%) R (%) F1 (%) Qwen2-VL-7B [40] arXiv24 7.32 11.52 8.95 8.52 12.87 10.25 11.42 13.09 12.20 Qwen2.5-VL-7B [2] arXiv25 12.33 12.04 12.19 25.81 23.95 24.84 13.82 15.63 14.68 Llama-3.2-11B-Vision [33] arXiv24 5.98 13.46 8.28 5.09 18.66 8.01 9.89 13.32 11.35 MEGA [51] MM21 49.51 47.24 48.34 33.30 38.53 35.72 64.51 68.44 66.41 MKGFormer [3] SIGIR22 60.22 60.26 60.23 55.76 53.74 54.73 82.40 81.73 82.06 IFAformer [28] AAAI23 60.21 62.04 61.11 55.13 54.24 54.68 82.59 80.78 81.67 MRE-ISE [43] ACL23 - - - - - - 84.69 83.38 84.03 MOREformer [11] MM23 63.03 62.77 62.89 62.18 63.34 62.75 82.19 82.35 82.27 MMIB [4] TASLP24 61.58 60.74 61.16 60.15 62.28 61.17 83.49 82.97 83.23 HVFormer [32] WWW24 61.37 61.04 61.20 58.81 62.84 60.76 84.14 82.65 83.39 CGI-MRE [41] ICMR24 60.45 61.84 61.63 57.44 63.01 60.09 85.02 84.22 84.62 FocalMRE † [12] MM24 61.35 65.96 63.57 60.57 62.67 61.60 87.97 86.88 87.42 REMOTE † [30] MM25 66.24 69.10 67.64 61.48 64.21 62.81 88.16 87.26 87.70 FocalMRE+UDUA - 61.53 66.74 64.03 62.32 64.28 63.28 88.14 87.34 87.73 FocalMRE+JAUA - 62.27 67.01 64.01 62.83 63.81 63.62 88.60 87.18 87.88 FocalMRE+UDUA+JAUA - 62.45 68.84 65.49 63.44 65.01 64.22 89.30 87.34 88.31 REMOTE+UDUA - 67.04 70.50 68.73 65.17 65.84 65.50 89.78 87.81 88.78 REMOTE+JAUA - 67.34 69.77 68.53 65.19 65.32 65.25 89.62 87.66 88.63 REMOTE+UDUA+JAUA - 69.16 70.82 69.98 66.79 66.72 66.76 90.44 88.75 89.59 Table 3: Ablation study on the UMRE, MORE, and MNRE datasets. “w/o” denotes the removal of a specific module. Bold indicates the best result. Model UMRE MORE MNRE                              
+
+> Acc (%) F1 (%) Acc (%) F1 (%) Acc (%) F1 (%)
+> UG-UMRE 79.27 69.98 86.37 66.76 95.17 89.59
+> -w/o UDUA (Text) 78.02 68.77 84.79 65.23 94.73 88.66 -w/o UDUA (Image) 77.92 68.35 84.54 64.91 94.04 88.24 -w/o UDUA (SCL) 78.64 69.33 85.33 65.91 94.89 88.97
+
+poorly on the UMRE task. This indicates that despite their strong generalization, MLLMs struggle with fine-grained information ex-traction requiring precise semantic boundaries and complex rela-tional reasoning, highlighting the need for specialized models. (2) Necessity of Global Calibration : Methods like REMOTE outperform coarse-grained methods by enhancing unimodal de-tails via MOT. However, their performance is still capped by the cross-modal distributional gap. The significant improvement of UG-UMRE proves that “structural aggregation” alone is insufficient; global semantic pre-calibration (JAUA) is essential to break the performance bottleneck caused by heterogeneity. (3) Synergy between Denoising and Calibration : Results show that introducing UDUA or JAUA individually improves per-formance, but the full model performs best. Notably, UDUA yields slightly higher gains than JAUA alone, revealing a deep depen-dency: high-quality, denoised unimodal features (via UDUA) are a prerequisite for effective cross-modal alignment (via JAUA). (4) Plug-and-Play Capability : Integrating UG-UMRE into both FocalMRE (standard inputs) and REMOTE (enhanced inputs) yields consistent improvements. Crucially, these gains are achieved with-out altering the original input/output interfaces or core pa-rameters of the backbone networks. This demonstrates that UG-UMRE acts as a lightweight, non-intrusive “safety valve” and “cali-brator,” providing a universal solution for mitigating modal noise and distributional heterogeneity regardless of the underlying model architecture or feature richness. 
+
+4.3 Ablation Study 
+
+We evaluate UDUA on the UMRE, MORE, and MNRE datasets (Ta-ble 3). Removing UDUA from either modality reduces performance, with a larger F1 decline for the visual branch (1.63% on UMRE) than for the textual branch (1.21%). This confirms that visual noise is more harmful, since objects in complex scenes have less explicit se-mantic boundaries than textual tokens. Without UDUA’s probabilis-tic constraint, visual features are more susceptible to background clutter and can mislead cross-modal fusion. Removing uncertainty-aware SCL also degrades performance. Although VIB filters noise and preserves task-relevant information, it does not explicitly enforce discriminability. SCL therefore an-chors stable semantics in the noisy latent space, helping distinguish reliable information from noise. 
+
+4.4 Visualization of Modal Gap 
+
+To validate the effectiveness of the JAUA module in eliminating cross-modal distributional heterogeneity, we conducted visualiza-tion experiments on 150 text-image pairs from the UMRE test set. UG-UMRE MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil (a) w/o JAUA  + w/o HCMI  (b) w/o JAUA  + HCMI  (c) JAUA  + HCMI 
+
+Figure 3: t-SNE visualization of feature distributions. Table 4: Performance comparison on UMRE subtasks. Bold indicates the best result. Model Entity-Entity Object-Object Entity-Object 
+
+Acc (%) F1 (%) Acc (%) F1 (%) Acc (%) F1 (%) FocalMRE 73.52 61.72 68.24 41.07 76.33 69.08 REMOTE 73.81 62.46 67.77 44.86 80.74 72.79 FocalMRE+UG 75.44 63.58 70.03 42.31 78.33 71.17 REMOTE+UG 79.28 68.00 73.60 45.24 82.31 76.10 
+
+We employed t-SNE [14] (with 500 iterations and a perplexity of 10) to compare feature distributions under three settings: without JAUA and HCMI (w/o JAUA + w/o HCMI), with HCMI only (w/o JAUA + HCMI), and with both JAUA and HCMI (JAUA + HCMI), as shown in Figure 3 (a), (b), and (c). The results indicate that: (1) Initial features exhibit a significant distributional gap. (2) While relying solely on HCMI can reduce the modal distance, the distributions remain loosely separated, failing to fundamentally resolve the underlying heterogeneity. (3) In contrast, with the introduction of JAUA, textual and visual features become tightly interwoven and overlapped within the latent space. This demonstrates that JAUA achieves global semantic pre-calibration by synchronizing statistical properties, effectively eliminating the distributional gap and laying a solid alignment foundation for fine-grained interaction. 
+
+4.5 Subtask Performance Analysis 
+
+Table 4 compares the performance of SOTA models specifically trained on individual UMRE subtasks. The experimental results clearly show that both FocalMRE and REMOTE achieve significant improvements across all subtasks after integrating the UG-UMRE network. These results demonstrate that, even within specific triplet types, our proposed UDUA and JAUA modules are capable of effec-tively addressing the challenges of modal noise interference and cross-modal semantic heterogeneity inherent in the UMRE task. 
+
+4.6 Noise Robustness Analysis 
+
+Table 5 demonstrates the robustness of the UDUA module on the Aug-Noise challenge set. To construct this set, we introduced con-trollable aleatoric noise: for text, we applied random token masking with varying ratios; for images, we applied Gaussian noise perturba-tion to the visual features. Under extreme conditions (100% noise), the baseline REMOTE suffers a catastrophic drop to 35.01% F1, whereas REMOTE+UDUA maintains 52.33%, achieving a significant gain of 17.32%. Consistent improvements in visual (+14.71%) and text (+7.02%) scenarios further verify the "safety valve" mechanism 
+
+Table 5: Performance comparison on the Aug-Noise challenge set (F1-score(%)) with varying noise ratios. Bold indicates the best result. Dataset Ratio REMOTE REMOTE+UDUA 
+
+Aug-Noise 5% 66.03 68.27 (+2.24) 20% 61.55 66.83 (+5.28) 50% 48.06 62.52 (+14.46) 100% 35.01 52.33 (+17.32) Aug-Noise (text) 5% 67.35 68.54 (+1.19) 20% 65.50 67.81 (+2.31) 50% 62.07 66.53 (+4.46) 100% 56.12 63.14 (+7.02) Aug-Noise (image) 5% 66.85 68.43 (+1.58) 20% 63.54 67.52 (+3.98) 50% 55.02 65.30 (+10.28) 100% 46.07 60.78 (+14.71) (c) Control the weight parameters of the unimodal  IB  loss , SCL  loss , and JAUA loss .   
+
+> (a)The Lagrange multiplier in the UDUA module (b)Temperature coefficient
+
+Figure 4: Sensitivity analysis of hyperparameters on the UMRE dataset. (a) Impact of Lagrange multipliers 𝛽 . (b) Im-pact of temperature 𝜏 . (c) Impact of loss weights 𝜆 .
+
+of UDUA: by quantifying uncertainty, it dynamically down-weights high-variance noisy features, effectively blocking noise propagation and preventing performance collapse. 
+
+4.7 Parameter Sensitivity 
+
+To investigate the impact of hyperparameters on the performance of UG-UMRE (based on REMOTE), we conducted sensitivity ex-periments, specifically analyzing the Lagrange multipliers 𝛽 1, 𝛽 2
+
+in Eq. (1), the temperature factor 𝜏 in Eq. (5), and the loss weights 
+
+𝜆 1, 𝜆 2, 𝜆 3 in Eq. (12). In the visualization, F1 scores for the UMRE, MORE, and MNRE datasets are color-coded in red, blue, and yellow, respectively. The results indicate that the model achieves optimal F1 scores when 𝛽 1 = 𝛽 2 = 1 (Figure 4(a)), 𝜏 = 0.175 (Figure 4(b)), and 𝜆 1 = 1𝑒 − 3, 𝜆 2 = 1𝑒 − 5, 𝜆 3 = 1𝑒 − 3 (Figure 4(c)). 
+
+4.8 Analysis of Relation Types 
+
+We evaluate UG-UMRE on the UMRE test set across relation types and sample sizes (Table 6). The widespread red markers indicate MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Kong et al. 
+
+Table 6: Detailed performance comparison on specific rela-tion types from the UMRE dataset (F1-score). "Count" denotes the number of samples in the test set. Relation Type(Size) REMOTE Ours 
+
+/per/loc/place_of_governance(148) 63.41 65.37 (+1.96) /per/misc/party(58) 79.07 78.69 (-0.38) /per/org/member_of(650) 60.05 61.67 (+1.62) /per/per/self(1070) 89.85 89.71 (-0.14) /per/misc/nationality(107) 70.59 72.91 (+2.32) /loc/loc/self(180) 90.17 92.05 (+1.88) /per/misc/present_in(351) 63.52 64.93 (+1.41) /per/loc/place_of_residence(189) 40.58 43.17 (+2.59) /org/org/self(224) 79.28 80.74 (+1.46) /misc/misc/self(172) 79.75 82.97 (+3.22) /per/per/opponent(45) 29.21 48.57 (+19.36) /per/loc/place_of_birth(96) 41.11 37.97 (-3.41) /per/per/partner(716) 57.32 57.43 (+0.11) /per/org/opposed_to(52) 19.57 20.51 (+0.94) /loc/loc/contain(272) 82.81 82.44 (-0.37) /org/loc/locate_at(123) 52.38 52.21 (-0.17) /per/misc/president(9) 35.29 47.06 (+11.77) /misc/loc/held_on(66) 54.29 57.93 (+3.64) /per/org/leader_of(43) 51.11 60.67 (+9.56) /org/org/subsidiary(64) 28.57 27.72 (-0.85) /per/per/relatives(113) 42.67 43.37 (+0.70) /per/misc/awarded(50) 44.71 53.49 (+8.78) /misc/misc/part_of(33) 33.33 31.03 (-2.30) /per/misc/race(2) 0.00 66.67 (+66.67) /per/per/alumni(5) 0.00 0.00 (0.00) /per/misc/religion(5) 0.00 0.00 (0.00) /org/misc/present_in(1) 0.00 0.00 (0.00) consistent improvements over REMOTE, especially for long-tail and complex relations. For /per/per/opponent , UG-UMRE improves F1 by 
+
+19.36% ; for the extremely sparse /per/misc/race , it reaches 66.67% F1 while REMOTE achieves zero. These gains suggest that probabilistic feature modeling and JAUA harmonize heterogeneous modalities and reveal semantics obscured by noise. Although extreme few-shot cases (count ≤ 5) remain challenging, the results support the reliability of our uncertainty-guided approach. 
+
+4.9 Computational Efficiency 
+
+To quantify the deployment cost of UG-UMRE, we measure FLOPs, parameter count, peak GPU memory, and inference time on UMRE with batch size 16. As shown in Table 7, integrating UG-UMRE into REMOTE adds 2.36M parameters (0.49%), 3.7G FLOPs, 100 MiB peak memory, and 4.13 ms per sample, while improving F1 by 2.34 points. The same integration also produces a 1.92-point gain over FocalMRE with modest overhead. These measurements indicate that UDUA and JAUA can be added without changing the backbone hyperparameters, providing a practical accuracy–efficiency trade-off. 
+
+Table 7: Computational efficiency on UMRE (batch_size=16). Methods FLOPs (G) Params (M) Peak Mem (MiB) Inference (ms) F1 (%) FocalMRE 52.4 236.73 11924 64.98 63.57 + UG-UMRE 56.8 239.09 12546 70.16 65.49 REMOTE 106.5 483.92 15150 115.11 67.64 + UG-UMRE 110.2 486.28 15250 119.24 69.98 RT  @TCS _News  : Watch our CEO Rajesh Gopinathan  's # TCSQ 2                                         
+
+> address for the FY -2018 -19 ,live from TCS House ,Mumbai
+> Image :
+> REMOTE :(Mumbai ，TCS House ，/org /loc /locate _at )×
+> (，Mumbai ，/org /loc /locate _at )×
+> REMOTE +UG -UMRE :(Mumbai ，TCS House ，/loc /loc /contain )√
+> (，Mumbai ，/loc /loc /contain )√
+> Ground Truth :(Mumbai ，TCS House ，/loc /loc /contain )
+> (，Mumbai ，/loc /loc /contain )
+> Case (a)
+> LeBron James and Stephen Curry Test Different
+> Paths Back to N .B.A.Peak
+> Image :
+> Ground Truth : ( ,,/per /per /partner )
+> REMOTE : ( ,,/per /per /opponent )×
+> Case (b)
+> Text :Text :
+> REMOTE +UG -UMRE : ( ,,/per /per /partner )√
+
+Figure 5: Prediction Comparison for Two Test Samples on UMRE Dataset ( ✓: Correct; ×: Incorrect). 
+
+4.10 Case Study 
+
+As shown in Figure 5, we present a case study comparing our proposed REMOTE+UG-UMRE against the baseline REMOTE for cross-modal relational reasoning. In Case (a), our method correctly predicts the /loc/loc/contain 
+
+containment relation between textual entities and realizes precise cross-modal visual-text alignment, whereas REMOTE misclassifies the relation as /org/loc/locate_at due to distraction from organiza-tional attributes in the text. In Case (b), our approach infers the correct /per/per/partner teammate relation by aligning visual fea-tures of the bounded players with textual context, while REMOTE fails to leverage collaborative visual cues and erroneously outputs the /per/per/opponent relation. This case validates the superiority of UG-UMRE in neutralizing semantic interference and bridging modal heterogeneity: the UDUA module filters visual noise to maintain semantic consistency, and the JAUA module enables fine-grained cross-modal alignment. With text as the semantic anchor, the denoised and calibrated visual features provide key contextual support, significantly boosting the accuracy of cross-modal relational reasoning. 
+
+5 Conclusion 
+
+We present UG-UMRE, an Uncertainty-Guided Unified Multimodal Relation Extraction network that addresses intra-modal noise and cross-modal distribution heterogeneity. Its UDUA module uses a variational information bottleneck to model features as Gaussian distributions, filtering aleatoric noise and improving semantic con-sistency. The JAUA module globally pre-calibrates cross-modal dis-tributions, enabling coarse-grained alignment before fine-grained interaction. Experiments on three benchmarks demonstrate SOTA performance, favorable efficiency, and plug-and-play compatibility. Current uncertainty estimates rely on holistic paired inputs and fixed loss weights, which may be less reliable for sparse relations. Future work will explore dynamic thresholds for few-shot and long-tail relations, as well as robust open-domain modeling under unknown noise, severe mismatch, and missing modalities. UG-UMRE MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil 
+
+Acknowledgments 
+
+We sincerely thank the anonymous reviewers, Program Chairs, and Area Chairs for their constructive comments and careful handling of this submission. We also thank all participants and contributors involved in this work for their valuable support. This work was supported by the National Natural Science Foundation of China (No.62595731). 
+
+References 
+
+[1] Alexander A. Alemi, Ian Fischer, Joshua V. Dillon, and Kevin Murphy. 2017. Deep Variational Information Bottleneck. In Proceedings of the ICLR . OpenReview.net. [2] Shuai Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Sibo Song, Kai Dang, Peng Wang, Shijie Wang, Jun Tang, Humen Zhong, Yuanzhi Zhu, Ming-Hsuan Yang, Zhaohai Li, Jianqiang Wan, Pengfei Wang, Wei Ding, Zheren Fu, Yiheng Xu, Jiabo Ye, Xi Zhang, Tianbao Xie, Zesen Cheng, Hang Zhang, Zhibo Yang, Haiyang Xu, and Junyang Lin. 2025. Qwen2.5-VL Technical Report. arXiv preprint arXiv:2502.13923 (2025). [3] Xiang Chen, Ningyu Zhang, Lei Li, Shumin Deng, Chuanqi Tan, Changliang Xu, Fei Huang, Luo Si, and Huajun Chen. 2022. Hybrid Transformer with Multi-level Fusion for Multimodal Knowledge Graph Completion. In Proceedings of the SIGIR .ACM, 904–915. [4] Shiyao Cui, Jiangxia Cao, Xin Cong, Jiawei Sheng, Quangang Li, Tingwen Liu, and Jinqiao Shi. 2024. Enhancing Multimodal Entity and Relation Extraction With Variational Information Bottleneck. IEEE/ACM Transactions on Audio, Speech, and Language Processing 32 (2024), 1274–1285. [5] Marco Cuturi. 2013. Sinkhorn Distances: Lightspeed Computation of Optimal Transport. In Proceedings of the NeurIPS . 2292–2300. [6] Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. 2019. BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding. In 
+
+Proceedings of the NAACL . Association for Computational Linguistics, 4171–4186. [7] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xi-aohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby. 2021. An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale. In Proceedings of the ICLR . OpenReview.net. [8] Junyu Gao, Mengyuan Chen, and Changsheng Xu. 2023. Collecting Cross-Modal Presence-Absence Evidence for Weakly-Supervised Audio-Visual Event Percep-tion. In Proceedings of the CVPR . IEEE, 18827–18836. [9] Zixian Gao, Disen Hu, Xun Jiang, Huimin Lu, Heng Tao Shen, and Xing Xu. 2024. Enhanced Experts with Uncertainty-Aware Routing for Multimodal Sentiment Analysis. In Proceedings of the MM . ACM, 9650–9659. [10] Zixian Gao, Xun Jiang, Xing Xu, Fumin Shen, Yujie Li, and Heng Tao Shen. 2024. Embracing Unimodal Aleatoric Uncertainty for Robust Multimodal Fusion. In 
+
+Proceedings of the CVPR . IEEE, 26866–26875. [11] Liang He, Hongke Wang, Yongchang Cao, Zhen Wu, Jianbing Zhang, and Xinyu Dai. 2023. MORE: A Multimodal Object-Entity Relation Extraction Dataset with a Benchmark Evaluation. In Proceedings of the MM . ACM, 4564–4573. [12] Liang He, Hongke Wang, Zhen Wu, Jianbing Zhang, Xinyu Dai, and Jiajun Chen. 2024. Focus & Gating: A Multimodal Approach for Unveiling Relations in Noisy Social Media. In Proceedings of the MM . ACM, 1379–1388. [13] Xinyu He, Shixin Li, Yuning Zhang, Binhe Li, Sifan Xu, and Yuqing Zhou. 2025. The more quality information the better: Hierarchical generation of multi-evidence alignment and fusion model for multimodal entity and relation extrac-tion. Information Processing & Management 62, 1 (2025), 103875. [14] Geoffrey E. Hinton and Sam T. Roweis. 2002. Stochastic Neighbor Embedding. In 
+
+Proceedings of the NeurIPS . MIT Press, 833–840. [15] Wenti Huang, Jiayi Chen, Junjie Li, Yiyu Mao, and Ningyi Mao. 2025. ES-MRE: Evidence subgraph enhanced reasoning for multimodal relation extraction. 
+
+Knowledge-Based Systems 325 (2025), 113770. [16] Yatai Ji, Junjie Wang, Yuan Gong, Lin Zhang, Yanru Zhu, Hongfa Wang, Jiaxing Zhang, Tetsuya Sakai, and Yujiu Yang. 2023. MAP: Multimodal Uncertainty-Aware Vision-Language Pre-training Model. In Proceedings of the CVPR . IEEE, 23262–23271. [17] Liruizhi Jia, Shengquan Liu, Bo Kong, and Yuan Liu. 2025. REIA: Entity Relation Extraction Based on Interaction Policy and Data Augmentation. In Proceedings of the IJCNN . IEEE, 1–8. doi:10.1109/IJCNN64981.2025.11227659 [18] Abdelwahed Khamis, Russell Tsuchida, Mohamed Tarek, Vivien Rolland, and Lars Petersson. 2024. Scalable Optimal Transport Methods in Machine Learning: A Contemporary Survey. IEEE Transactions on Pattern Analysis and Machine Intelligence (2024), 1–20. [19] Diederik P. Kingma and Max Welling. 2014. Auto-Encoding Variational Bayes. In 
+
+Proceedings of the ICLR .[20] Bo Kong, Shengquan Liu, Liang He, Liruizhi Jia, and Yi Liang. 2024. CSMA-CNER: Multi-modal Chinese NER Task with Cross- and Self-Modality Attention. In 
+
+Proceedings of the ICME . IEEE, 1–6. doi:10.1109/ICME57554.2024.10688285 [21] Bo Kong, Shengquan Liu, Liruizhi Jia, Yi Liang, Dongfang Han, and Xu Zhang. 2026. MINIGE-MNER: A Multi-Stage Interaction Network Inspired by Gene Editing for Multimodal Named Entity Recognition. Neural Networks 194 (2026), 108106. doi:10.1016/j.neunet.2025.108106 [22] Zhiqiang Kou, Junyang Chen, Xin-Qiang Cai, Xiaobo Xia, Ming-Kun Xie, Dong-Dong Wu, Biao Liu, Yuheng Jia, Xin Geng, Masashi Sugiyama, and Tat-Seng Chua. 2026. Positive-Unlabeled Reinforcement Learning Distillation for On-Premise Small Models. arXiv preprint arXiv:2601.20687 (2026). [23] Zhiqiang Kou, Si Qin, Hailin Wang, Jing Wang, Mingkun Xie, Shuo Chen, Yuheng Jia, Tongliang Liu, Masashi Sugiyama, and Xin Geng. 2025. Label Distribution Learning with Biased Annotations Assisted by Multi-Label Learning. In Proceed-ings of the IJCAI .[24] Zhiqiang Kou, Jing Wang, Yuheng Jia, Biao Liu, and Xin Geng. 2025. Instance-Dependent Inaccurate Label Distribution Learning. IEEE Transactions on Neural Networks and Learning Systems 36, 1 (2025), 1425–1437. doi:10.1109/TNNLS.2023. 3329870 [25] Zhiqiang Kou, Jing Wang, Jiawei Tang, Yuheng Jia, Boyu Shi, and Xin Geng. 2024. Exploiting Multi-Label Correlation in Label Distribution Learning. In Proceedings of the IJCAI . 4326–4334. [26] Zhiqiang Kou, Junxiang Wu, Wenke Huang, Wenwen He, Ming-Kun Xie, Chang-wei Wang, Yuheng Jia, Di Jiang, Yang Liu, Xin Geng, and Qiang Yang. 2026. FedHarmony: Harmonizing Heterogeneous Label Correlations in Federated Multi-Label Learning. In Proceedings of the CVPR . IEEE. [27] Zhiqiang Kou, Yucheng Xie, Hailin Wang, Jing Wang, Mingkun Xie, Shuo Chen, Yuheng Jia, Tongliang Liu, and Xin Geng. 2025. RankMatch: A Novel Approach to Semi-Supervised Label Distribution Learning Leveraging Rank Correlation between Labels. In Proceedings of the NeurIPS .[28] Lei Li, Xiang Chen, Shuofei Qiao, Feiyu Xiong, Huajun Chen, and Ningyu Zhang. 2023. On Analyzing the Role of Image for Visual-Enhanced Relation Extraction (Student Abstract). In Proceedings of the AAAI . AAAI Press, 16254–16255. [29] Yi Liang, Turdi Tohti, Wenpeng Hu, Tianwei Yan, Shaohuang Wang, and Askar Hamdulla. 2026. LLaMA-MoT: A Cost-Effective Framework for Visual-Linguistic Instruction Tuning Based on Multi-Head Adapters and Chain-of-Thought. Expert Systems with Applications 297 (2026), 129250. doi:10.1016/j.eswa.2025.129250 [30] Xinkui Lin, Yongxiu Xu, Minghao Tang, Shilong Zhang, Hongbo Xu, Hao Xu, and Yubin Wang. 2025. REMOTE: A Unified Multimodal Relation Extraction Framework with Multilevel Optimal Transport and Mixture-of-Experts. arXiv preprint arXiv:2509.04844 (2025). [31] Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. 2023. Visual Instruc-tion Tuning. In Proceedings of the NeurIPS .[32] Xiyang Liu, Chunming Hu, Richong Zhang, Kai Sun, Samuel Mensah, and Yongyi Mao. 2024. Multimodal Relation Extraction via a Mixture of Hierarchical Visual Context Learners. In Proceedings of the WWW . ACM, 4283–4294. [33] Llama Team. 2024. The Llama 3 Herd of Models. arXiv preprint arXiv:2407.21783 
+
+(2024). [34] Ilya Loshchilov and Frank Hutter. 2019. Decoupled Weight Decay Regularization. In Proceedings of the ICLR . OpenReview.net. [35] Sina Moradi. 2025. A Survey on Algorithmic Developments in Optimal Transport Problem with Applications. arXiv preprint arXiv:2501.06247 (2025). [36] Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Björn Ommer. 2022. High-Resolution Image Synthesis with Latent Diffusion Models. In Proceedings of the CVPR . IEEE, 10674–10685. [37] Lin Sun, Kai Zhang, Qingyuan Li, and Renze Lou. 2024. UMIE: Unified Multimodal Information Extraction with Instruction Tuning. In Proceedings of the AAAI . AAAI Press, 19062–19070. [38] Jielong Tang, Yang Yang, Jianxing Yu, Zhen-Xing Wang, Haoyuan Liang, Liang Yao, and Jian Yin. 2025. UnCo: Uncertainty-Driven Collaborative Framework of Large and Small Models for Grounded Multimodal NER. In Proceedings of the EMNLP . Association for Computational Linguistics, 7633–7651. [39] Naftali Tishby and Noga Zaslavsky. 2015. Deep learning and the information bottleneck principle. In Proceedings of the ITW . IEEE, 1–5. [40] Peng Wang, Shuai Bai, Sinan Tan, Shijie Wang, Zhihao Fan, Jinze Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Yang Fan, Kai Dang, Mengfei Du, Xuancheng Ren, Rui Men, Dayiheng Liu, Chang Zhou, Jingren Zhou, and Junyang Lin. 2024. Qwen2-VL: Enhancing Vision-Language Model’s Perception of the World at Any Resolution. arXiv preprint arXiv:2409.12191 (2024). [41] Pengfei Wei, Zhaokang Huang, Hongjun Ouyang, Qintai Hu, Bi Zeng, and Guang Feng. 2024. CGI-MRE: A Comprehensive Genetic-Inspired Model For Multimodal Relation Extraction. In Proceedings of the ICMR . ACM, 524–532. [42] Junxiang Wu, Zhiqiang Kou, Hongwei Zeng, Wenke Huang, Biao Liu, Hanlin Gu, Yuheng Jia, Di Jiang, Yang Liu, and Xin Geng. 2026. Trustworthy Federated Label Distribution Learning under Annotation Quality Disparity. arXiv preprint arXiv:2605.04827 (2026). [43] Shengqiong Wu, Hao Fei, Yixin Cao, Lidong Bing, and Tat-Seng Chua. 2023. Information Screening whilst Exploiting! Multimodal Relation Extraction with Feature Denoising and Multimodal Topic Modeling. In Proceedings of the ACL .Association for Computational Linguistics, 14734–14751. MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Kong et al. 
+
+[44] Lihe Yang, Bingyi Kang, Zilong Huang, Zhen Zhao, Xiaogang Xu, Jiashi Feng, and Hengshuang Zhao. 2024. Depth Anything V2. In Proceedings of the NeurIPS .[45] Yaodong Yu, Tianzhe Chu, Shengbang Tong, Ziyang Wu, Druv Pai, Sam Buchanan, and Yi Ma. 2024. Emergence of Segmentation with Minimalistic White-Box Transformers. In Proceedings of the CPAL . PMLR, 72–93. [46] Li Yuan, Yi Cai, Xudong Shen, Qing Li, Qingbao Huang, Zikun Deng, and Tao Wang. 2025. Collaborative Multi-LoRA Experts with Achievement-based Multi-Tasks Loss for Unified Multimodal Information Extraction. In Proceedings of the IJCAI . 6940–6948. [47] Zefan Zhang, Weiqi Zhang, Yanhui Li, and Tian Bai. 2024. Caption-Aware Multi-modal Relation Extraction with Mutual Information Maximization. In Proceedings of the MM . ACM, 1148–1157. [48] Changpeng Zhao, Dongfang Han, Zicheng Zuo, and Turdi Tohti. 2025. KGDB-DDI: Knowledge Graph-Based Drug Background Data Fusion Model for Drug-Drug Interaction Prediction. Artificial Intelligence in Medicine 168 (2025), 103225. doi:10.1016/j.artmed.2025.103225 [49] Changmeng Zheng, Junhao Feng, Yi Cai, Xiaoyong Wei, and Qing Li. 2023. Rethinking Multimodal Entity and Relation Extraction from a Translation Point of View. In Proceedings of the ACL . Association for Computational Linguistics, 6810–6824. [50] Changmeng Zheng, Junhao Feng, Ze Fu, Yi Cai, Qing Li, and Tao Wang. 2021. Multimodal Relation Extraction with Efficient Graph Alignment. In Proceedings of the MM . ACM, 5298–5306. [51] Changmeng Zheng, Zhiwei Wu, Junhao Feng, Ze Fu, and Yi Cai. 2021. MNRE: A Challenge Multimodal Dataset for Neural Relation Extraction with Visual Evidence in Social Media Posts. In Proceedings of the ICME . IEEE, 1–6.

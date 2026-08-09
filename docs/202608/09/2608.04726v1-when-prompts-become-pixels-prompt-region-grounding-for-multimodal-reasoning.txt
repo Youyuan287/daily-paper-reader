@@ -1,0 +1,788 @@
+Title: When Prompts Become Pixels: Prompt-Region Grounding for Multimodal Reasoning
+
+URL Source: https://arxiv.org/pdf/2608.04726v1
+
+Published Time: Thu, 06 Aug 2026 00:50:15 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# When Prompts Become Pixels: Prompt-Region Grounding for Multimodal Reasoning 
+
+## Yongxin Wang 1, Ruizhe Zhou 2, Yueling Tang 2, Yingying Zhu 3,Xuemin Zhao 3, Xiaojun Chang 1,4 , Xiaodan Liang 1,2 
+
+> 1
+
+Mohamed bin Zayed University of Artificial Intelligence 
+
+> 2
+
+Sun Yat-sen University 3Transsion 4University of Science and Technology of China 
+
+Abstract 
+
+Multimodal large language models increasingly reason over screenshots and documents where the task itself may be writ-ten in pixels. Yet benchmarks usually place questions in text, leaving it unclear whether models use the same instruction equally well across channels. We introduce Visualized Task Semantics (VTS), a controlled intervention that moves the question into the image while keeping the source problem and answer fixed. Across six MLLMs and four benchmarks, accu-racy drops in all 24 model-task pairs, by 17.8 points on aver-age. Models often transcribe the visual question correctly yet fail to use it, exposing a semantic channel gap beyond OCR. To reduce this gap, we present prompt-region grounding, whose core design aligns the question region with typed semantics and recovers its clean representation from a masked view. At matched training cost, our method raises four-benchmark VTS accuracy from 58.0 to 66.3 while preserving accuracy on the original interface, and requires no OCR or region metadata at inference. Reading task-bearing text and grounding it as an instruction for reasoning are distinct capabilities. 
+
+## 1 Introduction 
+
+Visual text has become a standard input to multimodal large language models (MLLMs). High-resolution models can read screenshots, documents, and other text-rich images with increasing accuracy (Wang et al. 2024b; Bai et al. 2025b; Wu et al. 2024). Most work treats this text as evidence to extract: a label, value, or paragraph contributes content to the answer. A visual question has a different function. It determines how the evidence should be used and what answer is required. Whether MLLMs preserve this task-defining function when a question moves from prompt tokens into image pixels re-mains less understood. Standard reasoning protocols make this function difficult to study. They place the question in the language channel and reserve the image for visual evidence. Prior work re-ports weaker performance when instructions are visualized (Li et al. 2024b; An et al. 2025; Liu et al. 2026), but the measured gap can mix several effects: canvas expansion, im-age resizing, renderer errors, missing prompt content, and the change of semantic channel itself. A model may also transcribe the visual question correctly without using it to control the answer. An accuracy drop alone therefore cannot tell us whether the model failed to read the question or failed to use it. We study this problem with Visualized Task Semantics 
+
+(VTS), a paired intervention that changes where the question is presented. Given a benchmark item with question q, image 
+
+x, and answer a, the Original view presents (q, x ). VTS ren-ders q above x and replaces the typed question with a fixed cue. The source problem, visual evidence, and target answer remain paired within each item. VTS then adds separate con-trols for canvas geometry, prompt duplication, and missing task content. VTS reveals a systematic semantic channel gap. Across six MLLMs and four benchmarks, accuracy falls in all 24 model-task pairs, by 17.8 points on average and by as much as 28.0 points. A blank-canvas control remains within 1.1 points of Original accuracy, and a duplicate-question control remains within 0.6 points. Removing the question from both channels causes accuracy to collapse. The loss therefore cannot be explained by the added canvas, image resizing, or renderer corruption alone. We next test whether the remaining gap reduces to text recognition. In a two-task diagnostic, the base model tran-scribes 87.6% of visual questions exactly but answers only 48.4% correctly. Reinserting the same model’s transcript into the text channel raises answer accuracy by 7.7 points while leaving the composite unchanged. A substantial part of the gap therefore appears after transcription: the model recovers the words, but those words exert less control as pixels than as prompt tokens. This finding motivates prompt-region grounding . Mixed-interface replay presents questions in both channels, but it does not explicitly connect the visual question region to its typed counterpart. Our method adds two region-level ob-jectives. PVRD-SG aligns the prompt region with a frozen representation of the typed question. PRMLP masks part of that region and recovers the representation of its clean crop. Component controls test both parts of this design: prompt-panel readouts outperform full-image and random-region summaries, while matched targets outperform mismatched targets. Region boxes and crops are used only during train-ing. At inference, the model receives one composite and answers directly, without OCR or localization metadata. At matched training cost on Qwen3-VL-4B, ordinary SFT reaches 58.0 VTS accuracy and 69.1 Original accuracy across four benchmarks. Prompt-region grounding raises these scores to 66.3 and 70.3, with a VTS gain on every arXiv:2608.04726v1 [cs.AI] 5 Aug 2026 (a) Original view (b) VTS view  
+
+> What is the highest volume written on the blender?
+> What is the difference between the highest and the lowest dark blue bar? Help me solve the problem
+
+## Correct 
+
+## Correct Wrong 
+
+> <Model Output>
+
+800 
+
+> <Model Output>
+
+32 
+
+> <Model Output>
+
+1000 
+
+> <Model Output>
+
+54 
+
+## Wrong 
+
+> (1) Natural image / TextVQA (2) Chart / ChartQA
+
+Figure 1: The task stays fixed, but the answer changes when its question becomes pixels. VTS renders the question inside the image and replaces the native prompt with a fixed cue. The upper schematic omits this separate cue for space; the lower example displays it. The source visual evidence and target answer are unchanged within each pair. Original VTS 
+
+> 020 40 60 80
+> Qwen3-VL 4B Thinking Qwen3-VL 4B Instruct Qwen3-VL 8B Thinking Qwen3-VL 8B Instruct InternVL3.5 8B Instruct DeepEyes 7B
+> Accuracy (%)
+
+Figure 2: Every evaluated model is weaker when the ques-tion is in the image. Bars show mean accuracy over MATH-Vision, MathVista, ChartQA, and MMMU. Both interfaces are shown because a small gap can also occur when perfor-mance is low. task. The same recipe improves a second backbone. It also gains 4.1 points on the independently constructed VISTA-Bench protocol and 7.9 points on 1,000 held-out real-world pages. VTS and prompt-region grounding distinguish two ca-pabilities that MLLM evaluations often treat as the same: reading text in an image and grounding that text as the task instruction. VTS measures the distinction under paired prob-lems, and the region-level objectives train for task use without changing the inference interface. The results show that the channel carrying a question can alter reasoning even when its wording and answer remain fixed. 
+
+## 2 Related work 
+
+Multimodal models and reasoning. High-resolution MLLMs improve perception in images and documents (Wang et al. 2024b; Bai et al. 2025b; Wu et al. 2024; Li et al. 2024a). Other work improves multimodal reasoning through post-training or by varying diagrams, problem instances, and image count (Zhu et al. 2025; Kimi Team 2025; Zhang et al. 2024; Zou et al. 2025; Wang et al. 2025a). Our study holds the source problem fixed and asks how training should handle a change in the interface carrying its question. Recent work trains multimodal reasoning with process re-wards, contrastive reflection, and verifiable rewards (Wang et al. 2025b,d; DeepSeek-AI et al. 2025). We instead change where the task appears while keeping the answer fixed. We apply GSPO after the supervised model. The combination of PVRD-SG and PRMLP is the supervised method contribu-tion; GSPO is the final reinforcement-learning stage. 
+
+Visual prompting and questions. VIM introduces visual-modality instructions, measures the text-to-pixel gap across eight benchmarks, and trains on text and pixel interfaces (Li et al. 2024b). VoQA places the scene and question in one image and reconstructs the visual question before answering during supervised fine-tuning (An et al. 2025). VISTA-Bench compares matched text and visualized-text questions across renderers and OCR systems (Liu et al. 2026). These works establish the problem; we do not claim that moving a question into pixels is new. VIM-style mixed replay is therefore a central baseline rather than an omitted alternative. VoQA is the closest reconstruction-based method: it generates an intermediate question target before answering. We instead test whether region-level training can improve direct answering with-out an output-side transcription stage. VTS supplies source-matched reasoning pairs for this comparison. OCRBench v2 =        
+
+> Same
+> Answer
+> aᵢ
+> Original (Text-dominant)
+> User Question qᵢ
+> A
+> BCO
+> S
+> Image xᵢ
+> …
+> VTS (Visualized Semantics)
+> User Help me solve the problem.
+> Rendered question qᵢ
+> A
+> BCO
+> S
+> Image xᵢ
+> Prompt
+> panel
+> (box bᵢ)
+> …
+> Original Replay
+> (q₁, x₁) → y₁
+> (q₂, x₂) → y₂
+> (q
+> ₙ, x
+> ₙ) → y
+> ₙ
+> ⋮
+> VTS Data
+> (q
+> ₘᵢ
+> ₙ, x̃₁) → y₁
+> (q
+> ₘᵢ
+> ₙ, x̃₂) → y₂
+> (q
+> ₘᵢ
+> ₙ, x̃
+> ₙ) → y
+> ₙ
+> ⋮
+> Model
+> (MLLM)
+> Same Target yᵢ
+> <think>
+> rᵢ (reasoning)
+> </think>
+> <answer>
+> aᵢ
+> </answer>
+> Text tokens
+> Image / visual tokens
+> Prompt region
+> Frozen target
+> PVRD-SG (text-side grounding)
+> Prompt region
+> representation
+> (zᵢᵛᵗˢ) Text embedding
+> of qᵢ (tᵢ)
+> cosine
+> similarity
+> ∩
+> Full image
+> (online view with
+> masked prompt region)
+> Stop-grad target
+> (clean prompt crop)
+> predict
+> Predictor
+> qφ
+> Random mask
+> blocks in prompt
+> panel
+> cosine similarity
+> ∩
+> Generate (group)
+> …
+> …
+> Verify answer
+> ✓×✓⋮
+> Reward
+> R = 0.1 · Rformat + 0.9 · Rans
+> Policy update (e.g., GSPO)
+> Update
+> PRMLP (image-side latent prediction)
+
+Figure 3: Prompt-region grounding. Paired replay exposes the model to Original and VTS views with the same answer target. PVRD-SG connects the visual question region to its typed semantics, and PRMLP reconstructs a clean latent target from a masked prompt region. GSPO then continues the grounded checkpoint using verifiable format and answer rewards. Original VTS 
+
+> 50 55 60 65 70
+
+Base Balanced Replay Ours + GSPO  
+
+> 15.8 8.4 4.0 1.5
+> Accuracy (%)
+
+Figure 4: Training progressively closes the semantic channel gap. Lines show four-benchmark mean accuracy. Vertical connectors mark the Original minus VTS gap at each stage: 15.8, 8.4, 4.0, and 1.5 points. and MMLongBench-Doc cover broader visual-text localiza-tion and document layouts (Fu et al. 2025; Ma et al. 2024). VTCBench studies a related modality gap for long text com-pressed into dense images (Zhao et al. 2025). 
+
+Alignment and consistency learning. RegionCLIP learns open-vocabulary links between image regions and text (Zhong et al. 2022). Align-KD matches modalities to compress MLLMs, while Align-TI uses a teacher to trans-fer instruction-relevant visual interactions (Feng et al. 2025; Chen et al. 2026). These methods do not target printed ques-tions, but they provide close precedents for cross-modal dis-tillation. Masked representation learning provides a second precedent. I-JEPA predicts masked image regions. BYOL updates a stop-gradient target with an exponential moving average, whereas SimSiam stops the target gradient without that average (Assran et al. 2023; Grill et al. 2020; Chen and He 2021). PRMLP instead predicts a detached clean-crop representation from a composite whose prompt region has been masked. The reported implementation uses an identity predictor. 
+
+## 3 Prompt-region grounding 
+
+Paired replay teaches both interfaces but leaves their rela-tionship implicit. Prompt-region grounding makes that rela-tionship an explicit training signal. It adds two losses on VTS and real-world visual-prompt examples: prompt-visual rep-resentation distillation with semantic grounding (PVRD-SG) connects the visual question region to a frozen representa-tion of its typed semantics, and prompt-region masked latent prediction (PRMLP) connects a masked question region to its clean visual representation. Both losses share the original answer target and leave the inference interface unchanged. 
+
+Visualized task semantics 
+
+Let (qi, x i, a i) denote a question, its visual context, and its canonical answer. The original benchmark view is 
+
+uorig 
+
+i = concat( qi, x i). (1) The model receives qi as language tokens and xi through the vision encoder. VTS moves qi into the image. A deterministic renderer render normalizes lightweight LaTeX, wraps the question to the image width, and draws it in a white panel above the source image: 
+
+˜xi = render( qi, x i), uvts 
+
+i = concat( qmin , ˜xi). (2) Here qmin is the fixed cue “Help me solve the problem”. The renderer records the panel box bi and saves a clean crop ci.Both views use the same answer ai.VTS changes both the question channel and the remain-ing text prompt. We use three controls to interpret this change. Canvas presents concat( qi, render( ∅, x i)) : the na-tive question plus the same padded canvas with a blank panel. Duplicate presents concat( qi, render( qi, x i)) , plac-ing the question in both channels. Image-only presents 
+
+concat( qmin , render( ∅, x i)) , so neither channel contains the task wording. Renderer template, source-image placement, decoding, and scorer otherwise remain fixed. The controlled training subset uses only the Original and VTS views. During supervised training, the VTS renderer supplies bi
+
+and ci; the GLM-OCR pipeline supplies the corresponding region and crop for real-world rows (Duan et al. 2026). At VTS inference, the model receives only the image and qmin .No evaluation supplies a box, crop, OCR transcript, or other localization metadata. The method uses known regions as supervision, but it is not an explicit task-region detector. 
+
+Balanced replay 
+
+Following VIM’s cross-interface mixture (Li et al. 2024b), the controlled subset requires one Original and one VTS row for every selected source item: 
+
+Dpair =
+
+n
+
+(uorig  
+
+> i
+
+, y i)
+
+o
+
+> i∈I
+
+∪ (uvts  
+
+> i
+
+, y i) i∈I . (3) The complete supervised pool is Dsft = Dpair ∪ D rw ,where Drw pairs held-in real-world images with their original prompts and extracted regions. Let Ivis index the VTS and real-world visual-prompt rows; each stores (qi, b i, c i). We verify the one-to-one construction within Dpair using stable pair IDs and target and answer hashes. Both views use the same assistant target: 
+
+yi =
+
+sans (ai), answer-only ,strace (ri) ∥ sans (ai), trace-bearing . (4) Here ri is a question-scrubbed reasoning trace and ai is the canonical answer. The fixed serializers add the corresponding 
+
+<think> and <answer> tags. The target policy is frozen before training and shared by both views. Trace-bearing tar-gets omit verbatim reconstructions of qi; otherwise the run uses the answer-only target. The supervised loss is autore-gressive negative log-likelihood over assistant tokens: 
+
+Lsft (θ) = E(u,y )∼D sft ℓNLL (θ; u, y ), (5) where ℓNLL is the standard autoregressive loss on assistant-target positions. 
+
+PVRD-SG: Prompt-region semantic grounding 
+
+Balanced replay exposes the model to both interfaces but does not explicitly tie the rendered question to its typed coun-terpart. PVRD-SG places this constraint on the prompt region rather than the whole image. The distinction is important be-cause a VTS composite contains two kinds of information: the question specifies the task, while the source image sup-plies the evidence. A whole-image summary mixes these roles and may be dominated by objects, charts, or diagrams outside the question panel. Reading only from the recorded prompt box asks a narrower question: does the region that contains the instruction represent the same task as its typed counterpart? Let P text  
+
+> i
+
+be a fixed text-only template for qi,and let Qi contain its question-token positions. Before train-ing, we compute and freeze 
+
+ti = normalize 
+
+ 1
+
+|Qi|
+
+X
+
+> j∈Qi
+
+HLθ0,j (P text  
+
+> i
+
+)
+
+ . (6) For a visual-prompt template P vis  
+
+> i
+
+, the prompt box bi and the preprocessed image-token grid define a set Si of visual-token positions inside the prompt region. We pool only those positions: 
+
+zvis  
+
+> i
+
+= normalize 
+
+ 1
+
+|Si|
+
+X
+
+> j∈Si
+
+HLθ,j (P vis  
+
+> i
+
+)
+
+ . (7) PVRD-SG minimizes cosine distance between the prompt-region representation and the cached text target: 
+
+Lsg (θ) = Ei∈I vis 
+
+1 − (zvis  
+
+> i
+
+)⊤ sg( ti) . (8) By construction, the text target contains qi but neither ai
+
+nor ri. Freezing θ0, caching ti, and stopping its gradient keep the target fixed. The readout excludes both the visual evidence outside bi and assistant target positions. The loss is read from selected positions, but shared parameters can still propagate its effect beyond the box. PVRD-SG therefore does not teach the answer through its target. It teaches the visual prompt region where the task semantics represented by the typed question should be available, while the ordinary autoregressive loss remains responsible for the reasoning trace and final answer. 
+
+PRMLP: Masked latent prediction 
+
+PVRD-SG specifies a text-side semantic target, but it does not directly require the visual representation to remain stable when parts of the rendered question are difficult to observe. PRMLP supplies this image-side constraint. It is a latent consistency objective, not pixel reconstruction or transcript generation: the representation read from a partially masked prompt region must approach the representation of the corre-sponding clean crop. On a scheduled PRMLP update, Mρ,ω 
+
+masks a fraction ρ of the prompt region under block-sampling rule ω, while leaving the rest of the image unchanged. Let 
+
+xvis  
+
+> i
+
+be the VTS composite or real-world image: 
+
+xMi = Mρ,ω (xvis  
+
+> i
+
+; bi). (9) The online branch receives xMi , and the target branch receives the clean prompt crop ci:
+
+zfull  
+
+> i
+
+= pool  Hθ (qmin , x Mi ), S i
+
+ , (10) 
+
+zcrop  
+
+> i
+
+= pool ( Hθ (qmin , c i), S ci ) . (11) Here Si selects the prompt-region visual tokens in the masked composite, and Sci contains the visual tokens in the crop view. The token mask is mapped from the stored box after image preprocessing. The loss is 
+
+Lprmlp (θ) = Ei∈I vis 
+
+1 − cos  qϕ(zfull  
+
+> i
+
+), sg( zcrop  
+
+> i
+
+) .
+
+(12) Both branches use the current model, and the clean-crop branch is detached. qϕ is an optional predictor; the re-ported implementation sets it to the identity. The target there-fore changes as θ changes; there is no exponential-moving-average encoder. PRMLP is applied to visual-prompt exam-ples and can run every k steps to limit its additional cost. It uses no transcript supervision. Because the target is visual, PRMLP can also be applied to real-world prompts whose ty-pography and layout differ from the VTS renderer, provided that the training example supplies a prompt region and its clean crop. The complete supervised recipe is 
+
+Ltotal = Lsft + λsg Lsg + λprmlp Lprmlp , (13) where both loss weights are fixed before training and recorded in the run manifest. The objectives supervise different relationships. PVRD-SG specifies which typed task semantics should be recover-able from the prompt region; PRMLP preserves the region’s visual representation under partial occlusion. Their shared answer target and common prompt-region readout keep both signals tied to the same task-bearing pixels. Neither objec-tive changes the inference interface, and neither supplies an answer or a transcript at test time. 
+
+GSPO continuation 
+
+We continue the model trained with both PVRD-SG and PRMLP using GSPO on a separate mixture of original and VTS examples. The raw reward is 
+
+R(ˆ y, a ) = 0 .1Rformat (ˆ y) + 0 .9Rans (ˆ y, a ). (14) Both terms are binary. Rformat checks the output grammar, and Rans applies a deterministic verifier to the parsed final answer. The coefficients specify the raw reward, not each term’s share of the policy gradient, and the reward provides no separate prompt-transcription supervision. We refer to the resulting checkpoint as the GSPO continuation. 
+
+## 4 Experiments and analysis 
+
+The experiments ask two questions: how much does reason-ing change when a question becomes pixels, and how much of that loss can prompt-region grounding recover? The pri-mary evaluation uses MATH-Vision, MathVista, ChartQA, and MMMU (Wang et al. 2024a; Lu et al. 2024; Masry et al. 2022; Yue et al. 2024). Unless a table states other-wise, trained conditions report mean accuracy over com-pleted runs. “Mean” is the unweighted average of these four tasks. Accuracy is reported in percent; gains and gaps are percentage points. 
+
+Experimental setup 
+
+The Original view keeps the question in the text channel. VTS renders the same question into the image and supplies only a short fixed cue. The visual evidence and answer remain paired. We report Original accuracy, VTS accuracy, and their gap, ∆ = Acc orig − Acc vts .Our main adaptation experiments use Qwen3-VL-4B-Instruct (Bai et al. 2025a). The common supervised pool con-tains 24,761 controlled source examples, each exported once as Original and once as VTS, plus 50,389 real-world visual-prompt examples. This produces 99,911 training views from 75,150 source examples. A separate set of 1,000 real-world examples is held out before export and is never used for SFT or GSPO. Every adaptation condition uses the same train-ing export, assistant-target policy, initialization, optimizer, checkpoint rule, and evaluation protocol. Balanced Replay and SFT are distinct controls rather than consecutive stages. Balanced Replay follows the standard supervised schedule and measures what the mixed Origi-nal/VTS exposure provides by itself. SFT uses the same inter-face mixture and ordinary next-token objective but continues until its measured training cost matches Ours. The cost ledger counts all forward, target, and backward passes introduced by PVRD-SG and PRMLP; SFT is stopped when its training FLOPs are within 5% of Ours. GPU-hours are recorded as a secondary system measure but are not the matching crite-rion. Comparing Ours with Balanced Replay tests the gain over the standard mixed-interface recipe, while comparing it with SFT tests whether ordinary additional optimization is sufficient. We use the latter as the primary baseline for method gains. Full data, hyperparameters, and evaluator de-tails are in the supplement. 
+
+The semantic channel gap 
+
+Accuracy falls under VTS for every evaluated model and task. We compare thinking and instruct variants of Qwen3-VL (Bai et al. 2025a), InternVL3.5 (Wang et al. 2025c), and the rea-soning model DeepEyes (Zheng et al. 2026). The complete task-level table is in the supplement. For both Qwen3-VL sizes, the thinking variants are stronger on typed questions but lose more when the question moves into the image. On MATH-Vision, Qwen3-VL-4B-Thinking scores 60.0 under Original, compared with 51.6 for Qwen3-VL-4B-Instruct, yet its gap is 27.4 rather than 16.8 points. A small gap is not sufficient when both accuracies are low. DeepEyes-7B has the smallest average gap but reaches only 26.6 Original accuracy on MATH-Vision. Figure 2 therefore keeps both interface accuracies visible rather than ranking models by gap alone. Construction controls support this in-terpretation. For Base, adding a blank panel stays within 1.1 points of Original and duplicating the question across both channels stays within 0.6, whereas removing the question causes accuracy to collapse. Ours preserves this pattern and improves over Balanced Replay across the tested renderer variants (Appendix Table 18 and Figure 8). 
+
+Grounding visual task semantics 
+
+At the same measured training cost, Ours improves VTS accuracy over SFT on all four tasks (Table 1). The gains are 7.8 points on MATH-Vision, 7.0 on MathVista, 6.2 on ChartQA, and 12.4 on MMMU. Original accuracy changes by 0.6 to 1.6 points. Averaged across tasks, VTS accuracy rises from 58.0 to 66.3 and Original accuracy from 69.1 to 70.3, reducing the interface gap from 11.2 to 4.0 points. The remaining gap is 0.7 points on MATH-Vision and 2.4 on MathVista, compared with 6.8 on ChartQA and 6.1 on MMMU. MATH-Vision MathVista ChartQA MMMU Method Original VTS Original VTS Original VTS Original VTS Balanced Replay 52.0 45.6 73.9 68.4 85.0 74.4 68.3 57.2 SFT 51.5 44.3 73.9 65.1 83.7 72.3 67.4 50.1 Ours 52.8 52.1 74.5 72.1 85.3 78.5 68.6 62.5 
+
+Table 1: Four-task cost-matched adaptation. SFT follows the ordinary supervised objective and is trained to the same measured cost as Ours. Benchmarks form column groups, with Original and VTS views shown beneath each benchmark. Targeted / matched Comparison VTS accuracy (%)               
+
+> 60 62 64 66
+> Components
+> Balanced replay 61.4
+> + PRMLP 62.7
+> + PVRD-SG 64.5
+> Ours 66.3
+> Spatial readout
+> Random region 62.1
+> Full image 62.9
+> Prompt panel 64.5
+> Semantic target
+> PRMLP 61.7 62.7
+> +1.0
+> PVRD-SG 61.9 64.5
+> +2.6
+
+Figure 5: Component contributions and specificity. Marks show four-task mean VTS accuracy. The middle group com-pares spatial readouts at matched training cost; the bottom group contrasts matched and deranged targets. Original accu-racy ranges from 69.8 to 70.3 across the displayed conditions. The two baselines clarify where this improvement comes from. Balanced Replay reaches 61.4 mean VTS accuracy and 69.8 Original accuracy, so Ours adds 4.9 VTS points while retaining the typed interface within 0.5 point. Cost-matched SFT reaches only 58.0 VTS accuracy despite receiving the larger ordinary supervised budget. Ours exceeds it by 8.4 points on VTS and 1.2 points on Original. The result does not imply that longer SFT must always underperform a shorter schedule. It shows that, under the matched data, optimizer, checkpoint, and cost protocol used here, additional next-token training does not account for the gain from the region-level objectives. PVRD-SG accounts for the larger single-component gain, while PRMLP adds 1.8 VTS points over PVRD-SG when the objectives are combined (Figure 5). Original accuracy varies by at most 0.5 points across these rows. Reading from the known prompt panel outperforms full-image and random-region summaries at matched training cost. Matching each target to its own example also beats a deranged target by 2.6 points for PVRD-SG and 1.0 for PRMLP. The benefit there-fore depends on both where the representation is read and which semantic target it receives. The representation probes follow the objective design: PVRD-SG primarily improves typed-question retrieval, while PRMLP primarily improves clean-crop retrieval (Appendix Table 11). The advantage also grows throughout training rather than 
+
+Checkpoint EM Direct Self GT P-crop S-crop S-gain Base 87.6 48.4 56.1 58.3 54.6 49.3 +7 .7
+
+Balanced Replay 92.4 57.0 60.2 61.5 59.7 57.8 +3 .2
+
+Ours 95.1 62.1 62.9 63.4 63.0 62.2 +0 .8
+
+Table 2: Same-composite recognition and use diagnostic. Two-task means on the frozen composite. Self/GT reinsert transcripts; P-crop/S-crop add token-matched prompt/scene crops; EM is exact match transcription. appearing at one selected checkpoint. At 25%, 50%, 75%, and 100% of the matched budget, Ours exceeds Balanced Replay by 1.2, 2.5, 4.1, and 4.9 VTS points, respectively, while Original accuracy stays within 0.5 points (Appendix Figure 8). 
+
+Recognition is not task execution 
+
+All answer conditions retain the same frozen VTS composite. 
+
+Direct asks the model to answer that composite with the fixed cue used throughout VTS. Self adds the same checkpoint’s cached transcription to the text channel, whereas GT adds the ground-truth question. Thus Self minus Direct measures how much answer accuracy is recovered when the model’s recognized words regain the native text-channel role, and GT minus Self estimates the remaining effect of transcription errors. P-crop adds a clean crop of the prompt region as a second image. S-crop adds a scene crop sampled outside that region with matched dimensions, aspect ratio, image order, visual-token count, and auxiliary cue. Their difference tests whether isolating the task-bearing region helps beyond supplying another image crop. EM is exact match between the cached transcription and the ground-truth question. The base model already transcribes the prompt well, yet reinserting its own transcript improves answer accuracy by 7.7 points (Table 2). After full adaptation, Direct accuracy is 13.7 points higher and the Self advantage falls to 0.8; replac-ing Self with ground-truth text adds only another 0.5 point. Thus recognition alone does not explain the base failure, while adaptation reduces the benefit of moving the recog-nized question back into the text channel. The crop interventions lead to the same interpretation from the visual side. For Base, the prompt crop improves Direct accuracy by 6.2 points, while the matched scene crop adds only 0.9. Ours answers the full composite at 62.1 and reaches 63.0 with the prompt crop and 62.2 with the scene crop. The prompt region is therefore useful when isolated for the Checkpoint Original VTS Gap VTS gain Continued SFT 70.4 67.8 2.6 baseline GSPO 70.7 69.2 1.5 +1 .4
+
+Table 3: Cost-matched GSPO continuation on Qwen3-VL-8B-Instruct. Values are four-task mean accuracies.                                         
+
+> VISTA-Bench VT Text VT gain Base 52.3 59.1 –Balanced Replay 55.4 59.3 –SFT 56.2 59.4 baseline Ours 60.3 59.6 +4 .1
+> Ours +GSPO 60.1 61.3 +3 .9
+> OCRBench v2 ZH EN Avg gain Base 61.2 65.4 –Balanced Replay 59.7 65.2 –SFT 59.1 62.8 baseline Ours 60.5 65.9 +2 .3
+> Ours +GSPO 60.7 65.3 +2 .1
+
+Table 4: External evaluations with distinct protocols. VISTA reports official weighted VT/Text accuracy and VT gains over SFT; its Base row is Qwen3-VL-8B-Instruct. OCRBench v2 reports the official ZH and EN scores; avg gain is the un-rounded mean of the language-specific gains over SFT. base model, but after adaptation the full composite already provides nearly all of that benefit. Prompt-swap and fixed-OCR interventions show the same reduction in reliance on text-channel reinsertion; their com-plete results are in Appendix Table 10 and Figure 9. 
+
+RL refinement 
+
+At matched training cost, GSPO improves mean VTS ac-curacy by 1.4 points over continued SFT without reducing Original accuracy (Table 3); format accuracy also rises from 98.0 to 99.3. The cost-matched InternVL3.5-8B transfer re-sult is reported in Appendix Table 13. 
+
+Independent benchmark transfer 
+
+On the independently constructed VISTA-Bench pairs, Ours raises weighted VT accuracy from 56.2 to 60.3 while Text accuracy changes from 59.4 to 59.6 (Table 4). With GSPO, VT reaches 60.1 and the Text-to-VT gap is 1.2 points. On OCRBench v2, Ours scores 60.5/65.9 on ZH/EN, a 2.3-point average gain over SFT; Ours + GSPO gains 2.1 points. OCRBench measures text-rich capability rather than semantic-channel equivalence, so it is not pooled with VISTA. Category-level VISTA results and other text-rich benchmarks are in the supplement. 
+
+Real-world task images 
+
+We evaluate 1,000 real-world examples that are disjoint from training: 374 UI screenshots, 188 worksheets, 157 forms or slides, and 281 photographed pages. Ours improves over SFT SFT Ours             
+
+> 50 55 60 65 70
+> UI screens 63.0 70.6
+> +7.6
+> Worksheets 57.0 64.6
+> +7.6
+> Forms/slides 61.0 68.1
+> +7.1
+> Photo pages 50.2 59.1
+> +8.9
+> Accuracy (%)
+
+Figure 6: Real-world natural-page evaluation. Accuracy un-der SFT and Ours across four categories. Labels give the category scores and gains over SFT. in every category, by 7.1 to 8.9 points (Figure 6). Example-weighted accuracy rises from 58.0 to 65.8, a gain of 7.9 points; the unweighted category macro rises from 57.8 to 65.6. This set has no constructed typed counterpart, so it measures generalization to the evaluated real-world pages rather than semantic-channel equivalence. 
+
+Training controls. Question-scrubbed reasoning reaches 65.8 VTS accuracy, only 0.5 points below a full trace that may repeat the question (Appendix Table 9). The gain therefore does not depend on copying the question into the assistant target. Ours also exceeds VoQA QRA-SFT by 2.1 VTS points while retaining higher Original accuracy. 
+
+## 5 Discussion and conclusion 
+
+The same task is not equally usable across input channels. Moving a question from text tokens into image pixels lowers accuracy in all 24 evaluated model and task combinations, by 17.8 points on average. Blank-canvas and duplicate ques-tion tests do not reproduce the loss, and the base model can transcribe most visual questions exactly while still answering them poorly. The semantic channel gap is therefore not well described as an OCR failure alone. Prompt-region grounding raises four-benchmark VTS ac-curacy from 58.0 to 66.3 at matched cost while Original accu-racy changes from 69.1 to 70.3. Prompt-panel and deranged-target controls tie the gain to the intended spatial and seman-tic signals without identifying a unique internal mechanism. Ours also gains 4.1 points on the paired VISTA-Bench inter-face and 7.9 points on held-out real-world pages; the supple-ment reports a cost-matched second-backbone test. Inference remains one direct model call without an OCR transcript or prompt box. 
+
+## References 
+
+An, J.; Jiang, L.; Luo, J.; Wu, W.; and Huang, L. 2025. VoQA: Visual-only Question Answering. arXiv preprint arXiv:2505.14227 .Assran, M.; Duval, Q.; Misra, I.; Bojanowski, P.; Vincent, P.; Rabbat, M.; LeCun, Y.; and Ballas, N. 2023. Self-Supervised Learning from Images with a Joint-Embedding Predictive Architecture. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 15619–15629. Bai, S.; Cai, Y.; Chen, R.; Chen, K.; Chen, X.; Cheng, Z.; Deng, L.; Ding, W.; Gao, C.; Ge, C.; et al. 2025a. Qwen3-VL Technical Report. arXiv preprint arXiv:2511.21631 .Bai, S.; Chen, K.; Liu, X.; Wang, J.; Ge, W.; Song, S.; Dang, K.; Wang, P.; Wang, S.; Tang, J.; et al. 2025b. Qwen2.5-VL Technical Report. arXiv preprint arXiv:2502.13923 .Chen, L.; Zhao, X.; Ding, K.; Feng, W.; Miao, C.; Wang, Z.; Guo, W.; Wang, Y.; Zheng, K.; Zhang, B.; Li, Z.; and Xiang, S. 2026. Beyond Next-Token Alignment: Distilling Multimodal Large Language Models via Token Interactions. 
+
+arXiv preprint arXiv:2602.09483 .Chen, X.; and He, K. 2021. Exploring Simple Siamese Rep-resentation Learning. In Proceedings of the IEEE/CVF Con-ference on Computer Vision and Pattern Recognition .DeepSeek-AI; Guo, D.; Yang, D.; Zhang, H.; Song, J.; Wang, P.; Zhu, Q.; Xu, R.; et al. 2025. DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning. 
+
+Nature , 645: 633–638. Duan, S.; Xue, Y.; Wang, W.; Su, Z.; Liu, H.; Yang, S.; Gan, G.; Wang, G.; Wang, Z.; Yan, S.; Jin, D.; Zhang, Y.; Wen, G.; Wang, Y.; Zhang, Y.; Zhang, X.; Hong, W.; Cen, Y.; Yin, D.; Chen, B.; Yu, W.; Gu, X.; and Tang, J. 2026. GLM-OCR Technical Report. arXiv preprint arXiv:2603.10910 .Feng, Q.; Li, W.; Lin, T.; and Chen, X. 2025. Align-KD: Distilling Cross-Modal Alignment Knowledge for Mobile Vision-Language Large Model Enhancement. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 4178–4188. Fu, L.; Kuang, Z.; Song, J.; Huang, M.; Yang, B.; Li, Y.; Zhu, L.; Luo, Q.; Wang, X.; Lu, H.; Li, Z.; Tang, G.; Shan, B.; Lin, C.; Liu, Q.; Wu, B.; Feng, H.; Liu, H.; Huang, C.; Tang, J.; Chen, W.; Jin, L.; Liu, Y.; and Bai, X. 2025. OCRBench v2: An Improved Benchmark for Evaluating Large Multimodal Models on Visual Text Localization and Reasoning. arXiv preprint arXiv:2501.00321 .Grill, J.-B.; Strub, F.; Altché, F.; Tallec, C.; Richemond, P. H.; Buchatskaya, E.; Doersch, C.; Avila Pires, B.; Guo, Z. D.; Gheshlaghi Azar, M.; Piot, B.; Kavukcuoglu, K.; Munos, R.; and Valko, M. 2020. Bootstrap Your Own Latent: A New Approach to Self-Supervised Learning. In Advances in Neural Information Processing Systems .Kimi Team. 2025. Kimi-VL Technical Report. arXiv preprint arXiv:2504.07491 .Leng, S.; Wang, J.; Li, J.; Zhang, H.; Hu, Z.; Zhang, B.; Jiang, Y.; Zhang, H.; Li, X.; Bing, L.; Zhao, D.; Lu, W.; Rong, Y.; Sun, A.; and Lu, S. 2025. MMR1: Enhancing Multimodal Reasoning with Variance-Aware Sampling and Open Resources. arXiv preprint arXiv:2509.21268 .Li, B.; Zhang, Y.; Guo, D.; Zhang, R.; Li, F.; Zhang, H.; Zhang, K.; Zhang, P.; Li, Y.; Liu, Z.; and Li, C. 2024a. LLaVA-OneVision: Easy Visual Task Transfer. arXiv preprint arXiv:2408.03326 .Li, X.; Lu, Y.; Gan, Z.; Gao, J.; Wang, W. Y.; and Choi, Y. 2024b. Text as Images: Can Multimodal Large Language Models Follow Printed Instructions in Pixels? arXiv:2311.17647. Lian, S.; Wu, C.; Yang, L. T.; Yuan, H.; Yu, B.; Zhang, L.; and Chen, K. 2025. Euclid’s Gift: Enhancing Spatial Perception and Reasoning in Vision-Language Models via Geometric Surrogate Tasks. arXiv preprint arXiv:2509.24473 .Lin, H.; Liu, Z.; Zhu, Y.; Qin, C.; Lin, J.; Shang, X.; He, C.; Zhang, W.; and Wu, L. 2026. MMFineReason: Closing the Multimodal Reasoning Gap via Open Data-Centric Methods. 
+
+arXiv preprint arXiv:2601.21821 .Liu, Q.; Feng, J.; Wang, Y.; Han, X.; Cheng, Y.; Zhu, Y.; Diao, H.; Zhuge, Y.; and Lu, H. 2026. VISTA-Bench: Do Vision-Language Models Really Understand Visualized Text as Well as Pure Text? arXiv preprint arXiv:2602.04802 .Lu, P.; Bansal, H.; Xia, T.; Liu, J.; Li, C.; Hajishirzi, H.; Cheng, H.; Chang, K.-W.; Galley, M.; and Gao, J. 2024. MathVista: Evaluating Mathematical Reasoning of Founda-tion Models in Visual Contexts. In International Conference on Learning Representations .Ma, Y.; Zang, Y.; Chen, L.; Chen, M.; Jiao, Y.; Li, X.; Lu, X.; Liu, Z.; Ma, Y.; Dong, X.; Zhang, P.; Pan, L.; Jiang, Y.-G.; Wang, J.; Cao, Y.; and Sun, A. 2024. MMLongBench-Doc: Benchmarking Long-context Document Understanding with Visualizations. In Advances in Neural Information Process-ing Systems .Masry, A.; Long, D. X.; Tan, J. Q.; Joty, S.; and Hoque, E. 2022. ChartQA: A Benchmark for Question Answering about Charts with Visual and Logical Reasoning. In Findings of the Association for Computational Linguistics: ACL 2022 ,2263–2279. Meng, F.; Du, L.; Liu, Z.; Zhou, Z.; Lu, Q.; Fu, D.; Han, T.; Shi, B.; Wang, W.; He, J.; Zhang, K.; Luo, P.; Qiao, Y.; Zhang, Q.; and Shao, W. 2025. MM-Eureka: Exploring the Frontiers of Multimodal Reasoning with Rule-Based Reinforcement Learning. arXiv preprint arXiv:2503.07365 .Qiao, R.; Tan, Q.; Yang, P.; Wang, Y.; Wang, X.; Wan, E.; Zhou, S.; Dong, G.; Zeng, Y.; Xu, Y.; et al. 2025. We-Math 2.0: A Versatile MathBook System for Incentivizing Visual Mathematical Reasoning. arXiv preprint arXiv:2508.10433 .Wang, K.; Pan, J.; Shi, W.; Lu, Z.; Ren, H.; Zhou, A.; Zhan, M.; and Li, H. 2024a. Measuring Multimodal Mathemati-cal Reasoning with MATH-Vision Dataset. In Advances in Neural Information Processing Systems , volume 37. Wang, P.; Bai, S.; Tan, S.; Wang, S.; Fan, Z.; Bai, J.; Chen, K.; Liu, X.; Wang, J.; Ge, W.; Fan, Y.; Dang, K.; Du, M.; Ren, X.; Men, R.; Liu, D.; Zhou, C.; Zhou, J.; and Lin, J. 2024b. Qwen2-VL: Enhancing Vision-Language Model’s Perception of the World at Any Resolution. arXiv preprint arXiv:2409.12191 .Wang, P.; Li, Z.-Z.; Yin, F.; Ran, D.; and Liu, C.-L. 2025a. MV-MATH: Evaluating Multimodal Math Reasoning in Multi-Visual Contexts. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,19541–19551. Wang, W.; Gao, Z.; Chen, L.; Chen, Z.; Zhu, J.; Zhao, X.; Liu, Y.; Cao, Y.; Ye, S.; Zhu, X.; Lu, L.; Duan, H.; Qiao, Y.; Dai, J.; and Wang, W. 2025b. VisualPRM: An Effective Process Reward Model for Multimodal Reasoning. arXiv preprint arXiv:2503.10291 .Wang, W.; Gao, Z.; Gu, L.; Pu, H.; Cui, L.; Wei, X.; Liu, Z.; Jing, L.; Ye, S.; Shao, J.; et al. 2025c. InternVL3.5: Advancing Open-Source Multimodal Models in Versatility, Reasoning, and Efficiency. arXiv preprint arXiv:2508.18265 .Wang, Y.; Yang, Z.; Cao, M.; Han, M.; Lin, H.; Zhu, Y.; Chang, X.; and Liang, X. 2025d. CARE What Fails: Con-trastive Anchored-REflection for Verifiable Multimodal Rea-soning. arXiv preprint arXiv:2512.19554 .Wiedmann, L.; Zohar, O.; Mahla, A.; Wang, X.; Li, R.; Frere, T.; von Werra, L.; Gosthipaty, A. R.; and Marafioti, A. 2025. FineVision: Open Data Is All You Need. arXiv preprint arXiv:2510.17269 .Wu, Z.; Chen, X.; Pan, Z.; Liu, X.; Liu, W.; Dai, D.; Gao, H.; Ma, Y.; Wu, C.; Wang, B.; Xie, Z.; Wu, Y.; Hu, K.; Wang, J.; Sun, Y.; Li, Y.; Piao, Y.; Guan, K.; Liu, A.; Xie, X.; You, Y.; Dong, K.; Yu, X.; Zhang, H.; Zhao, L.; Wang, Y.; and Ruan, C. 2024. DeepSeek-VL2: Mixture-of-Experts Vision-Language Models for Advanced Multimodal Understanding. 
+
+arXiv preprint arXiv:2412.10302 .Xi, Z.; Li, G.; Fan, Y.; Guo, H.; Liu, Y.; Fan, X.; Liu, J.; Ding, J.; Zuo, W.; Yin, Z.; Bai, L.; Ji, T.; Gui, T.; Zhang, Q.; Torr, P.; and Huang, X. 2025. BMMR: A Large-Scale Bilingual Multimodal Multi-Discipline Reasoning Dataset. 
+
+arXiv preprint arXiv:2507.03483 .Yue, X.; Ni, Y.; Zhang, K.; Zheng, T.; Liu, R.; Zhang, G.; Stevens, S.; Jiang, D.; Ren, W.; Sun, Y.; Wei, C.; Yu, B.; Yuan, R.; Sun, R.; Yin, M.; Zheng, B.; Yang, Z.; Liu, Y.; Huang, W.; Sun, H.; Su, Y.; and Chen, W. 2024. MMMU: A Massive Multi-discipline Multimodal Understanding and Reasoning Benchmark for Expert AGI. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 9556–9567. Zhang, R.; Jiang, D.; Zhang, Y.; Lin, H.; Guo, Z.; Qiu, P.; Zhou, A.; Lu, P.; Chang, K.-W.; Qiao, Y.; Gao, P.; and Li, H. 2024. MathVerse: Does Your Multi-modal LLM Truly See the Diagrams in Visual Math Problems? In European Conference on Computer Vision , 169–186. Zhao, H.; Wang, M.; Zhu, F.; Liu, W.; Ni, B.; Zeng, F.; Meng, G.; and Zhang, Z. 2025. VTCBench: Can Vision-Language Models Understand Long Context with Vision-Text Compression? arXiv preprint arXiv:2512.15649 .Zheng, C.; Liu, S.; Li, M.; Chen, X.-H.; Yu, B.; Gao, C.; Dang, K.; Liu, Y.; Men, R.; Yang, A.; Zhou, J.; and Lin, J. 2025. Group Sequence Policy Optimization. arXiv preprint arXiv:2507.18071 .Zheng, Z.; Yang, M.; Hong, J.; Zhao, C.; Xu, G.; Yang, L.; Shen, C.; and Yu, X. 2026. DeepEyes: Incentivizing “Thinking with Images” via Reinforcement Learning. In 
+
+International Conference on Learning Representations .Zhong, Y.; Yang, J.; Zhang, P.; Li, C.; Codella, N.; Li, L. H.; Zhou, L.; Dai, X.; Yuan, L.; Li, Y.; and Gao, J. 2022. Re-gionCLIP: Region-based Language-Image Pretraining. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vi-sion and Pattern Recognition , 16793–16803. Zhu, J.; Wang, W.; Chen, Z.; Liu, Z.; Ye, S.; Gu, L.; Tian, H.; Duan, Y.; et al. 2025. InternVL3: Exploring Advanced Train-ing and Test-Time Recipes for Open-Source Multimodal Models. arXiv preprint arXiv:2504.10479 .Zou, C.; Guo, X.; Yang, R.; Zhang, J.; Hu, B.; and Zhang, H. 2025. DynaMath: A Dynamic Visual Benchmark for Evaluating Mathematical Reasoning Robustness of Vision Language Models. In International Conference on Learning Representations .A Supplementary overview 
+
+The supplement follows the paper’s main argument. It first clarifies the relationship to prior visual-question work and gives the implementation of prompt-region grounding. It then reports the full semantic channel gap, data construc-tion, training details, additional evaluations, and complete qualitative rollouts. The final section states the limits of the evidence and the release considerations for real-world im-ages. 
+
+## B Relationship to prior visual-question work 
+
+Visual questions and visualized text. VIM studies visual instructions and cross-interface mixture training (Li et al. 2024b). VoQA places the scene and question in one image and reconstructs the visual question during supervised fine-tuning (An et al. 2025). VISTA-Bench evaluates matched text and visualized-text questions under multiple rendering and OCR conditions (Liu et al. 2026). These studies establish that visualized questions can be difficult. VTS complements them with a source-fixed intervention, construction controls, and prompt-region supervision. We do not claim that moving a question into pixels is itself new. 
+
+Local alignment and reasoning post-training. Region– text alignment and teacher–student vision-to-text distillation predate our objectives (Zhong et al. 2022; Feng et al. 2025; Chen et al. 2026). Our method uses the known task-bearing region of a rendered training example as the readout for two representation-level targets. For the final stage, GSPO clips importance ratios at the response-sequence level (Zheng et al. 2025); we apply it with verifiable answer and format rewards after supervised grounding. 
+
+## C Implementation of prompt-region grounding 
+
+Both auxiliary objectives use a prompt-region box and clean crop. The renderer stores them for controlled VTS rows, while the GLM-OCR pipeline extracts them for real-world rows. After image preprocessing, the box is mapped to the corresponding visual-token region and the selected states are pooled. PVRD-SG aligns this prompt-region represen-tation with a cached embedding of the typed question as a stop-gradient target. PRMLP masks random blocks inside the prompt region and predicts the detached representation of the clean crop. The reported formal configuration uses an identity predictor. Neither objective asks the model to transcribe the prompt. Capturing only the final normalized visual states avoids materializing every decoder layer. PVRD-SG reuses the visual-prompt supervised forward pass. PRMLP adds a masked-composite view and a clean-crop target view on its scheduled updates. Prompt boxes, cached targets, and crop views are used only during training; evaluation uses one composite image and the fixed text cue. 
+
+## D Full semantic channel gap results 
+
+Accuracy decreases in all 24 combinations. The thinking variants obtain stronger Original scores than their instruct counterparts on several tasks, but they also have larger mean gaps. DeepEyes has the smallest mean gap and the lowest Original MATH-Vision accuracy, which is why we report both interface accuracies rather than gap alone. 
+
+## E Data, training, and evaluation 
+
+Supervised grounding data. The supervised pool con-tains 75,150 source examples. Its controlled portion has 24,761 examples, each exported in paired Original and VTS views, yielding 49,522 training views. VTS views store the full composite, prompt-panel coordinates, typed-question target representation, and clean prompt crop; Original views retain the native question and source image. The other 50,389 source examples are held-in real-world visual prompts de-scribed below. Each retains its original text prompt alongside the task-bearing image. The GLM-OCR pipeline provides a prompt box and clean crop for each real-world example. The resulting training export has 99,911 views. All conditions use this same export and assistant-target policy. Ours ap-plies PVRD-SG and PRMLP to the 24,761 VTS views and 50,389 real-world examples; there is no separate real-world SFT stage. The controlled examples are sampled from MMR1 (Leng et al. 2025), BMMR (Xi et al. 2025), Euclid30K (Lian et al. 2025), MMK12 (Meng et al. 2025), FineVision sub-sets (Wiedmann et al. 2025), mmopenr1-8k (Lin et al. 2026), and WeMath2 subsets (Qiao et al. 2025). 
+
+Real-world data and annotation 
+
+Collection and split. We collected 51,389 real-world im-age and question pairs. Before training, we set aside 1,000 examples for the natural-page evaluation and removed them from the SFT and GSPO exports. The remaining 50,389 examples are merged with the 24,761 controlled source ex-amples in Table 6, yielding 75,150 source examples. After the controlled examples are expanded into paired views, the supervised export contains 99,911 training views. Each real-world example retains its original text prompt as the semantic target and receives both region-level objectives in addition to the autoregressive supervised loss. 
+
+Annotation workflow. The GLM-OCR pipeline (Duan et al. 2026) first extracts the task text, its bounding box, and the corresponding crop from each image. GPT-5.4 then reads the source image and extracted prompt, annotates the question, and produces a reasoning trace with a final answer. Gemini 2.5 Pro performs the final quality check by testing whether the reasoning supports the answer. Only examples that pass this check are exported for training. Independent college-student review agreed with the finalized annotations on 97.4% of a 1,500-example sample. 
+
+GSPO data selection. We mine the GSPO split from the finalized SFT pool. For each source problem, the super-vised checkpoint produces eight independent completions, which are scored by the deterministic answer verifier. Let 
+
+ci = P8 
+
+> j=1
+
+1[ˆ aij = ai] be the number of correct comple-tions. We retain examples with 1 ≤ ci ≤ 5. This pass@8-style filter removes unsolved cases with no positive signal MATH-Vision MathVista ChartQA MMMU Mean gap Model Original VTS Original VTS Original VTS Original VTS Qwen3-VL-4B-T 60.0 32.6 79.5 56.4 88.8 60.8 70.8 43.2 26.5 Qwen3-VL-4B-I 51.6 34.8 73.7 61.9 84.6 67.8 67.4 49.6 15.8 Qwen3-VL-8B-T 62.7 35.7 81.4 60.8 88.6 63.4 74.1 46.5 25.1 Qwen3-VL-8B-I 53.9 38.6 77.2 66.0 89.6 73.2 69.6 54.1 14.6 InternVL3.5-8B-I 56.8 39.4 78.4 66.7 86.7 70.6 73.4 55.5 15.8 DeepEyes-7B 26.6 18.4 70.1 61.9 78.5 67.2 58.6 49.7 9.2 
+
+Table 5: Original/VTS accuracy for all 24 model–task pairs. Each benchmark separates Original and VTS accuracy. T and I denote thinking and instruct variants; Mean gap is the unweighted four-task mean of Original minus VTS.     
+
+> Data block Source examples Rendered training split 24,761 Real-world training split 50,389 Total supervised pool 75,150
+
+Table 6: Source examples in the common supervised grounding pool. Each controlled example produces one Original and one VTS training view, so 24,761 controlled examples yield 49,522 views. Together with the real-world split, the optimizer sees 99,911 views. The 1,000-example real-world validation split is excluded from every training condition. and nearly saturated cases with six to eight correct comple-tions. The retained 23,488 source problems are exported in both Original and VTS form, giving 46,976 training rows. A separate 512-problem development split gives 1,024 paired rows. GSPO initializes from the Ours supervised checkpoint and uses 0.1 rformat +0 .9 ranswer . The continued-SFT control starts from the same checkpoint and uses matched training-cost accounting. 
+
+Evaluation. MATH-Vision, MathVista, ChartQA, and MMMU use their standard answer extraction and accuracy evaluators. Every method row reports Original and VTS on the same task set. VISTA-Bench uses its official paired Text/VT examples and weighted overall score. OCRBench v2, DocVQA, TextVQA, and ST-VQA retain their own offi-cial metrics and are never averaged into a VTS headline. The natural-page evaluation contains 1,000 real-world examples held out from training: 374 UI screenshots, 188 worksheets, 157 forms/slides, and 281 photographed pages. It uses each original visual input and reports standard answer accuracy; no paired typed view is constructed. 
+
+Release. We plan to release the finalized annotations, split manifests, processing scripts, and all images that pass the applicable consent, privacy, and license checks. 
+
+## F Further evidence 
+
+Prompt cues and supervision 
+
+Changing the VTS cue improves the base-model accuracy from 53.5 to at most 56.2, whereas Ours reaches 66.3–67.4 under all three cues. The channel gap therefore remains visible under stronger scaffolds. For assistant targets, the question-scrubbed trace reaches 65.8 VTS accuracy, com-pared with 63.2 for answer-only and 66.3 for the full trace. Thus most of the trace benefit does not require repeating the question. Ours also reaches 66.3 VTS and 70.3 Original accuracy, compared with 64.2 and 69.8 for VoQA QRA-SFT. 
+
+Training dynamics and prompt following 
+
+The VTS gain grows from 1.2 points at one quarter of the budget to 4.9 points at the completed budget (Figure 8). Replay VTS accuracy is 57.2/59.0/60.3/61.4 across the four cost fractions; Ours reaches 58.4/61.5/64.4/66.3, giving gains of 1.2/2.5/4.1/4.9. Original accuracy stays within 0.5 points between the two recipes throughout the trajectory. Prompt-follow accuracy rises from 31.2 for Base to 58.9 for Ours, while evidence-follow accuracy falls from 52.4 to 26.0. Under direct channel conflict, visual-instruction follow-ing rises by 10.2 points over balanced replay. The latter result also motivates treating typed–visual instruction priority as a separate safety question. 
+
+Representation and PRMLP analyses 
+
+PVRD-SG primarily raises text retrieval accuracy, whereas PRMLP primarily raises crop retrieval accuracy. Ours im-proves both. Effective rank remains above 109 and off-diagonal similarity remains at or below 0.24 across the dis-played recipes. Figure 9 compares the PRMLP objective and schedule under the same total-cost accounting. The formal masked target gives the largest VTS gain over PVRD-SG only. The shorthand settings are: small ( λ = 0 .001 , every 4 steps), formal ( 0.003 , every 2), frequent ( 0.003 , every step), and high weight ( 0.010 , every 2); the unmasked, learned-predictor, and matched-token variants use 0.003 every 2 steps. Using a learned predictor or a matched-token crop remains close to the formal setting, while the unmasked target and high-weight setting are weaker. Original accuracy spans 69.6–70.3 across these configurations. Supervised grounding 
+
+Setting Value Initialization Qwen3-VL-4B-Instruct Optimization data 75,150 source examples: 24,761 controlled examples become 49,522 paired views, plus 50,389 real-world views Trainable modules Full language model and multimodal projector; frozen vision tower Optimizer AdamW; weight decay 0 Learning rate 5×10 −7; cosine decay; 3% warmup Batching Global batch 8; one example per GPU; gradient accumulation 1 Duration 1 epoch; 12,489 optimizer steps Text length 8,192-token cutoff; PRMLP main/extra caps 4,096/2,048 Image pixels 1,024–12,845,056; PRMLP crop cap 262,144 Precision BF16 on 8 GPUs PVRD-SG λsg = 0 .15 on VTS and real-world visual-prompt rows; VTS language-model weight 1.0 PRMLP λprmlp = 0.003 on VTS and real-world visual-prompt rows; 35% block mask; 32-pixel blocks; update every 2 steps; detached current target; identity predictor Reward/target Shared answer target for Original and VTS 
+
+GSPO continuation 
+
+Setting Value Initialization Our supervised checkpoint Optimization data 46,976 rows: 23,488 Original and 23,488 VTS; 1,024 paired development rows Trainable modules Full actor under FSDP; frozen reference policy Optimizer AdamW-BF16; (β1, β 2) = (0 .9, 0.999) ;weight decay 0.01 Learning rate 1×10 −6; constant schedule; no warmup Batching Rollout and actor global batch 40; update and experience microbatch 1 per GPU Duration 5 epochs; 5,870 actor-update steps Text length 4,096-token prompt; 12,288-token response; 16,384-token rollout context Image pixels 1,024–589,824 Precision BF16 full-shard FSDP on 5×8 GPUs Candidate mining 8 completions per source; retain 1–5 correct completions Policy sampling 5 completions per prompt; temperature 1.0; top-p = 1 .0
+
+Clipping and KL clip low/high 0.2/0.3; one policy epoch; max gradient norm 1.0; low-variance KL coefficient 0.01 Reward 0.1 rformat + 0 .9 ranswer 
+
+Table 7: Training hyperparameters. Candidate-mining completions construct the GSPO training set; five policy completions per prompt are sampled during optimization.             
+
+> Checkpoint Original Minimal Native Identify–solve Base 69.3 53.5 55.4 56.2 Ours 70.3 66.3 67.0 67.4
+
+Table 8: Cue robustness. Values are four-task macro accu-racies; cue variants keep the VTS image fixed. 
+
+Training condition Original VTS VTS gain 
+
+Assistant target; gain over answer only 
+
+Answer only 69.8 63.2 baseline Question-scrubbed trace 70.1 65.8 +2 .6
+
+Full trace 70.3 66.3 +3 .1
+
+Prior recipes; gain over Balanced Replay 
+
+Balanced Replay 69.8 61.4 baseline QA-SFT 69.7 63.0 +1 .6
+
+VoQA QRA-SFT 69.8 64.2 +2 .8
+
+Ours 70.3 66.3 +4 .9
+
+Table 9: Training-target and closest-baseline comparisons. Values are four-task mean accuracies. Target rows match source items, steps, and training cost. Balanced Replay is the VIM-style mixed-interface baseline.                                   
+
+> Checkpoint Direct Swap Wrong Prompt Evidence Other Base 53.5 25.1 13.2 31.2 52.4 16.4 Balanced replay 61.4 36.8 19.0 44.7 40.1 15.2 Ours 66.3 48.2 25.0 58.9 26.0 15.1 Checkpoint Typed follow Visual follow Other Base 80.5 8.1 11.4 Balanced replay 70.9 17.4 11.7 Ours 61.7 27.6 10.7
+
+Table 10: Prompt-swap and channel-conflict controls. The upper panel changes the visual prompt; the lower panel gives the two channels different scorable targets.                          
+
+> Training recipe VTS Text retr. Crop retr. Eff. rank Off-diag. sim. Balanced replay 61.4 26.4 22.5 117.3 0.19 Replay +PVRD-SG 64.2 48.7 24.0 113.7 0.21 Replay +PRMLP 62.8 28.1 45.5 111.7 0.22 Ours 66.3 51.6 49.1 109.3 0.24
+
+Table 11: Representation sanity checks. Retrieval uses a fixed 512-item pool; rank and similarity help screen for col-lapse. Figure 7: Representative samples from the real-world training collection. The examples span photographed screens and textbook pages, worksheets and exam sheets, learning interfaces, slides, and other layouts in which the task-defining text appears inside the visual input. These samples come from the training split, not the held-out 1,000-example evaluation.                                   
+
+> MATH-Vision MathVista ChartQA MMMU Mean Recipe Original VTS Original VTS Original VTS Original VTS Original VTS Continued SFT 52.9 54.0 74.6 73.5 85.4 79.7 68.7 63.9 70.4 67.8 GSPO 53.1 55.6 74.8 74.6 85.7 80.8 69.2 65.8 70.7 69.2
+
+Table 12: GSPO task-level continuation. Original and VTS accuracy are reported separately for every benchmark and as an unweighted four-task mean. Both updates start from the same Ours checkpoint and use matched training cost. Means use full-precision task scores before one-decimal display rounding.                                             
+
+> MATH-Vision MathVista ChartQA MMMU Mean Recipe Original VTS Original VTS Original VTS Original VTS Original VTS Base 56.8 39.4 78.4 66.7 86.7 70.6 73.4 55.5 73.8 58.1 SFT 57.0 47.8 78.5 73.0 86.8 78.0 73.7 64.0 74.0 65.7 Ours 57.2 53.2 78.7 75.5 87.0 81.3 73.9 69.4 74.2 69.8
+
+Table 13: InternVL3.5-8B task-level transfer. Original and VTS accuracy are reported separately under the same four evaluation protocols; Mean is the unweighted four-task aggregate computed before one-decimal display rounding. Generalization beyond VTS 
+
+Ours improves over SFT on DocVQA, TextVQA, and ST-VQA, with gains from 0.6 to 1.3 points. These benchmarks measure text-rich capability rather than a paired change in the channel carrying the task. On InternVL3.5-8B, Ours im-proves VTS accuracy by 4.1 points over cost-matched SFT while Original accuracy changes by 0.2 (Table 13). On prior matched-interface protocols, Ours is 3.7 points above bal-anced replay on VIM Pixel and 5.1 points above it on VoQA Visual-only. Relative to VoQA QRA-SFT, the gains are 2.5 and 1.2 points, respectively. The full method raises benign visual-follow accuracy while higher-priority instruction accuracy remains near 94%. Visible and obfuscated attack success do not increase across the displayed checkpoints. This check characterizes the eval-uated conflicts and is separate from the grounding analysis. Relative to SFT, Ours improves VT accuracy by 1.4 points on multimodal perception, 4.3 on multimodal reasoning, 5.5 on multimodal knowledge, and 4.4 on unimodal knowledge. Its weighted VT gain is 4.1 points, while weighted Text ac-curacy changes by 0.2 points. 
+
+Renderer robustness and task use 
+
+Canvas stays within 1.1 points of Original for Base, and Duplicate stays within 0.6. Image-only accuracy collapses because neither channel contains the question (Table 18). Ours improves over balanced replay under every renderer. Smaller text and unfamiliar placement remain harder than the default and large-font conditions, so the result shows robust-ness within the tested renderer family rather than invariance to layout (Figure 8).             
+
+> Benchmark Baseline Ours Gain DocVQA 68.2 69.5 +1 .3
+> TextVQA 71.8 72.4 +0 .6
+> ST-VQA 66.0 66.8 +0 .8
+
+Table 14: External text-rich benchmarks. Baseline is cost-matched SFT, and each benchmark retains its official score.                      
+
+> VIM VoQA Recipe Text Pixel Traditional Visual-only Base 68.5 50.2 66.0 49.5 Balanced replay 68.7 59.8 66.2 58.9 VoQA QRA-SFT 68.1 61.0 66.4 62.8 Ours 69.0 63.5 66.8 64.0
+
+Table 15: Prior matched-interface protocols. Each protocol retains its own split, prompt, and evaluator; scores are not pooled.                     
+
+> Checkpoint Clean Priority Benign Visible Obfus. Base 53.5 93.8 21.0 11.2 6.8 Balanced replay 61.4 94.0 35.0 11.0 6.7 Ours 66.3 94.1 52.0 10.9 6.6
+
+Table 16: Visual-instruction safety check. Columns report clean VTS accuracy, higher-priority instruction accuracy, be-nign visual following, and visible/obfuscated attack success. For Base, supplying the OCR transcript on the unchanged composite adds 7.6 points, while restoring the source image adds a further 1.8 points. For the full method, the correspond-ing gains are 0.7 and 0.2 points. The small same-composite gain at the final supervised stage is consistent with answering the composite directly (Figure 9). With OCR fixed, restor-ing the source adds 1.8, 0.5, and 0.2 points for Base, re-play, and Ours; ground-truth text adds a further 2.3, 1.4, and 0.6 points on the same composite. On restored sources (Base/replay/Ours), fixed-cue, OCR, and ground-truth scores are 20.7/21.0/21.2, 57.8/60.6/63.0, and 59.1/62.0/63.6. Multimodal perception Multimodal reasoning Multimodal knowledge Unimodal knowledge Weighted overall Condition VT Text VT Text VT Text VT Text VT Text Base 65.3 67.3 49.0 49.3 37.8 48.5 58.2 68.4 52.3 59.1 Balanced replay 67.0 67.4 52.2 49.6 42.0 48.8 61.0 68.6 55.4 59.3 SFT 67.4 67.5 52.9 49.7 43.0 49.0 62.1 68.7 56.2 59.4 Ours 68.8 67.7 57.2 50.1 48.5 49.2 66.5 68.9 60.3 59.6 
+
+Table 17: VISTA-Bench results. Every category separates the official VT and Text interfaces. Base is Qwen3-VL-8B-Instruct, and the overall accuracy weights categories by their sample counts. Replay Ours          
+
+> 56 60 64 68
+> Accuracy (%)
+> 25 50 75 100
+> Training cost (%)
+> +4.9
+> Base Replay Ours
+> 35 45 55 65
+> Accuracy (%)
+> Default Bottom Left Small Large
+> +5.1 +6.1 +6.2 +6.8 +5.1
+> Renderer variant
+
+Figure 8: Training and renderer robustness. Left: matched-budget VTS learning curves at 25%, 50%, 75%, and 100% of the full training cost; the final Ours-over-Replay difference is 4.9 points. Right: VTS accuracy when only prompt-panel placement or font scale changes; labels give Ours-over-Replay gains. 
+
+Base Ours Condition MATH-V. MathVista MATH-V. MathVista Original 51.6 73.7 52.8 74.5 VTS 34.8 61.9 52.1 72.1 Canvas 50.7 72.6 52.0 73.8 Duplicate 52.0 74.3 53.2 75.0 Image-only 7.9 33.5 8.2 34.1 
+
+Table 18: VTS construction controls. Canvas keeps the typed question and adds a blank panel; Duplicate presents it in both channels; Image-only removes it from both. Direct + OCR transcript 
+
+> 48 52 56 60 64
+> Accuracy (%)
+
+Base Replay Ours 
+
+> +7.6 +3.1 +0.7
+
+Checkpoint           
+
+> 64 65 66
+> PVRD-SG only 64.2
+> Small PRMLP 65.2
+> Formal masked target 66.3
+> Frequent PRMLP 65.7
+> High-weight PRMLP 64.8
+> Unmasked target 65.1
+> Learned predictor 66.0
+> Matched-token crop 66.1
+
+VTS accuracy (%) Figure 9: Task-use and PRMLP diagnostics. Left: Direct and OCR-transcript accuracy on the same VTS composite; the OCR gain contracts from 7.6 to 3.1 to 0.7 points. Right: four-task VTS accuracy under PRMLP variants; the dashed line is PVRD-SG only, and the formal masked target is highlighted. G Qualitative case studies 
+
+Aggregate accuracy hides how visual-task failures propagate. Each case below pairs a complete, verified rollout from Our Model with an incorrect Qwen3VL-8B-Thinking rollout. Red text marks the first recognition, reasoning, or diagram error and every later quantity that depends on it. All four images come from the held-out real-world split and were excluded from SFT and GSPO training. 
+
+Bank reconciliation. The task asks for the unadjusted cash-book balance, starting from the GH ¢12,345 credit balance on the bank statement. 
+
+Our Model. 1. Add items that make the cash book higher than the statement: the dishonoured cheque, bank charges, two standing orders, deposit in transit, post-dated cheques recorded as banked, and the GH ¢198 entry error. 
+
+∆+ = 5 ,000 + 120 + 1 ,220 + 2 ,600 + 2 ,500 + 23 ,000 + 198 = 34 ,638 .
+
+2. Subtract the direct deposit and the three unpresented cheques: 
+
+991 + 1 ,371 + 2 ,635 = 4 ,997 , ∆− = 3 ,900 + 4 ,997 = 8 ,897 .
+
+3. Reconcile the balances: 
+
+12 ,345 + 34 ,638 − 8,897 = GH ¢38 ,086 Dr .
+
+This matches the cash-book balance printed in the image. 
+
+Qwen3VL-8B-Thinking. 1. The rollout transcribes 23 ,000 as 2,300 and 4,321 as 4,123 . 2. 
+
+The second error removes the required correction: 
+
+∆entry = 4 ,123 − 4,123 = 0 .
+
+3. It keeps the other signs unchanged and computes 
+
+e∆+ = 5 ,000 + 120 + 1 ,220 + 2 ,600 + 2 ,500 + 2 ,300 + 0 = 13 ,740 .
+
+4. It therefore returns 
+
+12 ,345 + 13 ,740 − 8,897 = GH ¢17 ,188 Dr .
+
+The answer is short by GH ¢20,898, exactly the omitted GH ¢20,700 and GH ¢198. 
+
+Equal-instalment loan. The loan principal is Sh 3,000,000, the annual rate is 10%, and four equal payments are made, one at the end of each year. 
+
+Our Model. 1. Equate the principal to the present value of an ordinary annuity: 
+
+3,000 ,000 = A 1 − (1 .10) −4
+
+0.10 .
+
+2. Solve for the annual instalment: 
+
+A = 3,000 ,000(0 .10) 1 − (1 .10) −4 = Sh 946 ,412 .41 .
+
+3. Let Bt be the balance after payment t. Since each year’s interest is 10% of its opening balance, 
+
+Bt = 1 .10 Bt−1 − A, B0 = 3 ,000 ,000 .
+
+The schedule closes as 
+
+B1 = 2 ,353 ,587 .59 , B2 = 1 ,642 ,533 .94 ,B3 = 860 ,374 .92 , B4 = 0 .00 .
+
+The zero final balance verifies both the instalment and the amortization. 
+
+Qwen3VL-8B-Thinking. 1. The rollout treats the loan as carrying flat interest on the original principal, so it charges 
+
+It = 0 .10(3 ,000 ,000) = 300 ,000 in every year .
+
+2. It sets total interest to 4(300 ,000) = 1 ,200 ,000 . 3. It divides principal plus flat interest by four: 
+
+eA = 3,000 ,000 + 1 ,200 ,000 4 = Sh 1,050 ,000 .
+
+4. This cannot be the required equal instalment: its four discounted payments have present value 
+
+1,050 ,000 1 − (1 .10) −4
+
+0.10 = Sh 3,328 ,358 .72 ̸ = Sh 3,000 ,000 .
+
+Figure 10: Finance rollouts. Each example contrasts the verified derivation from Our Model with a Qwen3VL-8B-Thinking rollout containing a specific recognition or reasoning error. Two-wire circuit experiment. The procedure measures current and voltage for wires A and B, then plots voltage on the vertical axis against current on the horizontal axis. 
+
+Our Model. 1. The ammeter is in series and the voltmeter is across the test wire, so each pair 
+
+(IX , V X ) refers to the same wire X. 2. The requested axes give 
+
+SX = ∆VX
+
+∆IX
+
+= RX .
+
+3. For wires of the same material and length, 
+
+RX = ρL AX
+
+= 4ρL πd 2
+
+> X
+
+.
+
+4. Therefore, 
+
+SA
+
+SB
+
+= RA
+
+RB
+
+=
+
+ dB
+
+dA
+
+2
+
+.
+
+The thicker wire must have the smaller slope. The photograph contains no micrometer readings or measured (I, V ) pairs, so it supports this symbolic answer but no numerical slope or diameter ratio. 
+
+Qwen3VL-8B-Thinking. 1. The rollout reverses the axes and defines 
+
+SX = ∆IX
+
+∆VX
+
+= 1
+
+RX
+
+.
+
+2. It treats the drawn line widths as measurements and sets dB = 2 dA. 3. Using those two unsupported premises, it computes 
+
+SB
+
+SA
+
+=
+
+ dB
+
+dA
+
+2
+
+= 4 
+
+and reports 
+
+SB = 4 SA .
+
+The result follows only after reversing the plotted axes and measuring a schematic as though it were drawn to scale. 
+
+Net of a trapezoidal prism. The two end faces are congruent trapezia. Their side lengths, in cyclic order, are 2, 2.5, 5, and 2.5 cm. Let ℓ denote the common prism length, which is not numerically specified in the photographed prompt. 
+
+Our Model. 1. Identify the end faces ABCD and HEF G . They satisfy 
+
+AD = HE = 2 , AB = DC = 2 .5, BC = GF = 5 cm .
+
+2. A prism has one lateral rectangle for every side of its cross-section. The four rectangles therefore have dimensions 
+
+2 × ℓ, 2.5 × ℓ, 5 × ℓ, 2.5 × ℓ. 
+
+3. Place the rectangles in the same cyclic order as the four trapezium edges. Attach one congruent trapezium to an outer edge of the strip and the second to the corresponding edge on the opposite side. 4. The labelled net is therefore two congruent trapezia and four lateral rectangles .
+
+Several planar arrangements are valid, but every valid net has this face inventory and preserves the vertex correspondences. 
+
+Qwen3VL-8B-Thinking. 1. The rollout treats the 5-cm base label as the prism length and then assumes every edge is 5 cm. 2. It replaces the stated trapezium with a 5 cm × 5 cm square. 
+
+3. It consequently classifies the solid as a cube. 4. Its final net is six 5 cm × 5 cm squares .
+
+This rollout discards the visible 2-cm and 2.5-cm labels and omits both trapezoidal end faces. 
+
+Figure 11: Science and geometry rollouts. Our Model uses the stated axes, dimensions, and topology; Qwen3VL-8B-Thinking propagates a specific diagram-reading error to the final answer. H Scope, limitations, and broader impact 
+
+VTS is a controlled rendering protocol. The held-out natural-page evaluation tests generalization across four real-world layout categories, but its unpaired design does not measure a natural-page semantic-channel gap. It also does not cover all languages, handwriting, severe occlusion, dynamic in-terfaces, or unknown task regions. VISTA-Bench supplies an independent matched visualized-text protocol, whereas OCRBench-style and document benchmarks test broader text-rich capability rather than semantic-channel equiva-lence. Prompt-region supervision assumes a known task region during training. The deployed model needs neither a region nor OCR, but the method is not itself a general task-region detector. The second-backbone result supports transfer to InternVL3.5-8B under the tested setup; broader architecture and scale studies remain necessary. Stronger visual-instruction following creates an additional trust boundary. Our bounded safety check does not show higher visible or obfuscated attack success, but it is not a substitute for adversarial evaluation. Systems should pre-serve explicit instruction priority, distinguish trusted from untrusted image content, and support refusal when channels conflict. Any release of user-contributed screenshots or pho-tographs also requires consent, de-identification, source and license records, duplicate checks, and a removal process. Finally, attention heatmaps and representation retrievals are descriptive. They can reject simple explanations such as complete representation collapse, but they do not identify a unique internal mechanism. Our mechanistic wording is therefore limited to the measured spatial, semantic-target, and behavioral contrasts.
