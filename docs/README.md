@@ -6,35 +6,34 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-09
-- 运行时间：2026-08-09 19:29:08 UTC
+- 最新运行日期：2026-08-10
+- 运行时间：2026-08-10 21:09:02 UTC
 - 运行状态：成功
-- 本次总论文数：5
-- 精读区：2
+- 本次总论文数：4
+- 精读区：1
 - 速读区：3
 
 ### 今日简报（AI）
-今日共读5篇论文，精读2篇、速读3篇，重点覆盖具身智能导航与多模态推理。最值得关注的是SSTG-Nav（8.0分）的可复用物体导航图结构，以及When Prompts Become Pixels（8.0分）的提示-区域对齐新思路。若时间有限，可优先浏览这两篇精读论文，速读部分可先略过。
-- 详情：[/202608/09/README](/202608/09/README)
+今日共读4篇论文，其中1篇精读、3篇速读，重点聚焦3D场景理解与高效表示。  
+最值得关注的是精读论文《InstanceSplat》，它在前馈3D高斯泼溅中引入实例感知，获9.0高分，显著提升场景理解能力。  
+建议优先精读该文，其余三篇可作扩展，速读了解开放词汇变化检测、层级语义建图与视觉token剪枝方向即可。
+- 详情：[/202608/10/README](/202608/10/README)
 
 ### 精读区论文标签
-1. [SSTG-Nav: Metric-Grounded Spatial-Semantic Topological Graphs for Reusable Object Navigation](/202608/09/2608.00527v1-sstg-nav-metric-grounded-spatial-semantic-topological-graphs-for-reusable-object-navigation)  
-   标签：评分：8.0/10、query:open-vocab-d
-   evidence：度量-语义拓扑图，跨视角证据整合，支持长期机器人导航的可复用物体导航
-2. [When Prompts Become Pixels: Prompt-Region Grounding for Multimodal Reasoning](/202608/09/2608.04726v1-when-prompts-become-pixels-prompt-region-grounding-for-multimodal-reasoning)  
-   标签：评分：8.0/10、query:open-vocab-d
-   evidence：提出提示-区域定位，将问题区域与视觉内容对齐，直接针对区域级视觉-语言对齐。
+1. [InstanceSplat: Instance-Aware Feed-Forward 3D Gaussian Splatting for Scene Understanding](/202608/10/2608.07144v1-instancesplat-instance-aware-feed-forward-3d-gaussian-splatting-for-scene-understanding)  
+   标签：评分：9.0/10、query:open-vocab-d
+   evidence：前馈式3D高斯溅射实例感知场景理解，融合语言对齐语义，属于开放词汇3D场景理解直接方法
 
 ### 速读区论文标签
-1. [UG-UMRE: Uncertainty-Guided Modality Augmentation and Distributional Calibration for Unified Multimodal Relation Extraction](/202608/09/2608.04949v1-ug-umre-uncertainty-guided-modality-augmentation-and-distributional-calibration-for-unified-multimodal-relation-extraction)  
-   标签：评分：7.0/10、query:open-vocab-d
-   evidence：对文本实体与视觉对象进行不确定性引导的跨模态分布对齐
-2. [InfiniSplat: Implicit Gaussian Decoding for Large-Baseline Monocular View Synthesis](/202608/09/2608.02437v1-infinisplat-implicit-gaussian-decoding-for-large-baseline-monocular-view-synthesis)  
+1. [CogVis: Must Open-Vocabulary Change Detection Perceive the Scene Anew for Every Query?](/202608/10/2608.06150v1-cogvis-must-open-vocabulary-change-detection-perceive-the-scene-anew-for-every-query)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：前馈单图3DGS从图像特征预测表面对齐的高斯体，实现从2D视觉特征到3D的抬升。
-3. [Super-Gaussian: Interactive Scene Editing for 3D Gaussian Splatting and NLI-Based Volume Visualization in Virtual Reality](/202608/09/2608.04475v1-super-gaussian-interactive-scene-editing-for-3d-gaussian-splatting-and-nli-based-volume-visualization-in-virtual-reality)  
+   evidence：开放词汇变化检测的感知-记忆-验证与语义记忆校准，可迁移至开放词汇分割
+2. [M2-SMap: Memory-Efficient Semantic Mapping with Hierarchical Multi-Model Representation](/202608/10/2608.07074v1-m2-smap-memory-efficient-semantic-mapping-with-hierarchical-multi-model-representation)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：通过自然语言交互选择与编辑3D高斯，实现交互式场景编辑
+   evidence：层次化多模型语义建图；对层次化3D场景表示为方法论桥梁
+3. [RoRA: Role-Oriented Regional Allocation for Visual Token Pruning in MLLMs](/202608/10/2608.07088v1-rora-role-oriented-regional-allocation-for-visual-token-pruning-in-mllms)  
+   标签：评分：6.0/10、query:open-vocab-d
+   evidence：通过文本条件注意力与对象先验区域进行角色导向的视觉令牌区域分配，实现区域级视觉-语言对齐
 
 
 <div class="dpr-home-promo-card">

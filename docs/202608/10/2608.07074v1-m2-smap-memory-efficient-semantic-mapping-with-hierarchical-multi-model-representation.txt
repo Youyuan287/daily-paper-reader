@@ -1,0 +1,712 @@
+Title: M2-SMap: Memory-Efficient Semantic Mapping with Hierarchical Multi-Model Representation
+
+URL Source: https://arxiv.org/pdf/2608.07074v1
+
+Published Time: Mon, 10 Aug 2026 00:46:22 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# M2-SMap: Memory-Efficient Semantic Mapping with Hierarchical Multi-Model Representation 
+
+QiYing Deng 1, ZhongLai Wang 1,∗, Yuan Gao 2, Wei Dong 2
+
+Abstract — Dense point cloud maps, as a typically used mapping representation, are difficult to deploy on resource-constrained robots because their memory consumption grows rapidly with scene scale. Although compact single-model rep-resentations reduce memory cost, their fixed geometric expres-siveness is insufficient for structurally diverse environments. Existing multi-model methods improve representational flex-ibility, yet their feature extraction and model selection are often dominated by local geometry, which can cause overfitting and adhesion between objects. To address these issues, this pa-per presents M2-SMap, a memory-efficient semantic mapping framework based on hierarchical multi-model representation. First, a hierarchical geometric decomposition partitions RGB-D point clouds into compact Gaussian components. Then, a projection-guided semantic annotation mechanism assigns instance identities to each component. Subsequently, these annotations are incorporated into an object-aware Gaussian fusion strategy. Furthermore, a multi-scale feature extraction strategy separates large planar regions, semantic objects, and complex residual structures, which are respectively represented by bounded planes, object-level superquadrics, and GMM primitives. Experiments on three RGB-D sequences show that M2-SMap runs in real time at no less than 29.37 Hz while achieving the lowest primitive count, with an average reduction of 18.7% over the best baseline. It also reduces the mean per-frame number of measured inter-object adhesion cases from 2.808 to 0, demonstrating efficient and semantically consistent scene representation. 
+
+I. INTRODUCTION 3D scene mapping provides the geometric foundation for robotic localization, navigation, and interaction [1], [2], [3], [4]. Point clouds directly preserve the structure observed by RGB-D cameras, but their storage requirements increase substantially as the mapped environment expands. Therefore, resource-constrained robots require map representations that remain both compact and computationally efficient without sacrificing essential geometric expressiveness. Traditional parametric mapping methods are mainly based on single-model representations, which often struggle to satisfy these requirements simultaneously. Voxel, octree, TSDF, and ESDF methods support online mapping through spatial discretization or signed-distance estimation [1], [5], [2], while their accuracy remains closely coupled with map 
+
+*This work was supported by the AAAA. (Corresponding author: ZhongLai Wang.) 
+
+> 1
+
+QiYing Deng and ZhongLai Wang are with University of Electronic Science and Technology of China (e-mail: 202422040355@std.uestc.edu.cn; wzhonglai@uestc.edu.cn). 
+
+> 2
+
+Yuan Gao and Wei Dong are with the State Key Laboratory of Mechanical System and Vibration, School of Mechanical Engineering, Shanghai Jiao Tong University, China (e-mail: GaoY-23@sjtu.edu.cn; dr.dongwei@sjtu.edu.cn). (a)  (b)    
+
+> tv
+> chair
+> keyboard bottle
+> (c) (d)
+> Flat plane
+> Flat plane
+> Super -filter Cluster
+> Refined GMM Cluster
+
+Fig. 1. Overall results of the proposed M2-SMap framework. (a) Original RGB image with instance segmentation. (b) Overlay of supervoxelized point-cloud clusters and the refined GMMs. (c) Result after GMM fusion. (d) Final multi-model semantic representation. 
+
+resolution, creating an accuracy–memory trade-off. Plane-based methods compactly model large planar regions [6], whereas surfel maps provide flexible local surface recon-struction [7] but retain many local elements in large or geometrically complex scenes. B-spline surfaces represent complex geometry with few parameters, although merging overlapping patches is nontrivial [8]. Quadrics compactly encode object position, orientation, and extent [9], [10], but their ellipsoidal form restricts the shapes represented by a single primitive. Gaussian Mixture Models (GMMs) replace dense local points with probabilistic components parameter-ized by means and covariance matrices [11], [12], [13], while complex boundaries may still require multiple low-degree-of-freedom components [14]. Deep implicit representations reduce explicit storage at the expense of costly optimization and GPU acceleration, which limits their use on low-power platforms [15], [16]. Consequently, the fixed geometric ex-pressiveness of a single model makes it difficult to represent diverse scenes with bounded memory and computation. To overcome the limitations of single-model representa-tions, multi-model methods combine models with comple-mentary geometric properties and assign them to different scene regions. Gao and Dong integrate planes, GMMs, and B-spline surfaces for real-time point-cloud represen-tation [14], while PLC-LiSLAM jointly optimizes planes, lines, and cylinders in LiDAR SLAM [17]. These meth-arXiv:2608.07074v1 [cs.RO] 7 Aug 2026 RGB with Instance Segmentation 
+
+> Depth Map
+> Semantic Annotation
+> Mask Matching
+> Section III.B
+> 2D-3D Projection
+> Multi-scale Feature Extraction
+> Cluster Fusion
+> Section I Ⅴ.A
+> Section I Ⅴ.B
+> Plane Judgement
+> Preprocessing
+> Supervoxel Filter
+> GMM Refinement
+> Section III.A
+> Model Fitting
+> Planes
+> Others
+> Recall
+> Semantic GMM Extraction
+
++   
+
+> Section IV.C
+> Superquadric
+> Planes
+> GMMs
+> Section V
+> Back
+> Inter-Frame Association
+> t-2 t-1 t
+> Hybrid Semantic Map
+> Recon. Fig. 2. Overview of M2-SMap. RGB-D observations are converted into refined Gaussian components and annotated through 3D-to-2D projection and mask matching. Multi-scale feature extraction then produces the final hierarchical representation using planes, superquadrics, and GMMs.
+
+ods improve geometric flexibility, but compact maps for resource-constrained systems must still limit the number of model instances. Therefore, each model may cover a relatively large or geometrically mixed region, and model selection based mainly on local connectivity or fitting resid-uals can merge adjacent objects or fragment one object with several models. This causes blind model allocation and inter-object adhesion in complex scenes. The limitations above indicate that compact multi-model mapping requires semantics not only to describe the scene but also to guide geometric allocation. Existing semantic mapping methods can be broadly grouped according to how semantic information interacts with geometry. The first group annotates a predefined 3D representation. Early RGB-D systems fuse class predictions into reconstructed maps [18], [19], [20]. SemanticFusion integrates CNN predictions into an ElasticFusion surfel map [4], while PanopticFusion main-tains semantic classes and instance identities in a spatially hashed TSDF volume [21]. These methods improve persis-tent labeling and multi-view semantic consistency. However, the annotated primitives are still determined by geometry alone, so semantic labels neither correct geometry-based grouping nor guide compact parametric model selection. The second group uses semantic instances to allocate separate geometric models. MaskFusion maintains indepen-dent surfel models for segmented objects [22], Voxblox++ constructs volumetric object-centric maps [23], Fusion++ ini-tializes per-object TSDF reconstructions [24], and Panoptic Multi-TSDFs assigns separate submaps and class-dependent resolutions [25]. Such object-wise allocation can reduce cross-object fusion, but it relies on dense surfel or TSDF submaps together with instance or panoptic segmentation. MaskFusion was evaluated using two Titan X GPUs [22], Voxblox++ operated at 1 Hz in its online robotic experi-ment [23], and Fusion++ reported 4–8 Hz [24]. The cost of dense model maintenance and learned segmentation makes these systems difficult to deploy on resource-constrained RGB-D platforms and leaves a need for lightweight semantic guidance of compact primitive allocation. To address blind model selection and inter-object adhe-sion, this paper proposes M2-SMap, a semantic mapping framework based on hierarchical adaptive multi-model fusion for resource-constrained RGB-D robots, as illustrated in Fig. 2. M2-SMap validates instance annotations on refined Gaussian components before Gaussian fusion and flat-plane separation. The support points of each component are pro-jected into the registered image and matched with instance masks, after which the validated instance attributes constrain geometric merging. Large flat regions, regular semantic ob-jects, and complex residual structures are then represented by bounded planes, object-level superquadrics, and GMMs, respectively. This hierarchy combines compact object-level abstraction with local geometric flexibility. The complete pipeline is shown in Fig. 2. The main contributions are as follows. (1) A semantic-guided hierarchical mapping framework combines bounded planes, object-level superquadrics, and GMMs for compact RGB-D scene representation. (2) Instance-mask annotations are introduced before Gaus-sian fusion and flat-plane separation, reducing irreversible inter-object adhesion while preserving object boundaries. (3) Our method significantly improves representation com-pactness. Compared with the best existing baseline, it reduces the average primitive count by 18.7%. II. ALGORITHM OVERVIEW The overall pipeline of M2-SMap is shown in Fig. 2 and summarized in Algorithm 1. Starting from each RGB-D frame, the algorithm performs hierarchical Gaussian decomposition, projection-guided instance annotation, and semantic-constrained Gaussian fusion. It then separates flat planes, semantic objects, and residual structures, which are represented by planes, superquadrics, or GMM primitives. III. G EOMETRIC REFINEMENT AND MASK -G UIDED 
+
+GAUSSIAN ANNOTATION 
+
+A. Hierarchical Geometric Refinement 
+
+A registered RGB-D frame is first converted into a point cloud, which is then sampled and pre-segmented into super-voxels. These supervoxels form locally coherent geometric units that preserve surface continuity while reducing the influence of depth noise. Each supervoxel produced by the preceding pre-segmentation defines an input point cluster Ci = {pik }Ni
+
+> k=1
+
+before hierarchical Gaussian refinement. Its mean and covari-ance are μi = 1
+
+> Ni
+
+PNi 
+
+> k=1
+
+pik and Σi = 1
+
+> Ni−1
+
+PNi
+
+> k=1
+
+(pik −Algorithm 1 Semantic-Constrained Hierarchical Mapping 
+
+Require: Registered RGB image It, depth image Dt, instance-mask set 
+
+Mt, camera intrinsic matrix K, previous superquadric tracks T sq t−1,and mapping parameters Θ
+
+Ensure: Hierarchical primitive map Ht and updated superquadric tracks 
+
+T sq t
+
+1: P ← GENERATE POINT CLOUD (It, Dt, K)
+
+2: Graw ← HIERARCHICAL SEGMENTATION (P)
+
+3: Gsem ← ∅
+
+4: for all Gi ∈ G raw do 
+
+5: Ui ← PROJECT TOIMAGE (Gi, K)
+
+6: M∗ 
+
+> i
+
+← FIND BEST MASK MATCH (Ui, Mt)
+
+7: Gsi ← ASSIGN INSTANCE SEMANTICS (Gi, M∗ 
+
+> i
+
+)
+
+8: Gsem ← G sem ∪ { Gsi }
+
+9: end for 
+
+10: Gfused ← ∅
+
+11: for all candidate pairs (Gi, G j ) ⊆ G sem do 
+
+12: if GEOMETRICALLY CONSISTENT (Gi, G j )
+
+and SEMANTICALLY CONSISTENT (Gi, G j ) then 
+
+13: Gfused ← G fused ∪ FUSE (Gi, G j )
+
+14: else 
+
+15: RETAIN ORIGINAL COMPONENTS (Gi, G j )
+
+16: end if 
+
+17: end for 
+
+18: Pplane ← ∅
+
+19: for all Gfi ∈ G fused do 
+
+20: if SATISFY PLANE CONDITIONS (Gfi ) then 
+
+21: Pplane ← P plane ∪ RECONSTRUCT PLANE (Gfi )
+
+22: end if 
+
+23: end for 
+
+24: Gnonplane ← REMOVE PLANE RELATED GAUSSIANS (Graw , Pplane )
+
+25: (Osem , Gunknown ) ← CONSTRUCT OBJECT INSTANCES (Gnonplane )
+
+26: for all Ok ∈ O sem do 
+
+27: Qk ← FIT SUPERQUADRIC (Ok )
+
+28: if ISVALID SUPERQUADRIC (Qk ) then 
+
+29: (hk , Q ak ) ← ASSOCIATE AND ALIGN SQ (Qk , T sq t−1, Θ)
+
+30: Qk ← SMOOTH SUPERQUADRIC (Qak , h k , Θ)
+
+31: UPDATE SUPERQUADRIC MAP (Qk )
+
+32: else 
+
+33: Gk ← HIERARCHICAL GAUSSIAN REFINEMENT (Ok )
+
+34: UPDATE GAUSSIAN MAP (Gk )
+
+35: end if 
+
+36: end for 
+
+37: U PDATE GAUSSIAN MAP (Gunknown )
+
+38: U PDATE PLANE MAP (Pplane )
+
+39: return updated hierarchical primitive map 
+
+μi)( pik −μi)T , respectively. M2-SMap adopts the integrated hierarchical GMM (IH-GMM) refinement introduced by Gao and Dong [26] and subsequently used in their multi-model framework [14] to decompose each input cluster into compact Gaussian components, as illustrated in Fig. 3. The resulting components form the original Gaussian set Cg .
+
+B. Gaussian-to-Image Projection and Mask Matching 
+
+Semantic annotations are assigned to the refined Gaus-sian components by projecting their supporting 3D points onto the corresponding RGB image. For each Gaussian component, its valid projected pixels are evaluated against the instance masks predicted by a lightweight instance-segmentation model. As shown in Fig. 4, the instance bound-ing boxes first exclude clearly non-overlapping candidates, after which mask-level matching is performed according to the proportion of projected support points falling inside each candidate mask. The matched instance ID, category label, and detection confidence are stored as semantic attributes of the Gaussian component. v v
+
+vvv 
+
+> Input scene
+> voxel
+> filter
+> Down -Sampled Point Cloud Rough Clustered Point Cloud
+> Initial Gaussian
+> Components
+> Refined Clusters
+> several times
+> refinement s
+> super -voxel
+> filter
+> IH -GMM
+> Gaussian
+> estimate
+> First Refinement
+
+Fig. 3. Hierarchical geometric refinement. The filtered point cloud is partitioned into locally coherent supervoxels, whose point clusters are further decomposed into compact Gaussian components using the adopted IH-GMM refinement. (a)  (b)  
+
+> 3D -Clusters
+> 2D -Projected
+> Clusters
+> 1. Bounding box judge
+> 2. Point -size judge
+> B0
+> B1
+> B2B3
+
+Fig. 4. Projection-guided instance-mask matching. (a) The 3D support points of each refined Gaussian component are projected into the registered image. (b) Non-overlapping instance candidates are rejected using their bounding boxes, and the remaining masks are ranked by the valid projected-point support ratio. 
+
+Let the instance-segmentation output be Y =
+
+{(Mj , B2D  
+
+> j
+
+, ℓ j , s j )}Ny
+
+> j=1
+
+, where Ny is the number of detected instances, Mj is the binary mask, B2D 
+
+> j
+
+is its 2D bounding box, ℓj is the category label, and sj is the detection confidence. For a point 
+
+pcik = (xik , y ik , z ik )T in Gaussian component Ci, its image coordinate is obtained inline as qik = πK(pcik ) = [uik , v ik ]T = [ fxxik /z ik + cx, f y yik /z ik + cy ]T . Projected points inside the image define the valid index set 
+
+Vi = {k | 0 ≤ round( uik ) < W, 0 ≤ round( vik ) < H },where W and H are the image width and height. The quantity N proj  
+
+> i
+
+= |V i| is the number of valid projected points from component Ci.Let umin  
+
+> i
+
+, umax  
+
+> i
+
+, vmin  
+
+> i
+
+, and vmax  
+
+> i
+
+be the coordinate extrema over k ∈ V i. The projected Gaussian support is the 2D box set B2D  
+
+> i
+
+= [ umin  
+
+> i
+
+, u max  
+
+> i
+
+] × [vmin  
+
+> i
+
+, v max  
+
+> i
+
+]. It is used only to reject non-overlapping masks through Ji = {j | sj ≥
+
+τs, B2D  
+
+> i
+
+∩ B 2D 
+
+> j
+
+̸ = ∅}. Pixel-level mask matching is then performed only for candidates in Ji.The remaining candidates are ranked by confidence-weighted projected-point support. When the best match sat-isfies the minimum projection, confidence, and support-ratio requirements, the component stores its instance ID ai, label 
+
+ℓi, confidence si, and mask-support ratio ρi. Otherwise, ai =
+
+−1 and the component remains semantically unassigned. (a) iajai ja a= (b)  (c) max max max max                     
+
+> [,,]
+> iTiiixyz
+> =b,
+> yi j b,
+> zi j b,
+> xi j bmin
+> jb,,,connect
+> xyzi j i j i j bbbd++i
+
+njnij        
+
+> ,i j l,j i lmin ij
+> ,min ,min{ ,}i j i j lll
+
+Fig. 5. Semantic-constrained Gaussian fusion. A candidate pair is merged only when it satisfies (a) instance-ID consistency ai = aj , (b) AABB connectivity dbox  
+
+> i,j
+
+≤ dconnect , and (c) normal-angle and bidirectional point-to-plane constraints θi,j ≤ θmin and min( li,j , l j,i ) ≤ lmin .
+
+IV. M ULTI -SCALE FEATURE EXTRACTION 
+
+M2-SMap extracts complementary geometric features at two coupled scales. Fused clusters reveal large planar struc-tures for flat-plane judgment, while the preserved fusion mapping returns to the original Gaussian scale to retain semantic objects and residual geometric details. 
+
+A. Semantic-Constrained Gaussian Fusion 
+
+Let Ci and Cj be two annotated Gaussian components with instance IDs ai and aj . The semantic condition in Fig. 5(a) is 
+
+ψs(Ci, Cj ) = I(ai = aj ), where I(·) is the indicator function, equal to 1 when its argument is true and 0 otherwise. Thus, 
+
+ai = aj = −1 permits fusion between two unassigned components, whereas an object–plane pair or two different object instances are rejected. For geometric connectivity, define the 3D axis-aligned bounding box of Ci as the set B3D  
+
+> i
+
+= Q
+
+> r∈{ x,y,z }
+
+[bmin  
+
+> i,r
+
+, b max  
+
+> i,r
+
+].For r ∈ { x, y, z }, the non-overlapping interval gap between 
+
+B3D  
+
+> i
+
+and B3D  
+
+> j
+
+is bri,j = max(0 , b min  
+
+> j,r
+
+− bmax  
+
+> i,r
+
+, b min  
+
+> i,r
+
+− bmax  
+
+> j,r
+
+),and the 3D box distance shown in Fig. 5(b) is 
+
+dbox  
+
+> i,j
+
+=
+
+q
+
+(bxi,j )2 + ( byi,j )2 + ( bzi,j )2 ≤ dconnect . (1) Here, dconnect is the maximum admissible separation be-tween two component boxes. Let ni and nj be the least-variance eigenvectors of the two covariance matrices. Their unsigned normal angle is θi,j =arccos( |nTi nj |), and fusion requires θi,j ≤ θmin , where 
+
+θmin denotes the maximum allowed angular discrepancy in the notation of Fig. 5(c). The bidirectional centroid-to-plane distances are li,j = |(μj −μi)T ni| and lj,i = |(μi −μj )T nj |.The coplanarity test is min( li,j , l j,i ) ≤ lmin . Consequently, the geometric predicate satisfies ψg (Ci, Cj ) = 1 only when 
+
+dbox  
+
+> i,j
+
+≤ dconnect , θi,j ≤ θmin , and min( li,j , l j,i ) ≤ lmin .Otherwise, ψg (Ci, Cj ) = 0 . The complete fusion condition is 
+
+ψ(Ci, Cj ) = ψg (Ci, Cj ) ∧ ψs(Ci, Cj ). (2) A connectivity graph is constructed from ψ(Ci, Cj ). Its connected components are merged into larger clusters while preserving the mapping Γ from each fused cluster to its original Gaussian components. Semantic Exclusion  Sufficient Point Support   
+
+> Surface Extension
+> Test
+> Planarity Test
+> (a) (b)
+> (c) (d)
+
+( )     
+
+> 25ID C =()
+> 11ID C = −
+
+( )  
+
+> 31ID C = −
+
+( ) 
+
+> 1iID C = − min r
+
+N N   
+
+> Number of points Nr220
+
+or t
+
+     2
+
+1
+
+0
+
+     
+
+> σ2≤σ1≤σ001
+
+and s s
+
+    1
+
+0
+
+1
+
+0
+
+ τs - radius circle 
+
+Fig. 6. Semantic-constrained flat-plane judgment. A fused cluster is accepted only when it has no valid object-instance ID, sufficient point support, a small thickness or principal-scale ratio, and sufficient extension along both principal directions. 
+
+B. Flat-Plane Separation 
+
+After semantic-constrained fusion, M2-SMap identifies large flat-plane candidates from the fused clusters. Let the covariance eigenvalues of a fused cluster Ci be λi, 0 ≥ λi, 1 ≥
+
+λi, 2, with principal scales σi,k = pλi,k . The conditions illustrated in Fig. 6 are defined as follows. First, Ni =
+
+|C i| ≥ Nmin provides sufficient point support. Second, the cluster is planar when σi, 2 ≤ τt or σi, 2/σ i, 0 ≤ μ, where 
+
+τt is the thickness threshold. The implementation evaluates the equivalent eigenvalue-ratio form λi, 2/λ i, 0 ≤ τλ, hence 
+
+μ = √τλ. Third, sufficient extension along both principal directions requires σi, 0 ≥ τs and σi, 1 ≥ τs, where τs is the minimum principal scale. Let ID( Ci) = ai denote the validated instance ID carried by the fused cluster. The complete flat-plane indicator is 
+
+χp(Ci) = I
+
+
+
+Ni ≥ Nmin ∧
+
+
+
+σi, 2 ≤ τt ∨ σi, 2
+
+σi, 0
+
+≤ μ
+
+
+
+∧
+
+σi, 0 ≥ τs ∧ σi, 1 ≥ τs ∧
+
+ID( Ci) = −1
+
+
+
+.
+
+(3) A locally planar cluster associated with an object instance therefore remains in the object branch, preventing thin object surfaces such as monitors and laptops from being removed as flat-plane support. 
+
+C. Semantic GMM Extraction 
+
+The fused clusters are used only for large-scale planar judgment. Object and residual modeling returns to the origi-nal Gaussian scale. For each accepted plane support Pr , the fusion mapping Γ traces its source fused cluster back to the corresponding original Gaussian indices G(Pr ). Let Go be the original Gaussian components carrying validated object-instance annotations. The confirmed plane-related indices are 
+
+Gpl = S  
+
+> Pr∈P acc
+
+(G(Pr ) \ G o), and the retained non-plane Gaussian set is Cnp = {C gk ∈ C g | k / ∈ G pl }. This mapping-based extraction removes original GMMs confirmed as flat-plane support while preserving semantic GMMs and un-matched residual GMMs. The retained components are divided into the semantic set Csem = {C gi ∈ C np | ai ≥ 0} and the residual set 
+
+Cres = {C gi ∈ Cnp | ai = −1}. Components in Csem 
+
+with the same valid instance ID are aggregated into the object-level support set Oj = S   
+
+> i:ai=j, Cgi∈C sem
+
+Cgi . Each object instance stores its category label, confidence, mask-support statistics, associated bounding box, original Gaussian indices, and aggregated 3D support. Components in Cres 
+
+remain local GMM candidates for irregular or unmatched structures in Section V. V. H IERARCHICAL ADAPTIVE MODEL FITTING 
+
+Flat-plane supports are reconstructed as bounded planes. Semantic object supports are first fitted with superquadrics and fall back to their original GMM components when a valid fit cannot be obtained. Residual components are represented by GMM primitives. 
+
+A. Plane Reconstruction 
+
+For an accepted plane support Pr , the centroid μr and the first two covariance eigenvectors er, 1 and er, 2 define the local tangent frame. The unit normal is nr = er, 1 × er, 2,and the analytic support plane satisfies nTr (x − μr ) = 0 .Each support point p ∈ P r is mapped to local coordinates 
+
+u(p) = ( p − μr )T er, 1 and v(p) = ( p − μr )T er, 2. For a grid size gp, the occupied-cell set is 
+
+Hr =
+
+ u(p)
+
+gp
+
+
+
+,
+
+ v(p)
+
+gp
+
+ 
+
+p ∈ P r
+
+
+
+. (4) One representative point is reconstructed at the center of each occupied cell (a, b ) ∈ H r :
+
+ˆpr,ab = μr +
+
+
+
+a + 12
+
+
+
+gper, 1 +
+
+
+
+b + 12
+
+
+
+gper, 2. (5) The plane primitive stores this occupied support together with its local frame, finite extent, thickness, eigenvalue ratio, color, and source cluster ID. Reconstructing only occupied cells keeps the plane bounded by the observed support and avoids filling unobserved regions inside a complete rectangle. 
+
+B. Superquadric Fitting for Semantic Objects 
+
+For a semantic object support Oi, M2-SMap uses asuperquadric as a compact analytic model. Its scale, shape, translation, and rotation parameters are collected in the vector Θsq = [ sx, s y , s z , ϵ 1, ϵ 2, t x, t y , t z , r x, r y , r z ]T . Given a point pk, its local coordinate is ˜pk = RT (pk − t). The implementation uses the residual 
+
+rk(Θsq ) = pH(˜ pk, Θsq ) − 1, (6) where H(·) is the superquadric implicit function. The fitting objective is 
+
+Esq = 1
+
+|O i|
+
+X 
+
+> pk∈O i
+
+r2
+
+> k
+
+(Θsq )∥˜pk∥. (7) Dist -Candidate  
+
+> Semantic Match
+> Best Match
+> 1. Same
+> Semantic label max d
+> Label_01_t
+> Label_02_t
+> 2. Nearest Center within Label_01_t -1
+> Label_02_t -1max
+
+d  
+
+> Fig. 7. Inter-frame superquadric association. A previous superquadric is considered only when its semantic label matches that of the current measurement. Among label-consistent candidates whose center distance is no greater than dmax , the nearest center is selected as the correspondence used for temporal pose alignment and smoothing.
+
+The distance-related weighting is consistent with the im-plementation and reduces the influence of near-center numer-ical instability. The initial pose is estimated from the PCA frame of the object cluster. Robust local bounds are computed in this frame using percentile statistics, and the resulting box provides the initial center and axes. The parameters are optimized with Levenberg–Marquardt by solving 
+
+(JT J + λI)∆ θ = −JT r, (8) where J is the numerical Jacobian. The candidate with the lowest residual is accepted when its fitting error and valid-ity checks satisfy their thresholds. Otherwise, the semantic object is represented by its original GMM components. 
+
+Inter-frame association and pose stabilization. Tem-poral processing is applied only to accepted superquadric measurements. Let Qm,t be a current superquadric with measured center ˆcm,t and semantic label ˆℓm,t , and let T sq t−1
+
+denote the previous superquadric tracks. Consistent with Fig. 7, candidate tracks must have the same semantic label and lie within the maximum center distance dmax :
+
+T sq m,t = h ∈ T sq t−1 ℓh = ˆℓm,t ,
+
+∥ˆcm,t − ch,t −1∥2 ≤ dmax . (9) The nearest valid track is selected as 
+
+h∗ = arg min  
+
+> h∈T sq m,t
+
+∥ˆcm,t − ch,t −1∥2. (10) When T sq m,t is empty, a new superquadric track is initialized. For a matched track, the center is updated by 
+
+ch,t = αcˆcm,t + (1 − αc)ch,t −1. (11) Direct smoothing of the measured rotation remains unre-liable because a superquadric has multiple equivalent local-coordinate representations. Flipping two local axes by 180 ◦,or swapping the local x and y axes together with their axis lengths, can describe the same box-like object while produc-ing a substantially different rotation matrix. Quaternion sign correction resolves only the equivalence between q and −q.It does not resolve local-axis flips or permutations. Given the previous matched state (Rt−1, st−1) and the current measurement ( ˆRt, ˆst), M2-SMap constructs the RGB Image  M2 -SMap MMC MMQ MMP MMOG Fig. 8. Qualitative comparison of compact map representations on two representative RGB-D frames. Each row shows, from left to right, the input RGB image and the reconstruction results of M2-SMap, MMC, MMQ, MMP, and MMOG. 
+
+equivalence set 
+
+E = {( ˆRtPD , PT ˆst) | P ∈ { I, Pxy },
+
+D = diag( dx, d y , d z ), d x, d y , d z ∈ {− 1, 1},
+
+det( PD ) = 1 },
+
+(12) where Pxy swaps the local x and y axes, and D enumer-ates valid local-axis sign changes while retaining a proper rotation. The aligned measurement is selected by 
+
+(Rat , sat ) = arg max  
+
+> (R,s)∈E
+
+tr( RTt−1R) − β∥st−1 − s∥22. (13) The trace term favors orientation continuity, whereas the second term penalizes an inconsistent axis permutation. After alignment, rotation is smoothed by quaternion SLERP using the shortest-path q/ − q correction. The axes and shape exponents are smoothed by exponential moving averages: 
+
+Rt = slerp( Rt−1, Rat , α R),
+
+st = αssat + (1 − αs)st−1,
+
+ϵt = αsbϵt + (1 − αs)ϵt−1.
+
+(14) This superquadric-specific association, alignment, and smoothing suppresses numerical pose discontinuities while preserving genuine temporal changes. 
+
+C. GMM Primitives for Fallback and Residual Structures 
+
+Semantic objects rejected by superquadric fitting and components in the residual set Cres are represented by GMM primitives. Each primitive 
+
+Gi = (μi, Σi, Ri, di, N i, ci, a i, ℓ i, s i, ρ i) stores its mean vector μi, covariance matrix Σi, eigenvector-based rotation matrix Ri, principal-scale axis vector di, point count Ni, color vector ci, and available semantic attributes 
+
+(ai, ℓ i, s i, ρ i). This representation preserves local flexibility for partial observations, articulated objects, clutter, and shapes that are not well explained by a single analytic primitive. For visualization and evaluation, samples are reconstructed from each Gaussian using the covariance eigenstructure and a Mahalanobis-distance range. VI. E XPERIMENTS 
+
+We use three TUM RGB-D sequences [27]: 
+
+fr3/walking rpy (D1), fr1/xyz (D2), and fr1/teddy (D3). They contain flat planes, planar semantic objects, regular instances, and irregular structures. YOLOv8s-seg provides instance masks, although the framework accepts any mask-level front-end. All methods use the same timestamp-aligned frames and outlier-removal protocol. 
+
+Parameter settings. Depth is limited to 0.1–3.0 m and randomly sampled at 15% . The supervoxel voxel and seed resolutions are 0.03 and 0.65 m. Mask association requires at least 20 valid projected points, a support ratio above 0.6,and a YOLOv8s-seg confidence of 0.5. Gaussian fusion uses 
+
+dconnect = 0 .15 m, θmin = 15 ◦, and lmin = 0 .10 m. Flat-plane selection uses Nmin = 200 , τt = 0 .04 m, τλ = 0 .02 ,and τs = 0 .1125 m. Superquadric fitting requires at least 80 
+
+points, accepts fitting errors below 0.20 , and runs at most 12 
+
+LM iterations on 100 sampled points. Inter-frame association uses dmax = 0 .35 m, αc = 0 .6, and αs = αR = 0 .35 . All comparison and ablation variants share these settings unless the evaluated module is explicitly disabled. Let P and ˆP denote the observed and reconstructed point clouds. The directional nearest-neighbor errors EG2R =
+
+d( ˆP → P ) and ER2G = d(P → ˆP) measure surface accuracy and observation coverage, respectively. We also report the mean serialized primitive payload ¯Smap , processing rate, and primitive composition. 
+
+A. Comparison With Existing Map Representations 
+
+M2-SMap is compared with four geometry-driven base-lines implemented in the same framework. MMC is the com-D1 D2 D3 012                
+
+> (cm) G2R RMSE
+> D1 D2 D3 0.0 2.5 5.0
+> (cm) R2G RMSE
+> D1 D2 D3 0510
+> (KB) Model size
+> M2-SMap MMC MMQ MMP MMOG
+> Fig. 9. Quantitative comparison on D1–D3. The panels report generated-to-real RMSE, real-to-generated RMSE, and mean per-frame compact model size for M2-SMap and four geometry-driven baselines. Post-merge semantic association only
+> Without superquadric equivalence alignment
+> (a) (c)
+> (d) (e) (f)
+> (b)
+> Oversize GMM
+> Unreasonable Rotation Fig. 10. Qualitative ablations on D1–D3. Red boxes show adhesion after geometry-only fusion, while blue boxes show spurious inter-frame SQ rotations without equivalence alignment.
+
+plete plane–B-spline–GMM method of Gao and Dong [14]. MMQ, MMP, and MMOG are controlled variants derived from this implementation by restricting the available prim-itive families to plane–quadric–GMM, plane–GMM, and GMM, respectively. Fig. 8 shows that M2-SMap represents object instances with coherent primitives and identifiable semantic labels, whereas the geometry-driven baselines produce less distinct object boundaries and identities. Fig. 9 reports the quantitative comparison. M2-SMap obtains G2R RMSEs of 0.0214 , 0.0197 , and 0.0236 m on D1–D3. These intermediate values result from using object-level abstractions rather than the locally exhaustive fitting of MMC/MMQ or the coarser approximation of MMP/MMOG. Its R2G RMSEs are 0.0560 , 0.0437 , and 0.0663 m, higher than the baselines because bounded planes and superquadrics intentionally avoid covering sensor noise, isolated outliers, and fine irregularities with additional local primitives. The mean payloads are 5.613 , 2.881 , and 8.264 KB. M2-SMap is smallest on D2 and remains close to the minimum on D1 and D3 because planes and superquadrics replace many local components, while semantic attributes and GMM fallback add limited storage. The corresponding processing rates are 97 .67 , 79 .90 , and 29 .37 Hz. Although semantic annotation and superquadric fitting cost more than geometry-only processing, all sequences remain real-time. Table I reports primitive composition, where B/Q de-notes B-splines in MMC and quadrics in MMQ. M2-SMap achieves the lowest total count on all sequences, reducing the best-baseline count by 11 .9% , 27 .7% , and 16 .5% on D1–D3. The reduction comes from representing large planar supports and regular objects with single bounded planes and superquadrics, while retaining GMMs only for irregular or superquadric-rejected structures. 
+
+B. Ablation Study 
+
+The ablations compare the full method with post-merge semantic association only (PMSAO) and the variant without superquadric equivalence alignment (WSQA), using identical inputs and parameters. As, Nadh , and Jsq denote semantic fusion consistency, adhesion count, and mean inter-frame SQ rotation jump, respectively. The semantic plane-exclusion rule remains enabled in all variants. Fig. 10 and Table II report the results. 
+
+Post-merge semantic association only. Without pre-merge semantics, As decreases from 1.000 to 0.810 , 0.516 ,and 0.777 , while Nadh increases from zero to 4.281 , 1.851 ,and 2.291 on D1–D3. Processing changes by less than 
+
+0.21 ms. The slightly higher Rc is not a true improve-ment because incorrect fusion produces fewer but oversized components, and post-merge labels cannot recover the lost object–plane or inter-object boundaries. 
+
+Without superquadric alignment. Disabling equivalence alignment increases Jsq from 10 .404 ◦ to 61 .213 ◦ on D1, 
+
+8.163 ◦ to 43 .574 ◦ on D2, and 14 .725 ◦ to 50 .058 ◦ on D3. The full method therefore reduces the jumps by 83 .0% ,
+
+81 .3% , and 70 .6% . The nearly unchanged Rc, As, Nadh ,                                                                                 
+
+> TABLE I AVERAGE PRIMITIVE COMPOSITION PER ALIGNED FRAME .Method Dataset Plane SQ GMM B/Q Total M2-SMap D1 1.348 0.804 49.478 0.000 51.630
+> D2 1.193 1.207 24.281 0.000 26.682
+> D3 2.353 1.176 72.529 0.000 76.059
+> MMC D1 3.870 0.000 50.217 4.870 58.957 D2 2.949 0.000 32.151 1.810 36.909 D3 5.471 0.000 78.824 6.765 91.059 MMQ D1 3.783 0.000 50.478 4.848 59.109 D2 3.020 0.000 32.054 1.810 36.884 D3 5.765 0.000 80.941 6.647 93.353 MMP D1 4.065 0.000 54.544 0.000 58.609 D2 3.026 0.000 33.892 0.000 36.918 D3 6.000 0.000 86.118 0.000 92.118 MMOG D1 0.000 0.000 78.674 0.000 78.674 D2 0.000 0.000 55.276 0.000 55.276 D3 0.000 0.000 135.765 0.000 135.765
+
+TABLE II ABLATION RESULTS ON THREE RGB-D SEQUENCES .Method Dataset Rc T (ms) As Nadh Jsq (◦)Full D1 9.174 41.281 1.000 0.000 10.404 D2 11.578 15.512 1.000 0.000 8.163 D3 10.368 54.985 1.000 0.000 14.725 PMSAO D1 9.375 41.481 0.810 4.281 10.546 D2 12.518 15.528 0.516 1.851 8.258 D3 10.455 54.910 0.777 2.291 14.520 WSQA D1 9.307 40.112 1.000 0.000 61.213 D2 11.571 15.474 1.000 0.000 43.574 D3 10.386 54.385 1.000 0.000 50.058 
+
+and processing time show that alignment specifically sup-presses equivalent-pose discontinuities rather than affecting compactness or semantic grouping. VII. CONCLUSIONS Existing compact multi-model mapping methods are often dominated by geometric criteria, which can lead to inefficient primitive allocation and inter-object adhesion. To address these limitations, we propose M2-SMap, a memory-efficient semantic mapping framework that integrates instance-level semantic constraints with hierarchical multi-model repre-sentation. By combining bounded planes, object-level su-perquadrics, and GMM primitives, M2-SMap improves rep-resentation compactness while preserving semantic consis-tency. Experiments on three RGB-D sequences show that M2-SMap reduces the average primitive count by 18.7% over the best baseline, eliminates the measured inter-object adhesion cases from 2.808 to 0, and maintains real-time processing at 29.37-97.67 Hz. Future work will investigate larger-scale and dynamic environments and tighter integra-tion with robotic navigation and manipulation. REFERENCES [1] A. Hornung, K. M. Wurm, M. Bennewitz, C. Stachniss, and W. Bur-gard, “Octomap: An efficient probabilistic 3d mapping framework based on octrees,” Autonomous Robots , vol. 34, no. 3, pp. 189–206, 2013. [2] H. Oleynikova, Z. Taylor, M. Fehr, J. Nieto, and R. Siegwart, “Voxblox: Incremental 3d euclidean signed distance fields for on-board mav planning,” in Proceedings of the IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , 2017, pp. 1366– 1373. [3] R. B. Rusu, Z. C. Marton, N. Blodow, M. Dolha, and M. Beetz, “To-wards 3d point cloud based object maps for household environments,” 
+
+Robotics and Autonomous Systems , vol. 56, no. 11, pp. 927–941, 2008. [4] J. McCormac, A. Handa, A. Davison, and S. Leutenegger, “Se-manticfusion: Dense 3d semantic mapping with convolutional neural networks,” in Proceedings of the IEEE International Conference on Robotics and Automation (ICRA) , 2017, pp. 4628–4635. [5] R. A. Newcombe, S. Izadi, O. Hilliges, D. Molyneaux, D. Kim, A. J. Davison, P. Kohli, J. Shotton, S. Hodges, and A. Fitzgibbon, “Kinectfusion: Real-time dense surface mapping and tracking,” in 
+
+Proceedings of the 10th IEEE International Symposium on Mixed and Augmented Reality (ISMAR) , 2011, pp. 127–136. [6] J. Poppinga, N. Vaskevicius, A. Birk, and K. Pathak, “Fast plane detec-tion and polygonalization in noisy 3d range images,” in Proceedings of the IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , 2008, pp. 3378–3383. [7] T. Whelan, S. Leutenegger, R. F. Salas-Moreno, B. Glocker, and A. J. Davison, “Elasticfusion: Dense slam without a pose graph,” in 
+
+Proceedings of Robotics: Science and Systems (RSS) , 2015. [8] R.-J. Yan, J. Wu, J. Y. Lee, and C.-S. Han, “Representation of 3d envi-ronment map using b-spline surface with two mutually perpendicular lrfs,” Mathematical Problems in Engineering , vol. 2015, p. 690310, 2015. [9] L. Nicholson, M. Milford, and N. S¨ underhauf, “Quadricslam: Dual quadrics from object detections as landmarks in object-oriented slam,” 
+
+IEEE Robotics and Automation Letters , vol. 4, no. 1, pp. 1–8, 2019. [10] Z. Liao, W. Wang, X. Qi, and X. Zhang, “Rgb-d object slam using quadrics for indoor environments,” Sensors , vol. 20, no. 18, p. 5150, 2020. [11] S. Srivastava and N. Michael, “Efficient, multifidelity perceptual rep-resentations via hierarchical gaussian mixture models,” IEEE Trans-actions on Robotics , vol. 35, no. 1, pp. 248–260, 2019. [12] A. Dhawale and N. Michael, “Efficient parametric multi-fidelity surface mapping,” in Proceedings of Robotics: Science and Systems (RSS) , 2020. [13] P. Z. X. Li, S. Karaman, and V. Sze, “Memory-efficient gaussian fitting for depth images in real time,” in Proceedings of the IEEE International Conference on Robotics and Automation (ICRA) , 2022, pp. 8003–8009. [14] Y. Gao and W. Dong, “A real-time multi-model parametric represen-tation of point clouds,” arXiv preprint arXiv:2509.14773 , 2025. [15] E. Sucar, S. Liu, J. Ortiz, and A. J. Davison, “imap: Implicit mapping and positioning in real-time,” in Proceedings of the IEEE/CVF Interna-tional Conference on Computer Vision (ICCV) , 2021, pp. 6229–6238. [16] Z. Zhu, S. Peng, V. Larsson, W. Xu, H. Bao, Z. Cui, M. R. Oswald, and M. Pollefeys, “Nice-slam: Neural implicit scalable encoding for slam,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2022, pp. 12 776–12 786. [17] L. Zhou, G. Huang, Y. Mao, J. Yu, S. Wang, and M. Kaess, “Plc-lislam: Lidar slam with planes, lines and cylinders,” IEEE Robotics and Automation Letters , vol. 7, no. 3, pp. 7163–7170, 2022. [18] J. St¨ uckler, N. Biresev, and S. Behnke, “Semantic mapping using object-class segmentation of RGB-D images,” in Proceedings of the IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , 2012, pp. 3005–3010. [19] J. St¨ uckler, B. Waldvogel, H. Schulz, and S. Behnke, “Dense real-time mapping of object-class semantics from RGB-D video,” Journal of Real-Time Image Processing , vol. 10, no. 4, pp. 599–609, 2015. [20] A. Hermans, G. Floros, and B. Leibe, “Dense 3d semantic mapping of indoor scenes from RGB-D images,” in Proceedings of the IEEE International Conference on Robotics and Automation (ICRA) , 2014, pp. 2631–2638. [21] G. Narita, T. Seno, T. Ishikawa, and Y. Kaji, “Panopticfusion: Online volumetric semantic mapping at the level of stuff and things,” in 
+
+Proceedings of the IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , 2019, pp. 4205–4212. [22] M. R¨ unz, M. Buffier, and L. Agapito, “MaskFusion: Real-time recog-nition, tracking and reconstruction of multiple moving objects,” in 
+
+Proceedings of the IEEE International Symposium on Mixed and Augmented Reality (ISMAR) , 2018, pp. 10–20. [23] M. Grinvald, F. Furrer, T. Novkovic, J. J. Chung, C. Cadena, R. Sieg-wart, and J. Nieto, “Volumetric instance-aware semantic mapping and 3d object discovery,” IEEE Robotics and Automation Letters , vol. 4, no. 3, pp. 3037–3044, 2019. [24] J. McCormac, R. Clark, M. Bloesch, A. J. Davison, and S. Leuteneg-ger, “Fusion++: Volumetric object-level SLAM,” in Proceedings of the International Conference on 3D Vision (3DV) , 2018, pp. 32–41. [25] L. Schmid, J. Delmerico, J. L. Sch¨ onberger, J. Nieto, M. Pollefeys, R. Siegwart, and C. Cadena, “Panoptic multi-TSDFs: A flexible representation for online multi-resolution volumetric mapping and long-term dynamic scene consistency,” in Proceedings of the IEEE International Conference on Robotics and Automation (ICRA) , 2022, pp. 8018–8024. [26] Y. Gao and W. Dong, “An integrated hierarchical approach for real-time mapping with gaussian mixture model,” IEEE Robotics and Automation Letters , vol. 8, no. 11, pp. 6891–6898, 2023. [27] J. Sturm, N. Engelhard, F. Endres, W. Burgard, and D. Cremers, “A benchmark for the evaluation of RGB-D SLAM systems,” in Proc. IEEE/RSJ Int. Conf. Intell. Robots Syst. (IROS) , 2012, pp. 573–580.
