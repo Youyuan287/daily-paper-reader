@@ -1,0 +1,308 @@
+Title: Open-World Semantic Segmentation with Sensitivity Modeling
+
+URL Source: https://arxiv.org/pdf/2608.08308v1
+
+Published Time: Tue, 11 Aug 2026 01:07:04 GMT
+
+Number of Pages: 6
+
+Markdown Content:
+# OPEN-WORLD SEMANTIC SEGMENTATION WITH SENSITIVITY MODELING 
+
+# Anastasios Romanos Varvarigos and Nikos Giakoumoglou and Tania Stathaki 
+
+# Department of Electrical and Electronic Engineering, Imperial College London, London, UK 
+
+# {anastasis.varvarigos21, nikos, t.stathaki }@imperial.ac.uk 
+
+ABSTRACT 
+
+Modern vision systems must operate in “open-world” set-tings, where models must recognize known categories and detect unseen or anomalous content. Conventional semantic segmentation models operate under a “closed-world” assump-tion, often producing overconfident misclassifications on novel content. We address open-world semantic segmentation, the joint task of segmenting known classes while detecting and grouping novel or anomalous content without additional su-pervision, by extending a dual-decoder baseline with a third, complementary decoder within a unified encoder-decoder de-sign. The first decoder performs closed-set segmentation using Gaussian prototypes for known categories. The second uses contrastive feature learning to isolate unknown regions in em-bedding space. The third, our key contribution, is a sensitivity decoder that captures fine-grained texture irregularities and ac-tivation instabilities indicative of semantic uncertainty, which neither semantic prototypes nor contrastive norms can reliably detect. The three decoders provide genuinely complemen-tary signals: class-level OOD distance in logit space, global feature energy in embedding space, and local activation in-stability across encoder scales. Experiments on Cityscapes and BDD-Anomaly show that our method improves anomaly segmentation and novel-class discovery while maintaining competitive closed-set accuracy, with gains of +2.4% AUROC and a 2.5 pp. reduction in FPR@95TPR on BDD-Anomaly over the baseline. 
+
+Index Terms — Semantic Segmentation, Open-World Learning, Anomaly Detection, Uncertainty Estimation 
+
+1. INTRODUCTION 
+
+Semantic segmentation assigns a semantic label ( e.g. , road, pedestrian, car) to every pixel of an image. Despite signif-icant progress, most segmentation models operate under a 
+
+“closed-world” assumption: they are trained and evaluated on a fixed, predefined set of classes. This assumption fails in real-world deployments, where models frequently encounter out-of-distribution (OOD) content such as unexpected road debris, novel vehicle types, or context-dependent anomalies. Conventional networks tend to produce overconfident misclas-sifications [1], leading to unsafe behavior in safety-critical applications such as autonomous navigation and robotic scene understanding. 
+
+“Open-world” semantic segmentation addresses the prob-lem of jointly segmenting known classes and detecting novel or anomalous regions without additional supervision [2]. It combines two complementary sub-tasks: anomaly segmen-tation , which produces a binary map distinguishing known from unknown pixels, and novel class discovery , which per-forms pixel-wise classification of novel samples into coherent, previously unseen categories. Solving both simultaneously re-quires a model to be simultaneously discriminative (for known classes) and appropriately uncertain (for unknown content), objectives that are in tension under standard training. Existing dual-decoder approaches [3] address these objec-tives with two complementary branches: a semantic branch that models known class distributions in logit space, and a contrastive branch that structures embedding norms to sepa-rate known and unknown features globally. However, both operate at a relatively coarse level of abstraction: prototype distance and embedding norm are scalar, globally aggregated quantities per pixel. In practice, anomalous content often ap-pears with subtle local cues, i.e. , irregular texture patterns, atypical activation frequency content, and inconsistencies at object boundaries, that these global signals are not designed to capture. A partially occluded novel object, for instance, may produce a feature norm within the range of known classes while exhibiting locally inconsistent activation patterns that a spatially sensitive detector would flag. Similarly, road sur-face anomalies such as oil spills or debris may span only a few pixels, lie far from any class prototype boundary, and yet produce characteristic high-frequency activation signatures at intermediate encoder scales, cues that are washed out by the global pooling and hierarchical upsampling operations that the semantic and contrastive decoders rely on. These observations motivate a third, independent signal specifically tuned to local activation analysis. In this paper, we propose a three-decoder architecture (Sec-tion 3) that introduces a third, orthogonal objective: sensitivity modeling. The semantic decoder performs closed-set segmen-tation using Gaussian prototypes. The contrastive decoder 
+
+separates known and unknown pixels in feature space via prototype alignment and objectosphere loss. The sensitivity decoder models local, fine-grained uncertainty arising from ac-arXiv:2608.08308v1 [cs.CV] 8 Aug 2026 tivation irregularities and texture anomalies that the other two branches cannot detect. All three outputs are fused into a uni-fied segmentation map. We evaluate on BDD-Anomaly [4] and Cityscapes [5], reporting both closed-set mIoU and dedicated open-world metrics (AUROC, AUPR, FPR@95TPR), showing consistent improvements over the baseline [3] (Tabs. 1 to 3). Our contributions are: (i) A sensitivity decoder for fine-grained uncertainty modeling, specifically designed to detect ambiguous boundaries and texture anomalies that semantic and contrastive branches cannot resolve, and conceptually distinct from both prototype-based and norm-based uncertainty. (ii) 
+
+A fully-convolutional three-decoder architecture with comple-mentary losses, trained end-to-end on a single consumer GPU, achieving improved open-world segmentation. (iii) Evalua-tion with closed-set and open-world metrics (AUROC, AUPR, FPR@95TPR) demonstrating consistent gains, with ablation studies validating each architectural component. 
+
+2. RELATED WORK 2.1. Anomaly Detection and OOD Recognition 
+
+Open-world segmentation builds on a long line of anomaly detection work, which addresses the realistic assumption that test-time inputs may contain pixels from classes absent at training time and asks a model to flag such pixels as unknown rather than force them into the closed label set. Early methods rely on softmax confidence thresholding [1] or energy-based scoring [6] to flag OOD inputs at the image level. Feature-space methods compare per-pixel embeddings to learned class prototypes, treating distance as an unknownness proxy [7]. These approaches share a common limitation: they operate on globally aggregated statistics per pixel, which can miss locally inconsistent but globally plausible content. 
+
+2.2. Pixel-Level Open-World Segmentation 
+
+Pixel-level extensions of anomaly detection use synthetic OOD data generation [4], or reconstruction error from generative models. The closest prior work, ContMAV [3], formalizes open-world semantic segmentation with a dual-decoder design: one branch for closed-set prediction and one for contrastive anomaly detection via objectosphere loss [7]. RAML [8] and DMLNet [9] both build on a heavier DeepLabV3+ backbone trained with a multi-stage SGD pipeline, closed-set pretraining followed by pixel-level metric learning, with RAML further fine-tuning on a handful of labeled novel-class examples; their closed-set gains therefore come with a larger backbone, a longer multi-stage schedule, and additional supervision that our single-stage, fully unsupervised, end-to-end training on one consumer GPU does not require. Vision-language mod-els have been applied to open-vocabulary anomaly segmenta-tion [10], offering strong zero-shot generalization but relying on billion-parameter backbones incompatible with real-time deployment. 
+
+2.3. Positioning of Our Approach 
+
+Our sensitivity decoder is inspired by TruFor [11], which local-izes image tampering through learned local texture sensitivity maps. The underlying intuition is that anomalous content leaves high-frequency traces in intermediate activations even when global statistics appear normal. We adapt this idea to open-world segmentation, training the decoder on proxy un-known labels as a lightweight parallel head. This is concep-tually distinct from prototype distance (semantic decoder), embedding norm (contrastive decoder), Bayesian uncertainty, and reconstruction error: it captures local activation instability in a single deterministic forward pass with negligible overhead. 
+
+3. METHODOLOGY 3.1. Architecture 
+
+Our architecture uses a shared encoder fenc and three parallel decoder heads: fsem , fcon , and fsen (Figure 1). Given input 
+
+x ∈ RH×W ×3, the encoder produces a hierarchy of feature maps, of which the deepest is z = fenc (x) ∈ Rh×w×d, while intermediate feature maps at multiple resolutions are passed to decoders via skip connections. 
+
+3.2. Semantic Decoder 
+
+fsem produces per-pixel logits ysem ∈ RH×W ×K for K
+
+known classes. We maintain class-wise Gaussian prototypes 
+
+{(μk, σ2
+
+> k
+
+)}Kk=1 computed from correctly classified pixels [12]: 
+
+μ(e) 
+
+> k
+
+= 1
+
+| ˆΩk|
+
+X 
+
+> p∈ˆΩk
+
+ysem ,p , σ2,(e) 
+
+> k
+
+= 1
+
+| ˆΩk|
+
+X 
+
+> p∈ˆΩk
+
+(ysem ,p − μ(e) 
+
+> k
+
+)2,
+
+(1) where ˆΩk = {p | ˆyp = yp = k} is the set of correctly classi-fied pixels for class k at epoch e. Prototypes are updated at the end of each epoch using an exponential moving average with momentum 0.9 for training stability. The feature alignment loss penalizes deviations from class prototypes, normalized by per-class standard deviation for scale invariance: 
+
+Lfeat = 1
+
+|Ω|
+
+X
+
+> p∈Ω
+
+∥ysem ,p − μ(e−1)  
+
+> yp
+
+∥2
+
+∥σ(e−1)  
+
+> yp
+
+∥2 + ϵ . (2) The multi-loss semantic objective combines class-weighted cross-entropy LCE , focal loss Lfocal [13], soft dice loss Ldice ,and prototype alignment Lfeat :
+
+Lsem = λCE LCE + λfocal Lfocal + λdice Ldice + λfeat Lfeat . (3) This combination is motivated by the severe class imbalance inherent in urban driving datasets: cross-entropy provides sta-ble gradient flow across all classes, focal loss downweights easy background pixels to focus learning on rare foreground Fig. 1 : Proposed architecture. A shared ResNet-based encoder with pyramid pooling extracts multi-scale features, which are fed to three parallel decoders: fsem for semantic segmentation with Gaussian prototype modeling, fcon for contrastive anomaly detection, and fsen for sensitivity-based uncertainty estimation. and boundary pixels, and dice loss directly optimizes region overlap, complementing pixel-wise losses on small or infre-quent objects. In practice, we found that the focal and dice terms together provide sufficient gradient signal for both com-mon and rare classes, and that retaining LCE alongside them slightly degraded performance in our final configuration; we therefore set λCE =0 in the full model (cf. Section 4.4, Rows G) and H)), while listing it explicitly in Lsem for completeness, since intermediate ablation rows do include it. 
+
+3.3. Contrastive Decoder 
+
+fcon produces per-pixel embeddings ycon ∈ RH×W ×de . The contrastive loss operates on ℓ2-normalized embeddings ¯ycon =
+
+ycon /∥ycon ∥2, aligning per-class mean normalized features with historical normalized class prototypes on the unit hyper-sphere [14]: 
+
+Lcont = −
+
+> K
+
+X
+
+> k=1
+
+log exp(¯ y⊤ 
+
+> con ,k
+
+¯μ(e−1)  
+
+> k
+
+/τ )
+
+PKi=1 exp(¯ y⊤ 
+
+> con ,k
+
+¯μ(e−1)  
+
+> i
+
+/τ ) , (4) where ¯ycon ,k is the mean normalized embedding for ground-truth class k pixels and τ =0 .07 is temperature. The objecto-sphere loss [7], by contrast, operates on the raw (unnormalized) embeddings ycon , enforcing radial separation: known pixels (ΩK ) are pushed to have embedding norm ≥ ξ, while unknown pixels ( ΩU ) are pulled toward the origin: 
+
+Lobj = 1
+
+|Ω|
+
+ X
+
+> p∈ΩK
+
+max(0 , ξ −∥ ycon ,p ∥2) + X
+
+> p∈ΩU
+
+∥ycon ,p ∥2
+
+ .
+
+(5) This creates a geometrically interpretable embedding space where the norm of the unnormalized ycon ,p directly serves as an unknownness proxy, with the anomaly score at inference given by a(c) 
+
+> p
+
+= max(0 , 1 − ∥ ycon ,p ∥2/ξ ). The contrastive objective is Lanom = λcont Lcont + λobj Lobj .
+
+3.4. Sensitivity Decoder 
+
+The semantic and contrastive decoders operate on global se-mantic predictions and feature norms, respectively. However, anomalous regions often manifest locally as subtle texture ir-regularities, unstable activations near object boundaries, or partially visible novel objects, phenomena that neither seman-tic prototype distance nor embedding norm can reliably detect. A partially occluded anomalous object may produce a fea-ture norm within the range of known classes while exhibiting spatially inconsistent activation patterns that a local detector would identify. The sensitivity decoder fsen is specifically designed to capture these fine-grained, local cues. Inspired by forensic sensitivity networks [11], fsen pro-cesses encoder feature maps from three pyramid levels inde-pendently. At each scale, a shared lightweight head comprising three 1×1 convolutional layers with layer normalization and ReLU activations is applied. The resulting scale-wise sen-sitivity maps are upsampled to full resolution and fused via element-wise summation, followed by a sigmoid activation to produce the per-pixel uncertainty map ysen ∈ [0 , 1] H×W . This multi-scale design preserves high-frequency spatial informa-tion that the upsampling operations in fsem and fcon tend to smooth out, making fsen sensitive to fine-grained local incon-sistencies at each resolution level. Critically, fsen learns where the model should be uncertain 
+
+rather than what class a pixel belongs to or how far a feature is from known prototypes . The three decoders therefore pro-vide genuinely complementary signals: semantic prototype distance captures class-level OOD in logit space, contrastive norm captures global feature energy in embedding space, and sensitivity captures local activation instability across encoder scales. The decoder is trained via binary cross-entropy against proxy unknown labels up ∈ { 0, 1}, generated from void anno-tations in the dataset and from OOD patches synthesized via CutPaste augmentation applied to training images: 
+
+Lsens = − 1
+
+|Ω|
+
+X
+
+> p∈Ω
+
+[up log ysen ,p + (1 −up) log(1 −ysen ,p )] .
+
+(6) 
+
+3.5. Fusion and Inference 
+
+The semantic confidence is derived from the Gaussian like-lihood s(sem ) 
+
+> p
+
+= max k N (ysem ,p | μk, diag (σ2
+
+> k
+
+)) , yielding semantic unknownness s(sem ) 
+
+> unk ,p
+
+= 1 − s(sem ) 
+
+> p
+
+. The contrastive anomaly score and sensitivity map are averaged: s(cont ) 
+
+> unk ,p
+
+= 
+
+> 12
+
+(a(c) 
+
+> p
+
++ ysen ,p ). The final unknownness score is: 
+
+sunk ,p = 12 (s(sem ) 
+
+> unk ,p
+
++ s(cont ) 
+
+> unk ,p
+
+). (7) Before fusion, each score is min-max normalized per image to bring all three signals to a common [0 , 1] range, preventing any single branch from dominating due to scale differences. Pixels with sunk ,p > δ are labeled as unknown; the threshold δ=0 .99 
+
+is selected based on [3]. Remaining pixels adopt the semantic decoder label ˆyp. The full network is trained end-to-end with 
+
+Ltotal = Lsem + Lanom + Lsens .
+
+4. EXPERIMENTS 4.1. Implementation Details 
+
+The encoder is ResNet-34 [15] with basic residual blocks replaced by NonBottleneck-1D blocks [16] for computational efficiency, augmented with Squeeze-and-Excitation mod-ules [17] and a Pyramid Pooling Module [18]. The semantic and contrastive decoders share a hierarchical architecture of three cascaded modules, each comprising a 3×3 convolu-tion, NonBottleneck-1D blocks, 2× bilinear upsampling, and encoder skip connections via element-wise addition. The sensitivity decoder uses a lightweight multi-scale 1×1 convo-lutional MLP applied independently at three encoder scales, with output channels 64, 32, and 16 at the three pyramid levels, before sigmoid-gated element-wise summation. The full model has approximately 28M parameters, of which the sensitivity decoder contributes fewer than 1M ( <3.6% of the total), making it a negligible computational addition over the dual-decoder baseline. Inference speed is 24 fps at 1024 ×512 
+
+Table 1 : Closed-set performance on the Cityscapes validation set. mIoU (%), Recall (%), Precision (%). Method mIoU Recall Precision 
+
+Closed-World Methods 
+
+FCN-8s [19] 65.30 – –DeepLabv2 [20] 70.40 – –
+
+Open-World Methods 
+
+DMLNet [9] 69.20 – –RAML [8] 76.70 – –ContMAV [3] 71.10 – –ContMAV (repr.) 69.28 89.6 69.7 
+
+Ours 69.88 90.2 70.4 
+
+resolution on a single NVIDIA L40s GPU, compared to 23 fps for the dual-decoder baseline, confirming the minimal overhead introduced by fsen .
+
+4.2. Datasets and Training Setup 
+
+We evaluate on Cityscapes [5] (2,975 train / 500 val, 19 classes, closed-world evaluation) and BDD-Anomaly [4] (1,935 val images with anomalous objects under diverse weather condi-tions including rain, night, and fog). Images are resized to 
+
+1024 ×512 and normalized with ImageNet statistics. We train for 500 epochs using Adam with initial learning rate 4×10 −3,polynomial decay schedule with power 0.9, batch size 8, and weight decay 10 −4. Standard augmentations include random cropping, horizontal flipping, color jitter, and multi-scale re-sizing. Loss weights are set to λCE =0 , λfocal =1 .0, λdice =1 .0,
+
+λfeat =0 .5, λcont =1 .0, λobj =0 .5 in the final model; the objec-tosphere radius is ξ=1 .0 and the contrastive temperature is 
+
+τ =0 .07 .
+
+4.3. Main Results 
+
+Results on Cityscapes (Tab. 1) and BDD-Anomaly (Tabs. 2 and 3) show consistent gains over the reproduced ContMAV baseline across all metrics. 1 On Cityscapes, the sensitivity decoder and multi-loss landscape provide regularization that benefits closed-set segmentation without degrading it. On BDD-Anomaly, the Recall gain confirms fewer missed detec-tions under challenging conditions, while the AUPR improve-ment under class imbalance confirms that fsen provides a signal complementary to the contrastive branch. RAML [8] uses a substantially heavier backbone and multi-stage pipeline; its number is reported for reference only. Qualitative comparisons are shown in Figures 2 and 3. 
+
+> 1“–” indicates metrics not reported by the original method. Entries marked (repr.) are our reproductions under a unified training setup; the gap to the orig-inal ContMAV reflects differences in schedule, augmentation, and hardware.
+
+Fig. 2 : Qualitative results on Cityscapes. Columns : input image, semantic prediction, anomaly logits, anomaly prediction, open-world prediction, semantic GT, anomaly GT. Rows : Our method (bottom) vs. ContMAV [3] (repr.) (top). 
+
+Fig. 3 : Qualitative results on BDD-Anomaly. Columns and rows are as in Figure 2. 
+
+Table 2 : Closed-set performance on BDD-Anomaly. mIoU (%), Recall (%), Precision (%). Method mIoU Recall Precision ContMAV [3] 62.28 82.5 63.1 ContMAV (repr.) 56.12 78.9 60.4 
+
+Ours 56.68 81.3 62.0 Table 3 : Open-world anomaly detection on BDD-Anomaly. AUROC (%), AUPR (%), FPR@95TPR (%; lower is better). Method AUROC AUPR FPR@95TPR ↓
+
+ContMAV (repr.) 63.4 41.8 67.4 
+
+Ours 65.8 44.3 64.9 4.4. Ablation Study 
+
+Tab. 4 presents an incremental ablation on Cityscapes. Gaus-sian prototype alignment Lfeat (Row C) is the most impactful component, providing a +4% gain: normalizing by per-class standard deviation is key, as otherwise the loss is dominated by high-variance classes and regularizes compact categories more weakly. Row D recovers the reproduced ContMAV base-line, validating our implementation. The sensitivity decoder (Row F) further improves over the dual-decoder setup (Row E), with +0.5% AUROC and 1.2 pp. lower FPR@95TPR on BDD-Anomaly, confirming that fsen mainly benefits unknown-region detection rather than closed-set accuracy. Rows G and H show that replacing LCE with focal + dice yields a small but consistent gain: once focal loss is active, cross-entropy becomes partially redundant and its uniform weighting slightly biases the optimizer toward over-represented classes, so remov-ing it lets focal/dice shape the loss landscape effectively. All 
+
+Table 4 : Ablation on Cityscapes validation set. Configuration H (full model) achieves the highest performance.                                                
+
+> LCE Lobj Lfeat Lcont Ldice Lsens Lfocal mIoU A✓63.21 B✓✓64.21 C✓✓✓68.12 D✓✓✓✓69.28 E✓✓✓✓✓69.40 F✓✓✓✓✓✓69.63 G✓✓✓✓✓69.70 H✓✓✓✓✓✓69.88
+
+contributions are additive: the monotonic improvement from Row A to Row H confirms that each component addresses a distinct aspect of the open-world problem. 
+
+5. CONCLUSION 
+
+We proposed a three-decoder architecture for open-world se-mantic segmentation, the joint task of segmenting known classes while detecting and grouping novel or anomalous con-tent without additional supervision, extending the dual-decoder ContMAV baseline with a sensitivity decoder that provides a complementary uncertainty signal alongside prototype-based OOD distance and contrastive embedding norm. The sensitiv-ity decoder is deterministic, lightweight ( <1M parameters), and trained on proxy labels from standard annotations. Experi-ments on Cityscapes and BDD-Anomaly confirm consistent gains in both closed-set mIoU and open-world metrics (AU-ROC, AUPR, FPR@95TPR), with ablations validating the additive contribution of each component. Future work will explore learned fusion strategies and richer OOD synthesis for the sensitivity branch. 6. REFERENCES 
+
+[1] Dan Hendrycks and Kevin Gimpel, “A baseline for de-tecting misclassified and out-of-distribution examples in neural networks,” in International Conference on Learn-ing Representations , 2017. [2] Robin Chan, Krzysztof Lis, Svenja Uhlemeyer, Hermann Blum, Sina Honari, Roland Siegwart, Pascal Fua, Math-ieu Salzmann, and Matthias Rottmann, “Segmentmeify-oucan: A benchmark for anomaly segmentation,” in 
+
+Proceedings of the Neural Information Processing Sys-tems Track on Datasets and Benchmarks , J. Vanschoren and S. Yeung, Eds., 2021, vol. 1. [3] Matteo Sodano, Federico Magistri, Lucas Nunes, Jens Behley, and Cyrill Stachniss, “Open-World Semantic Segmentation Including Class Similarity,” in Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024. [4] Robin Chan, Matthias Rottmann, and Hanno Gottschalk, “Entropy maximization and meta classification for out-of-distribution detection in semantic segmentation,” in 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 2021, pp. 5108–5117. [5] Marius Cordts, Mohamed Omran, Sebastian Ramos, Timo Rehfeld, Markus Enzweiler, Rodrigo Benenson, Uwe Franke, Stefan Roth, and Bernt Schiele, “The cityscapes dataset for semantic urban scene understand-ing,” in Proceedings of the IEEE Conference on Com-puter Vision and Pattern Recognition (CVPR) , June 2016. [6] Weitang Liu, Xiaoyun Wang, John Owens, and Yixuan Li, “Energy-based out-of-distribution detection,” Ad-vances in Neural Information Processing Systems , 2020. [7] Akshay Raj Dhamija, Manuel G¨ unther, and Terrance E. Boult, “Reducing network agnostophobia,” 2018. [8] Hexin Dong, Zifan Chen, Mingze Yuan, Yutong Xie, Jie Zhao, Fei Yu, Bin Dong, and Li Zhang, “Region-aware metric learning for open world semantic segmentation via meta-channel aggregation,” 2022. [9] Jun Cen, Peng Yun, Junhao Cai, Michael Yu Wang, and Ming Liu, “Deep metric learning for open world seman-tic segmentation,” 2021. [10] Jongheon Jeong, Yang Zou, Taewan Kim, Dongqing Zhang, Avinash Ravichandran, and Onkar Dabeer, “Win-clip: Zero-/few-shot anomaly classification and segmen-tation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2023, pp. 19606–19616. [11] Fabrizio Guillaro, Davide Cozzolino, Avneesh Sud, Nicholas Dufour, and Luisa Verdoliva, “Trufor: Leverag-ing all-round clues for trustworthy image forgery detec-tion and localization,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2023, pp. 20606–20615. [12] Nikolaos Giakoumoglou and Tania Stathaki, “Cluster Contrast for Unsupervised Visual Representation Learn-ing,” in Proceedings of the IEEE International Con-ference on Image Processing (ICIP) . IEEE, 2025, pp. 133–138. [13] Tsung-Yi Lin, Priya Goyal, Ross Girshick, Kaiming He, and Piotr Doll´ ar, “Focal loss for dense object detection,” 
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 42, no. 2, pp. 318–327, 2020. [14] Nikolaos Giakoumoglou, Tania Stathaki, and Athanasios Gkelias, “A review on discriminative self-supervised learning methods in computer vision,” 2025. [15] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun, “Deep residual learning for image recognition,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2016, pp. 770– 778. [16] Eduardo Romera, Jos´ e M. ´ Alvarez, Luis M. Bergasa, and Roberto Arroyo, “Erfnet: Efficient residual factorized convnet for real-time semantic segmentation,” IEEE Transactions on Intelligent Transportation Systems , vol. 19, no. 1, pp. 263–272, 2018. [17] Jie Hu, Li Shen, and Gang Sun, “Squeeze-and-excitation networks,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) ,2018, pp. 7132–7141. [18] Hengshuang Zhao, Jianping Shi, Xiaojuan Qi, Xiaogang Wang, and Jiaya Jia, “Pyramid scene parsing network,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2017, pp. 6230– 6239. [19] Jonathan Long, Evan Shelhamer, and Trevor Darrell, “Fully convolutional networks for semantic segmenta-tion,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2015, pp. 3431–3440. [20] Liang-Chieh Chen, George Papandreou, Iasonas Kokki-nos, Kevin Murphy, and Alan L. Yuille, “Deeplab: Se-mantic image segmentation with deep convolutional nets, atrous convolution, and fully connected crfs,” IEEE Transactions on Pattern Analysis and Machine Intelli-gence , vol. 40, no. 4, pp. 834–848, 2018.

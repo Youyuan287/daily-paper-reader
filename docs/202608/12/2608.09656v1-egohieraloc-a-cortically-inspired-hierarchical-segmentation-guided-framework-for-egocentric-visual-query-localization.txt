@@ -1,0 +1,1328 @@
+Title: EgoHieraLoc: A Cortically Inspired Hierarchical Segmentation-Guided Framework for Egocentric Visual Query Localization
+
+URL Source: https://arxiv.org/pdf/2608.09656v1
+
+Published Time: Tue, 11 Aug 2026 02:43:22 GMT
+
+Number of Pages: 60
+
+Markdown Content:
+# EgoHieraLoc: A Cortically Inspired Hierarchical Segmentation-Guided Framework for Egocentric Visual Query Localization 
+
+Yifei Cao a, Guolong Wang b, Mingliang Hou c, Xiya Bu a, Daming Liu a, Yu Liu a, ∗
+
+> aDalian University of Technology, Dalian, China
+> bUniversity of International Business and Economics, Beijing, China
+> cJinan University, Guangzhou, China
+
+Abstract 
+
+Visual query localization (VQL) aims to retrieve and re-localize a queried object in egocentric videos, yet remains challenging when object boundaries are ambiguous and global context cannot e ff ectively guide fine-grained localization. Human vision handles such ambiguity through a hierarchical process: it rapidly screens foreground candidates, selectively attends to the target despite distractors, refines perception via feedback between global context and local detail, and, when a single view is unre-liable, integrates evidence across viewpoints according to its credibility. Inspired by these competencies, we propose EgoHieraLoc , a unified framework for VQL-2D and VQL-3D. A Discriminative Parsing Module first extracts foreground-aware query rep-resentations using segmentation priors; a Query-Aware Module then performs robust target localization through discriminative correlation filtering with deformable mod-eling; and a Regional Adaptation Module feeds multi-scale context back into local regions to recover precise object boundaries. To extend this perceptual hierarchy to 3D localization, we introduce Geometric-Semantic Joint Confidence (GSJC), which multiplicatively couples segmentation confidence with local depth consistency, multi-view back-projection consistency, and triangulation-baseline quality, so that a view-point contributes to the 3D estimate only when it is credible both semantically and ge-ometrically. Extensive experiments demonstrate state-of-the-art performance on both  
+
+> ∗Corresponding author: Yu Liu (e-mail: yuliu@dlut.edu.cn) arXiv:2608.09656v1 [cs.CV] 10 Aug 2026 Fig. 1. The framework of the EgoHieraLoc . (a) represents the overall architecture of EgoHieraLoc, with the content of the dashed box indicating the 2D task branch. This branch consists of three key components: the Discriminative Parsing Module (b, blue block), the Query-Aware Module (QAM) (c, yellow block), and the Regional Adaptation Module (RAM) (see Fig.2). These modules collaboratively establish semantic associations between the target and its surrounding environment in the 2D space to enable e ff ective target retrieval. The remaining part corresponds to the 3D process, which integrates 2D predictions, depth estima-tion, and camera poses, and employs GSJC to generate the final 3D results.
+
+VQL-2D and -3D benchmarks. 
+
+Keywords: Visual Query Localization, Discriminative Parsing Module, Query-aware Module, Regional Adaptation Module, Geometric-Semantic Joint Confidence. 
+
+1. Introduction 
+
+Visual query localization (VQL), a fundamental yet challenging task in computer vision, has recently attracted significant attention for its central role in embodied AI, robotics, and AR /VR [1, 2, 3, 4]. VQL enables an agent to retrieve and re-localize a previously seen object in egocentric videos, formulated as recovering the object’s last appearance as a 2D bounding box or a 3D vector. Existing methods either couple de-tection and tracking modules [2, 5, 6, 7, 3, 8], or reduce the di ffi culty of spatio-temporal matching by explicitly modeling inter- and intra-frame relations [9, 10, 11, 12]. How-ever, they often assume that the query object exhibits clearly visible boundaries in the 2reference frame, an assumption that frequently fails under egocentric motion blur, oc-clusion, and drastic scale change, making precise localization hard to sustain during retrieval. Moreover, current methods still struggle with fine-grained boundary seg-mentation and show limited ability to relate global context to local appearance. These issues collectively cap further progress in VQL. Humans, in contrast, re-localize objects in dynamic environments with remarkable robustness, owing to the hierarchical and feedback-driven organization of the visual system. Perception begins with rapid foreground screening that segregates candidate objects from cluttered surroundings; attention is then selectively steered toward the target of interest despite distractors and appearance changes; and higher cortical areas refine this percept through top-down feedback that reconciles global context with lo-cal detail. Crucially, when a single observation is ambiguous or unreliable, humans do not weigh all evidence equally, but integrate cues across viewpoints according to their perceived reliability to form a stable spatial estimate. This progression, from coarse screening, to attentive localization, to feedback-based refinement, and finally to reliability-weighted spatial integration, provides valuable inspiration for machine vision. Motivated by this, we propose EgoHieraLoc, a human-vision-inspired framework that instantiates these four competencies as three cooperating 2D modules and a geometry-aware 3D fusion scheme, forming a perceptual flow from semantic guidance to geo-metric refinement, and endowing the model with both global understanding and precise localization in complex videos. Concretely, the Discriminative Parsing Module (DPM) realizes rapid foreground screening: it exploits the strong priors of the Segment Any-thing Model (SAM) [13] to generate fine-grained query representations and separate the target from background clutter within the search region. The Query-aware Mod-ule (QAM) implements attentive localization: it focuses on the query region with a discriminative correlation filter (DCF) [14], strengthening resistance to distractors and robustness to scale variation through dynamic deformable modeling. The Regional Adaptation Module (RAM) performs feedback-based refinement: simulating the re-entry and integration of higher cortical signals, it aggregates multi-scale backbone fea-tures to refine and restore the final segmentation, implicitly associating global context 3with local appearance. Each module plays a distinct role and complements the others, together forming a powerful and robust pipeline. The same principle extends naturally from a single image to 3D space. Once 2D predictions are lifted into 3D by back-projection through SfM poses and robust monoc-ular depth, a stable estimate must be recovered from many noisy per-frame observa-tions, yet not all views deserve equal trust: a confident mask can still yield an unreliable 3D point when its depth is locally ambiguous, when it disagrees with the multi-view consensus, or when its viewing baseline is near-degenerate. Mirroring how humans weight evidence by its reliability, we propose a novel Geometric-Semantic Joint Confi-dence (GSJC) weighting scheme that assigns each view a credibility by multiplicatively coupling its segmentation confidence with three geometric factors: local depth consis-tency, multi-view reprojection consistency, and triangulation-baseline quality. Because these factors are combined multiplicatively, a view contributes only when it is credible along every axis at once, so any single unreliable cue suppresses its influence, while a small clamp keeps the confidence-weighted aggregation well-defined and lets it grace-fully reduce to a uniform average when all views are unreliable. GSJC thus turns multi-view fusion from a heuristic average into a reliability-driven decision, yielding stable 3D displacement estimates and providing a principled solution for both VQL-2D and VQL-3D within a single framework. Our method achieves state-of-the-art perfor-mance on all VQL tasks, demonstrating the potential of this framework as a strong new baseline. Our main contributions are summarized as follows: 
+
+• We propose EgoHieraLoc, a novel human-vision-inspired framework that uni-fies VQL-2D and VQL-3D through three specialized, synergistic modules: a Discriminative Parsing Module (DPM) for fine-grained query representation, a Query-aware Module (QAM) for robust target localization, and a Regional Adaptation Module (RAM) for high-fidelity segmentation restoration, jointly emulating the hierarchical mechanism of the human visual system. 
+
+• We present the Geometric-Semantic Joint Confidence (GSJC) weighting scheme, which multiplicatively fuses segmentation confidence with local depth consis-4tency, multi-view reprojection consistency, and triangulation-baseline quality, enabling reliability-driven multi-view aggregation and stable 3D displacement estimation. 
+
+• Extensive experiments show that EgoHieraLoc achieves superior performance on both VQL-2D and VQL-3D benchmarks, demonstrating the framework’s po-tential as a unified solution and robust baseline for VQL in egocentric vision. 
+
+2. Related Works Few-shot Visual Object Tracking . VQL links closely to few-shot visual object track-ing, as both require localizing targets under limited prior knowledge. Traditional short-and long-term trackers [2, 15, 16, 17, 18, 19] rely on similarity matching or discrimi-native modeling. Siamese trackers [20, 21, 22, 23] measure similarity via dual-branch feature alignment, emphasizing global matching and generalization. Conversely, dis-criminative methods stabilize tracking by decoupling it into classification and regres-sion. Recent work shifts toward few-shot video segmentation and instance-level track-ing: [24] integrates saliency detection; [25, 26] use Transformers for spatio-temporal dependencies; [27, 28, 29, 30] extend instance segmentation to videos; and [13, 31] show zero-shot potential. While the Ego4D-VQ baseline uses tracking-centric Siam-RCNN [32], such methods typically assume canonically cropped templates. In real-world VQL, queries often involve occlusions or motion blur, degrading performance when appearance discrepancies exist between query and search domains. We pro-pose a segmentation-centric path for visual query modeling. By generating pixel-level boundary-aware representations, our approach captures robust appearance features for stable spatio-temporal localization. 
+
+Visual Query Localization with 2D &3D . VQL comprises 2D (VQL-2D) and 3D (VQL-3D) tasks. VQL-2D localizes the target’s spatial-temporal occurrence, while VQL-3D pinpoints its 3D location. Current research predominantly focuses on the 2D task. Ego4D[2, 5] proposed a three-stage approach integrating frame-wise detection and bidirectional tracking. CocoFormer[33, 7] used negative frames and optimized pro-posal generation to improve VQL-2D performance. VQLoc[9] simplified architectures 5by implementing end-to-end position prediction with a Transformer. HERO-VQL[11] combines TAG and Egocentric Augmentation-based Consistency Training (EgoACT) to tackle challenges like drastic viewpoint changes and occlusions. RELOCATE[3] achieves e ffi cient localization in long videos by using region-level features from pre-trained models combined with bidirectional tracking. PRVQL[10] progressively ex-tracts target-relevant appearance and spatial knowledge from the video to refine both query and video features. For VQL-3D, EgoCOL[6] used sparse camera reconstruction in a two-fold manner, video and scan independently, to estimate the camera pose of ego-centric frames in 3D renders with high recall and precision. EgoLoc[8] entangles 3D multi-view geometry with 2D object retrieval to improve 3D localization performance. Despite progress on each task in isolation, the 2D and 3D pipelines remain largely disjoint: the former concentrates on semantic matching, while the latter relies on geo-metric reconstruction, without a shared representation that allows semantic evidence to modulate geometric fusion. Inspired by the hierarchical organization of human vision, our framework couples the two within a single pipeline: the 2D branch supplies both the localization and a per-view semantic confidence, which is combined with three geo-metric reliability factors, namely local depth consistency, multi-view reprojection con-sistency, and triangulation-baseline quality, through the proposed Geometric-Semantic Joint Confidence (GSJC) aggregation. We note that this coupling is directional , prop-agating from 2D semantics to 3D geometry rather than forming a mutual refinement loop; such a design keeps the input–output contract of each stage interpretable while still letting mask reliability determine which viewpoints dominate the final 3D esti-mate. 
+
+Egocentric 3D Visual Understanding . Egocentric 3D Visual Understanding enables first-person perception for AR /VR and robotic navigation. Structure-from-Motion (SfM)[34] provides the foundational principles for recovering 3D scene structure and camera poses from multiple 2D views. However, applying classical SfM to egocentric videos presents unique challenges, primarily due to drastic viewpoint changes, severe mo-tion blur, and the inherent dynamic nature of human-centric interactions. Moreover, many downstream tasks, such as precise object localization, do not necessitate a full, dense 3D reconstruction of the entire scene. To address these challenges, various ad-6vanced methods have emerged. Some approaches approximate Simultaneous Localiza-tion and Mapping (SLAM) as an SfM estimation over a sliding window for enhanced robustness in egocentric settings, such as EgoSLAM[35]. Others focus on dense scene representation and reconstruction: NeuralDi ff [36] reconstructs dynamic video scenes using Neural Radiance Fields (NeRF)[37], while EgoLifter[38] integrates instance-level segmentation via SAM to refine object geometry. More recently, methods like DUST3R[39] achieve unconstrained 3D scene reconstruction, and EgoGaussian[40] utilizes Gaussian Splatting[41] for explicit object-background separation. While these methods significantly advance 3D understanding through comprehensive 3D models, they primarily target full scene reconstruction and o ff er limited mechanisms for lever-aging 2D semantic cues to enhance precise target localization, especially when recon-struction is computationally expensive or unnecessary. Our work departs from com-plete 3D scene reconstruction, instead focusing on robust 3D localization of targets in egocentric sequences by exploiting 2D information. We propose a multi-view aggre-gation function that fuses 3D location estimations across frames, weighted by a novel Geometric-Semantic Joint Confidence (GSJC) score. The GSJC scheme combines se-mantic segmentation confidence with three geometric reliability factors: depth uncer-tainty, multi-view reprojection consistency, and triangulation baseline quality. This semantic-geometric synergy e ff ectively filters low-confidence 3D predictions and pri-oritizes reliable cues across viewpoints, significantly improving accuracy and robust-ness of 3D displacement estimation and target localization in complex, dynamic ego-centric environments. 
+
+3. The Proposed Method 
+
+3.1. Task Formulation 
+
+Given a visual query Q (an image crop) and an egocentric video sequence V =
+
+{vi}NV −1 
+
+> i=0
+
+with NV frames, our framework addresses two complementary tasks. The VQL-2D task predicts a spatio-temporal response track R = {bt}et=s, where bt = [xt, yt, wt, ht]denotes the 2D bounding box centered on the target in frame vt, with s and e represent-ing the start and end frame indices. Building on these 2D localization results, the 7Fig. 2. The architecture of RAM . The backbone adopts a pyramidal structure, containing four stages, each integrating an encoder module and progressively downsampling to reduce resolution via a dimensional collapse module (DCM). The RAM (bottom dashed box) receives the cascaded DPM and QAM outputs, fuses multi-level features through convolution and upsampling modules, and gradually restores the output to the original resolution. 
+
+VQL-3D task determines the 3D position of the target relative to the camera center of the query frame. We first apply SfM[34] and depth estimation[42] to compute the camera poses {T vi }NV −1 
+
+> i=0
+
+and depth maps {D vi }NV −1 
+
+> i=0
+
+for all video frames. We then com-bine the 2D predictions with the estimated camera poses, depth maps, and a multi-view aggregation function to recover the 3D position [ ˆ x, ˆy, ˆz] of the object in the world coor-dinate system. Finally, we compute the relative displacement o ff set δ by projecting Tvi
+
+relative to the current frame. 
+
+3.2. Discriminative Parsing Module (DPM) 
+
+To simulate the process of the human visual cortex rapidly screening targets, we utilize a strong-prior SAM[13] 1 to generate query representations to distinguish the target from the background within the search area. Specifically, SAM segments query 
+
+Q ∈ Rh×w×c, producing binary mask S(Q) ∈ { 0, 1}h×w. Query features F (Q) ∈ Rh′×w′×d,extracted by the backbone, are spatially aligned with the mask via bilinear interpo-
+
+> 1Details of the degradation strategy for SAM failures are provided in Appendix E.
+
+8lation. We employ a scaling ratio s = ⌊h/h′⌋ to map feature coordinates ( x′, y′) to (x′ s, y′ s). This yields mask-guided object and background feature sets, both derived from Q: 
+
+MO = {F (Q)(x′,y′) | S (Q)(x′ s,y′ s) = 1},
+
+MB = {F (Q)(x′,y′) | S (Q)(x′ s,y′ s) = 0}.
+
+(1) Each set MO (or MB) contains multiple d-dimensional feature vectors corresponding to the foreground (or background) pixels of the query. Search region features F (vi) ∈
+
+RH×W×D are processed by two simple CBN layers (Conv-BN-ReLU). CBN 1 performs 1 × 1 channel-wise linear transformations, focusing on local, fine-grained features, while CBN 2 utilizes a 3 × 3 convolution to capture spatial contextual relationships. The formulation is as follows: F (vi)′ = CBN 2(CBN 1(F (vi))) ∈ RHξ ×Wξ ×Dξ , where Hξ
+
+and Wξ are the spatial dimensions after stride-ξ downsampling, and Dξ is the feature dimension. For each spatial location ( x, y) in F (vi)′, we compute the cosine similarity between F (vi)′ 
+
+> (x,y)
+
+and each individual feature vector mo ∈ M O and mb ∈ M B. This generates a set of raw foreground matching scores LO 
+
+> (x,y)
+
+= {LO 
+
+> (x,y),mo
+
+|mo ∈ M O} and background matching scores LB 
+
+> (x,y)
+
+= {LB 
+
+> (x,y),mb
+
+|mb ∈ M B}, as formulated below: 
+
+
+
+LO 
+
+> (x,y),mo
+
+= F (vi)′  
+
+> (x,y)·mo
+> max( ∥F (vi)′
+> (x,y)∥2·∥ mo∥2,ϵ )
+
+,
+
+LB 
+
+> (x,y),mb
+
+= F (vi)′  
+
+> (x,y)·mb
+> max( ∥F (vi)′
+> (x,y)∥2·∥ mb∥2,ϵ )
+
+,
+
+(2) where ∥ · ∥ 2 denotes the ℓ2-norm, and ϵ = 1e−8 prevents division-by-zero errors. Top-K average is used to aggregate responses: 
+
+
+
+O = 1
+
+> KDPM
+
+PLO  
+
+> (x,y)∈TopK DPM (LO
+> (x,y),KDPM )
+
+LO
+
+> (x,y)
+
+,
+
+B = 1
+
+> KDPM
+
+PLB  
+
+> (x,y)∈TopK DPM (LB
+> (x,y),KDPM )
+
+LB
+
+> (x,y)
+
+,
+
+(3) where KDPM is set to 3, and TopK DPM (·, KDPM ) selects the KDPM highest scores from the provided set for averaging. Finally, the likelihood-channel map, Z, is obtained via a softmax operation: Z = softmax([ O, B]) . Consequently, the foreground map ( O) and the likelihood-channel map ( Z) serve as outputs of the DPM. 93.3. Query-aware Module (QAM) 
+
+To refine localization and enhance robustness against similar distractors and scale variations, we design the Query-aware Module (QAM) by integrating Discriminative Correlation Filters (DCF) with multi-peak detection and dynamic elliptical deformable constraints. This module operates in a frame-by-frame manner, leveraging temporal information to maintain spatial consistency while adapting to object deformations. The DCF f operates on the query features F (Q) and is defined by the following ridge-regression objective, which encourages the filter response on the query to match an ideal Gaussian target: 
+
+L f = F T −1F T (F (Q)) ⊙ F T ( f ) − y 22 + λ∥ f ∥22, (4) where F T (·) and F T −1(·) denote the Fourier transform and its inverse, respectively, 
+
+y ∈ Rh×w is an ideal Gaussian response map centered at the query, and λ∥ f ∥22 is a ridge regularization term. For a fixed feature representation F (Q), the objective in Eq.(4) is a linear ridge-regression problem that admits an exact closed-form solution in the frequency domain: ˆf ∗ = F T (F (Q)) ⊙ F T (y)
+
+F T (F (Q)) ⊙ F T (F (Q)) + λ , (5) where ˆ f ∗ = F T ( f ∗) and all operations are element-wise. Consequently, the filter f ∗ is never obtained through iterative gradient descent; it is computed analytically from the query features via Eq.(5). The objective in Eq.(4) therefore serves a dual role. (i) It pro-vides the closed-form filter f ∗ used for localization. (ii) During end-to-end training, the residual of Eq. (4) (evaluated at the closed-form optimum f ∗) is back-propagated only into the shared backbone, shaping F (Q) so that the analytically computed filter yields a sharp, Gaussian-like response. This explains the behavior observed in the training dynamics 2: the DCF loss L f decreases over iterations not because f is optimized step-by-step, but because the backbone features it depends on become progressively more discriminative, allowing the closed-form filter to reach a stable attractor. This design follows the di ff erentiable-DCF paradigm of modern trackers [43, 44], where the cor-relation filter is solved in closed form per query while the feature extractor is learned 
+
+> 2Detailed analysis of training dynamics is provided in Appendix D.4.
+
+10 end-to-end. Once the query-specific filter f ∗ is obtained, it is applied to every video frame vi without any further update to extract a response map: 
+
+Rvi = F T −1 F T (F (vi)) ⊙ F T ( f ∗) , (6) where F (vi) is the backbone feature of frame vi. The response map Rvi ∈ RH×W indi-cates correlation strength at each spatial location. To handle response maps with multi-ple local maxima (caused by occlusions, motion blur, or background clutter), we apply an adaptive threshold-based binarization rather than single-peak selection. First, we fil-ter low-response regions using a statistical threshold Tvi : Tvi = μRvi +αQAM ·σRvi , where 
+
+μRvi and σRvi are the mean and standard deviation of Rvi respectively, and αQAM = 1.0is a sensitivity parameter controlling the threshold aggressiveness. This produces a bi-nary mask Mvi ∈ { 0, 1}H×W . We identify connected regions in Mvi using 8-connectivity and extract the peak location from each connected component: 
+
+p(vi) 
+
+> k
+
+= argmax 
+
+> (x,y)∈CC (vi)
+> k
+
+Rvi (x, y), k = 1, 2, . . . , NCC , (7) where CC (vi) 
+
+> k
+
+denotes the k-th connected component and NCC is the total number of components. To reduce noise from spurious background peaks, we retain the Top-
+
+KQAM = 5 candidates with the highest response values. We then weight these can-didates by both their response strength and the area of their corresponding connected components: 
+
+p(vi)can = argmax  
+
+> p(vi)
+> k∈Top-KQAM
+
+hRvi (p(vi) 
+
+> k
+
+) · A (CC (vi) 
+
+> k
+
+)i , (8) where A(CC (vi) 
+
+> k
+
+) is the pixel count of the connected component. This weighting scheme favors large, high-confidence regions over small noise peaks, improving robustness to clutter. At the first frame ( i = 0), we perform a direct initialization without recursive refinement: 
+
+p(v0)can = argmax (x,y) Rv0 (x, y)
+
+p(v0)mod = p(v0)can 
+
+∆(v0) = 0
+
+Ω(v0) = 0
+
+a(v0), b(v0) = width Q 
+
+> 2
+
+, height Q
+
+> 2
+
+(9) 11 where width Q and height Q are computed from the SAM-generated mask fitting. This initialization ensures stable bootstrapping without accumulating errors from ill-defined prior frames. For subsequent frames ( i ≥ 1), we employ a two-level temporal smooth-ing mechanism: instantaneous deformation and cumulative deformation. The instanta-neous deformation field captures frame-to-frame motion: 
+
+∆(vi) = p(vi)can − p(vi−1)mod , (10) which measures the displacement between the current frame’s candidate peak and the previous frame’s refined position. To prevent temporal jitter and accumulation of noise, we maintain a cumulative deformation field Ω(vi) that exponentially decays older mo-tion: 
+
+Ω(vi) = γQAM · Ω(vi−1) + (1 − γQAM ) · ∆(vi), (11) where γQAM = 0.4 is the decay factor. This recursive scheme maintains an exponential moving average of motion, balancing historical and current information. For the first frame, Ω(v0) = 0. To handle scale variations and non-rigid object deformations in egocentric views, we model the query’s shape using a dynamic ellipse parameterized by semi-major and semi-minor axes. Let w(vi) and h(vi) denote the bounding-box width and height of the connected component containing the candidate peak: 
+
+
+
+w(vi) = max x∈CC (vi)can 
+
+x − min x∈CC (vi)can 
+
+x,
+
+h(vi) = max y∈CC (vi)can 
+
+y − min y∈CC (vi)can 
+
+y,
+
+(12) where CC (vi)can is the connected component associated with p(vi)can . The ellipse semi-axes are recursively updated with temporal smoothing: 
+
+
+
+a(vi) = ηQAM · a(vi−1) + (1 − ηQAM ) · w(vi) 
+
+> 2
+
+,
+
+b(vi) = ηQAM · b(vi−1) + (1 − ηQAM ) · h(vi) 
+
+> 2
+
+,
+
+(13) where ηQAM = 0.7 controls the smoothing strength. The initial parameters a(v0) and b(v0)
+
+are derived directly from the query size. To ensure the standard ellipse form where the first axis is the semi-major axis (longer dimension), we enforce a(vi) ≥ b(vi) via 12 automatic swapping: (a(vi), b(vi)) ←
+
+
+
+(a(vi), b(vi)) if a(vi) ≥ b(vi),
+
+(b(vi), a(vi)) otherwise .
+
+(14) The ellipse is aligned with the image coordinate axes; its orientation angle is fixed at 
+
+θellipse = 0. This alignment choice is motivated by two factors: (i) VQL output format specifies axis-aligned bounding boxes, and (ii) in egocentric videos, primary deforma-tions are due to perspective scaling rather than in-plane rotation. This simplification is validated by ablation studies (Fig. 7), where removing the elliptical constraint degrades performance by 1.19%. To correct the response map for predicted object motion, we apply a displacement-based shift. For each coordinate i = (xi, yi) in Rvi , we compute the aligned coordinate: 
+
+i′ = i + ψ(Ω(vi)), (15) where ψ(·) is the pixel-rounding function that discretizes the continuous cumulative deformation into pixel coordinates: ψ(Ω(vi)) = jΩ(vi) + 0.5k . This rounding operation aligns the floating-point motion estimate with the discrete image lattice, ensuring nu-merical stability in subsequent distance computations. We determine the refined query location by minimizing a combined distance metric that accounts for both Euclidean proximity and elliptical shape constraints: Dis mod ,(vi) 
+
+> i
+
+= ∥i′ − p(vi)can ∥2 + λe ·
+
+s
+
+(xi − px)2
+
+(a(vi))2 + (yi − py)2
+
+(b(vi))2 , (16) where ( px, py) denotes the coordinates of the candidate peak p(vi)can , and λe = 0.5 weights the elliptical constraint. The first term enforces proximity to the motion-compensated candidate, while the second term applies an anisotropic spatial prior that penalizes deviations along the principal axes of the ellipse. The refined position is then: 
+
+p(vi)mod = argmin 
+
+> i
+
+Dis mod ,(vi) 
+
+> i
+
+. (17) This refined position p(vi)mod becomes the reference for the next frame’s instantaneous deformation computation (Eq. (10)). After dimensional alignment with the DPM re-sponse map, the QAM location response map is concatenated with the DPM foreground 13 likelihood map and fed into the Regional Adaptation Module (RAM) for further refine-ment. 
+
+3.4. Regional Adaptation Module (RAM) 
+
+To better simulate the top-down and bottom-up signal integration of the advanced cortex, and inspired by [45], we aggregate multi-scale features from the backbone net-work to refine and restore the final segmentation result. This process implicitly models the relationship between global context and local features during restoration. As shown in Fig.2, the hierarchical features Fi ∈ {F 1, F2, F3, F4} at four di ff erent scales are gen-erated through four stages, each employing a similar architectural design. Initially, we transform the dimensions of the features from the video frames (which we call the search region). In the first stage, a 1 × 1 convolution block is used to reduce the feature channel dimension from C to Ds, constructing the embeddings F1 ∈ R(T ×Hs×Ws)×Ds .Each subsequent stage takes the feature embeddings from the previous stage as input, generating features F2, F3, and F4, which correspond to progressively larger strides relative to the input. This demonstrates a hierarchical downsampling strategy. Specif-ically, we denote the patch size at stage i as Pi. At the beginning of stage i, the input feature Fi−1 ∈ RT ×Hi−1×Wi−1×Ci−1 is evenly divided into NP = T ×Hi−1×Wi−1
+
+> P2
+> i
+
+patches. Each patch is then flattened into a vector of dimension P2 
+
+> i
+
+Ci−1 and projected into an embed-ding space of Ci dimensions. After the linear projection layer, the shape of the embed-ded patches can be represented as ( T × Hi−1 
+
+> Pi
+
+× Wi−1 
+
+> Pi
+
+) × Ci, where the height and width are downsampled by a factor of Pi compared to the input. This process is formalized as follows: 
+
+Fi = ℓi−1(Reshape( Fi−1 → R 
+
+> T H i−1Wi−1
+> P2
+> i
+> ×P2
+> iCi−1
+
+)) , (18) where ℓ(·) denotes the linear embedding layer. The feature embedding Fi ∈ R(T ×Hi×Wi)×Ci
+
+then requires processing through a multi-layer encoder. We have constructed a Trans-former encoder consisting of L layers, which include both attention and feedforward layers. Following [45], Fig.2 illustrates the Dimensional Collapse Module (DCM) that replaces the traditional Multi-Head Attention (MHA) layer in the encoder, thereby re-ducing computational costs. For a specific feature embedding Fi ∈ RT ×Hi×Wi×Ci , we first project it into the query space Qi ∈ RT ×Hi×Wi×Ci . For the key and value spaces, we 14 apply a reduction rate denoted as φi, representing their reduction degree at stage i, as illustrated below: 
+
+Ki = Reshape( Fi, φ i)WK ∈ R
+
+> T H iWi
+> φ2
+> i
+> ×Ci
+
+, (19) 
+
+Vi = Reshape( Fi, φ i)WV ∈ R
+
+> T H iWi
+> φ2
+> i
+> ×Ci
+
+, (20) where Reshape( Fi, φ i) reshapes the input Fi into a sequence of size T H iWi
+
+> φ2
+> i
+
+× (φ2 
+
+> i
+
+Ci), and 
+
+W(·) ∈ R(φ2  
+
+> iCi)×Ci
+
+is a linear projection operation that reduces the input sequence’s di-mensionality to Ci. Finally, the multi-scale features from the hierarchical Transformer are e ff ectively integrated into the RAM to achieve feature fusion and refinement. 
+
+3.5. 2D-to-3D Back-Projection 
+
+During the retrieval stage, VQL-2D outputs a spatio-temporal trajectory from which we extract the target’s center coordinates ( ui, vi) in frame i by converting the predicted segmentation mask into a bounding box. To obtain robust depth estimates in the pres-ence of partial occlusions and to suppress noise from unreliable depth regions, we employ a confidence-weighted depth aggregation: ¯Di =
+
+P(x,y)∈SM i Di(x, y) · pr i
+
+> (x,y)
+
+P(x,y)∈SM i pr i
+
+> (x,y)
+
+, (21) where SM i denotes the predicted segmentation mask, Di(x, y) is the per-pixel depth prediction, and pr i 
+
+> (x,y)
+
+is the per-pixel confidence score. By prioritizing high-confidence regions, this formulation naturally filters outliers and reduces the influence of uncertain depth estimates. We combine the confidence-weighted depth with camera intrinsics K and the world-to-camera pose Ti to back-project the 2D point into 3D world coordinates: 
+
+
+
+xi
+
+yi
+
+zi
+
+1
+
+
+
+= Ti
+
+
+
+¯DiK−1[ui, vi, 1] T
+
+1
+
+ . (22) For depth estimation, we adopt Depth Anything [42], which produces relative (up-to-scale) depth. Since the target output is a relative displacement o ff set and COLMAP-based SfM [34] imposes a consistent global scale across frames, absolute metric depth 15 is neither necessary nor beneficial—it would only introduce additional computational cost without improving relative localization accuracy. Critically, our work maintains a unidirectional information flow: segmentation confidence from VQL-2D modulates the geometric reliability of 3D operations, but 3D estimates do not backpropagate to modify 2D predictions. This hierarchical design achieves two objectives: (i) elimi-nating circular dependencies that can destabilize joint optimization, (ii) preserving a transparent input-output contract for each branch. 
+
+3.6. Geometric-Semantic Joint Confidence-Based Multi-View Aggregation 
+
+To enhance the robustness of 3D displacement estimation under multi-view fusion, we introduce a confidence-weighted aggregation scheme that integrates both seman-tic and geometric cues. The Geometric-Semantic Joint Confidence (GSJC) framework evaluates each candidate frame via four complementary factors: segmentation confi-dence, depth consistency, reprojection consistency, and triangulation baseline quality. 
+
+Semantic confidence score. Given the segmentation mask SM i, we compute three probability statistics that collectively characterize mask quality: 
+
+Pave = 1
+
+|SM i|
+
+X
+
+> (x,y)∈SM i
+
+pr i
+
+> (x,y)
+
+, Pthr = 1
+
+n
+
+X
+
+> (x,y)∈SM i
+> pr i
+> (x,y)>℘
+
+pr i
+
+> (x,y)
+
+, Pmax = max 
+
+> (x,y)∈SM i
+
+pr i
+
+> (x,y)
+
+,
+
+(23) where n is the count of pixels exceeding threshold ℘ = 0.5, and the three terms measure mask coverage, high-confidence concentration, and peak certainty respectively. We combine these into a unified semantic score: 
+
+ϑsem  
+
+> i
+
+= 13 (Pave + Pthr + Pmax ), (24) assigning equal contribution to each component. 
+
+Depth consistency. Reliable depth predictions should exhibit low variance within the target region: 
+
+σ2 
+
+> d,i
+
+= 1
+
+|SM i|
+
+X
+
+> (x,y)∈SM i
+
+Di(x, y) − ¯Di
+
+2
+
+. (25) The depth consistency weight is defined as: ϖdepth  
+
+> i
+
+= exp 
+
+
+
+− σ2
+
+> d,i
+> σ20
+
+
+
+, where σ0 is the dataset median depth variance computed over validation frames. Frames with low within-mask 16 variance receive weights near 1, while high-variance regions are attenuated accord-ingly. 
+
+Reprojection consistency. We verify geometric coherence by triangulating NC candi-date frames. Back-projecting each using Eq. (22) yields 3D points {x j, y j, z j}NC
+
+> j=1
+
+. We compute their mean: ¯p = 1
+
+NCNCX
+
+> j=1
+
+[x j, y j, z j]T , (26) then reproject this consensus point to frame i by first transforming to camera coordi-nates and then projecting: ¯pc = Ti
+
+
+
+¯p
+
+1
+
+ , [ˆ ui, ˆvi]T = K ¯p(1:2) 
+
+> c
+
+¯p(3) 
+
+> c
+
+, (27) where ¯ p(1:2)  
+
+> c
+
+and ¯ p(3)  
+
+> c
+
+denote the xy and z components of the camera-frame point. The reprojection weight is: 
+
+ϖreproj  
+
+> i
+
+= exp − ∥ [ui, vi]T − [ˆ ui, ˆvi]T ∥2
+
+ϵr
+
+!
+
+, (28) where the tolerance is scaled by object size: ϵr = max(10 , 0.02 ×bbox_diag). This adap-tive tolerance (typically 10–25 pixels for egocentric objects) ensures scale-dependent consistency checking. Frames whose back-projected consensus aligns well with the original 2D observation receive higher weights. 
+
+Triangulation Baseline. Triangulation accuracy depends fundamentally on viewing baseline geometry. We define the optical ray direction in world coordinates by first computing the ray in camera coordinates and then rotating it back to world frame. Let 
+
+rc = K−1[ui, vi, 1] T denote the unnormalized ray direction in camera space. The ray direction in world coordinates is: 
+
+ri = RTi rc
+
+∥ RTi rc ∥2
+
+, (29) where Ri is the rotation component of Ti. The mean ray across all candidate frames is: ¯r = 1
+
+> NC
+
+PNC 
+
+> j=1
+
+r j. The baseline quality factor is: ϖtri  
+
+> i
+
+= sin( θi) = p1 − (ri · ¯r)2, where θi
+
+is the angle between ray ri and the mean direction. To prevent numerical degeneracy when rays are nearly parallel, we clamp the result: ϖtri  
+
+> i
+
+= max(sin( θi), 0.01). Larger 17 baseline angles enhance triangulation stability, as orthogonal rays are less sensitive to depth noise. 
+
+Multi-View Aggregation. We combine all confidence factors multiplicatively to ob-tain a composite weight: ˜ϑi = max ϑsem  
+
+> i
+
+· ϖdepth  
+
+> i
+
+· ϖreproj  
+
+> i
+
+· ϖtri  
+
+> i
+
+, ϵ w
+
+ , (30) where ϵw = 10 −6 prevents numerical underflow. This multiplicative aggregation en-sures that any significantly unreliable factor suppresses that frame’s contribution, while frames robust across all dimensions receive full weight. The final 3D position is com-puted as a confidence-weighted mean: [ ˆ x, ˆy, ˆz]T =
+
+PNC 
+
+> j=1
+
+˜ϑ j · [x j, y j, z j]T
+
+PNC 
+
+> j=1
+
+˜ϑ j
+
+. (31) When all frames are severely unreliable (all weights clamp to ϵw), the denominator approaches NC ϵw and the aggregation gracefully defaults to an unweighted average, ensuring numerical stability. Finally, we transform the aggregated world position into the query frame’s coordinate system via the inverse query pose: 
+
+δ = T −1query [ ˆ x, ˆy, ˆz, 1] T , (32) yielding the VQL-3D prediction—the target’s 3D o ff set in the query frame’s local co-ordinate system. 
+
+4. Experiments 
+
+4.1. Implementation details 
+
+Experimental setup . Video clips are uniformly preprocessed to a resolution of 448 ×
+
+448 via cropping and zero-padding. We employ a PVT-L[45] as the backbone, fine-tuning the remaining network on Ego4D-VQ[2] and VISOR[46] 3. Depth estimation us-ing the frozen Depth Anything-Large [42] model. The model is optimized with AdamW [47], running for 20,000 iterations with a peak learning rate of 1 .5 × 10 −3, a weight decay of 
+
+> 3See Appendix D.1 for an ablation study isolating architectural contributions from the VISOR
+
+18 0.02, and a step learning rate scheduler that applies three successive decay factors of 
+
+×0.1 at iterations 2k, 4k, and 11k, preceded by a linear warm-up over the first 250 itera-tions. All models are trained on GTX 4090 GPUs. Following [2], we augment the train-ing data by replacing the visual crop with samples from the response track. To simu-late viewpoint variations, the visual crop is randomly rotated between −135 ◦ and 135 ◦.Additionally, we apply random brightness enhancements to both the video frames and the visual crop to account for varying lighting conditions. For VQL-3D, we select sharp frames using a Laplacian operator before processing them with COLMAP[48] for camera pose estimation. We adopt the SIMPLE_RADIAL_FISHEYE camera model to address fisheye distortion in egocentric views. Sparse reconstruction is performed via Sequential matching with a window size of 15, followed by Poisson surface re-construction using the vocab_tree_flickr100K_words1M vocabulary tree. Finally, a post-processing step aligns the estimated COLMAP poses with the Matterport world coordinate system. Using COLMAP’s model_aligner function, we estimate a Sim3 transformation between the two spaces based on at least five rendered images with known camera poses from the Matterport scan. This alignment ensures that our results are evaluated in the exact coordinate system where annotators labeled the ground truth bounding boxes. 
+
+Training stage 4. We train the model with a composite objective Ltotal that combines a classification term LBCE , two regression terms( Lsmooth and Ls2bIoU ), a DCF loss L f , and a segmentation branch loss Lseg :
+
+Ltotal = η1 · L BCE + η2 · (Lsmooth + Ls2bIoU ) + η3 · L f + η4 · L seg , (33) with η1 = η3 = 0.1, η2 = 0.4, η4 = 0.2 set empirically. The classification loss LBCE is the binary cross-entropy between the predicted prob-ability ppr i and the ground-truth label pgt i ∈ { 0, 1}:
+
+LBCE = − 1
+
+NBNBX
+
+> i=1
+
+[pgt i log( ppr i ) + (1 − pgt i ) log(1 − ppr i )] , (34) where NB is the number of samples. For bounding-box regression, we use the Smooth 
+
+> 4Details regarding the training functions are provided in Appendix D.
+
+19 L1 loss 
+
+Lsmooth =
+
+X
+
+> j∈{ x,y,w,h}
+
+smooth L1 (bpr j − bgt j ),
+
+smooth L1 (x) =
+
+
+
+0.5x2, if |x| < 1
+
+|x| − 0.5, otherwise 
+
+. (35) Here, bpr j and bgt j are the predicted and ground-truth values of the bounding-box cen-ter coordinates and dimensions, respectively. The VQL-2D branch also provides a segmentation mask that we convert into a fitted bounding box. We first binarize the predicted mask with a threshold of 0.5. We then fit an ellipse by least squares to obtain an initial box, parameterized by the ellipse center and its major and minor axes. We refine the box by maximizing the intersection over union between the binary mask and the fitted box, using pixel counts inside and outside the box: 
+
+Ls2bIoU = 1 − N+
+
+> IS
+
+αIoU N− 
+
+> IS
+
++ N+ 
+
+> IS
+
++ N+
+
+> OS
+
+, (36) where N+ 
+
+> IS
+
+and N+ 
+
+> OS
+
+are the numbers of pixels of objects inside and outside the bound-ing box, respectively, and N− 
+
+> IS
+
+is the number of background pixels inside the bounding box. As Ego4D-VQ lacks pixel-level mask annotations while VISOR provides dense segmentation labels for EPIC-KITCHENS egocentric videos, we adopt a mixed super-vision strategy to train the segmentation branch. For VISOR samples, which account for 30% of training iterations, we apply the complete segmentation loss LVISOR seg us-ing pixel-wise binary cross-entropy between predicted masks and ground-truth labels. For Ego4D-VQ samples, representing 70% of iterations, we generate pseudo-masks by executing SAM with ground-truth bounding boxes as prompts. These pseudo-masks serve as weak supervision targets with a down-weighted segmentation loss coe ffi cient 
+
+λpdo = 0.3 · η4. Additionally, Ls2b 
+
+> IoU
+
+and Lsmooth provide indirect bounding-box-level supervision to evaluate mask quality. Formally, the segmentation loss is defined as: 
+
+Lseg = ⊮[VISOR] · LBCE_mask + ⊮[Ego4D] · λpdo · LBCE_pdo , (37) where the indicator function ⊮[·] switches between supervision modes based on the data source of each mini-batch sample. This design enables the model to leverage the rich mask supervision in VISOR while maintaining temporal and semantic consistency 20 Table 1: Comparison results on Ego4D-VQ2D. 
+
+Method VQ2D Test Server VQ2D Validation Set tAP 25 ↑ stAP 25 ↑ Rec. ↑ Succ. ↑ tAP 25 ↑ stAP 25 ↑ Rec. ↑ Succ. ↑
+
+Ego4D Baseline [2] 0.20 0.13 32.20 39.80 0.22 0.15 32.92 43.24 NFM [33] 0.24 0.17 35.29 43.07 0.26 0.19 37.88 47.90 CocoFormer [7] 0.25 0.18 42.34 48.37 0.26 0.19 37.67 47.68 VQLoc [9] 0.32 0.24 45.10 55.88 0.31 0.22 47.05 55.89 HERO-VQL [11] 0.38 0.28 45.32 60.73 0.38 0.28 44.90 61.10 PRVQL [10] 0.37 0.28 45.70 59.43 0.37 0.28 45.70 59.43 RELOCATE [3] 0.43 0.35 50.55 60.14 0.41 0.33 50.50 58.04 EgoHieraLoc (Ours) 0.44 0.37 51.28 61.33 0.43 0.35 51.52 62.30 
+
+on Ego4D-VQ frames despite the absence of pixel-level ground truth. The loss L f is the DCF loss defined in Eq.(4). Visual Query  Temporal Confidence Time 
+
+Fig. 3. Qualitative visualization results on Ego4D-VQ2D. . Each row shows a query, its corresponding response, and the temporal confidence curve of our work. Green, red, and blue boxes represent the ground truth, EgoHieraLoc, and RELOCATE, respectively. The green shaded region denotes the GT interval. 
+
+Inference stage 5. The video is processed in clips, and the predictions are concatenated. Given that bbox generation primarily relies on the segmentation results, we adopt the segmentation mask confidence score after aggregation, ϑ, as the corresponding tempo-
+
+> 5
+
+Inference e ffi ciency and parameter scale are provided in Appendix H. 
+
+21 Table 2: Comparison results on the Ego4D-VQ3D benchmark.                                                                                 
+
+> Method VQ3D Test Server (Leaderboard) VQ3D Validation Set Succ. ↑Succ* ↑L2 ↓Angle ↓QwP ↑Succ. ↑Succ* ↑L2 ↓Angle ↓QwP ↑
+> Ego4D [2] 7.95 48.61 4.64 1.31 0.16 –––––Ego4D Improved [2] 8.71 51.47 4.93 1.23 15.15 1.22 30.77 1.98 0.60 1.83 Eivul [5] 25.76 38.74 8.97 1.21 66.29 73.78 91.45 1.35 0.82 80.49 CocoFormer [7] 9.09 50.60 4.23 1.23 16.29 –––––EgoCOL [6] 62.88 85.27 2.37 0.53 74.62 59.15 93.39 2.31 0.58 63.42 EgoLoc [8] 87.12 96.14 1.86 0.92 90.53 80.49 98.14 1.45 0.61 82.32 EgoHieraLoc (Ours) 87.50 96.17 1.80 0.87 90.91 82.25 98.22 1.30 0.58 84.48
+
+ral score. To smooth the temporal scores, a median filter with a window size of 5 is employed. Subsequently, peak detection is performed to identify the maximum peak in the matching scores. Finally, a threshold of 0.8 times the maximum peak is selected to filter the score sequence, and the last time interval in the score sequence that exceeds the threshold is retained as the temporal result for VQL-2D. For VQL-3D, we select all response tracks within this retained 2D temporal interval as our candidate frames. The center point of the bbox in each candidate frame is projected into 3D space by leveraging the corresponding frame’s camera pose and depth. 3D positions are then aggregated using GSJC weighting scheme to infer the final 3D displacement of the query. 
+
+4.2. Comparison with State-of-the-art 
+
+We evaluate EgoHieraLoc on Ego4D-VQ[2], the only publicly available bench-mark for VQL. Our method is further evaluated on large-scale tracking benchmarks with minor adaptations. 6
+
+VQL-2D (Tab.1): EgoHieraLoc achieves state-of-the-art performance across all eval-uated metrics on both the VQ2D validation and test sets. Compared to RELOCATE[3], the proposed method consistently improves localization accuracy. On the test set, EgoHieraLoc increases tAP 25 from 0.43 to 0.44 and stAP 25 from 0.35 to 0.37, while 
+
+> 6
+
+See Appendix B for further details on the VQL-to-VOT transfer. 
+
+22 Fig. 4. Visualization of VQ3D results across four reconstructed Matterport Scan scenes. Ground-Truth (white), EgoLoc (blue), and our predictions (red) are projected into 3D scenes reconstructed via COLMAP, with the reconstructed scan coordinate system and visual queries displayed on the left of each row. Four localization results are selected from non-fixed viewpoints for each scene to facilitate inspection. Since 3D scale and orientation are not predicted, all cubes utilize ground truth dimensions and rotations while centered at the predicted 3D coordinates. 
+
+Fig. 5. Qualitative analysis of heatmaps for key components. Each example illustrates four levels of in-termediate representations across temporally consecutive egocentric video frames. Row 1: egocentric video frames. Row 2: response heatmaps generated by DPM, highlighting candidate spatial regions of interest. Row 3: DPM heatmaps overlaid on corresponding frames, demonstrating spatial alignment between pre-dicted activation and visual content. Row 4: Gaussian-smoothed heatmaps produced under QAM guidance, showing refined, semantically concentrated activation around the target object. 
+
+reaching peak recall (51.28%) and success (61.33%) rates. These gains are even more pronounced under the stringent spatial-temporal metrics of the validation set, where 23 EgoHieraLoc achieves a 4.26% absolute improvement in success rate over RELO-CATE (from 58.04% to 62.30%) and lifts recall to 51.52%. The simultaneous in-crease in tAP 25 and stAP 25 suggests that the model not only retrieves correct tem-poral windows more reliably but also predicts tighter spatial bounding boxes within those segments. Crucially, EgoHieraLoc maintains stable performance across di ff er-ent data splits, avoiding the fluctuations often seen in previous models. For example, tAP 25 remains nearly identical on the validation set (0.43) and test server (0.44), with recall rates showing similar consistency (51.52% vs. 51.28%). This minimal degrada-tion between the visible and hidden sets highlights the model’s strong generalization capability. 7 This further confirms our superior capability in precise spatio-temporal localization (qualitative comparisons in Fig.3). 
+
+VQL-3D (Tab.2): EgoHieraLoc establishes a new state-of-the-art on both the VQ3D validation set and the test server leaderboard. Compared to EgoLoc[8], it consistently improves across primary localization metrics. On the test server, EgoHieraLoc reaches a success rate of 87.50 and a QwP of 90.91. On the validation set, it increases the success rate from 80.49 to 82.25 and QwP from 82.32 to 84.48. EgoHieraLoc also reduces spatial localization errors; the L2 distance drops from 1.45 to 1.30 compared to EgoLoc, and the angle error reaches 0.58, matching the best baseline without sacri-ficing overall success. Consequently, EgoHieraLoc retrieves the object more reliably while predicting its position with higher geometric accuracy. This demonstrates en-hanced robustness in camera-scene alignment and 3D localization accuracy (visualized in Fig.4). 
+
+4.3. Ablation Study 
+
+Impact of DPM & QAM . As shown in Tab.3, we conducted ablation studies on Ego4D-VQ2D and -VQ3D validation sets, using the following variants: (i) removal of 
+
+O from the DPM; (ii) exclusion of the likelihood channel map Z from the DPM; (iii) utilization of only the QAM; and (iv) retention of only the DPM. The experimental re-sults indicate that, compared to retaining all components, individually removing either 
+
+> 7Please refer to Appendix F for detailed analyses of failure cases.
+
+24 Table 3: Ablation studies of DPM and QAM on VQ2D and VQ3D .
+
+DPM VQ2D Validation Set VQ3D Validation Set 
+
+O Z QAM tAP25 ↑ stAP25 ↑ Rec.% ↑ Succ.(%) ↑ Succ(%) ↑ Succ*(%) ↑ L2 ↓ Angle ↓ QwP% ↑
+
+✓ ✓ 0.33 0.22 47.70 43.09 65.47 68.22 3.35 1.38 84.48 
+
+✓ ✓ 0.30 0.19 42.27 41.22 63.20 66.38 3.72 1.32 84.48 
+
+✓ 0.27 0.18 34.25 36.01 58.12 60.23 3.55 1.30 84.48 
+
+✓ ✓ 0.37 0.26 48.27 51.33 76.44 93.95 2.08 1.17 84.48 
+
+✓ ✓ ✓ 0.43 0.35 51.52 62.30 82.25 98.22 1.30 0.58 84.48 49.61 50.38 51.52        
+
+> 60.39 61.11 62.3 0.4 0.41
+> 0.43 0.31 0.32 0.35 0.20 0.25 0.30 0.35
+> 0.40
+> 0.45 45
+> 50
+> 55 60 65
+> QAM w/o
+> elliptical model
+> QAM w/o multi-
+> peak
+> QAM
+> tAP25 & stAP25
+> Rec. (%) & Succ.(%)
+> Rec% Succ.(%) tAP25 stAP25
+
+(a) 15913 17 21 25 42 44 46 48 50 52 54 56 58      
+
+> 12345
+> Frames-skipping K Candidates
+> FPS
+> Rec. & Succ.
+> Rec Succ FPS
+
+(b) 0.22 0.27 0.32 0.37       
+
+> 0.42
+> 0.47 45 50 55 60 65 13510
+> tAP25/stAP25 Rec./Succ. (%) Top-K Selection
+> Succ.(%) Rec% tAP25 stAP25
+
+(a) 
+
+Fig. 6. Ablations on QAM components, k-frame skipping, and Top-K QAM . (a) Ablation studies of QAM modules on Ego4D-VQ2D. (b) Frame k-skipping ablation. Di ff erent k-values a ff ect FPS /Success on VQ2D validation set. (c) Sensitivity analysis on the number of candidates K. On VQ2D, increasing K improves recall by recovering occluded targets, but excessive candidates (K =10) degrade localization precision (stAP). 
+
+O or Z degrades performance on both benchmarks, while their simultaneous removal leads to a more substantial performance decline, highlighting their complementarity and the overall importance of the DPM. Meanwhile, ablating the QAM module also results in varying degrees of negative impact. It can be observed that performance on 2D tasks directly influences the 3D results, and it also suggests that the DPM is slightly more critical than the QAM, although both modules play indispensable and crucial roles. Fig.5 shows the heatmap visualization of the two modules and their re-lated components overlaid on the image. It can be seen that the synergy of them makes the localization more robust and accurate. 
+
+Impact of components of QAM . We further analyzed the critical components of QAM. Specifically, we evaluated two QAM variants on VQ2D: (i) QAM without the elliptical model constraint, and (ii) QAM without multi-peak detection. As shown in Fig.6(a), removing either component leads to a performance drop. It can be observed 25 Table 4: Ablation study of RAM components on Ego4D-VQ2D validation set. Our default full model configuration is highlighted in light gray .                                    
+
+> Variant /Setting tAP25 ↑stAP25 ↑Rec. (%) ↑Succ. (%) ↑
+> w/o DCM 0.41 0.33 50.24 61.12 Feature Stage: Stage 3 0.42 0.33 50.03 60.11 w/o FFN 0.38 0.29 45.74 59.35 w/o PE 0.43 0.34 51.04 61.18 Backbone Architecture: ResNet-101 0.37 0.27 46.85 59.97
+> Full Model (Stage 4, w /DCM, FFN, PE, PVT) 0.43 0.35 51.52 62.30
+
+that the elliptical model constraint serves as an e ff ective complement to DCF, adapt-ing better to non-rigid target deformations than bounding boxes by providing a spatial morphological prior for the object. Removing this component weakens the model’s prior knowledge of the target shape, resulting in failures when the object undergoes significant deformation. Meanwhile, removing multi-peak detection introduces local-ization ambiguity, as the target’s response map in videos may exhibit multiple salient or discontinuous peaks. 
+
+Impact of k-frame skipping . The k-frame skipping strategy demonstrates varying de-grees of improvement in both frames per second (FPS) and localization performance. Ablation studies were conducted on the VQ2D for the k-frame skipping strategy, with the results depicted in Fig.6(b). When we increase the number of skipped frames k, FPS rises while performance deteriorates. We attribute this to three factors: (i) loss of temporal continuity: skipping more frames enlarges the time gap between consecutive inputs, impeding the model’s ability to capture smooth target motion and causing drift in tracking boundaries and localization points; (ii) loss of key-frame information: key frames carry fine-grained details for target localization; (iii) amplified appearance and contextual variation: as the frame interval grows, changes in scene illumination, view-point or target appearance become more pronounced, depriving the model of su ffi cient inter-frame comparisons to distinguish target from background. 
+
+Impact of Top-K QAM . We investigate the impact of the candidate number K ∈ { 1, 3, 5, 10 }
+
+in the QAM module. For VQ2D, Fig.6(c) shows that increasing K from 1 to 5 con-26 Table 5: Ablation study on the multi-view aggregation function (GSJC scheme) on VQ3D validation set. Semantic ϑsem and geometric ϖ weights are progressively integrated. The optimal full configuration is highlighted in light gray .                                                                                                         
+
+> Semantic ϑsem Geometric ϖVQ3D Validation Set Variant /Setting Pave Pthr Pmax ϖdepth ϖreproj ϖtri Succ. ↑Succ.* ↑L2 ↓Ang. ↓QwP(%) ↑
+> Baseline (w /o Aggregation) ––––––78.13 94.32 1.66 0.76 84.48
+> Single Semantic Component
+> ✓78.25 94.40 1.64 0.72 84.48
+> ✓78.44 94.93 1.52 0.67 84.48
+> ✓79.12 96.13 1.45 0.64 84.48
+> Semantic Combinations
+> ✓✓80.85 96.78 1.39 0.61 84.48
+> ✓✓80.99 96.64 1.42 0.62 84.48
+> ✓✓80.95 96.70 1.40 0.62 84.48
+> ✓✓✓81.42 96.93 1.37 0.60 84.48
+> +Partial Geometric Weights
+> ✓✓✓✓81.63 97.96 1.32 0.58 84.48
+> ✓✓✓✓81.82 98.11 1.31 0.57 84.48
+> ✓✓✓✓81.54 97.84 1.34 0.56 84.48
+> Full GSJC Scheme ✓✓✓✓✓✓82.25 98.22 1.30 0.56 84.48
+
+sistently improves Rec, stAP, and tAP. This validates that considering multiple peaks eff ectively retrieves targets under severe occlusion or motion blur. However, a larger 
+
+K = 10 introduces significant background noise, causing a sharp drop in stAP and Succ. Therefore, we select K = 5 as the optimal setting to balance retrieval robustness and localization accuracy. 
+
+Impact of RAM . We took several ablation studies to analyze the functional of the hier-archical Transformer backbone and evaluated some variants: (i) W /O DCM: standard Transformer lacking hierarchy without DCM. (ii) Stage[3,4]: two /four-stage hierarchi-cal Transformers. (iii) W /O FFN: lightweight variant, removing FFN layers for reduced complexity. (iv) W /O PE: variant without position encoding. (vi) ResNet-101[49] vari-ant replaced the hierarchical Transformer architecture. Tab.4 shows that replacing the DCM with a standard attention mechanism does not improve performance, likely be-cause fine-grained feature scaling is necessary during fusion with segmentation fea-tures. While deeper hierarchical Transformers can refine representations, they o ff er 27 only marginal overall gains. The impact of absolute positional encoding is similarly negligible; considering the object dynamics induced by camera motion, relative po-sitional information may be more e ff ective. Comparing backbone architectures, our model outperforms the ResNet-101 variant, highlighting the limitations of CNNs in capturing the long-range dependencies and global context required for cross-scale vi-sual localization. These results reinforce the importance of Transformers in correlating global and local features, a capability that our module is designed to exploit. 
+
+Impact on Multi-view Aggregation 8. We first evaluate the impact of semantic weight-ing via ϑsem . Results indicate that incorporating the full set of proxies ( Pave , Pthr , and 
+
+Pmax ) significantly enhances the Success rate from 78.13% to 81.42% and reduces the L2 error by 0.29. Among individual components, Pmax provides the most substantial gain, demonstrating that identifying peak-response frames is crucial for filtering out noisy temporal observations. The integration of ϖdepth , ϖrepro j , and ϖtri culminates in an optimal Success rate of 82.25% and a Success* of 98.22%. Notably, ϖrepro j con-tributes most to Succ* by enforcing multi-view consistency. While accuracy metrics show consistent improvement, QwP remains constant at 84.48% as it is bounded by the preceding camera pose and depth estimation stage, confirming that our GSJC scheme primarily optimizes prediction precision through semantic-geometric cooperation. 
+
+5. Conclusions 
+
+We present EgoHieraLoc, a human-vision-inspired framework unifying VQL-2D and -3D to address egocentric VQL. It employs three cooperating 2D modules—Discriminative Parsing Module (DPM), Query-aware Module (QAM), and Regional Adaptation Mod-ule (RAM)—for robust, fine-grained object localization via hierarchical processing. Further, our Geometric-Semantic Joint Confidence (GSJC) weighting scheme enables reliability-driven multi-view fusion for stable 3D displacement estimation. By syner-gistically integrating semantic guidance and geometric reliability, EgoHieraLoc achieves state-of-the-art performance across VQL benchmarks, setting a strong new baseline. 
+
+> 8A comprehensive analysis of GSJC is provided in Appendix D.3.
+
+28 Acknowledgments . This work supported by the National Natural Science Foundation of China (Grant:61672128) and from the Dalian Key Field Innovation Team Support Plan (Grant:2020RT07). 
+
+References 
+
+[1] C. Plizzari, G. Goletto, A. Furnari, S. Bansal, F. Ragusa, G. M. Farinella, D. Damen, T. Tommasi, An outlook into the future of egocentric vision, Inter-national Journal of Computer Vision (2024) 1–57. [2] K. Grauman, A. Westbury, E. Byrne, Z. Chavis, A. Furnari, R. Girdhar, J. Ham-burger, H. Jiang, M. Liu, X. Liu, et al., Ego4d: Around the world in 3,000 hours of egocentric video, in: Proceedings of the IEEE /CVF Conference on Computer Vision and Pattern Recognition, 2022, pp. 18995–19012. [3] S. Khosla, A. Schwing, D. Hoiem, et al., Relocate: A simple training-free base-line for visual query localization using region-based representations, in: Pro-ceedings of the Computer Vision and Pattern Recognition Conference, 2025, pp. 3697–3706. [4] Y. Cao, Y. Liu, G. Wang, Z. Liu, K. Wang, X. Zhang, J. Yu, X. Tu, Eagle: Episodic appearance-and geometry-aware memory for unified 2d-3d visual query localiza-tion in egocentric vision, in: Proceedings of the AAAI Conference on Artificial Intelligence, Vol. 40, 2026, pp. 2634–2642. [5] J. Mai, C. Zhao, A. Hamdi, S. Giancola, B. Ghanem, Estimating more camera poses for ego-centric videos is essential for vq3d, arXiv preprint arXiv:2211.10284 (2022). [6] C. Forigua, M. Escobar, J. Pont-Tuset, K.-K. Maninis, P. Arbeláez, Egocol: Ego-centric camera pose estimation for open-world 3d object localization@ ego4d challenge 2023, arXiv preprint arXiv:2306.16606 (2023). [7] M. Xu, Y. Li, C.-Y. Fu, B. Ghanem, T. Xiang, J.-M. Pérez-Rúa, Where is my wallet? modeling object proposal sets for egocentric visual query localization, 29 in: Proceedings of the IEEE /CVF Conference on Computer Vision and Pattern Recognition, 2023, pp. 2593–2603. [8] J. Mai, A. Hamdi, S. Giancola, C. Zhao, B. Ghanem, Egoloc: Revisiting 3d object localization from egocentric videos with visual queries, in: Proceedings of the IEEE /CVF International Conference on Computer Vision, 2023, pp. 45–57. [9] H. Jiang, S. K. Ramakrishnan, K. Grauman, Single-stage visual query localiza-tion in egocentric videos, Advances in Neural Information Processing Systems 36 (2024). [10] B. Fan, Y. Feng, Y. Tian, Y. Lin, Y. Huang, H. Fan, Prvql: Progressive knowledge-guided refinement for robust egocentric visual query localization, arXiv preprint arXiv:2502.07707 (2025). [11] J. Chang, S. Hong, H. Lee, S. J. Ha, D. Lee, S. T. Kim, J. Choi, Hero-vql: Hierar-chical, egocentric and robust visual query localization (2025). arXiv:2509.00385. [12] Y. Cao, G. Wang, M. Hou, J. Yu, X. Zhang, X. Bu, Z. Li, Y. Liu, Biovql: Brain-inspired one-stage egocentric visual query localization, in: Proceedings of the 2026 International Conference on Multimedia Retrieval, 2026, pp. 88–98. [13] A. Kirillov, E. Mintun, N. Ravi, H. Mao, C. Rolland, L. Gustafson, T. Xiao, S. Whitehead, A. C. Berg, W.-Y. Lo, et al., Segment anything, in: Proceedings of the IEEE /CVF International Conference on Computer Vision, 2023, pp. 4015– 4026. [14] D. S. Bolme, J. R. Beveridge, B. A. Draper, Y. M. Lui, Visual object tracking using adaptive correlation filters, in: 2010 IEEE computer society conference on computer vision and pattern recognition, IEEE, 2010, pp. 2544–2550. [15] M. Dunnhofer, A. Furnari, G. M. Farinella, C. Micheloni, Is first person vision challenging for object tracking?, in: Proceedings of the IEEE /CVF International Conference on Computer Vision, 2021, pp. 2698–2710. 30 [16] M. Dunnhofer, A. Furnari, G. M. Farinella, C. Micheloni, Visual object tracking in first person vision, International Journal of Computer Vision 131 (1) (2023) 259–283. [17] S. Zhang, Y. Sui, S. Zhao, L. Zhang, Graph-regularized structured support vec-tor machine for object tracking, IEEE Transactions on Circuits and Systems for Video Technology 27 (6) (2015) 1249–1262. [18] J. Zhu, X. Chen, P. Zhang, X. Wang, D. Wang, W. Zhao, H. Lu, Srrt: Exploring search region regulation for visual object tracking, IEEE Transactions on Circuits and Systems for Video Technology 34 (11) (2024) 10551–10563. [19] C. Liu, J. Zhao, C. Bo, S. Li, D. Wang, H. Lu, Lgtrack: Exploiting local and global properties for robust visual tracking, IEEE Transactions on Circuits and Systems for Video Technology 34 (9) (2024) 8161–8171. [20] L. Bertinetto, J. Valmadre, J. F. Henriques, A. Vedaldi, P. H. Torr, Fully-convolutional siamese networks for object tracking, in: Computer Vision–ECCV 2016 Workshops: Amsterdam, The Netherlands, October 8-10 and 15-16, 2016, Proceedings, Part II 14, Springer, 2016, pp. 850–865. [21] B. Li, J. Yan, W. Wu, Z. Zhu, X. Hu, High performance visual tracking with siamese region proposal network, in: Proceedings of the IEEE conference on computer vision and pattern recognition, 2018, pp. 8971–8980. [22] B. Li, W. Wu, Q. Wang, F. Zhang, J. Xing, J. Yan, Siamrpn ++ : Evolution of siamese visual tracking with very deep networks, in: Proceedings of the IEEE /CVF conference on computer vision and pattern recognition, 2019, pp. 4282–4291. [23] Y. Xu, Z. Wang, Z. Li, Y. Yuan, G. Yu, Siamfc ++ : Towards robust and accurate visual tracking with target estimation guidelines, in: Proceedings of the AAAI conference on artificial intelligence, Vol. 34, 2020, pp. 12549–12556. 31 [24] W. Hu, Q. Wang, L. Zhang, L. Bertinetto, P. H. Torr, Siammask: A framework for fast online object tracking and segmentation, IEEE Transactions on Pattern Analysis and Machine Intelligence 45 (3) (2023) 3072–3089. [25] B. Yan, H. Peng, J. Fu, D. Wang, H. Lu, Learning spatio-temporal transformer for visual tracking, in: Proceedings of the IEEE /CVF international conference on computer vision, 2021, pp. 10448–10457. [26] J. Wu, Y. Jiang, S. Bai, W. Zhang, X. Bai, Seqformer: Sequential transformer for video instance segmentation, in: European Conference on Computer Vision, Springer, 2022, pp. 553–569. [27] A. Lukezic, J. Matas, M. Kristan, D3s-a discriminative single shot segmentation tracker, in: Proceedings of the IEEE /CVF conference on computer vision and pattern recognition, 2020, pp. 7133–7142. [28] L. Yang, Y. Fan, N. Xu, Video instance segmentation, CoRR abs /1905.04804 (2019). URL https://arxiv.org/abs/1905.04804 
+
+[29] P. Voigtlaender, Y. Chai, F. Schro ff , H. Adam, B. Leibe, L.-C. Chen, Feelvos: Fast end-to-end embedding learning for video object segmentation, in: Proceedings of the IEEE /CVF conference on computer vision and pattern recognition, 2019, pp. 9481–9490. [30] Y. Wang, Z. Xu, X. Wang, C. Shen, B. Cheng, H. Shen, H. Xia, End-to-end video instance segmentation with transformers, in: Proceedings of the IEEE /CVF conference on computer vision and pattern recognition, 2021, pp. 8741–8750. [31] N. Ravi, V. Gabeur, Y.-T. Hu, R. Hu, C. Ryali, T. Ma, H. Khedr, R. Rädle, C. Rol-land, L. Gustafson, et al., Sam 2: Segment anything in images and videos, arXiv preprint arXiv:2408.00714 (2024). [32] P. Voigtlaender, J. Luiten, P. H. Torr, B. Leibe, Siam r-cnn: Visual tracking by re-detection, in: Proceedings of the IEEE /CVF conference on computer vision and pattern recognition, 2020, pp. 6578–6588. 32 [33] M. Xu, C.-Y. Fu, Y. Li, B. Ghanem, J.-M. Perez-Rua, T. Xiang, Nega-tive frames matter in egocentric visual query 2d localization, arXiv preprint arXiv:2208.01949 (2022). [34] S. Ullman, The interpretation of structure from motion, Proceedings of the Royal Society of London. Series B. Biological Sciences 203 (1153) (1979) 405–426. [35] S. Patra, K. Gupta, F. Ahmad, C. Arora, S. Banerjee, Ego-slam: A robust monocu-lar slam for egocentric videos, in: 2019 IEEE Winter Conference on Applications of Computer Vision (WACV), IEEE, 2019, pp. 31–40. [36] V. Tschernezki, D. Larlus, A. Vedaldi, Neuraldi ff : Segmenting 3d objects that move in egocentric videos, in: 2021 International Conference on 3D Vision (3DV), IEEE, 2021, pp. 910–919. [37] B. Mildenhall, P. P. Srinivasan, M. Tancik, J. T. Barron, R. Ramamoorthi, R. Ng, Nerf: Representing scenes as neural radiance fields for view synthesis, Commu-nications of the ACM 65 (1) (2021) 99–106. [38] Q. Gu, Z. Lv, D. Frost, S. Green, J. Straub, C. Sweeney, Egolifter: Open-world 3d segmentation for egocentric perception, arXiv preprint arXiv:2403.18118 (2024). [39] S. Wang, V. Leroy, Y. Cabon, B. Chidlovskii, J. Revaud, Dust3r: Geometric 3d vision made easy, in: Proceedings of the IEEE /CVF Conference on Computer Vision and Pattern Recognition, 2024, pp. 20697–20709. [40] D. Zhang, G. Li, J. Li, M. Bressieux, O. Hilliges, M. Pollefeys, L. Van Gool, X. Wang, Egogaussian: Dynamic scene understanding from egocentric video with 3d gaussian splatting, arXiv preprint arXiv:2406.19811 (2024). [41] B. Kerbl, G. Kopanas, T. Leimkühler, G. Drettakis, 3d gaussian splatting for real-time radiance field rendering., ACM Trans. Graph. 42 (4) (2023) 139–1. [42] L. Yang, B. Kang, Z. Huang, X. Xu, J. Feng, H. Zhao, Depth anything: Unleash-ing the power of large-scale unlabeled data, in: Proceedings of the IEEE /CVF 33 Conference on Computer Vision and Pattern Recognition, 2024, pp. 10371– 10381. [43] M. Danelljan, G. Bhat, F. S. Khan, M. Felsberg, Atom: Accurate tracking by overlap maximization, in: Proceedings of the IEEE /CVF conference on computer vision and pattern recognition, 2019, pp. 4660–4669. [44] G. Bhat, M. Danelljan, L. V. Gool, R. Timofte, Learning discriminative model prediction for tracking, in: Proceedings of the IEEE /CVF international confer-ence on computer vision, 2019, pp. 6182–6191. [45] W. Wang, E. Xie, X. Li, D.-P. Fan, K. Song, D. Liang, T. Lu, P. Luo, L. Shao, Pyramid vision transformer: A versatile backbone for dense prediction without convolutions, in: Proceedings of the IEEE /CVF international conference on com-puter vision, 2021, pp. 568–578. [46] A. Darkhalil, D. Shan, B. Zhu, J. Ma, A. Kar, R. Higgins, S. Fidler, D. Fouhey, D. Damen, Epic-kitchens visor benchmark: Video segmentations and object re-lations, Advances in Neural Information Processing Systems 35 (2022) 13745– 13758. [47] I. Loshchilov, F. Hutter, Decoupled weight decay regularization, in: International Conference on Learning Representations. [48] J. L. Schonberger, J.-M. Frahm, Structure-from-motion revisited, in: Proceedings of the IEEE conference on computer vision and pattern recognition, 2016, pp. 4104–4113. [49] K. He, X. Zhang, S. Ren, J. Sun, Deep residual learning for image recognition, in: Proceedings of the IEEE conference on computer vision and pattern recognition, 2016, pp. 770–778. [50] H. Tang, K. J. Liang, K. Grauman, M. Feiszli, W. Wang, Egotracks: A long-term egocentric visual object tracking dataset, Advances in Neural Information Processing Systems 36 (2024). 34 [51] K. Dai, Y. Zhang, D. Wang, J. Li, H. Lu, X. Yang, High-performance long-term tracking with meta-updater, in: Proceedings of the IEEE /CVF conference on computer vision and pattern recognition, 2020, pp. 6298–6307. [52] L. Huang, X. Zhao, K. Huang, Globaltrack: A simple and strong baseline for long-term tracking, in: Proceedings of the AAAI conference on artificial intelli-gence, Vol. 34, 2020, pp. 11037–11044. [53] C. Mayer, M. Danelljan, G. Bhat, M. Paul, D. P. Paudel, F. Yu, L. Van Gool, Transforming model prediction for tracking, in: Proceedings of the IEEE /CVF conference on computer vision and pattern recognition, 2022, pp. 8731–8740. [54] Y. Cui, C. Jiang, L. Wang, G. Wu, Mixformer: End-to-end tracking with iterative mixed attention, in: Proceedings of the IEEE /CVF conference on computer vision and pattern recognition, 2022, pp. 13608–13618. 35 Supplementary Material Appendix A. Statistical Significance Validation 
+
+To demonstrate that our performance gains are statistically robust and not an ar-tifact of random seed selection, we conduct multiple independent runs to validate the statistical significance of our results. Specifically, we execute 5 independent training runs with di ff erent random seeds on the Ego4D-VQ2D validation set (Table A.6a). We also measure the multi-run variance of the RELOCATE baseline under identical experimental conditions (Table A.6b). The 95% confidence interval (CI) for the success rate improvement ( ∆Succ ) is cal-culated as: 
+
+∆Succ = (Succ Ours − Succ RELOCATE ) ± 1.96 
+
+s
+
+σ2Ours + σ2RELOCATE 
+
+5 (A.1) This yields ∆Succ = 62 .44% − 58 .06% = 4.38% ± 0.57% [95% CI: 3 .81%–4 .95%] (p < 0.001 via Welch’s t-test). Since the confidence interval is strictly above zero and well exceeds the benchmark’s typical noise magnitude, the observed improvement is statistically significant. This confirms that our architecture consistently outperforming the baseline is robust across random initializations. 
+
+Table A.6: Multi-run validation results across 5 independent runs with di ff erent random seeds.                                                         
+
+> (a) Ego4D-VQ2D Validation Set (Ours)
+> Metric Run 1 Run 2 Run 3 Run 4 Run 5 Mean ±Std tAP25 0.42 0.44 0.43 0.43 0.44 0.432 ±0.008 stAP25 0.34 0.36 0.35 0.35 0.36 0.352 ±0.008 Rec. (%) 50.95 51.87 51.23 51.52 51.65 51 .44 ±0.32 Succ. (%) 61.65 63.12 62.18 62.30 62.95 62 .44 ±0.62
+> (b) RELOCATE Baseline Multi-run Validation
+> Metric Run 1 Run 2 Run 3 Run 4 Run 5 Mean ±Std Succ. (%) 57.85 58.34 57.92 58.15 58.06 58 .06 ±0.18
+
+Appendix B. VQL-to-VOT Transfer 
+
+To the best of our knowledge, Ego4D-VQ[2] is currently the only benchmark for VQL. The workflow of VQL shares both similarities and di ff erences with visual object tracking (VOT). The main distinctions lie in their initialization and output logic. The 36 core of our method (specifically the VQL-2D branch) is a segmentation-based tracking paradigm; therefore, in addition to its use for VQL, our framework can serve as a ro-bust tracking algorithm for evaluation on egocentric tracking benchmarks. For VQL, our method initializes a segmentation mask based on an input query image. This mask is then propagated and updated frame-by-frame throughout the video in a manner sim-ilar to Video Object Segmentation (VOS) until the end of the video to determine the final appearance of the target. When tracking (mask propagation) fails or the target temporarily disappears, instead of using a separate detector to re-detect the bounding box, we attempt to “re-awaken” or “match” the segmented target in subsequent frames using the original query image and updated templates. To adapt our method for ego-centric VOT, we discard the reliance on an external static query image. It directly uses the interior of the bounding box provided in the initial frame of the VOT task as a coarse initial segmentation mask. Concurrently, the logic for determining the "last appearance" is removed, and the system is adjusted to continuously output the segmen-tation mask for each frame. These masks are then converted into minimum bounding rectangles to complete the tracking output. 
+
+EgoTracks. We evaluate on the long-term egocentric benchmark EgoTracks [50] under both VCT-VS and VCT-VC settings (Table.B.7). Our method outperforms the previous SOTA EgoSTARK[25, 50] in both tracks. Specifically, we achieve gains of 1.2% AO 
+
+/ 3.4% F-score on VCT-VS and 5.5% AO / 4.5% F-score on VCT-VC. These results demonstrate that our model maintains robust tracking in long sequences solely through query appearance priors, without explicit detection modules, while significantly en-hancing local feature representation and consistency (qualitative results in Fig. C.9). 
+
+TREK-150. We evaluate on the TREK-150 [15] benchmark using standard OPE and MSE protocols. OPE (Fig.B.7): EgoHieraLoc outperforms the previous best LTMU[51] across all metrics, achieving gains of 2.5% (SS), 10.7% (NPS), and 1.8% (GSR). MSE (Fig. B.8): Our method demonstrates superior robustness on challenging attributes, specifically FM, LR, FOC, and OUT. This confirms EgoHieraLoc’s e ff ec-tiveness in handling severe viewpoint changes and occlusions characteristic of egocen-tric videos. Fig.C.9 and Fig. C.10 present qualitative visualizations of our algorithm’s perfor-37 Table B.7: Comparison with the state-of-the-art trackers on EgoTracks under VCT-VS and VCT-VC .
+
+† indicates that this work was fine-tuned on EgoTracks.                                                                                   
+
+> VCT-VS VCT-VC Method AO ↑F-score ↑Precision ↑Recall ↑FPS ↑AO ↑F-score ↑Precision ↑Recall ↑
+> GlobalTrack[52] 23.63 20.35 31.28 15.14 6----LTMU[51] 29.33 27.46 37.28 21.74 13 ----ToMP[53] 30.93 20.95 19.63 22.46 5----ToMP ( †)36.13 28.11 29.01 27.26 437.32 29.31 30.22 28.45 MixFormer[54] 27.93 25.54 28.30 23.27 728.63 26.68 29.55 24.31 SiamRCNN[32]( †)45.37 41.41 56.11 32.81 4.5 46.11 43.20 61.28 33.36 EgoSTARK[50]( †)45.46 43.33 56.88 34.99 947.33 44.54 59.86 35.47 EgoHieraLoc(Ours) 45.99 44.80 58.11 36.45 549.91 46.53 62.57 37.03
+
+mance on the tracking benchmark, comparing it against state-of-the-art methods. The results demonstrate that, under the initialization template setup, our algorithm excels in challenging scenarios and maintains robust performance as a tracking baseline. 
+
+Fig. B.7. Comparison with the state-of-the-art trackers on TREK-150 under the OPE . Within the brackets adjacent to the tracker names, we show the SS, NPS, and GSR values achieved by trackers among benchmarks. 
+
+Appendix C. Camera Pose Estimation and Alignment 
+
+Estimating camera poses from first-person perspective videos with significant view-point changes is a highly challenging task. EgoLoc[8] used a direct and e ffi cient solu-tion paradigm: COLMAP. As shown in Fig.1(a), we also employ COLMAP [48] for camera pose estimation and 3D reconstruction. By adjusting and optimizing the hy-38 Fig. B.8. Comparison with the state-of-the-art trackers on the sequence attributes of TREK-150 under the MSE .
+
+perparameter settings to better accommodate the characteristics of egocentric videos, we can obtain more valid camera poses in a shorter time compared to the COLMAP settings used in EgoLoc. We employ a keypoint matching strategy and Perspective-n-Point (PnP) solver for camera pose estimation. Overall, our approach comprises the following four steps. 
+
+First , we estimate the camera intrinsics using Structure-from-Motion (SfM). Second ,we extract and match keypoints from each frame in the video with keypoints extracted from Matterport3D scan panoramas. Then , leveraging the matched keypoints, we for-mulate and solve the PnP problem for each frame in the video to estimate the corre-sponding camera pose. Finally , we refine these poses using temporal constraints. 
+
+Camera intrinsics prediction We use Laplacian transformation on non-blurry frames to construct a contiguous set of non-blurry images. To constrain the computational cost of SfM, we cap the number of selected frames at 25. The camera intrinsics are then estimated by running COLMAP automatic reconstruction model. 
+
+Keypoint extraction and matching We employ SuperGlue 9 for keypoint extraction and matching. We begin by extracting keypoints from the scan panoramas {k{p,n}, p ∈
+
+P, n ∈ Nkp }, where P denotes the number of panoramas and Nkp represents the number of keypoints. Subsequently, we render RGB and depth images at each scan position, sweeping over pitch values ∈ [−60 , 60] with a step size of 5 degrees and yaw values 
+
+∈ [−180 , 180] with a step size of 10 degrees. On average, we generate 9K images per 
+
+> 9https: // github.com /magicleap /SuperGluePretrainedNetwork
+
+39 scan. We extract keypoints from the video frames {k{n,b}, n ∈ NV , b ∈ B}, where NV
+
+signifies the number of images in the video and B the number of keypoints. Once the keypoints are extracted, we iterate through each frame n ∈ NV in the video and match the extracted frame keypoints {k{n,b}, b ∈ B}, to all panorama keypoints {k{w,r}, w ∈
+
+W, r ∈ R}. We utilize pre-trained SuperPoint 10 models for keypoint and descriptor extraction, and SuperGlue for the matching process. 
+
+Initial pose estimation The positions of the 3D keypoints are computed using a pin-hole camera model of the Matterport scan, in conjunction with the rendered panorama depth, camera intrinsics, and camera pose. The positions of the 2D keypoints are di-rectly extracted from the video frame pixels. Subsequently, we employ the OpenCV library to solve the PnP problem, estimating the camera pose from the matched 3D and 2D point correspondences, utilizing the estimated camera intrinsics. Finally, we incorporate temporal constraints to increase the number of camera pose estimates. 
+
+Temporal Refinement . Following [2], we optimize pose estimation by incorporating temporal constraints within the iterative process. Specifically, we begin by extract-ing 2D keypoints from the localization frame and matching them to non-localization frames within the video. We employ the same SuperGlue, along with utilizing the matched keypoints and the currently estimated pose. We triangulate novel 3D key-points for the non-localization images. Subsequently, we solve a novel PnP configura-tion using these new keypoints. We iteratively apply this process until convergence.                        
+
+> 1import subprocess
+> 2import shlex
+> 34def align_colmap_model ( m a t t e r p o r t _ r e n d e r i n g s _ p a t h ) :
+> 5command =[
+> 6’ colmap ’ ,
+> 7’ model_aligner ’ ,
+> 8’ -- ref_images_path ’ , matterport_renderings_path ,
+> 9’ -- ref_is_gps ’ , ’0 ’ ,
+> 10 ’ -- robust_alignment ’ , ’1 ’ ,
+> 11 ’ -- alignment_type ’ , ’ custom ’ ,
+> 12 ’ -- estimate_scale ’ , ’1 ’ ,
+> 13 ’ -- r o b u s t _ a l i g n m e n t _ m a x _ e r r o r ’ , ’ 30 ’
+> 10 https: // github.com /rpautrat /SuperPoint
+
+40 14 ]                   
+
+> 15 try :
+> 16 result =subprocess . run (
+> 17 command ,
+> 18 check = True ,
+> 19 capture_output = True ,
+> 20 text = True
+> 21 )
+> 22 print ( " COLMAP output :\ n " , result . stdout )
+> 23 except subprocess . CalledProcessError as e :
+> 24 print ( f " COLMAP failure : { e } " )
+> Listing 1: Script code for model_aligner
+
+Alignment between Matterport Scan and Videos . Since the poses provided by COLMAP are inconsistent with the Matterport world coordinate system, alignment is required. We employ a post-processing step, aligning the COLMAP reconstruction with the Matterport scan coordinate system via a Sim3 transformation. Specifically, we utilize COLMAP’s model_aligner function and render at least five images with known camera poses from the Matterport scan. Subsequently, we estimate the Sim3 transfor-mation between the COLMAP coordinate system and the Matterport scan coordinate system using the script in Listing. 1. This enables us to evaluate the results in the same coordinate system in which the annotators labeled the ground truth 3D bounding boxes. 
+
+Appendix D. Additional Ablations 
+
+Appendix D.1. Impact of Training Data: VISOR Contribution Analysis 
+
+To isolate the architectural contribution from the e ff ect of additional training data, we conduct an ablation study removing the VISOR dataset from the training pipeline. The model trained exclusively on Ego4D-VQ is compared against both our full model and the RELOCATE baseline (which uses only Ego4D-VQ training). The following are the key findings: (i) Without VISOR, EgoHieraLoc achieves 60 .45% success rate vs. RELOCATE’s 58 .04%, demonstrating a +2.41 % improve-ment purely from our three-module design (DPM, QAM, RAM) and GSJC weighting. (ii)The additional 1 .85% gain (62 .30% − 60 .45%) comes from leveraging VISOR’s 41 Fig. C.9. Visualization of comparison with SOTA trackers on EgoTracks.  
+
+> Fig. C.10. Qualitative comparison with state-of-the-art trackers on TREK-150. .
+
+dense pixel-level supervision during 30% of training iterations, providing supplemen-tary mask guidance that refines the segmentation branch. (iii) This decomposition clar-ifies that the core architectural innovations contribute more to performance improve-ment than the additional training data, validating the design choices of DPM, QAM, and RAM over simpler feature-matching baselines. We further evaluate this variant on Ego4D-VQ3D (Table.D.8b), which demonstrates that the consistent improvement across both 2D and 3D tasks confirms that VISOR provides complementary mask su-pervision that enhances the robustness of our segmentation pipeline. 42 Table D.8: VISOR dataset ablation study on Ego4D-VQ2D and VQ3D validation sets.                                             
+
+> (a) Ego4D-VQ2D Validation Set
+> Training Data tAP25 stAP25 Rec.(%) Succ.(%)
+> RELOCATE (Ego4D-VQ only) 0.41 0.33 50.50 58.04 EgoHieraLoc w /o VISOR 0.41 0.33 50.88 60.45
+> ∆vs. RELOCATE +0.00 +0.00 +0.38% +2.41 %EgoHieraLoc w /VISOR 0.43 0.35 51.52 62.30
+> ∆vs. RELOCATE +0.02 +0.02 +1.02% +4.26 %
+> (b) Ego4D-VQ3D Validation Set
+> Training Data Succ.(%) Succ*(%) L2 ( ↓)QwP(%)
+> EgoHieraLoc w /o VISOR 80.12 97.89 1.38 84.48 EgoHieraLoc w /VISOR 82.25 98.22 1.30 84.48 Improvement +2.13% +0.33% −0.08 −
+
+Appendix D.2. Impact of components of QAM on EgoTracks 
+
+In addition, we analyze the critical components of QAM on EgoTracks. Two vari-ants of QAM are adopted, consistent with the experiments on Ego4D-VQ: (i) QAM without elliptical model constraints and (ii) QAM without multi-peak detection. As illustrated in Fig.D.11, the absence of the elliptical model in the VCT-VC configu-ration results in a decrease in F-score from 45.16 to 40.73 and recall from 38.03 to 33.44. Removing the multi-peak component reduces the F-score from 45.16 to 42.40, recall from 38.03 to 35.63, and precision from 55.57 to 52.34. Under the VCT-VS setting, the lack of elliptical constraints causes recall to drop from 36.45 to 32.34 and F-score from 43.23 to 39.62. Similarly, removing multi-peak detection leads to a re-duction in F-score from 43.23 to 40.01, recall from 36.45 to 33.27, and precision from 53.11 to 50.18. The experiments on elliptical model constraints indicate an asymmet-ric impact on recall, demonstrating that recall is more sensitive to missed detections than precision. When the target undergoes deformation, the DCF loses confidence in the spatial extent of the target, causing tracking failure rates to increase significantly. Elliptical constraints e ff ectively encode continuous geometric priors into the target re-gion, providing a structurally grounded reference for the tracker. In the experiments regarding multi-peak detection, it is observed that unresolved peak ambiguities cause the tracker to lock onto distractor responses, creating false associations that directly degrade detection-level precision. Significant di ff erences in runtime exist between the two configurations. In the VCT-VS setting, the tracker processes every frame in causal order starting from the first frame, representing a single unidirectional scan of the en-tire temporal sequence. In the VCT-VC setting, the tracker executes twice for the same 43 video by running forward and backward from the visual crop frame, which doubles the total number of frames processed per video segment. Although the forward and back-ward runs in VCT-VC only cover portions of the video timeline anchored by the visual crop, VCT-VS must handle the full duration of the video in a single uninterrupted infer-ence process. This accumulates longer total inference sequences and subsequently low-ers the e ff ective frame rate. Furthermore, VCT-VS lacks the visual proximity advantage inherent in VCT-VC, where high-quality visual crop templates serve as initialization references. In VCT-VC, the initial frames exhibit high visual similarity to the template, a structural proximity that reduces costly re-detection and template update operations triggered by appearance drift and indirectly increases throughput. In contrast, VCT-VS must cope with the full range of appearance changes accumulated throughout the entire video from the very first frame. Ablation results demonstrate that the complete QAM module maximizes tracking robustness by integrating geometric and distribution priors, yielding the highest F-score and average overlap (AO) metrics. Specifically, elliptical modeling serves as a vital supplement to the underlying filter by providing critical spa-tial morphology priors that adapt to non-rigid deformations. Meanwhile, multi-peak detection explicitly addresses localization ambiguities that arise when the target re-sponse map exhibits multiple discontinuous peaks. The removal of either component deprives the tracker of essential shape awareness and peak discrimination capabilities, leading to tracking failures during severe deformations. However, the computation of these advanced spatial-visual constraints introduces unavoidable processing overhead. Consequently, integrating the full QAM results in a decrease in inference speed from 18 FPS to 13 FPS in the VCT-VC setting and from 10 FPS to 5 FPS in the VCT-VS setting. 
+
+Appendix D.3. Complete Analysis of GSJC 
+
+As detailed in Table .5, the experimental results highlight the critical role of se-mantic weighting factors in improving localization accuracy within the VQ3D task. Among the individual components of ϑsem , Pmax yields the most significant single-factor contribution, raising the success rate from 78.13% to 79.12% and reducing the Angle error by 0.12. The integration of all three semantic metrics ( Pave , Pthr , and 44 Fig. D.11. Ablations for QAM modules on EgoTracks. 
+
+Pmax ) further boosts the success rate to 81.42% and decreases the L2 error from 1.66 to 1.37. This trend suggests that combining diverse semantic evidence e ff ectively fil-ters out low-quality frames, providing a more robust foundation for spatial reasoning than relying on any single metric. The introduction of geometric reliability factors as additional weights provides incremental performance gains over the semantic-only baseline. Among the geometric components, ϖrepro j proves to be the most influential factor, achieving a Succ score of 81.82% and a Succ* of 98.11% when added to the full semantic set. In comparison, ϖdepth and ϖtri yield slightly lower but consistent improvements. These metrics physically constrain the 3D predictions by assessing re-projection consistency and triangulation geometry, ensuring that the aggregation pro-cess prioritizes viewpoints with higher geometric fidelity. The complete integration of both semantic and geometric components in the GSJC scheme yields the optimal performance across all metrics, achieving a Succ of 82.25% and an L2 error of 1.30. This represents a cumulative improvement of 4.12% in Succ and a 21.7% reduction in L2 error relative to the baseline. Notably, while accuracy and angular metrics show consistent optimization as more components are added, the QwP remains constant at 84.48%. Following the metric definition in [2], this is by design, not coincidence: QwP measures the fraction of queries with available camera poses for both response-track frames and the query frame. This condition depends solely on the success of offl ine COLMAP camera-pose estimation on raw video sequences. Since this pose estimation is a fixed pre-processing step performed prior to and independently of any network component, QwP depends only on the intrinsic geometric and photometric properties of the videos rather than on the model. Consequently, architectural or loss-45 LR decay  ◊0.1   
+
+> LR decay  ◊0.1
+> LR decay  ◊0.1 Fig. D.12. Training losses of EgoHieraLoc. We plot the raw mini-batch loss curves to illustrate convergence behavior under a multi-step learning rate scheduler. Vertical dashed lines denote 0.1 learning rate decay. Notably, the success rate (yellow curve, right y-axis) on validation set exhibits a pronounced acceleration following each annealing stage.
+
+function ablations—which alter how accurately an object is localized but not whether a camera pose can be recovered—leave both the numerator and denominator of QwP unchanged. In contrast, the Success and Success ∗ rates, which depend on the predicted 3D location’s accuracy, vary meaningfully across variants and thus serve as the primary indicators of each component’s contribution. In the original formulation, GSJC weights are multiplied and normalized as a weighted average. To ensure numerical stability when all weights are extremely small, we add a small epsilon and a fallback strategy. The total weight becomes ˜ϑi = ϑsem  
+
+> i
+
+· ϖdepth  
+
+> i
+
+· ϖreproj  
+
+> i
+
+· ϖtri  
+
+> i
+
+, ˜ϑi ← max( ˜ ϑi, ϵ ).
+
+Then the multi-view aggregation is 
+
+A {(x j, y j, z j, ˜ϑ j)}NC
+
+> j=1
+
+ =
+
+PNC 
+
+> j=1
+
+˜ϑ j [x j, y j, z j]
+
+PNC 
+
+> j=1
+
+˜ϑ j + ϵ .
+
+If PNC 
+
+> j=1
+
+˜ϑ j < ϵ , we fall back to uniform averaging. 46 Appendix D.4. Training Dynamics and Loss Component Analysis 
+
+Fig. D.12 presents the complete training dynamics of EgoHieraLoc over 20,000 iterations. All loss functions decrease in expectation, and the success rate (Val. Succ., right axis) rises steadily from initialization to a plateau of 62.30%, confirming sta-ble convergence without overfitting. The composite loss Ltotal descends from the ini-tial stage to approximately 0.21 at convergence, representing a reduction of 77.2%. Specifically, the learning rate schedule partitions training into three distinct optimiza-tion phases, each exhibiting characteristic loss behaviors. During the rapid feature ac-quisition phase (0 to 2,000 iterations), a linear warm-up scales the learning rate from 0 to a peak of 1 .5 × 10 −3 within the first 250 iterations, followed by full-rate optimization until the first step decay at 2,000. In this phase, LBCE and Lsmooth experience the most dramatic absolute declines, as the model rapidly acquires basic frame-query discrim-ination and coarse spatial regression capabilities. High-frequency oscillations in this period stem from (i) stochastic mini-batch sampling across heterogeneous data sources including Ego4D-VQ and VISOR, (ii) the inherent non-stationarity of the AdamW optimizer at high learning rates, and (iii) competing gradient signals from five simulta-neous loss terms shaping the shared feature representation. The DCF loss L f exhibits the highest initial amplitude and the fastest early decline. We emphasize that this de-cline does not arise from iteratively optimizing the correlation filter itself: for each query, the filter f ∗ is obtained analytically through the closed-form frequency-domain solution. Instead, L f measures the residual of this closed-form filter evaluated on the end-to-end fine-tuned backbone features F (·), so its steep early drop indicates that the shared backbone rapidly learns representations under which the analytically com-puted filter already yields a sharp Gaussian-like response. The segmentation-geometry co-refinement phase (2,000 to 11,000 iterations) begins with the first decay ( ×0.1 at 2,000), which lowers the learning rate to 1 .5 × 10 −4 and immediately dampens oscil-lation across all curves. The most significant relative declines occur in Ls2b
+
+> IoU
+
+, which drops 44% relative to its value at 2,000, and Lseg , which falls 51%, indicating that mask-to-box alignment and mixed segmentation supervision benefit from the stable feature representations established in the first stage. Notably, Lseg exhibits a distinctive two-stage descent pattern within this phase: a steep drop from 2,000 to 5,000 itera-47 tions followed by a shallower but sustained decline from 5,000 to 11,000. This trend reflects the mixed supervision strategy where the initial steep descent corresponds to the model fitting densely supervised VISOR samples that account for 30% of iterations and provide full pixel-level guidance. The subsequent gradual descent indicates pro-gressive adaptation to weakly supervised Ego4D-VQ pseudo-masks which comprise 70% of iterations with a coe ffi cient of λpdo = 0.3η4, where noisy labels from SAM constrain the rate of improvement. This observation validates the necessity of asym-metric loss weighting, as the noisy Ego4D labels would otherwise dominate Lseg and impede convergence. A second step decay ( ×0.1 at 4,000) further reduces gradient noise, after which the validation success rate experiences its most rapid rise, increasing by approximately 11.3 percentage points between 4,000 and 11,000 iterations. This suggests that the mid-training stage is critical for the model to internalize discrimi-native query-video correspondences. The final step decay ( ×0.1 at 11,000) initiates a precision refinement phase with low variance. All five losses stabilize within tight plateaus, where Smooth-L1 regression retains residual error on geometrically ambigu-ous samples while L f settles to a low, stable residual, indicating that the closed-form filter consistently produces sharp responses on the now-converged backbone features. The success rate reaches 62.30%, confirming that the model e ff ectively extracts learn-able signals from the training data without overfitting. We identify three interaction patterns. First, the synchronous decline of Ls2b 
+
+> IoU
+
+and Lseg indicates that mask quality and box tightness are learned jointly; improvements in the segmentation mask directly reduce background pixels within the fitted box, represented by lower N− 
+
+> IS
+
+, thereby de-creasing Ls2b 
+
+> IoU
+
+and confirming that both losses provide complementary signals. Second, 
+
+Lsmooth maintains the highest absolute value throughout training, reflecting its η2 = 0.4weight and the intrinsic di ffi culty of bounding box coordinate regression under highly variable egocentric viewpoints. The persistently higher residual of Lsmooth relative to 
+
+Ls2b 
+
+> IoU
+
+suggests that precise coordinate localization is a more challenging sub-task than holistic mask-box alignment, matching the observation that tAP25 lags behind success rate in the main results. Third, L f reaches its stable residual, around 3,000 iterations. Since the filter is solved in closed form rather than optimized, this early stabilization reflects that the backbone features feeding the filter become discriminative faster than 48 the segmentation and box-regression branches mature. This rapid convergence pro-vides a stable spatial prior to the QAM module, allowing it to guide RAM refinement reliably before the segmentation branch matures. 
+
+Appendix D.5. Hyperparameter Sensitivity Analysis for QAM 
+
+We evaluate the robustness of our method against variations in five key hyperparam-eters across ±30% ranges around the selected optimal values. This analysis assesses whether our design is overly tuned to the validation set. Across all five hyperparame-ters, performance fluctuations within ±30% perturbations range from ±0.5% to ±1.1%, demonstrating moderate robustness to hyperparameter choices. The selected hyperpa-rameters ( αQAM = 1.0, γ QAM = 0.4, η QAM = 0.7, λ e = 0.5) were optimized on the Ego4D-VQ validation set through grid search. For deployment on new datasets (e.g., EgoTracks, TREK-150), we recommend re-tuning these five parameters using the same grid-search protocol to maintain performance. The minimal degradation between vali-dation and test performance (e.g., tAP25: 0 .43 → 0.44) suggests that hyperparameter overfitting is not a major concern.                                                                               
+
+> Table D.9: Hyperparameter sensitivity analysis for QAM on Ego4D-VQ2D validation set. Optimal values are marked with ✓. Results show mean ±std over 3 runs.
+> Value tAP25 stAP25 Rec. Succ. Value tAP25 stAP25 Rec. Succ.
+> (a) Threshold Scale ( αQAM )(b) Deformation Decay ( γQAM )
+> 0.5 ( −30%) 0.41 0.33 50.2 61.3 0.2 ( −50%) 0.42 0.34 50.6 61.7
+> 1.0 ✓(Default) 0.43 0.35 51.5 62.3 0.4 ✓(Default) 0.43 0.35 51.5 62.3
+> 1.5 ( +30%) 0.42 0.34 50.8 61.8 0.6 ( +50%) 0.41 0.32 50.2 61.4
+> (c) Ellipse Smoothing ( ηQAM )(d) Ellipse Weight ( λe)
+> 0.5 ( −30%) 0.42 0.34 51.0 62.0 0.3 ( −40%) 0.41 0.32 50.1 61.5
+> 0.7 ✓(Default) 0.43 0.35 51.5 62.3 0.5 ✓(Default) 0.43 0.35 51.5 62.3
+> 0.9 ( +30%) 0.41 0.33 50.4 61.9 0.7 ( +40%) 0.42 0.34 50.9 62.1
+
+Appendix D.6. Visual Analysis of the Elliptical Constraint in QAM 
+
+To provide an intuitive understanding of how the dynamic elliptical constraint con-tributes to robust localization, we visualize the fitted ellipses and their e ff ect on target 49 Fig. D.13. Visualization of the dynamic elliptical constraint in QAM. Left two columns: the query image (left) and its corresponding adaptive elliptical fitting overlaid on the response map (right), where the white dashed ellipse and its semi-axes ( a, b) are automatically derived from the query’s bounding-box dimensions (Eq. (13)). For the elongated bottle (top), the constraint yields a high-aspect-ratio ellipse ( a ≫ b), whereas for the compact power tool (bottom), it produces a near-circular ellipse ( a ≈ b). Right ( 2 × 3) grid: 
+
+for each example, the top row shows three representative frames from the egocentric video sequence, and the bottom row shows the corresponding localization response maps produced by EgoHieraLoc. The red dashed ellipse indicates the anisotropic spatial prior applied during peak refinement (Eq. (16)). The elliptical constraint suppresses spurious o ff -axis peaks (e.g., background clutter, similar distractors) and concentrates the response energy along the object’s principal orientation, yielding accurate and stable localization even under severe viewpoint changes and partial occlusion. 
+
+retrieval across diverse egocentric scenes in Fig.D.13. As shown in the left columns of Fig.D.13, the elliptical constraint automatically adapts its geometry to the intrinsic shape of the query. The elongated water bottle induces a slender ellipse with a large semi-major-to-semi-minor axis ratio ( a/b ≈ 3.5), reflecting its vertical elongation. In contrast, the compact power tool produces a near-isotropic ellipse ( a/b ≈ 1.3). This shape-awareness is crucial: a fixed isotropic (circular) prior would either over-penalize the elongated object’s valid extent along its major axis or under-constrain the compact 50 object, both leading to localization drift. The bottom rows of each example demon-strate how the elliptical constraint reshapes the raw DCF response. Without the con-straint, the response maps exhibit multiple competing peaks—particularly in cluttered workshop scenes where reflective surfaces, tools, and hands generate strong distractor responses. The anisotropic distance metric in Eq.(16) penalizes candidate peaks that deviate from the object’s principal axes, e ff ectively down-weighting o ff -axis distrac-tors. As a result, the refined response (bottom rows) concentrates sharply around the true target, with the red dashed ellipse tightly enclosing the correct object. Across the three frames of each sequence, the query undergoes substantial scale and perspective changes induced by head-mounted camera motion. The recursive smoothing of the ellipse semi-axes (Eq.(13), ηQAM = 0.7) allows the constraint to gradually adapt to these variations while maintaining temporal stability. Notably, even when the target is partially occluded (e.g., the bottle held against a dark background, top-right frame), the elliptical prior—combined with the cumulative deformation field Ω(vi)—preserves accurate localization by leveraging the object’s expected spatial extent and motion tra-jectory. These qualitative observations align with the ablation results in Fig. 7 of the main paper, where removing the elliptical constraint degrades the VQ2D success rate from 62 .30% to 60 .39% ( −1.91%). The visualization here reveals the under-lying mechanism: the constraint’s primary benefit lies in distractor suppression and shape-consistent peak selection, which are especially valuable in the visually complex, distractor-rich environments characteristic of egocentric footage. 
+
+Appendix E. Adaptive Fallback for SAM Failures 
+
+Visual queries cropped from video streams often lack sharp contours or su ffi cient discriminability. While the initial stage relies on the strong segmentation priors of the Segment Anything Model (SAM), erroneous masks can introduce severe interfer-ence during the subsequent retrieval phase. Because the DPM depends heavily on precise foreground and background feature sets, MO and MB, inaccurate masks cause the DPM to extract inverted discriminative features. This inversion triggers a catas-trophic collapse of the localization system. To detect these failures without requiring 51 additional annotations, the predicted IoU score sSAM ∈ [0 , 1] from SAM is utilized as an unsupervised quality gating signal. Following a success-recall calibration on the validation set, an empirical threshold of τSAM = 0.6 is established to trigger an adaptive fallback mechanism. Specifically, rather than employing a binary rejection strategy, a three-level degradation mechanism is designed to handle varying degrees of mask failure. In Level 0 , which represents the normal operation with sSAM ≥ 0.6, the system uses the original SAM masks to construct MO and MB, allowing the DPM to exert full background suppression. In Level 1 , where the mask is only partially reli-able (0 .4 ≤ sSAM < 0.6), a confidence-weighted soft mask is introduced, defined as ˜S (Q) = sSAM · S (Q) + (1 − sSAM ) · 1. This strategy smoothly expands the foreground sampling range to prevent the loss of target features caused by excessive mask contrac-tion. In Level 2 , where the mask is deemed entirely untrustworthy ( sSAM < 0.4), MO
+
+is set to include the global crop features, and MB is defined as ∅. Crucially, under this extreme fallback mode, a weight gain of βQAM = 1.5 is applied to the Query-Aware Module (QAM). This leverages the frequency-domain robustness of the QAM, which remains independent of spatial masks, to guide the spatial localization. As shown in Fig. E.14, we validate these configurations. The "No Fallback" baseline, which rigidly applies Level 0 logic to all queries regardless of mask quality, su ff ers from a high hard failure rate. Equipping the system with individual fallback strategies ("Level 1 only" or "Level 2 only") yields partial improvements. Ultimately, the "Full 3-Level" strategy, which dynamically routes queries across Level 0, 1, and 2 based on sSAM , achieves the optimal balance, maximizing the success rate while significantly reducing hard failures. 
+
+Appendix F. Failure Case Analysis 
+
+As illustrated in Fig. F.15, while the proposed quality-aware fallback mechanism successfully mitigates a large portion of segmentation errors, certain extreme scenarios in the Ego4D-VQ2D dataset remain unresolved. These residual failure cases reveal the fundamental limitations of appearance-based matching under severe egocentric visual degradation. The 1st two rows present instances of extreme feature-level ambiguity 52 510 15 20 25 30 010 20 30 40 50 60 70 No Fallback Level 1 only Level 2 only L1+L2 Full 3-Level    
+
+> Hard Failure Rate (%) Success Rate (%)
+> Succ. (%) Hard Failure Rate (%)
+> +7.32
+> +1.23 +1.36 +2.06
+
+(a) 61% (2806) 22% (1012)  
+
+> 12%
+> (552) 5% (230)
+> Ego4D -VQ
+> Validation Set
+> N=4.6K
+> High
+> Quality
+> Medium
+> Quality
+> Low
+> Quality
+> Very Poor
+> Quality
+
+(b) 
+
+Fig. E.14. Analysis of the adaptive fallback mechanism. (a) Quantitative ablation of di ff erent fallback configurations. The proposed “Full 3-Level” strategy e ff ectively mitigates catastrophic collapses, maximiz-ing the success rate while significantly reducing the hard failure rate compared to the “No Fallback” baseline. (b) The distribution of SAM confidence scores ( sSAM ) on the validation set, which validates the necessity of the fallback mechanism and guides the empirical thresholding. 
+
+coupled with dense identical distractors. In the first row, severe motion blur physically destroys the high-frequency texture of the query, while the environment is cluttered with identical objects (bottles and caps). In the 2nd row, the target (blue cups) exhibits transparency and drastic viewpoint deformations. In such scenarios, even when the system gracefully degrades to the frequency-domain Query-Aware Module (QAM), the fundamental lack of discriminative texture renders the fallback mechanism ine ff ective. Consequently, the temporal response curves (right column) become highly noisy, and the model erroneously locks onto visually similar distractors. The 3rd row highlights the challenges associated with extreme scale variations and background camouflage. The query object is exceptionally small and shares an almost identical color distribution with the rugged terrain. The scarcity of high-resolution feature representations causes the model to fail in di ff erentiating the true target from the background noise, demon-strating that current multi-scale feature pyramids still struggle to isolate sub-pixel level targets against highly textured environments. The 4th row demonstrates failures caused by dynamic occlusion and extreme egocentric viewpoint drifts. As the camera wearer interacts with the environment (e.g., repairing machinery), the target (a power drill) undergoes drastic geometric deformation and is heavily occluded by the user’s hands. 53 Fig. F.15. Failure analysis in Ego4D-VQ2D . The left column displays the visual queries, and each cor-responding row on the right presents the video response tracks. Within these trajectories, the white boxes denote the ground truth, while the red masks and their associated red bounding boxes represent the predic-tions generated by EgoHieraLoc. 
+
+The algorithm struggles to maintain temporal coherence when the target’s appearance is severely fragmented. These failure modes suggest that relying solely on 2D appear-ance modeling and spatial correlation has its upper bounds in unconstrained egocentric vision. Future research must extend beyond appearance features by integrating explicit 3D geometric priors, temporal motion kinematics, and hand-object interaction contexts to ensure robustness against absolute visual degradation. 
+
+Fig. F.16. Visualization of back-projected 2D–to–3D. We compare back-projected 3D locations of Ego-HieraLoc against EgoLoc and Ground-Truth (GT). While both methods succeed in simple cases (a-b), EgoLoc su ff ers large displacement errors in challenging scenarios (c-d) due to inaccurate 2D responses. In contrast, EgoHieraLoc maintains robustness and closely matches the GT. Note: Visualizations use pre-dicted 3D centers with GT box dimensions /orientation, as these are unknown during inference. 
+
+54 Appendix G. 2D-to-3D Visualization 
+
+Fig. F.16 presents a qualitative comparison of back-projected 3D object positions estimated by EgoHieraLoc (red) and EgoLoc (blue) against the ground truth (white) across four query cases in Matterport scanns. For each case, the top row shows the 2D response in the retrieved video frame, where the image-space centroid determined by the predicted bounding box is subsequently lifted to 3D space via depth back-projection. The bottom row renders the final 3D centroid predictions and the ground truth bounding box in the scene coordinate system. The scale and orientation of the ground truth box are fixed to their actual values across all methods since these quanti-ties are inaccessible during inference, thus serving as a shared controlled variable. For query (a), the 2D bounding boxes retrieved by the two methods show noticeable di ff er-ences. Conversely, for query (b), both methods achieve accurate 2D localization with their back-projected 3D centroids aligning closely with the ground truth. This suggests that when the object appearance is su ffi ciently discriminative and the scene context lacks ambiguity, both approaches can provide reliable 3D placement estimation. How-ever, any deviation in 2D localization is significantly amplified when back-projected into 3D space. In the scene corresponding to query (c), the target is embedded in a vi-sually cluttered desktop environment containing multiple objects with similar color and texture statistics. EgoLoc produces an inaccurate 2D response biased toward distractor regions. This bias introduces a large lateral displacement error in the back-projected 3D estimation, which is evident from the substantial spatial o ff set of the blue box rel-ative to the ground truth. In contrast, EgoHieraLoc utilizes hierarchical discriminative parsing to suppress background interference, generating a target-centric 2D prediction and a 3D estimation that closely matches the actual position. For query (d), the object is small and observed from a top-down egocentric viewpoint, severely compressing its distinct geometric features. EgoLoc again fails to produce reliable 2D localization, resulting in a substantial distance error in the 3D projection. EgoHieraLoc mitigates this failure through frequency-domain correlation operations within the query-aware module. This mechanism maintains the target identity under severe viewpoint changes and yields a 3D centroid prediction aligned with the ground truth within the acceptable 55 localization tolerance. These qualitative visualizations demonstrate that inaccurate 2D responses are a primary source of 3D localization errors. This finding validates the core design priority of EgoHieraLoc, which explicitly dedicates representational ca-pacity to robust 2D spatial localization as a fundamental prerequisite for accurate 3D object placement in egocentric video understanding. 50 100 150 200 250 300 350 400 450 500        
+
+> 0300
+> 600
+> 900 1200
+> CocoFormer VQLoc NFM Ego4D HERO-VQL PRVQL EgoHieraLoc (Ours) RELOCATE
+> Params(M) FLOPs (G)
+> Params (M) FLOPs (G)
+
+Fig. G.17. Analysis of FLOPs and parameter scale. Trade-o ff between computational cost in GFLOPs and model capacity in parameters, high-lighting the structural e ffi ciency of our architecture. STARK-S50 CocoFormer VQLoc            
+
+> NFM
+> Ego4D baseline RELOCATE EgoHieraLoc (Ours) HERO-VQL PRVQL 30 35 40 45 50 55 60
+> 65
+> 0510 15 20 25 30 35 40 45 50 55
+> Success Rate (%) Inference Speed (FPS)
+
+Fig. G.18. Comparison of inference speed among current methods. Inference speed comparison on the Ego4D-VQ2D task, where our method estab-lishes an optimal Pareto frontier performance. 
+
+Appendix H. Analysis of Computational E ffi ciency and Parameter Scale 
+
+We evaluate the inference e ffi ciency of our 2D branch on the VQ2D task to charac-terize the framework’s operational footprint. As depicted in the accuracy-versus-speed trade-o ff curve (Fig. G.18), EgoHieraLoc establishes a new Pareto frontier, e ff ectively reconciling localization precision with inference throughput. While established base-lines such as Ego4D (5 FPS, 43.2%) and NFM (5 FPS, 47.9%) are severely constrained by low throughput, and tracking-based baselines like STARK-ST50 (30 FPS, 45.2%) su ff er from suboptimal accuracy, EgoHieraLoc achieves a state-of-the-art success rate of 62.3% at a high-speed regime of 41 FPS. Although RELOCATE achieves a slightly higher throughput (52 FPS), it lags behind our framework in precision while incur-ring prohibitive computational costs. Compared to contemporary high-performance VQL frameworks such as HERO-VQL (17 FPS, 61.1%), PRVQL (20 FPS, 59.4%), 56 and VQLoc (21 FPS, 55.9%), EgoHieraLoc delivers over a 2 × speedup while simul-taneously outperforming them all in success rate. This validates that our hierarchical architecture mitigates the classical trade-o ff where fine-grained spatiotemporal reason-ing necessitates prohibitive latency. To further elucidate our structural e ffi ciency, Fig. ?? details the joint trade-o ff be-tween computational complexity (FLOPs) and model capacity (Parameters). EgoHier-aLoc exhibits superior computational economy, requiring a lightweight 248G FLOPs per inference—achieving the lowest FLOPs among all benchmarked methods. This represents a drastic reduction in computational overhead relative to heavy architectures like Ego4D (933G), NFM (742G), and Cocoformer (590G). In terms of model capacity, EgoHieraLoc maintains a compact 150M parameter footprint. While VQLoc occupies a marginally smaller parameter size (145M), its computational demand (374G FLOPs) is 50.8% higher, indicating lower capacity utilization e ffi ciency. Conversely, although HERO-VQL matches our parameter scale (155M) with comparable FLOPs (255G), its operational speed is severely bottlenecked (17 FPS vs. 41 FPS) due to unoptimized temporal operations. Finally, the training-free RELOCATE requires 472M parameters and 1345G FLOPs—exceeding our model by 3.1 × in parameters and 5.4 × in FLOPs. Relative to the original Ego4D baseline (195M), our cortically inspired design achieves a 23% parameter reduction while dramatically boosting both accuracy and throughput. It is pertinent to note that our e ffi ciency analysis focuses on the intrinsic com-putations of the model via the VQ2D branch. We deliberately exclude end-to-end VQ3D latency from the throughput analysis, as 3D localization is dominated by exter-nal camera pose estimation (e.g., COLMAP). The computational cost of these o ffl ine pre-processing components fluctuates drastically with scene geometry and video du-ration, which would introduce stochastic noise into the evaluation of the model’s core algorithmic e ffi ciency. Given that our 3D branch inherits the hierarchical backbone and feature representations of the 2D branch, this analysis provides a definitive and representative assessment of the framework’s computational characteristics. 57 Appendix I. Pseudo code of Core Modules 
+
+We provide formal algorithmic specifications for the two core modules of EgoHier-aLoc: the DPM and the QAM. These pseudocode listings complement the architectural descriptions in Section 3 by making explicit the step-by-step computational proce-dures, hyperparameter dependencies, and data flow that underpin each module. Algo-rithm Appendix I details the DPM pipeline, which partitions query features into SAM-guided foreground and background token sets MO and MB, computes per-location cosine similarity scores against both sets via Top-K aggregation, and produces a fore-ground response map O and a likelihood-channel map Z for downstream fusion. Algo-rithm Appendix I details the QAM pipeline, which trains a Discriminative Correlation Filter (DCF) directly on query features in the frequency domain, performs adaptive peak selection via connected-component analysis, and refines frame-level location esti-mates through a deformation-aware distance metric that jointly accounts for cumulative motion trajectory Ω(vi) and dynamically updated ellipse geometry ( a(vi), b(vi)). Together, these two modules constitute the spatial grounding backbone of EgoHieraLoc, whose outputs are fused in the RAM to produce the final per-frame localization response. 58 Algorithm 1 Discriminative Parsing Module (DPM) 
+
+Require: Query Q ∈ Rh×w×c, Search region features F (vi) ∈ RH×W×D, Top-K parame-ter KDPM 
+
+Ensure: Foreground map O, Likelihood-channel map Z
+
+1: Segment Q via SAM to obtain binary mask S(Q) ∈ { 0, 1}h×w
+
+2: Extract query features F (Q) ∈ Rh′×w′×d via backbone 
+
+3: Compute scaling ratio s = ⌊h/h′⌋; align F (Q) with S(Q) via bilinear interpolation 
+
+4: Partition query features into foreground and background sets: 
+
+MO = {F (Q)(x′,y′) | S (Q)(x′ s, y′ s) = 1}MB = {F (Q)(x′,y′) | S (Q)(x′ s, y′ s) = 0}
+
+5: Process search region features through two CBN layers: 
+
+F (vi)′ = CBN 2(CBN 1(F (vi))) ∈ RHξ ×Wξ ×Dξ
+
+6: for all spatial location ( x, y) in F (vi)′ do 
+
+7: for all mo ∈ M O do 
+
+8: LO 
+
+> (x,y),mo
+
+= F (vi)′ 
+
+> (x,y)
+
+· mo
+
+max( ∥F (vi)′
+
+> (x,y)
+
+∥2 · ∥ mo∥2, ϵ )
+
+9: end for 
+
+10: for all mb ∈ M B do 
+
+11: LB 
+
+> (x,y),mb
+
+= F (vi)′ 
+
+> (x,y)
+
+· mb
+
+max( ∥F (vi)′
+
+> (x,y)
+
+∥2 · ∥ mb∥2, ϵ )
+
+12: end for 
+
+13: O(x,y) = 1
+
+KDPM 
+
+X  
+
+> L∈TopK( LO
+> (x,y),KDPM )
+
+L
+
+14: B(x,y) = 1
+
+KDPM 
+
+X  
+
+> L∈TopK( LB
+> (x,y),KDPM )
+
+L
+
+15: end for 
+
+16: Compute likelihood-channel map: Z = softmax([ O, B]) 
+
+return O, Z
+
+59 Algorithm 2 Query-Aware Module (QAM) 
+
+Require: Query Q, Search region frames {vi}, sensitivity αQAM , decay γQAM = 0.4, smoothing ηQAM = 0.7, ellipse weight λe = 0.5
+
+Ensure: Refined location p(vi)mod and location response map for each frame vi
+
+1: Train DCF filter f on F (Q) by minimizing: 
+
+L f = argmin f ∥F T −1(F T (F (Q)) ⊙ F T ( f )) − y∥22 + λ∥ f ∥22
+
+2: Initialize ellipse axes ( a(v0), b(v0)) from query; set Ω(v0) = 0
+
+3: for all frame vi do 
+
+4: Compute response map: Rvi = F T −1(F T (F (vi)) ⊙ F T ( f )) 
+
+5: Compute adaptive threshold: Tvi = μRvi + αQAM · σRvi
+
+6: Apply threshold to get binary mask Mvi ; extract connected components 
+
+{CC k}Nk=1 via 8-connectivity 
+
+7: for all connected component CC k do 
+
+8: Extract candidate peak: p(vi) 
+
+> k
+
+= argmax (x,y)∈CC (vi)
+
+> k
+
+Rvi (x, y)
+
+9: end for 
+
+10: Retain Top-5 peaks by response value; select primary candidate: 
+
+p(vi)can = argmax p(vi) 
+
+> k∈Top-5
+
+hRvi (p(vi) 
+
+> k
+
+) · A (CC (vi) 
+
+> k
+
+)i
+
+11: if i = 0 then 
+
+12: Set ∆(v0) = 0; assign p(v0)mod = p(v0)can 
+
+13: else 
+
+14: Compute instantaneous deformation: ∆(vi) = p(vi)can − p(vi−1)mod 
+
+15: Update cumulative deformation: Ω(vi) = γQAM · Ω(vi−1) + (1 − γQAM ) · ∆(vi)
+
+16: end if 
+
+17: Compute bounding box of CC (vi)can to get w(vi), h(vi); update semi-axes: 
+
+a(vi) = ηQAM · a(vi−1) + (1 − ηQAM ) · w(vi)/2
+
+b(vi) = ηQAM · b(vi−1) + (1 − ηQAM ) · h(vi)/2
+
+18: for all coordinate i = (xi, yi) in Rvi do 
+
+19: Compute motion-aligned coordinate: i′ = i + ψ(Ω(vi))
+
+20: Compute deformation-aware distance: 
+
+Dis mod ,(vi) 
+
+> i
+
+= ∥i′ − p(vi)can ∥2 + λe ·
+
+s
+
+(xi − px)2
+
+(a(vi))2 + (yi − py)2
+
+(b(vi))2
+
+21: end for 
+
+22: Determine refined location: p(vi)mod = argmin i Dis mod ,(vi)
+
+> i
+
+23: end for return p(vi)mod and location response map for each vi
+
+60

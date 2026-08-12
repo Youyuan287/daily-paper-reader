@@ -1,0 +1,428 @@
+Title: CausalSplat: Towards Comprehensive Hierarchical Reasoning in 3D Gaussian Splatting
+
+URL Source: https://arxiv.org/pdf/2608.11150v1
+
+Published Time: Wed, 12 Aug 2026 01:25:52 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# CausalSplat: Towards Comprehensive Hierarchical Reasoning in 3D Gaussian Splatting 
+
+# Jiayu Ding ∗
+
+Peking University Shenzhen Graduate School Guangdong Provincial Key Laboratory of Ultra High Definition Immersive Media Technology Shenzhen, China jyding25@stu.pku.edu.cn 
+
+# Meilu Song ∗
+
+North China Electric Power University Department of Computer Science and Technology Baoding, China songml@ncepu.edu.cn 
+
+# Yun Chen ∗
+
+Hunan University College of Computer Science and Electronic Engineering Changsha, China cy2911@hnu.edu.cn 
+
+# Wei Gao 
+
+Peking University Shenzhen Graduate School Guangdong Provincial Key Laboratory of Ultra High Definition Immersive Media Technology Shenzhen, China gaowei262@pku.edu.cn 
+
+# Ge Li †
+
+Peking University Shenzhen Graduate School Guangdong Provincial Key Laboratory of Ultra High Definition Immersive Media Technology Shenzhen, China geli@ece.pku.edu.cn 
+
+Figure 1: Overview of our reasoning segmentation paradigm and benchmark. Left: Evolution of 3DGS segmentation from basic open vocabulary queries and referring expressions to complex reasoning tasks driven by implicit intents. Middle: Our hierarchi-cal framework evaluates models across four progressive levels: commonsense, spatial, affordance, and predictive/counterfactual reasoning. Right: CausalSplat significantly outperforms SOTA methods on 2D/3D metrics within the new causal dataset. 
+
+## Abstract 
+
+While 3D Gaussian Splatting (3DGS) has advanced open vocabulary scene understanding, existing methods remain confined to explicit queries. They struggle to interpret implicit intents, complex spatial constraints, and commonsense reasoning required for practical em-bodied interactions. To address this gap, we introduce the task of rea-soning 3D Gaussian segmentation and construct two benchmarks, Causal-LERF and Causal-ScanNet. These benchmarks systemati-cally evaluate commonsense, spatial, affordance, and counterfactual reasoning. Evaluations reveal that current state of the art meth-ods perform poorly on these reasoning challenges. Therefore, we propose CausalSplat, a framework that integrates vision-language 
+
+> ∗These authors contributed equally to this work.
+> †Corresponding author.
+
+models with 3D scene graphs to disentangle explicit structural perception from implicit logical inference. Extensive experiments demonstrate that CausalSplat achieves state of the art performance on our reasoning benchmarks while showing strong generalizabil-ity on standard referring and open vocabulary 3D segmentation tasks. Project Page: https://jiayuding031020.github.io/CausalSplat 
+
+## 1 Introduction 
+
+3D Gaussian Splatting [15] (3DGS) is a leading neural rendering method known for its explicit representation and real-time ren-dering speed. Building on efficiency, recent studies advance open-vocabulary 3D scene understanding by distilling features from pre-trained 2D vision-language models into 3D Gaussian fields. Despite this progress, current methods primarily handle explicit, noun-based queries. However, practical applications like Embodied AI [9] arXiv:2608.11150v1 [cs.CV] 11 Aug 2026 Preprint, 2026, Ding et al. 
+
+require interpreting natural instructions with complex attributes. To address this, Referring 3D Gaussian Splatting [7, 11] (R3DGS) was proposed to localize objects using complex language descrip-tions involving spatial relations or specific attributes. Current R3DGS methods rely on explicit referring expressions like category nouns or simple adjectives, struggling with complex reasoning. In real-world embodied interactions, user intents are highly implicit and context-dependent. Instead of rigid commands like “find the blue towel,” users often make situational requests, such as “I just washed my hands, please hand me the thing to dry them next to the sink, hanging under the cabinet.” Parsing these instructions requires inferring implicit affordances and decoding physical 3D spatial relations, demanding human-like commonsense and logical reasoning. To address this, we introduce Reasoning 3D Gaussian Segmentation to accurately localize and segment objects in 3D scenes using complex, implicit language queries. Existing studies on implicit 3D understanding remain fragmented: 3DAf-fordSplat [35] focuses solely on affordance in synthetic scenes, while REALM [32] handles limited commonsense and spatial rea-soning. We advocate for comprehensive abilities and propose a hierarchical taxonomy of 3D reasoning skills: (1) Commonsense Reasoning for basic categories and intrinsic attributes; (2) Spatial Reasoning for complex 3D geometric relations; (3) Affordance Rea-soning for potential interactions and functions; and (4) Predictive and Counterfactual Reasoning for dynamic changes and causal rela-tions under hypothetical conditions. Based on this framework, we build two benchmarks, Causal LERF and Causal ScanNet, derived from LERF [16] and ScanNet [5]. These datasets evaluate low-level perception and high-level reasoning by measuring fine-grained segmentation accuracy at 3D point and 2D pixel levels. An intuitive solution for this new task is to follow the R3DGS approach, which involves assigning semantic features to individual 3D Gaussians and aligning them directly with text features. How-ever, this direct method faces two main bottlenecks in reasoning tasks. First, it lacks structured spatial awareness. Limited by the bag of words effect of models like CLIP [29], current feature alignment struggles to encode topological structures and relative geometric relations between objects. Thus, it fails to parse instructions with complex spatial constraints like orientation and inclusion. Second, it lacks implicit reasoning. Traditional vision-language alignment focuses on explicit attributes and struggles to capture implicit causal logic and functional descriptions. This prevents building accurate logical mappings between abstract reasoning descriptions (e.g., tool to cut steak”) and concrete objects (e.g., knife”). To tackle these challenges, we propose CausalSplat, a reasoning segmentation framework based on LLMs and scene graphs. Causal-Splat conceptually separates the reasoning process into explicit structural perception and implicit logical inference. Specifically, we use scene graphs to explicitly model the topological and spatial relations among objects in 3D Gaussian scenes. This overcomes the spatial perception limitations of traditional feature fields. Mean-while, we use the extensive knowledge and reasoning abilities of LLMs to parse implicit queries into executable structured intents. Through this design, CausalSplat effectively bridges the gap be-tween low-level visual features and high-level logical semantics. In summary, our main contributions are as follows: (1) We for-mally define a new task named Reasoning 3D Gaussian Segmenta-tion. (2) We build two new reasoning oriented 3D scene datasets. These provide comprehensive benchmarks for evaluating spatial reasoning abilities under complex instructions. (3) We propose the CausalSplat framework, combining LLMs with scene graphs to effectively separate explicit structural perception from implicit log-ical inference. (4) Extensive experiments show that our method achieves state of the art performance on the proposed benchmarks. 
+
+## 2 Related Works 2.1 3D Scene Representations 
+
+Novel view synthesis and 3D scene reconstruction are fundamental tasks in computer vision. Neural Radiance Fields (NeRF) and its vari-ants use implicit multi-layer perceptrons (MLPs) for high-quality novel view synthesis [24], significantly advancing 3D representa-tion learning. However, the high computational cost of implicit volume rendering limits its application in real-time scenarios, such as embodied interaction. To address this, 3D Gaussian Splatting (3DGS) was proposed [15]. 3DGS represents a 3D scene using ex-plicit 3D Gaussian primitives. Each primitive is parameterized by a 3D center, a covariance matrix, view-dependent color, and opacity. For rendering, it uses an efficient differentiable rasterizer to project these primitives onto the 2D image plane, followed by depth-sorted alpha compositing to compute the final pixel colors. This explicit representation balances rendering quality and real-time perfor-mance while enabling direct discrete operations on scene geometry. Consequently, it provides a flexible structural foundation for the complex object-level logical reasoning tasks addressed in our work. 
+
+## 2.2 Understanding in 3D Gaussian Splatting 
+
+Enabling open-vocabulary understanding in 3D Gaussian fields has recently gained significant attention. Existing methods are primarily categorized into pixel-based and point-based approaches, both relying heavily on discriminative feature matching. Pixel-based methods [27–29, 33, 39–41] (e.g., LangSplat [27] and Feature-3DGS [41]) distill features from 2D vision foundation models into scene-specific latent feature fields. They perform semantic matching at the pixel level in the rendered 2D image space, which often suffers from multi-view inconsistency. Conversely, point-based methods [6, 13, 20, 21, 23, 36] (e.g., OpenGaussian [36] and Dr.Splat [13]) lift 2D segmentation masks or CLIP features [29] directly to 3D Gaussian centroids. This discretizes the scene into instance-aware clusters for point-level semantic matching. Building on these foundations, recent studies explore deeper 3DGS understanding using natural language instructions. For in-stance, ReferSplat introduces referring 3D Gaussian understand-ing to localize targets using complex text descriptions [11]. Ze-roSplat further expands upon this task [7]. 3DAffordSplat focuses on fine-grained 3D affordance understanding by aligning cross-modal structures from point clouds to 3D Gaussians [35]. REALM employs Multimodal Large Language Models (MLLMs) within an agent framework to perform open-world commonsense and implicit instruction reasoning on 3DGS [32]. However, these pioneering works are typically tailored for single-dimensional reasoning and lack a systematic formulation of complex reasoning capabilities in CausalSplat: Towards Comprehensive Hierarchical Reasoning in 3D Gaussian Splatting Preprint, 2026, 
+
+3D scenes. In contrast, our work introduces a multi-level reason-ing framework encompassing commonsense, spatial, affordance, and predictive and counterfactual reasoning. This aims to com-prehensively evaluate and systematically enhance the deep logical inference capabilities of models in continuous 3D scenes. 
+
+## 2.3 Reasoning Segmentation 
+
+Reasoning segmentation extracts accurate object masks from im-plicit text queries. LISA [19] introduced this by integrating large vision-language models with SAM [18]. Later methods expanded this paradigm: PixelLM [31] achieves pixel-level reasoning via a lightweight decoder and codebook; LLM-Seg [34] bridges LLMs and SAM to filter mask proposals; LLaVASeg [38] applies chain-of-thought prompting for accurate segmentation and dialogue; and VISA [37] extends implicit query-based tracking and segmenta-tion to videos. In the 3D domain, scene understanding has recently evolved to encompass a series of novel tasks [1, 2, 8, 22]. Specifically for reasoning segmentation, existing paradigms primarily rely on point cloud representations. For example, PARIS3D [14] and Rea-soning3D [3] focus on part-level segmentation and interpretation of isolated 3D objects, making them difficult to apply to complex real-world 3D scenes. Recent methods like SegPoint [10] and Rea-son3D [12] introduce LLM reasoning capabilities into 3D point cloud segmentation. While recent studies have explored 3DGS as an alternative representation, their reasoning scope remains limited. For instance, 3DAffordSplat only investigates affordance reasoning for potential interaction regions in synthetic scenes [35], while REALM only addresses commonsense and limited spatial reason-ing [32]. In contrast, our method achieves systematic multi-level 3D Gaussian reasoning segmentation, providing an effective solution for complex embodied interaction in real-world scenes. 
+
+## 3 Task and Benchmark 3.1 Task Formulation 
+
+To advance 3D scene understanding toward higher-order logical reasoning, we formally define the task of Reasoning 3D Gaussian Segmentation . Given a 3D Gaussian scene and a natural language instruction with implicit intent or logic, the model must parse the instruction and accurately segment the target object in 3D space. Unlike traditional explicit referring expression segmentation, this task requires multi-level cognitive abilities, ranging from basic spatial perception to physical causal inference. Although prior research has explored 3D reasoning, most works are confined to single-dimensional tasks, such as commonsense or affordance reasoning alone. Furthermore, the field lacks a bench-mark for evaluating open-vocabulary 3D Gaussian understanding at the point level in real-world scenes. To address these limitations, we introduce a multi-dimensional reasoning taxonomy and construct two new benchmark datasets: Causal-LERF for 2D pixel-level eval-uation and Causal-ScanNet for 3D point-level evaluation. This is the first multi-level reasoning benchmark specifically built for 3DGS, covering dimensions from basic spatial topology to physical counterfactual inference. 
+
+## 3.2 The Hierarchical Reasoning Taxonomy 
+
+Existing 3D understanding datasets often focus on isolated dimen-sions, failing to provide a systematic evaluation of comprehensive reasoning. We categorize real-world interaction instructions into four progressive levels: 1) Spatial Reasoning: Requires parsing absolute and relative geometric relations (e.g., distance, scale) and identifying 3D topologies like support, containment, and occlusion. For example, “Find the object occluded under the table that sup-ports a box.” This requires 3D structural perception to overcome 2D limitations. 2) Commonsense Reasoning: Requires aligning LLM prior knowledge with 3D scene instances to interpret implicit semantics without direct visual descriptions. For example, given “I just finished a greasy meal and need to clean my mouth,” the model must use commonsense to locate a napkin based on functional relevance rather than appearance matching. 3) Affordance Rea-soning: Requires inferring whether an object supports embodied actions based on its 3D geometry (e.g., concavity, handle width) and spatial state. For example, “Find a container with an upward opening for a robotic arm to grasp.” This demands precise mapping between physical structure and utility. 4) Predictive and Coun-terfactual Reasoning: As the highest cognitive level, this requires understanding mechanisms governed by physics (e.g., gravity, col-lision) to perform counterfactual deduction. For example, “If the bottom red object is removed, which objects will fall?” The model must predict state changes by analyzing 3D force distribution and structural dependencies. 
+
+## 3.3 Dataset 
+
+Annotation and Quality Control To ensure accuracy and logical rigor, all instructions undergo strict generation and verification: 1) Instruction Initialization: We use ground truth object annotations from real 3D scans and preset templates to guide an LLM in generat-ing initial instructions across all four levels. 2) Physical and Logical Consistency Check: Four professional annotators review the instruc-tions from multiple perspectives. An instruction is included only if all four annotators approve it; ambiguous samples are removed. 
+
+Dataset Statistics and Splits Causal-LERF and Causal-ScanNet contain a total of 231 reasoning instructions across 14 real 3D indoor scenes. The instruction distribution consists of 18.2% spatial rea-soning, 48.5% commonsense reasoning, 16.0% affordance reasoning, and 17.3% predictive and counterfactual reasoning. 
+
+## 3.4 Evaluation Metrics 
+
+We define Reasoning 3D Gaussian Segmentation as a target local-ization and mask segmentation task. Accordingly, we adopt two primary metrics: 2D Mean Intersection over Union (mIoU) for pixel-level evaluation on Causal-LERF, and 3D mIoU for point-level eval-uation on Causal-ScanNet. 
+
+## 4 Method 
+
+Given multi-view 2D observations and a natural language instruc-tion, we aim to localize a target object specified by complex intents within a 3D Gaussian scene. As illustrated in Figure 2, our frame-work consists of three modules: (1) Semantic Field Construction ,which lifts 2D segmentation masks into a 3D feature field; (2) Mul-timodal Semantic Scene Graph Construction , which structures Preprint, 2026, Ding et al. 
+
+Table 1: Comparison of 3DGS-based understanding and reasoning datasets. Abbreviations used in the table: "Seg." for Segmenta-tion, "Ref." for Referring, and "Inst." for Instructions. For reasoning capabilities, "Spa. Reas.", "Com. Reas.", "Aff. Reas.", and "Cou. Reas." represent Spatial, Commonsense, Affordance, and Counterfactual Reasoning, respectively. Dataset Source Task Type Domain Scene Scenes Query Scale Referring Spa. Reas. Com. Reas. Aff. Reas. Cou. Reas.                                                                              
+
+> LERF LangSplat [27] Open-Vocab Seg. 2D Real 4208 Words -----ScanNet OpenGaussian [36] Open-Vocab Seg. 3D Real 10 84 Words -----Ref-LERF ReferSplat [11] Ref. Seg. 2D Real 463 Inst. ✓✓---3DAffordSplat 3DAffordSplat [35] Reasoning Seg. 3D Synthetic 8.3K 6.6K Inst. ---✓-REALM3D REALM [32] Reasoning Seg. 2D Real 100+ 1K+ Pairs ✓✓✓--
+> Causal-LERF (Ours) CausalSplat Reasoning Seg. 2D Real 4158 Inst. ✓✓✓✓✓
+> Causal-ScanNet (Ours) CausalSplat Reasoning Seg. 3D Real 10 73 Inst. ✓✓✓✓✓
+
+Figure 2: Overview of the proposed CausalSplat pipeline. (a) Semantic Field Construction. 2D masks are extracted via SAM, and mask-averaged semantic features p are obtained after spatial weighting and contrastive feature optimization. Afterward, 2D masks are clustered into 3D entities, and unique 3D entity labels are assigned to 3D Gaussian points. (b) Semantic Scene Graph Construction & Reasoning. 3D entities are represented as nodes, interconnected via edges to form semantic scene graph. A VLM then performs a three-stage reasoning pipeline on thegraph to localize target nodes based on language instructions. 
+
+3D entities into a scene graph with multimodal attribute nodes and scale adaptive topological edges; and (3) Scene Graph based Mul-timodal Reasoning , which guides the model to parse instructions and perform a topological search within the graph to output the target entity. 
+
+## 4.1 Semantic Field Construction 
+
+This module lifts multi-view 2D segmentation masks into a 3D semantic feature field. To mitigate inherent edge noise in 2D seg-mentation masks, our method proceeds in three stages: suppressing edge noise via spatially weighted feature extraction to obtain mask-averaged semantic features; aggregating target features and separating backgrounds in the 3D feature space via contrastive feature optimization ; and performing clustering based 3D in-stance assignment to group discrete 2D segmentation masks into unified 3D entities. This completes the instance assignment for 3D Gaussian points. 
+
+Spatially Weighted Feature Extraction. To represent semantic information in 3D space, we associate each 3D Gaussian point with a semantic feature vector f𝑖 ∈ R𝐶 . Following the differentiable rendering pipeline of 3DGS [10], the rendered feature map F ∈
+
+R𝐻 ×𝑊 ×𝐶 is generated by splatting these 3D features onto the 2D image plane using the same alpha-blending process as the color rendering. Specifically, the rendered feature F𝑥,𝑦 at pixel (𝑥, 𝑦 ) is formulated as the weighted aggregation of semantic feature vector 
+
+f𝑖 from the ordered set of overlapping Gaussians N:
+
+F𝑥,𝑦 =∑︁  
+
+> 𝑖 ∈ N
+
+f𝑖 𝛼 𝑖 𝑖 −1Ö
+
+> 𝑗 =1
+
+(1 − 𝛼 𝑗 ) (1) where N denotes the sorted Gaussians overlapping pixel (𝑥, 𝑦 ) ac-cording to their depth. Simultaneously, given multi-view images, we utilize the SAM model [13] to extract a set of 2D segmenta-tion masks M𝑣 for each view 𝑣 ∈ V 𝑡𝑟𝑎𝑖𝑛 , providing the input for subsequent instance assignment. However, the mask boundaries CausalSplat: Towards Comprehensive Hierarchical Reasoning in 3D Gaussian Splatting Preprint, 2026, 
+
+generated by SAM often contain inherent semantic noise, which can degrade the quality of the reconstructed 3D feature field. To extract 3D feature representations from these noisy observations, we propose a spatial weighting strategy. Given the rendered feature map F and its corresponding instance mask 𝑀 𝑝𝑜𝑠 ∈ M 𝑣 , we first compute geometric center (𝑐 𝑥 , 𝑐 𝑦 ) of the mask. The spatial weight 
+
+𝑊 𝑥,𝑦 for each pixel (𝑥, 𝑦 ) within the mask 𝑀 𝑝𝑜𝑠 is then defined as: 
+
+𝑊 𝑥,𝑦 = 𝜔 𝑚𝑖𝑛 + ( 1 − 𝜔 𝑚𝑖𝑛 )
+
+
+
+1 − 𝑑 𝑥,𝑦 
+
+𝑑 𝑚𝑎𝑥 + 𝜖 
+
+
+
+(2) where 𝑑 𝑥,𝑦 is the Euclidean distance from pixel (𝑥, 𝑦 ) to the geomet-ric center, 𝑑 𝑚𝑎𝑥 is the maximum distance from any pixel in 𝑀 𝑝𝑜𝑠 
+
+to the geometric center, and 𝜔 𝑚𝑖𝑛 is a predefined minimum weight threshold. Using this weight, we aggregate the features within 𝑀 𝑝𝑜𝑠 
+
+to extract a mask-averaged semantic feature p ∈ R𝐶 representing the instance: 
+
+p = Norm ©«∑︁ (𝑥,𝑦 ) ∈ M 𝑝𝑜𝑠 
+
+𝑊 𝑥,𝑦 · F𝑥,𝑦 ª®¬
+
+(3) where Norm (·) denotes 𝐿 2 normalization. We then compute the cosine similarity map S between the mask-averaged semantic fea-tures p and the global feature field to guide the subsequent stages of the contrastive feature optimization. 
+
+Contrastive Feature Optimization. To ensure semantic consis-tency, we design an end-to-end contrastive learning objective [17] 
+
+L𝑡𝑜𝑡𝑎𝑙 , consisting of a positive alignment term L𝑝𝑜𝑠 and a negative repulsion term L𝑛𝑒𝑔 :
+
+L𝑡𝑜𝑡𝑎𝑙 = L𝑝𝑜𝑠 + L 𝑛𝑒𝑔 (4) The positive alignment term applies the spatial weight 𝑊 𝑥,𝑦 to attenuate boundary noise, guiding the target region features to cluster toward the mask-averaged semantic features: 
+
+L𝑝𝑜𝑠 =
+
+Í(𝑥,𝑦 ) ∈ M 𝑝𝑜𝑠 𝑊 𝑥,𝑦 (1 − 𝑆 𝑥,𝑦 )2
+
+Í(𝑥,𝑦 ) ∈ M 𝑝𝑜𝑠 𝑊 𝑥,𝑦 
+
+(5) The negative repulsion term constrains the negative sample features using a margin 𝑚 . It penalizes the negative samples with a similarity exceeding 𝑚 to increase the discriminability between the positive sample and the negative sample: 
+
+L𝑛𝑒𝑔 = 1
+
+|M 𝑛𝑒𝑔 |∑︁ (𝑥,𝑦 ) ∈ M 𝑛𝑒𝑔 
+
+ℓ𝑛𝑒𝑔 (𝑆 𝑥,𝑦 ) (6) where the computed penalty term is ℓ𝑛𝑒𝑔 (𝑆 𝑥,𝑦 ) = (𝑆 𝑥,𝑦 − 𝑚 )2 if 
+
+𝑆 𝑥,𝑦 > 𝑚 , and 0 otherwise. Because negative sample regions dominate the image, using all negative samples causes severe class imbalance. We therefore introduce a dynamic sampling strategy. An indicator function I𝑗 
+
+filters the negative sample set M𝑛𝑒𝑔 during optimization: 
+
+I𝑗 =
+
+(
+
+1, if 𝜂 𝑗 < 𝑟 or 𝑆 𝑗 > 𝜏 
+
+0, otherwise (7) where 𝜂 𝑗 ∼ U ( 0, 1) is a uniformly distributed sampling factor, and 𝜏 
+
+is the hard negative threshold. The sampling ratio 𝑟 = 𝑁 𝑝𝑜𝑠 /𝑁 𝑛𝑒𝑔 is the pixel count ratio of positive to negative samples, where 𝑁 𝑝𝑜𝑠 =
+
+Í𝑖 ∈Ω I(𝑖 ∈ M 𝑝𝑜𝑠 ) and 𝑁 𝑛𝑒𝑔 = Í𝑗 ∈Ω I( 𝑗 ∈ M 𝑛𝑒𝑔 ).
+
+3D Instance Assignment. To link 2D segmentation masks to 3D entities, we employ a feature clustering strategy. Following the contrastive feature optimization, each 2D mask is associated with a mask-averaged semantic feature. We collect mask-averaged semantic features from all views and apply HDBSCAN algorithm for density based clustering. This groups 2D segmentation masks into 3D entity clusters O𝑘 .Next, we compute representative feature C𝑘 for each 3D entity as the mean of all mask-averaged semantic features in the cluster: 
+
+C𝑘 = Norm ©«
+
+1
+
+|O 𝑘 |∑︁ p∈ O 𝑘 
+
+pª®¬
+
+(8) Finally, we use C𝑘 to assign 3D instances to the 3D Gaussian point cloud P. For any 3D Gaussian point 𝑗 ∈ P , we compute the cosine similarity between its semantic feature vector f𝑗 and representative features of all 3D entities to obtain the score e𝑗,𝑘 = f𝑗 · C⊤ 
+
+> 𝑘
+
+. Fol-lowing a hard assignment principle, the 𝑗 -th Gaussian point 𝑗 ∈ P 
+
+is uniquely assigned to a specific 3D entity ID by selecting the highest similarity score. Consequently, the 𝑖 -th 3D physical entity is represented by the point set P𝑖 = { 𝑗 ∈ P | arg max 𝑘 (𝑒 𝑗,𝑘 ) = 𝑖 }
+
+## 4.2 Semantic Scene Graph Construction 
+
+To enable Vision-Language Models (VLMs) to parse 3D scenes, we transform extracted 3D entities into structured multimodal seman-tic scene graph G = (V , E) . Nodes V represent 3D entities, and edges E represent spatial relationships between them. 
+
+Semantic Node Construction. We instantiate each extracted 3D entity as a graph node 𝑛 𝑖 ∈ V . To align 3D physical space with textual semantics, we build a multimodal descriptor M𝑖 =
+
+⟨c𝑖 , b𝑖 , I𝑖 , A𝑖 ⟩ for each node. Geometrically, the spatial centroid 
+
+c𝑖 ∈ R3 is the mean coordinate of all Gaussian points in the 3D entity. The axis-aligned bounding box span b𝑖 ∈ R3 is the coor-dinate range of the point cluster P𝑖 ⊆ P across each dimension: 
+
+b𝑖 = max (P 𝑖 ) − min (P 𝑖 ), where P𝑖 denotes the set of Gaussian points assigned to the 𝑖 -th entity. I𝑖 represents 2D segmentation masks associated with the 3D entity. Semantically, we use a Vision-Language Model (VLM) to analyze 2D segmentation masks of the 3D entity and extract a structured tuple A𝑖 = {T 𝑖 , X𝑖 , F𝑖 }. This tuple records the intrinsic category, visual features, and interactive affordances of the 3D entity. 
+
+Scale Adaptive Edge Construction. Open-world scenes often exhibit drastic scale variations, making fixed distance thresholds unreliable for determining spatial relationships. We propose an adaptive topological edge construction mechanism. Using vertical relationships as an example, we require 3D entities to have signif-icant displacement along the vertical axis while strictly limiting horizontal deviation. First, the relative displacement Δ𝑍 = 𝑧 𝑖 −𝑧 𝑗 be-tween the centroids of two entities {P 𝑖 , P𝑗 } (represented by nodes 
+
+𝑛 𝑖 , 𝑛 𝑗 ) along the 𝑍 -axis must be a large proportion of their centroid distance 𝑑 𝑖,𝑗 , satisfying |Δ𝑍 |/ 𝑑 𝑖,𝑗 > 𝜏 . Second, their projected dis-tance on the horizontal 𝑋𝑌 -plane must be smaller than a dynamic tolerance D𝑥 𝑦 𝑙𝑖𝑚𝑖𝑡 :
+
+D𝑥 𝑦 𝑙𝑖𝑚𝑖𝑡 = min 
+
+
+
+max 
+
+
+
+0.55 √︃ ¯𝑏 2 
+
+> 𝑥
+
++ ¯𝑏 2
+
+> 𝑦
+
+, 0.08 S𝑥 𝑦 
+
+
+
+, 0.35 S𝑥 𝑦 
+
+
+
+(9) Preprint, 2026, Ding et al. 
+
+Figure 3: Qualitative comparison on the Causal-LERF dataset. Table 2: Quantitative comparison on the Causal-LERF dataset. We report the 2D mIoU (%) metric.                                         
+
+> Method Ramen Teatime Figurines Waldo Mean OpenGaussian [36] 9.6 4.2 3.3 8.2 6.3 Dr.Splat [13] 8.7 8.8 16.1 13.3 11.7 InstanceGaussian [20] 2.7 4.7 9.2 10.5 6.8 LUDVIG [23] 32.6 19.7 34.1 8.0 23.6 ReferSplat [11] 5.2 16.2 7.5 11.1 10.0 REALM [32] 9.4 14.3 7.8 13.9 11.4 Ours 26.2 68.4 46.9 46.5 47.0
+
+where ¯𝑏 𝑥 and ¯𝑏 𝑦 are the average spans of the two entities’ 3D bounding boxes along the corresponding axes: ¯𝑏 𝑥 = 𝑏 𝑖,𝑥 + 𝑏 𝑗,𝑥 
+
+2 , ¯𝑏 𝑦 = 𝑏 𝑖,𝑦 + 𝑏 𝑗,𝑦 
+
+2 (10) and S𝑥 𝑦 =√︁ (Δ𝑋 𝑠𝑐𝑒𝑛𝑒 )2 + ( Δ𝑌 𝑠𝑐𝑒𝑛𝑒 )2 represents the diagonal span of the entire 3D scene on the horizontal plane. This scene span is calculated from the extrema of the centroid coordinate set C for all 3D entity valid nodes: 
+
+Δ𝑋 𝑠𝑐𝑒𝑛𝑒 = max (C 𝑥 ) − min (C 𝑥 ), Δ𝑌 𝑠𝑐𝑒𝑛𝑒 = max (C 𝑦 ) − min (C 𝑦 )
+
+(11) The dynamic tolerance balances object size and overall scene range. 
+
+## 4.3 Multimodal Reasoning 
+
+After constructing the structured scene graph, we use a Vision-Language Model with prompt engineering to precisely localize the target 3D entity specified by the natural language instruction 𝑄 .
+
+Table 3: Quantitative comparison on the Causal-ScanNet dataset. We report the 3D mIoU (%) metric. 
+
+Method mIoU OpenGaussian [36] 2.9 InstanceGaussian [20] 1.4 Dr.Splat [13] 4.0 LUDVIG [23] 5.1 Ours 14.9 
+
+Specifically, We utilize the semantic scene graph G as the multi-modal input. and guide the model through a three-stage reasoning pipeline: 1) Instruction Parsing: The model first parses the seman-tics of instruction 𝑄 . If the instruction only describes the intrinsic features of an object, the model skips to decision output. If explicit spatial relationship words are detected, topological reasoning is triggered. 2) Topological Reasoning: The model identifies the anchor node 𝑣 𝑎𝑛𝑐ℎ𝑜𝑟 described in the instruction within the scene graph G, and performs a structured search along the directed edges 
+
+E. 3) Decision Output: The model integrates semantic and topo-logical constraints to output the final target node. Detailed prompt designs are provided in the supplementary material. 
+
+## 5 Experiments 5.1 Implementation Details 
+
+We adopt SAM for 2D mask extraction and HDBSCAN for 3D instance clustering. Key hyperparameters: 𝜔 𝑚𝑖𝑛 = 0.4, contrast margin 𝑚 = 0.03, hard negative threshold 𝜏 = 0.5, vertical edge CausalSplat: Towards Comprehensive Hierarchical Reasoning in 3D Gaussian Splatting Preprint, 2026, 
+
+Figure 4: Qualitative comparison on the Causal-ScanNet dataset. 
+
+threshold 0.3. All semantic features are L2-normalized. We use Qwen3-VL-30B-A3B-Instruct to build scene graph attributes and parse text queries. 
+
+## 5.2 Reasoning 3D Gaussian Segmentation 
+
+Settings. 1) Task. This task requires models to localize and seg-ment a target within a 3D scene based on natural language queries containing implicit intents or multi-hop logical constraints. Con-sequently, it demands capabilities beyond basic object recognition, requiring robust common-sense reasoning and spatial topological analysis. 2) Baselines. We compare our approach against three categories of 3D scene understanding methods: open-vocabulary understanding, referring understanding, and reasoning understand-ing. 3) Metrics. We evaluate segmentation accuracy using the mean Intersection over Union (mIoU). Specifically, we report the 2D mIoU for the Causal-LERF dataset and the 3D mIoU for the Causal-ScanNet dataset to properly measure the spatial overlap between the predictions and the ground-truth annotations. 
+
+Results on Causal-LERF As presented in Table 2, our method achieves the highest performance on the Causal-LERF dataset with an average mIoU of 47.0%. This significantly outperforms the second-best method, LUDVIG (23.6% mIoU). In complex environments like 
+
+Teatime and Waldo , our model surpasses baselines by a large mar-gin. Specifically, open-vocabulary and referring methods lack the reasoning capabilities required to interpret implicit intents. Fur-thermore, reasoning methods like REALM struggle with highly complex logical constraints. These results emphasize the need for advanced spatial reasoning in accurate 3D segmentation. Figure 3 provides qualitative comparisons on Causal-LERF. The visualizations show that our approach accurately segments targets described by complex queries with implicit intents and multi-hop spatial constraints. For queries requiring common-sense reasoning (e.g., identifying a camera for a “visual record” or a pumpkin for an “autumn harvest display”), baseline models frequently misunder-stand the semantics and incorrectly localize salient but irrelevant distractors. Additionally, under multi-hop spatial conditions (e.g., “the bag next to the plate”), referring and open-vocabulary methods often fail to separate the primary target from the reference object. This leads to severe over-segmentation or incorrect localization. In contrast, our model effectively grounds abstract logical condi-tions and complex spatial relationships into the physical 3D space, consistently producing accurate boundaries. 
+
+Results on Causal-ScanNet Table 3 details the quantitative eval-uation on the more complex Causal-ScanNet dataset. Our method achieves an mIoU of 14.9%, nearly tripling the performance of the second-best method, LUDVIG (5.1%). The low performance of ex-isting open-vocabulary models highlights the extreme difficulty of this task, which requires robust common-sense reasoning amid dense distractors in large-scale point clouds. This substantial gain confirms the robustness and scalability of our reasoning framework. Preprint, 2026, Ding et al. 
+
+Table 4: Quantitative results for R3DGS on Ref-LERF mea-sured by mIoU.                                         
+
+> Method Ramen Teatime Figurines Waldo Mean Grounded SAM [30] 14.1 16.9 16.0 16.2 15.8 LangSplat [27] 12.0 7.6 17.9 17.9 13.9 SPIn-NeRF [25] 7.3 11.7 9.7 10.3 9.8 GS-Grouping [39] 27.9 14.8 8.6 6.3 14.4 GOI [28] 27.1 22.9 16.5 15.7 20.5 ReferSplat [11] 35.2 31.3 25.7 24.4 29.2
+> Ours 28.2 38.0 50.6 27.7 36.1
+
+Table 5: Quantitative results for open-vocabulary object se-lection on LERF measured by mIoU.                                                                       
+
+> Method Ramen Teatime Figurines Waldo Mean
+> Pixel-based
+> LEGaussians [33] 46.0 60.3 40.8 39.4 46.6 LangSplat [27] 51.2 65.1 44.7 44.5 51.4 Feature-3DGS [41] 43.7 58.8 40.5 39.6 45.7 GS-Grouping [39] 45.5 60.9 40.0 38.7 46.3 GOI [28] 52.6 63.7 44.5 41.4 50.6 ReferSplat 55.1 50.1 67.5 48.9 55.4 Occam’s LGS [4] 51.0 70.2 58.6 65.3 61.3 3DVLGS [26] 61.4 73.5 58.1 54.8 62.0 Point-based
+> OpenGaussian [36] 31.0 60.4 39.3 22.7 38.4 InstanceGaussian [20] 24.6 63.4 45.5 29.2 40.7 Dr.Splat(Top-40) [13] 24.7 57.2 53.4 39.1 43.6 LUDVIG [23] 42.3 58.6 58.0 42.8 50.4
+> Ours 26.7 73.0 75.3 30.1 51.3
+
+As illustrated in Figure 4, our method effectively handles the complex spatial geometries and semantic ambiguities of the Causal-ScanNet dataset. When given queries about object affordances or implicit functions (e.g., an object allowing passage or a surface for toiletries), existing models struggle to ground these abstract con-cepts. This typically results in missed predictions, scattered noise, or severe over-segmentation across the room, as seen with Dr.Splat. Moreover, for queries with dense spatial constraints (e.g., locating a structure opposite the toilet), baselines frequently misidentify the reference object as the target. Conversely, our model successfully interprets these spatial and functional constraints to output precise segmentation masks directly on the 3D point clouds. 
+
+## 5.3 Referring 3D Gaussian Segmentation 
+
+Settings. 1) Task. This task aims to precisely localize and segment a single target object in a 3D scene based on natural language instructions. 2) Baselines. We primarily compare CausalSplat with ReferSplat, the current SOTA method for this task. For a broader evaluation, we also include relevant baselines. 3) Datasets. We evaluate on the standard benchmark provided by ReferSplat. 
+
+Results. Table 4 shows our method achieves a state-of-the-art mean mIoU of 36.1 on Ref-LERF. This surpasses the previous best, ReferSplat, by 6.9 points. Although our method is not specifically designed for this task, it still performs favorably, demonstrating strong generalization ability. 
+
+Table 6: Ablation studies on key framework components measured by mIoU. Component Configuration mIoU Semantic Field Construction 
+
+Random Weighting 34.9 Average Pooling 35.7 Spatial Weighting 47.0 Scene Graph Construction 
+
+Text Nodes Only 40.1 Text Nodes + Node Images 37.2 Text Nodes + Topological Edges 40.2 Full Multimodal Graph 47.0 VLM Reasoning Prompt 
+
+Without Instruction Parsing 40.5 Without Topological Reasoning 42.2 Complete CoT Pipeline 47.0 
+
+## 5.4 Open-Vocabulary 3D Gaussian Segmentation 
+
+Settings. 1) Task: This task aims to precisely localize and segment a single target object within a 3D scene based on a given text category label. 2) Datasets: We conduct experiments on the LERF-OVS dataset re-annotated by LangSplat. 3) Baselines: We compare our approach against twelve open-vocabulary 3D baselines, categorized into pixel-based and point-based methods. 
+
+Results. As shown in Table 5, CausalSplat achieves a state-of-the-art mIoU of 51.3 among point-based methods on LERF. These results demonstrate that our semantic field construction enables robust feature extraction and precise instance decoupling, proving effective for standard open-vocabulary segmentation despite being designed for complex reasoning. 
+
+## 5.5 Ablation Studies 
+
+We conduct comprehensive ablation studies to evaluate the key components of our framework. All experiments use the mIoU met-ric, and the quantitative results are summarized in Table 6. 
+
+Semantic Field Construction. Standard average pooling intro-duces 2D boundary noise, yielding 35.7 mIoU. Our spatial weighting suppresses this noise and preserves 3D consistency, boosting mIoU to 47.0. Random weighting performs worst (34.9), confirming that structured feature aggregation is essential. 
+
+Scene Graph Construction. A text-only graph achieves 40.1 mIoU. Adding only images degrades performance (37.2), while adding only edges provides minimal gains (40.2). Combining both visual nodes and spatial edges achieves 47.0 mIoU, proving that these modalities require joint modeling for scene understanding. 
+
+VLM Prompt Design. Skipping instruction parsing drops mIoU to 40.5, as redundant searches cause errors on simple queries. Omitting topological reasoning drops mIoU to 42.2 due to failures on complex spatial tasks. The complete pipeline dynamically routes reasoning to reach 47.0 mIoU. 
+
+## 6 Conclusion 
+
+In this paper, we introduce the novel task of Reasoning 3D Gaussian Segmentation to bridge the gap between basic 3D perception and CausalSplat: Towards Comprehensive Hierarchical Reasoning in 3D Gaussian Splatting Preprint, 2026, 
+
+higher-order logical reasoning. To systematically evaluate this, we present two comprehensive benchmarks: Causal-LERF and Causal-ScanNet. Furthermore, we propose CausalSplat, a framework that synergizes Vision-Language Model (VLM) with 3D semantic scene graphs to disentangle explicit structural perception from implicit logical inference. Extensive experiments demonstrate that Causal-Splat not only establishes a new state-of-the-art on complex rea-soning tasks but also exhibits strong generalizability on standard referring and open-vocabulary segmentation. We believe this work provides a robust foundation for future context-aware embodied agents in complex 3D environments. 
+
+## Acknowledgments 
+
+This work was supported by the Natural Science Foundation of China (62531022) and the Guangdong Provincial Key Laboratory of Ultra High Definition Immersive Media Technology (Grant No. 2024B1212010006). 
+
+## References 
+
+[1] Daichi Azuma, Taiki Miyanishi, Shuhei Kurita, and Motoaki Kawanabe. 2022. Scanqa: 3d question answering for spatial scene understanding. In 2022 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 19107– 19117. [2] Dave Zhenyu Chen, Angel X Chang, and Matthias Nießner. 2020. Scanrefer: 3d object localization in rgb-d scans using natural language. In European conference on computer vision . Springer, 202–221. [3] Tianrun Chen, Chunan Yu, Jing Li, Jianqi Zhang, Lanyun Zhu, Deyi Ji, Yong Zhang, Ying Zang, Zejian Li, and Lingyun Sun. 2024. Reasoning3D–Grounding and Reasoning in 3D: Fine-Grained Zero-Shot Open-Vocabulary 3D Reasoning Part Segmentation via Large Vision-Language Models. arXiv preprint arXiv:2405.19326 
+
+(2024). [4] Jiahuan Cheng, Jan-Nico Zaech, Luc Van Gool, and Danda Pani Paudel. 2025. Occam’s LGS: An Efficient Approach for Language Gaussian Splatting. In 36th British Machine Vision Conference 2025, BMVC 2025, Sheffield, UK, November 24-27, 2025 . BMVA. [5] Angela Dai, Angel X Chang, Manolis Savva, Maciej Halber, Thomas Funkhouser, and Matthias Nießner. 2017. Scannet: Richly-annotated 3d reconstructions of indoor scenes. In Proceedings of the IEEE conference on computer vision and pattern recognition . 5828–5839. [6] Jiayu Ding, Xinpeng Liu, Zhiyi Pan, Shiqiang Long, and Ge Li. 2026. ExtrinSplat: Decoupling Geometry and Semantics for Open-Vocabulary Understanding in 3D Gaussian Splatting. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 31019–31028. [7] Jiayu Ding, Meilu Song, Xiaoyi Zhang, Hongbo Jin, Yichen Jin, and Xiangtian Si. 2026. ZeroSplat: Generalized Referring Segmentation in 3D Gaussian Splatting. 
+
+arXiv preprint arXiv:2607.18801 (2026). [8] Jiayu Ding, Haoran Tang, Hongbo Jin, Wei Gao, and Ge Li. 2026. 3D Instruction Ambiguity Detection. arXiv preprint arXiv:2601.05991 (2026). [9] Agrim Gupta, Silvio Savarese, Surya Ganguli, and Li Fei-Fei. 2021. Embodied intelligence via learning and evolution. Nature communications 12, 1 (2021), 5721. Publisher: Nature Publishing Group UK London. [10] Shuting He, Henghui Ding, Xudong Jiang, and Bihan Wen. 2024. Segpoint: Segment any point cloud via large language model. In European Conference on Computer Vision . Springer, 349–367. [11] Shuting He, Guangquan Jie, Changshuo Wang, Yun Zhou, Shuming Hu, Guanbin Li, and Henghui Ding. 2025. ReferSplat: Referring Segmentation in 3D Gaussian Splatting. In International Conference on Machine Learning (ICML) .[12] Kuan-Chih Huang, Xiangtai Li, Lu Qi, Shuicheng Yan, and Ming-Hsuan Yang. 2025. Reason3d: Searching and reasoning 3d segmentation via large language model. In 2025 International Conference on 3D Vision (3DV) . IEEE, 1177–1186. [13] Kim Jun-Seong, GeonU Kim, Kim Yu-Ji, Yu-Chiang Frank Wang, Jaesung Choe, and Tae-Hyun Oh. 2025. Dr. splat: Directly referring 3D gaussian splatting via direct language embedding registration. In Proceedings of the Computer Vision and Pattern Recognition Conference . 14137–14146. [14] Amrin Kareem, Jean Lahoud, and Hisham Cholakkal. 2024. Paris3d: Reasoning-based 3d part segmentation using large multimodal model. In European Conference on Computer Vision . Springer, 466–482. [15] Bernhard Kerbl, Georgios Kopanas, Thomas Leimkühler, and George Drettakis. 2023. 3D gaussian splatting for real-time radiance field rendering. ACM Trans. Graph. 42, 4 (2023), 139–1. [16] Justin* Kerr, Chung Min* Kim, Ken Goldberg, Angjoo Kanazawa, and Matthew Tancik. 2023. LERF: Language Embedded Radiance Fields. In International Con-ference on Computer Vision (ICCV) .[17] Prannay Khosla, Piotr Teterwak, Chen Wang, Aaron Sarna, Yonglong Tian, Phillip Isola, Aaron Maschinot, Ce Liu, and Dilip Krishnan. 2020. Supervised contrastive learning. Advances in neural information processing systems 33 (2020), 18661– 18673. [18] Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alexander C. Berg, and Wan-Yen Lo. 2023. Segment anything. In Proceedings of the IEEE/CVF international conference on computer vision . 4015–4026. [19] Xin Lai, Zhuotao Tian, Yukang Chen, Yanwei Li, Yuhui Yuan, Shu Liu, and Jiaya Jia. 2024. Lisa: Reasoning segmentation via large language model. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition . 9579–9589. [20] Haijie Li, Yanmin Wu, Jiarui Meng, Qiankun Gao, Zhiyao Zhang, Ronggang Wang, and Jian Zhang. 2025. Instancegaussian: Appearance-semantic joint gaussian representation for 3D instance-level perception. In Proceedings of the Computer Vision and Pattern Recognition Conference . 14078–14088. [21] Tao Lu, Mulin Yu, Linning Xu, Yuanbo Xiangli, Limin Wang, Dahua Lin, and Bo Dai. 2024. Scaffold-gs: Structured 3D gaussians for view-adaptive rendering. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition .20654–20664. [22] Xiaojian Ma, Silong Yong, Zilong Zheng, Qing Li, Yitao Liang, Song-Chun Zhu, and Siyuan Huang. 2022. Sqa3d: Situated question answering in 3d scenes. arXiv preprint arXiv:2210.07474 (2022). [23] Juliette Marrie, Romain Menegaux, Michael Arbel, Diane Larlus, and Julien Mairal. 2025. LUDVIG: Learning-Free Uplifting of 2D Visual Features to Gaussian Splatting Scenes. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) .[24] Ben Mildenhall, Pratul P. Srinivasan, Matthew Tancik, Jonathan T. Barron, Ravi Ramamoorthi, and Ren Ng. 2022. NeRF: Representing scenes as neural radiance fields for view synthesis. Commun. ACM 65, 1 (2022), 99–106. [25] Ashkan Mirzaei, Tristan Aumentado-Armstrong, Konstantinos G Derpanis, Jonathan Kelly, Marcus A Brubaker, Igor Gilitschenski, and Alex Levinshtein. 2023. Spin-nerf: Multiview segmentation and perceptual inpainting with neural radiance fields. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 20669–20679. [26] Qucheng Peng, Benjamin Planche, Zhongpai Gao, Meng Zheng, Anwesa Choud-huri, Terrence Chen, Chen Chen, and Ziyan Wu. 2024. 3d vision-language gaussian splatting. arXiv preprint arXiv:2410.07577 (2024). [27] Minghan Qin, Wanhua Li, Jiawei Zhou, Haoqian Wang, and Hanspeter Pfister. 2024. Langsplat: 3D language gaussian splatting. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 20051–20060. [28] Yansong Qu, Shaohui Dai, Xinyang Li, Jianghang Lin, Liujuan Cao, Shengchuan Zhang, and Rongrong Ji. 2024. GOI: Find 3D gaussians of interest with an optimizable open-vocabulary semantic-space hyperplane. In Proceedings of the 32nd ACM International Conference on Multimedia . ACM. [29] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, and Jack Clark. 2021. Learning transferable visual models from natural language supervision. In 
+
+International conference on machine learning . PmLR, 8748–8763. [30] Tianhe Ren, Shilong Liu, Ailing Zeng, Jing Lin, Kunchang Li, He Cao, Jiayu Chen, Xinyu Huang, Yukang Chen, Feng Yan, et al. 2024. Grounded sam: Assembling open-world models for diverse visual tasks. arXiv preprint arXiv:2401.14159 
+
+(2024). [31] Zhongwei Ren, Zhicheng Huang, Yunchao Wei, Yao Zhao, Dongmei Fu, Jiashi Feng, and Xiaojie Jin. 2024. Pixellm: Pixel reasoning with large multimodal model. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 26374–26383. [32] Changyue Shi, Minghao Chen, Yiping Mao, Chuxiao Yang, Xinyuan Hu, Jiajun Ding, and Zhou Yu. 2025. REALM: An MLLM-Agent Framework for Open World 3D Reasoning Segmentation and Editing on Gaussian Splatting. arXiv preprint arXiv:2510.16410 (2025). [33] Jin-Chuan Shi, Miao Wang, Hao-Bin Duan, and Shao-Hua Guan. 2024. Language embedded 3D gaussians for open-vocabulary scene understanding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 5333– 5343. [34] Junchi Wang and Lei Ke. 2024. Llm-seg: Bridging image segmentation and large language model reasoning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 1765–1774. [35] Zeming Wei, Junyi Lin, Yang Liu, Weixing Chen, Jingzhou Luo, Guanbin Li, and Liang Lin. 2025. 3daffordsplat: Efficient affordance reasoning with 3d gaussians. In 
+
+Proceedings of the 33rd ACM International Conference on Multimedia . 2821–2830. [36] Yanmin Wu, Jiarui Meng, Haijie Li, Chenming Wu, Yahao Shi, Xinhua Cheng, Chen Zhao, Haocheng Feng, Errui Ding, Jingdong Wang, et al. 2024. Opengaus-sian: Towards point-level 3d gaussian-based open vocabulary understanding. 
+
+Advances in Neural Information Processing Systems 37 (2024), 19114–19138. Preprint, 2026, Ding et al. 
+
+[37] Cilin Yan, Haochen Wang, Shilin Yan, Xiaolong Jiang, Yao Hu, Guoliang Kang, Weidi Xie, and Efstratios Gavves. 2024. Visa: Reasoning video object segmentation via large language models. In European Conference on Computer Vision . Springer, 98–115. [38] Yuqi Yang, Peng-Tao Jiang, Jing Wang, Hao Zhang, Kai Zhao, Jinwei Chen, and Bo Li. 2024. Empowering segmentation ability to multi-modal large language models. arXiv preprint arXiv:2403.14141 (2024). [39] Mingqiao Ye, Martin Danelljan, Fisher Yu, and Lei Ke. 2024. Gaussian grouping: Segment and edit anything in 3D scenes. In European conference on computer vision . Springer, 162–179. [40] Hao Zhang, Feng Li, Shilong Liu, Lei Zhang, Hang Su, Jun Zhu, Lionel M. Ni, and Heung-Yeung Shum. 2022. DINO: DETR with improved DeNoising anchor boxes for end-to-end object detection. arXiv preprint arXiv:2203.03605. [41] Shijie Zhou, Haoran Chang, Sicheng Jiang, Zhiwen Fan, Zehao Zhu, Dejia Xu, Pradyumna Chari, Suya You, Zhangyang Wang, and Achuta Kadambi. 2024. Feature 3Dgs: Supercharging 3d gaussian splatting to enable distilled feature fields. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 21676–21685. CausalSplat: Towards Comprehensive Hierarchical Reasoning in 3D Gaussian Splatting Preprint, 2026, 
+
+## A Additional Results A.1 Additional Quantitative Results 
+
+To comprehensively validate the reasoning capability of our method beyond overall performance, we conduct fine-grained quantitative evaluation on the Causal-LERF dataset, with results broken down by the four progressive reasoning dimensions defined in Section 3.2: Spatial Reasoning, Commonsense Reasoning, Affordance Reason-ing, and Predictive and Counterfactual Reasoning. This fine-grained analysis verifies that our method excels at high-level complex rea-soning tasks, rather than only achieving good performance on simple semantic matching subsets. Our method outperforms all baselines by a large margin across all four reasoning dimensions, achieving mIoU of 58.9%, 42.9%, 49.5%, and 50.6% on Spatial Rea-soning, Commonsense Reasoning, Affordance Reasoning, and Pre-dictive and Counterfactual Reasoning tasks, respectively. Notably, our method achieves the most significant performance gain on the most challenging tasks with high reasoning complexity. For Predictive and Counterfactual Reasoning, the highest cognitive level requiring modeling of object state changes and counterfactual assumptions, our method reaches 50.6% mIoU, outperforming the previous state-of-the-art ReferSplat (16.0%) by a 34.6 absolute mIoU gain. For Spatial Reasoning, the core task for 3D scene understand-ing requiring parsing of geometric relations and 3D topologies, our method achieves 58.9% mIoU, exceeding the previous best LUDVIG (23.4%) by 35.5 absolute mIoU. These results demonstrate the supe-riority of our scene graph based framework in modeling complex spatial relationships and high-level semantic reasoning. On Affor-dance Reasoning and Commonsense Reasoning tasks, our method also consistently outperforms all baselines, with 49.5% and 42.9% mIoU respectively, validating the effectiveness of our multimodal node representation in aligning visual features, object attributes and functional semantics with natural language instructions. 
+
+## A.2 Additional Qualitative Results 
+
+To further validate the generalization capability of our approach, we provide additional qualitative evaluations on the Ref-LERF and LERF datasets. 
+
+Results on Ref-LERF. Figure 5 visualizes the 3D localization and segmentation performance on the Ref-LERF dataset. Compared with baselines (InstanceGaussian, ReferSplat, LUDVIG, OpenGaussian) that suffer from inaccurate positioning, blurred boundaries and severe background noise, our method accurately grounds natural language queries to target regions, yields sharper object boundaries and effectively suppresses artifacts. This demonstrates the superior-ity of our spatial weighting and contrastive optimization strategies for complex spatial reference tasks. 
+
+Results on LERF. Figure 6 illustrates the visual search results on the LERF dataset. Our framework robustly identifies target objects across varying scales and complex indoor layouts, and successfully distinguishes queried instances from visually similar distractors. By contrast, baselines (InstanceGaussian, OpenGaussian) exhibit obvious defects including missed detection, semantic confusion and incomplete reconstruction. These results confirm that our method maintains strong semantic alignment and precise instance decou-pling capabilities for arbitrary text queries. 
+
+## A.3 Generalization on Expanded Dataset 
+
+To better assess broad generalization, we expanded our datasets using the same data generation and annotation methods described in the paper. As shown in the Table 8, this increases the total instruc-tions from 231 to 2355. Evaluated on this larger scale, our approach consistently outperforms the state of the art baseline Ludvig in av-erage accuracy on both datasets. These results validate our claims of zero-shot capabilities and broad generalization. 
+
+## A.4 Additional Ablation Studies 
+
+We evaluate the effect of the relative displacement threshold 𝜏 along the principal axis. This hyperparameter controls the condition for establishing spatial edges between 3D entities in the scene graph. On the Causal-LERF dataset, we test three values and find that 
+
+𝜏 = 0.3 yields the best performance with an mIoU of 47.0%. When 
+
+𝜏 is too small (0.1), the spatial constraint becomes too loose: the model creates false edges between weakly related entities, which introduces topological noise and reduces the mIoU to 42.8%. Con-versely, when 𝜏 is too large (0.6), the constraint becomes too strict: the model misses valid spatial relationships, leading to an incom-plete scene graph and a lower mIoU of 45.1%. Therefore, we choose 
+
+𝜏 = 0.3 as the optimal default value to maintain a balanced and accurate semantic scene graph. 
+
+## B Analysis of Failure Cases 
+
+We conduct a systematic analysis of the failure cases of our method, and identify two core limitation-induced failure modes, which pro-vide directions for further optimization of our framework. 
+
+3D Instance Feature Contamination under Extreme Segmen-tation Noise Our method relies on multi-view 2D masks generated by SAM as the foundational input for semantic field construction. When the scene contains large-area textureless backgrounds or severely cluttered foreground occlusion, SAM may produce large-scale and persistent segmentation errors, such as massive frag-mented invalid masks from background regions, and severe missing or broken masks of the target foreground. Although our spatial weighting and contrastive optimization modules can suppress par-tial noise, they cannot fully correct such extreme input errors. These invalid masks will be mixed into the feature clusters of target in-stances during the clustering process, contaminating the semantic features of 3D entities, and eventually leading to incorrect instance assignment and target localization failure, as shown in Fig. 7(a). 
+
+VLM Semantic Matching Failure under Ultra-complex Spa-tial Constraints Our method implements reasoning and matching for complex language queries based on the structured scene graph, which provides spatial and semantic cues for the VLM. However, when the language query contains multi-level nested spatial con-straints, or there are a large number of interfering instances with highly similar visual features in the scene, the VLM may still make mistakes in the semantic parsing of the query and the topological search of the scene graph. For example, when the query contains nested descriptions of multiple groups of relative positional re-lationships, the VLM may incorrectly parse the core constraint conditions, resulting in wrong target node matching and failure to locate the correct 3D instance, as illustrated in Fig. 7(b). Preprint, 2026, Ding et al. 
+
+Table 7: Fine-grained average mIoU results on the Causal-LERF dataset, broken down by the reasoning taxonomy defined in Section 3.2. The best result is bolded. 
+
+Reasoning Dimension OpenGaussian Dr.Splat InstanceGaussian LUDVIG ReferSplat Ours Spatial Reasoning 2.5 14.4 5.9 23.4 14.5 58.9 
+
+Commonsense Reasoning 4.1 13.7 8.3 28.1 8.1 42.9 
+
+Affordance Reasoning 3.2 9.9 2.9 34.3 7.3 49.5 
+
+Predictive and Counterfactual Reasoning 1.8 5.6 2.1 10.8 16.0 50.6 
+
+Figure 5: Qualitative segmentation results on the Ref-LERF dataset. Table 8: Comparison of average mIoU on expanded Causal-LERF and Causal-ScanNet datasets. 
+
+Method Teatime Ramen Figurine Waldo CausalLERF Avg CausalScanNet Ludvig 22.5 27.7 28.3 10.2 22.2 6.7 Ours 56.1 26.7 39.4 39.8 40.5 14.3 
+
+## C Dataset Details 
+
+We construct a testbed for 3D scene language understanding us-ing two datasets, Causal-LERF and Causal-ScanNet. In total, they contain 231 natural language queries covering four core reasoning dimensions: spatial reasoning, commonsense reasoning, affordance reasoning, and predictive and counterfactual reasoning. Causal-LERF consists of 158 queries, distributed as follows: 27 (17.1%) on spatial reasoning, 79 (50.0%) on commonsense reasoning, CausalSplat: Towards Comprehensive Hierarchical Reasoning in 3D Gaussian Splatting Preprint, 2026, 
+
+Figure 6: Qualitative search results on the LERF dataset. Table 9: Ablation study on the relative distance threshold 
+
+𝜏 along the principal axis on the Causal-LERF dataset. We report the 2D mIoU (%) metric. Threshold 𝜏 mIoU ↑
+
+0.1 42.8 0.3 (Ours) 47.0 
+
+0.6 45.1 
+
+Figure 7: Core failure modes of our method. (a) Extreme seg-mentation noise causes 3D instance feature contamination and localization failure. (b) Ultra-complex spatial constraints cause VLM semantic and target node matching errors. 
+
+25 (15.8%) on affordance reasoning, and 27 (17.1%) on predictive and counterfactual reasoning. Causal-ScanNet contains 73 queries, with the following distribution: 15 (20.5%) on spatial reasoning, 33 (45.2%) on commonsense reasoning, 12 (16.4%) on affordance reasoning, and 13 (17.8%) on predictive and counterfactual reasoning. 
+
+Table 10: Runtime comparison (unit: second) on the Teatime scene with single RTX 4090D GPU. 
+
+Method Mask Ext. Training Processing Total OpenGaussian 5243 3993 1 9237 InstanceGaussian 5243 8518 0 10333 ReferSplat 1813 5117 13 6943 DrSplat 5243 4572 3189 13004 Ours 4354 5460 997 10811 
+
+Across the entire dataset, commonsense reasoning queries are the most frequent, accounting for 48.5% and serving as the primary reasoning type in 3D scene language understanding. Spatial rea-soning, affordance reasoning, and predictive and counterfactual reasoning constitute 18.2%, 16.0%, and 17.3%, respectively. This di-verse distribution ensures coverage of core reasoning dimensions, enabling comprehensive evaluation of models’ reasoning and un-derstanding capabilities. 
+
+## D Computational Efficiency 
+
+Our pipeline consists of five stages: mask extraction, feature train-ing, clustering, graph construction, and multimodal reasoning. We evaluate the processing time on the Teatime scene from the LERF dataset using a single RTX 4090D GPU. By decoupling perception from reasoning, our method enables higher-order reasoning while maintaining an overall runtime comparable to existing baselines. Re-garding GPU memory, the initial feature processing stages require 16.5 GiB (peaking at 18.5 GiB). However, memory consumption drops significantly during the subsequent clustering, graph con-struction, and reasoning stages to 12.1 GiB, 2.6 GiB, and 3.7 GiB, respectively. This indicates a practical memory footprint for stan-dard hardware, and the detailed runtime across all pipeline stages are summarized in Table 10.

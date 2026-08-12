@@ -1,0 +1,766 @@
+Title: RefineAny3D: Depth Refinement as Semantic Alignment for Monocular 3D Detection
+
+URL Source: https://arxiv.org/pdf/2608.09147v1
+
+Published Time: Tue, 11 Aug 2026 01:52:33 GMT
+
+Number of Pages: 30
+
+Markdown Content:
+# RefineAny3D: Depth Refinement as Semantic Alignment for Monocular 3D Detection 
+
+Zhihao Zhang 1 Gengwei Zhang 2 Tianlong Chen 2 Xiaoming Liu 1,2 
+
+> 1
+
+Michigan State University 2University of North Carolina at Chapel Hill 
+
+## Abstract 
+
+Monocular 3D object detection spans two regimes: closed-set detectors operating within a fixed category vocabulary, and open-vocabulary detectors that localize ar-bitrary categories by leveraging depth foundation models for 3D geometry. We find that current depth foundation models, despite their strong zero-shot generalization, lack the object-level precision 3D detection demands: substituting a state-of-the-art depth foundation model for a strong detector’s predicted depth degrades accuracy, even falling below the detector’s own prediction. Rather than pushing detectors or depth models to be more accurate end-to-end, we treat object-level depth re-finement as a stand-alone task and present RefineAny3D, a vision-language model that corrects depth without ever predicting a numerical value. Our key insight is that depth error has a direct visual signature in image space: when projected onto the image, a correctly placed box tightly encloses the object, while a too-far box projects too small and a too-close box projects too large. Depth refinement thus re-duces to a visual alignment problem rather than a metric regression problem, which we instantiate by extending the VLM’s vocabulary with action tokens that replace numerical depth output with categorical decisions, and by supervising the model on a large-scale chain-of-thought dataset that grounds each decision in explicit visual evidence. Applied as a single post-hoc step, RefineAny3D delivers consistent gains across closed-set detectors, open-vocabulary detectors, and 3D auto-labeling tools, and generalizes to novel categories, scenes, and cameras without retraining. 
+
+## 1 Introduction 
+
+Monocular 3D object detection (Mono3D), which aims to localize and recognize objects in 3D space from a single RGB image, is a fundamental problem with broad applications in autonomous driving [10, 12], robotics [56, 79], and augmented reality [32]. Compared to LiDAR- or multi-view-based alternatives [70, 47, 41], Mono3D is more cost-effective and scalable, yet the absence of explicit depth cues makes accurate 3D reasoning inherently challenging. Existing Mono3D detectors broadly fall into two regimes. Closed-set detectors [48, 73] are trained and evaluated on a fixed category vocabulary within a single dataset; while accurate in-domain, they cannot handle novel categories. Open-vocabulary 3D detectors [68, 67, 72], in contrast, aim to recognize and localize arbitrary categories in unseen domains, a setting where category-specific geometric priors no longer apply and depth must be recovered from generic visual cues alone. This need has made depth foundation models [42, 55] the de facto source of 3D geometry for open-vocabulary Mono3D, since these models offer strong zero-shot generalization to unseen domains and categories. Yet despite this generalization, their predicted object depth is not precise enough at the level that 3D IoU thresholds demand: substituting a state-of-the-art depth foundation model [55] for a strong detector’s predicted depth in fact degrades AP 3D by 3.68 on Omni3D [3] (Fig. 1), even below the detector’s own prediction. This depth bias is then inherited by every downstream pipeline that builds on these models, including auto-labeling tools [69, 58] that distill their predictions into 
+
+> Preprint. arXiv:2608.09147v1 [cs.CV] 10 Aug 2026
+
+(b) RefineAny3D: Reason -> Act -> Refine   
+
+> Current Projection
+> (Too large/ Too far)
+> 1. Reason
+> (Visual Alignment)
+> The 3D box is larger than the car and does not enclose it.
+> 2. Act
+> (Structured Token) Direction (Dir) Token Magnitude (Mag) Token <depth_farther> <step_large>
+> 3. Refine
+> (Depth Update)
+> 𝑑 (") = 𝑑 (") + ∆𝑑 (")
+
+(a) Depth is the Bottleneck            
+
+> ∆𝑑 (") = 𝑓(𝑑𝑖𝑟, 𝑚𝑎𝑔)
+> Updated Projection
+> (Closer to Object)
+> Iterative Refine until <depth_ok> or max steps Action Token List Dir ∈ { }<closer> <farther> <ok> Mag ∈ { }<small> <medium> <large>
+
+(c) Semantic Alignment in Image Space 
+
+> Bad Projection (Misalignment)
+> Not enclosed Box too large Too close
+> RefineAny3D
+> Reason -> Act -> Refine Iterative reduce the misalignment
+> Good Projection (Aligned)
+> Tight enclosure Correct scale <depth_ok>
+
+(d) Stronger Performance Across Key Tasks   
+
+> 1) Close-Set 3D Detection
+> MonoCoP Ours 23.98 27.47
+> 2) Open-Vocabulary 3D Detection
+> DetAny3D Ours 34.38 38.73
+> 3) 3D Auto-Labeling
+> LabelAny3D Ours 11.78 14.15
+> +3.49 +4.35 +2.37
+> Object depth is the dominant factor:
+> Depth foundation models generalize well but lack object-level precision.
+
+Figure 1: RefineAny3D: 3D box refinement as semantic alignment in image space. (a) Object depth is the dominant bottleneck of monocular 3D detection: replacing predicted depth with ground truth boosts AP 3D by +29 .92 , while substituting a depth foundation model (DFM) degrades it by 
+
+−3.68 . Relying on DFM alone is insufficient for accurate object-level depth. (b) RefineAny3D reformulates depth refinement as a semantic alignment problem in image space. Given a candidate 3D box projected onto the image, a vision-language model emits action tokens that iteratively adjust the depth until the projection aligns with the target or a step limit is reached. (c) Visual signature of depth error: a too-close box too large (left), while a correctly placed box tightly encloses the target object (right). (d) As a plug-and-play module, RefineAny3D consistently improves closed-set detectors, open-vocabulary detectors, and 3D auto-labeling methods. pseudo-3D annotations. The object-level geometric precision of open-vocabulary Mono3D systems thus remains a fundamental open challenge. This observation motivates a different approach. Rather than pushing depth foundation models or open-vocabulary 3D detectors to be more accurate end-to-end, we ask: can the residual object-depth error of any existing 3D pipeline be corrected after the fact, by a generic refinement module ? We formalize this as the task of 3D box refinement : given an image and a candidate 3D box from any upstream source (a closed-set detector, an open-vocabulary detector, or an auto-labeling tool), output a refined 3D box whose object depth is closer to the ground truth, leaving other attributes untouched. A successful refinement module is plug-and-play, depends on no specific upstream architecture, and generalizes across diverse object categories, scene types, and camera setups. We introduce RefineAny3D, the first refinement module designed for this task. Our key insight is that the correctness of an object’s depth has a direct visual signature: when a candidate 3D box is projected back onto the image, a correctly placed box tightly encloses the target object, while a too-far box projects too small and a too-close box too large. Refining depth therefore reduces to a familiar visual judgment that depends only on object appearance and 2D spatial layout, the kind of reasoning vision-language models (VLMs) are well positioned to make. We thus recast depth refinement from a metric regression problem into a semantic alignment problem in image space. Realizing this idea is not straightforward, since off-the-shelf VLMs [54, 2, 1] are not trained to reason about projected 3D boxes or to relate small visual misalignments to depth corrections. We therefore curate a large-scale training dataset on top of Omni3D that pairs each candidate box with a chain-of-thought reasoning trace and a corresponding refinement decision, forcing the model to ground its decisions in explicit visual evidence. To make these decisions atomic and unambiguous, we further extend the VLM’s vocabulary with a small set of dedicated action tokens, each carrying its own learnable embedding. This sidesteps the VLM’s well-known weakness at numerical regression [26, 266]: the model never emits a continuous depth value, only one of a few discrete decisions, which are then chained iteratively to recover fine-grained precision. Because refinement depends only on the local alignment between a projected box and its target object, RefineAny3D generalizes across categories, scenes, and cameras without retraining. We show that RefineAny3D, applied as a plug-and-play module, consistently improves the depth accuracy of closed-set 3D detectors, open-vocabulary 3D detectors, and 3D auto-labeling tools alike, establishing 3D box refinement as a practical capability that complements existing Mono3D systems. Our contributions are as follows: • We formalize 3D box refinement as a new task that operates on top of any upstream Mono3D method, positioning refinement as a capability orthogonal to existing detectors. • We recast depth refinement from metric regression into semantic alignment in image space, where a VLM judges depth correctness from visual cues rather than predicting metric depth. • We instantiate RefineAny3D with action tokens, a small set of dedicated VLM-vocabulary tokens that turn depth refinement into a sequence of categorical decisions, sidestepping the VLM’s weakness at numerical regression and enabling iterative recovery of fine-grained precision. • Applied as a plug-and-play module, RefineAny3D consistently improves closed-set detectors, open-vocabulary detectors, and 3D auto-labeling tools across novel categories, scenes, and cameras. 
+
+## 2 Related Work 
+
+Monocular 3D Detection. Mono3D methods can be broadly grouped into closed-set and open-vocabulary settings. Closed-set methods are trained and evaluated on a fixed category vocabulary, typically on benchmarks such as KITTI [15] and nuScenes [6]. Early CNN-based detectors adopt center-based prediction [35, 37, 57, 34], exploit 2D –3D geometric consistency [28, 36, 74, 61, 5], introduce depth-equivariant operators [24, 44], or build on 2D detector backbones [4, 25, 3], while more recent transformer-based detectors [8, 11, 76, 19, 60, 78, 73, 43, 31, 75] have come to dominate these benchmarks. In parallel, open-vocabulary methods instead generalize Mono3D beyond a fixed category set by scaling 3D training data or transferring foundation-model priors. Specifically, Omni3D [3] unifies existing 3D detection datasets into a single large-scale benchmark [29], auto-labeling pipelines [69, 58] turn unlabeled images into pseudo-annotated 3D data via 3D-aware foundation models [55], and methods such as OVMono3D [68], 3D-MOOD [67], and DetAny3D [72] couple 2D vision foundation models [55, 51, 33] with depth foundation models [42, 55] to recognize and localize novel categories in unseen domains [59]. Since RefineAny3D operates as a detector-agnostic refinement model, it can be applied to both streams, and our experiments show that object-level depth remains an under-addressed bottleneck rather than a detector-specific limitation. 
+
+Visual Prompting and Semantic Alignment. Recent work shows that multimodal models can benefit from explicit visual cues rendered directly on top of the input image. Early visual prompt engineering with red circles [50] demonstrates that simple marks can direct VLM attention to specific regions, while Set-of-Mark prompting [65], ViP-LLaVA [7], and Draw-and-Understand [30] extend this idea to boxes, masks, points, or arrows that make region references easier for MLLMs to parse. Omni-RGPT [16] and VideoRefer [71] further adapt such region cues to video understanding. These methods primarily use overlaid marks to improve visual understanding, grounding, and referring. Although our RefineAny3D follows the broader idea of reasoning over an overlaid visual cue, we use the projected 3D box as an alignment indicator of how the candidate depth should be refined. 
+
+Vision-Language Models for 3D Understanding. A growing body of work extends vision-language models (VLMs) toward 3D understanding. One line equips VLMs with a point-cloud encoder [17, 62, 38], lifting RGB images into point clouds via a 3D foundation model [53] and training a point-cloud-aware VLM on top. Another line adopts a dual-backbone design [13, 14, 45] that augments the vision encoder with a 3D or depth foundation model [42, 55], or distills 3D features into the visual representation [77, 18, 27]. A third strengthens the VLM’s ability to regress numerical 3D quantities through reinforcement learning or numerical supervision [9, 21, 46, 20]. These approaches all task the VLM with directly producing 3D output, whether raw coordinates, or metric depth. RefineAny3D takes a different route: we avoid VLM 3D prediction altogether and instead reduce 3D refinement to a 2D semantic alignment problem in image space, solved by emitting a small set of discrete decisions. From another perspective, the use of discrete action outputs also appears in vision-language-action (VLA) models for robotic control [80, 23]. Differently, RefineAny3D uses 3Input          
+
+> Image +3D box
+> Depth Update
+> 𝑑 (") = 𝑑 (") + ∆𝑑 (")
+> ∆𝑑 (") = 𝑓(𝑑𝑖𝑟, 𝑚𝑎𝑔)
+> Iteration
+> If <depth_ok> or max steps
+> RefineAny3D
+> A black car viewed from behind on a street. A car typically has a length of ~3.5-4.5m and a height of ~1.2 -1.6m. The wireframe looks bigger than the car and does not enclose the car. <depth_farther> <step_large>
+> 4. Decision 3. Evidence 2. Recall 1. Identify
+> Magnitude Token
+> <depth_closer> <depth_farther> <depth_ok> <step_small> <step_medium> <step_large>
+> Direction Token
+> Action Token Set
+> Else
+
+Figure 2: Overview of RefineAny3D. RefineAny3D recasts depth refinement as semantic alignment in image space: when a candidate 3D box is projected onto the image, depth error has a direct visual signature, with a too-far box projecting too small and a too-close box too large. We render the projected box as a wireframe overlay on the image, and a vision-language model performs chain-of-thought reasoning over the visual misalignment to emit two action tokens specifying the corrective direction (closer / ok / farther) and magnitude (small / medium / large). These tokens define an object-relative depth update that is applied to the box, and the loop repeats with the updated wireframe until the model emits the unchanged token or a step cap is reached. action tokens to represent relative depth-refinement decisions inferred from projected-box alignment, and recovers metric precision for monocular 3D detection through iterative updates. 
+
+## 3 Approach 
+
+Overview. RefineAny3D refines the object depth of a candidate 3D box by reformulating depth correction as a 2D semantic alignment problem. Given a noisy box, RefineAny3D projects it onto the image, queries a vision-language model to judge how the projection misaligns with the target object, and updates the depth based on a discrete action emitted by the model. The same step is applied iteratively, so that fine-grained corrections emerge from chaining categorical decisions rather than regressing a continuous metric quantity. Sec. 3.1 formalizes the alignment view, Sec. 3.2 introduces the discrete action tokens that realize it, and Sec. 3.3 describes the supervision and inference protocols. 
+
+Preliminaries: Monocular 3D Detection. A Mono3D detector takes an RGB image I ∈ RH×W ×3
+
+and camera intrinsics K as input, and outputs a set of 3D boxes {bi}Ni=1 . Each box is parameterized as 
+
+b = ( x, y, z, w, h, l, θ ), where (x, y, z ) is the object center in the camera coordinate frame, (w, h, l )
+
+are the box dimensions, and θ is the yaw angle. We write d = z for the object depth, the component of the center along the camera’s optical axis. RefineAny3D takes such a candidate box b as input and outputs a refined box b′ with corrected depth. 
+
+3.1 Depth Refinement as Semantic Alignment 
+
+Directly regressing a corrected metric depth is difficult: depth is a continuous, scale-sensitive quantity that depends jointly on camera intrinsics, object geometry, and scene context. Our key observation is that once the candidate 3D box is projected onto the image plane, the camera intrinsics and metric scale are absorbed into the projection itself, and what remains is a purely 2D question: does the projected box tightly enclose the target object? If the projection is too small, the box is too far; if too large, too close. The hard metric problem of correcting depth thereby reduces to a semantic alignment task in image space, judged entirely from 2D visual evidence. To realize this view, we cast depth refinement as a conditional generation problem over a VLM’s token sequence. At step t, the candidate box b(t) is projected onto the image and rendered as a wireframe overlay: 
+
+I(t) = render 
+
+
+
+I, π (b(t); K)
+
+
+
+, (1) where π(b; K) projects the eight corners of b to 2D image coordinates using K. The rendered image 
+
+I(t) encodes the current alignment hypothesis: a VLM looking at I(t) can compare the wireframe with the underlying object directly, without ever computing distances in metric space. 4Conditioned on I(t), the VLM autoregressively generates a single token sequence 
+
+S(t) =  r(t), a(t), (2) where r(t) is a chain-of-thought reasoning trace and a(t) is a compact action; the concrete form of a(t)
+
+is given in Sec. 3.2. The autoregressive nature of this single generation pass implies the following decomposition by chain rule: 
+
+P
+
+
+
+S(t) | I(t)
+
+= P
+
+
+
+r(t) | I(t)| {z }
+
+> visual reasoning
+
+· P
+
+
+
+a(t) | I(t), r(t)| {z }
+
+> action prediction
+
+, (3) where the action prediction is conditioned on the reasoning trace produced earlier in the same sequence. This decomposition exposes two complementary design choices that drive the rest of the method: the reasoning prefix r(t) grounds the action in explicit visual reasoning about the current projection, and the action a(t) is structured as discrete decisions to sidestep the VLM’s known weakness at numerical regression. 
+
+3.2 From Alignment to Action Tokens 
+
+The formulation in Eq. (3) reduces depth refinement to producing an action a(t) at each step. The most direct realization would be to let the VLM verbalize this action in natural language ( e.g. , “the box is slightly too far”) or, even more directly, regress a numerical correction ∆d. Both options inherit the VLM’s well-known unreliability at fine-grained numerical or open-ended outputs. We instead represent a(t) with a small set of action tokens that encode the action categorically: a direction token ad specifying how the box should move, paired with a magnitude token am specifying how strongly. We extend the VLM’s vocabulary with six new special tokens (three for direction, three for magnitude), each carrying its own learnable embedding tuned for depth adjustment, defining a closed output space that simplifies decoding and supervision. 
+
+Direction tokens. The direction token ad ∈ {⟨ depth_closer ⟩, ⟨depth_ok ⟩, ⟨depth_farther ⟩} 
+
+encodes the qualitative outcome of the alignment check: ⟨depth_closer ⟩ when the projected box is too small (the box should be moved closer to the camera, decreasing depth), ⟨depth_farther ⟩
+
+when it is too large (the box should be moved farther away, increasing depth), and ⟨depth_ok ⟩ when the projection already aligns with the target. We map them to scalar signs by 
+
+dir( ⟨depth_closer ⟩) = −1, dir( ⟨depth_ok ⟩) = 0 , dir( ⟨depth_farther ⟩) = +1 . (4) Discretizing direction into three classes turns this part of the action into a classification problem that VLMs handle reliably; the precision lost by discretization is recovered through iterative refinement at inference time. 
+
+Magnitude tokens. The magnitude token am ∈ {⟨ step_small ⟩, ⟨step_medium ⟩, ⟨step_large ⟩} 
+
+specifies how strongly to adjust along the chosen direction. A fixed metric step size would be inappropriate here: a 0.5 m shift is negligible for a distant truck but catastrophic for a nearby cup. We therefore tie magnitudes to the object’s own characteristic size sobj = ( w + h + l)/3, the arithmetic mean of the box’s 3D dimensions, so that step sizes are relative to the object scale: 
+
+mag( am, s obj ) = αam sobj , α⟨step_small ⟩ < α ⟨step_medium ⟩ < α ⟨step_large ⟩. (5) This scale-relative design keeps the same action semantically consistent across objects of different sizes, which is important for generalization across categories and scenes. The full action is then 
+
+a(t) = ( a(t) 
+
+> d
+
+, a (t) 
+
+> m
+
+), and the depth update becomes 
+
+∆d(t) = dir( a(t) 
+
+> d
+
+) · mag( a(t) 
+
+> m
+
+, s obj ). (6) 
+
+3.3 Training and Inference 
+
+RefineAny3D is trained in two stages, both using single-step supervision: given a noisy box paired with its ground-truth chain-of-thought and target action tokens, the model predicts (ad, a m) in one pass. In Stage 1, we initialize each new action-token embedding to the mean embedding of a short phrase describing its alignment semantics, freeze the VLM, and train only these six embeddings to 5<identify> A car viewed from behind on a street. <recall> Cars typically have a length of ~3.5-4.5m and a height of ~1.2-1.6m. <evidence> The front face of the projected box extends beyond the car, leaving noticeable empty space inside the wireframe.      
+
+> <action> <depth_farther> <step_large>
+> CoT Reasoning Steps Action Tokens
+> <identify> A cup placed on a table. <recall> The cup is a common household object with a relatively consistent cylindrical shape and open top, typically standing about 10 to 15 centimeters tall. <evidence> The projected box closely aligns with the cup, with edges matching the object boundaries and no visible gaps or overlaps.
+> <action> <depth_ok>
+> CoT Reasoning Steps Action Tokens
+
+Figure 3: Examples of CoT-based supervision. Each training sample pairs a rendered image of a projected 3D wireframe with a chain-of-thought reasoning target that grounds the corrective action in explicit visual evidence before emitting the action tokens. stabilize them before joint optimization. In Stage 2, we jointly fine-tune the LLM backbone and the action-token embeddings while freezing the vision encoder, preserving the general visual priors from VLM pretraining that we find essential for generalization across novel categories, scenes, and cameras. At inference, although trained with single-step supervision, RefineAny3D refines a box iteratively: at each step we render the current box onto the image, query the VLM for an action, and update the depth, until the model emits ⟨depth_ok ⟩ or a safeguard cap of Tmax steps is reached. This train-inference asymmetry is consistent because each action is a local decision conditioned only on the current visual state, so single-step supervision generalizes naturally to multi-turn refinement. 
+
+## 4 Data Curation at Scale 
+
+Training RefineAny3D requires large-scale triplets of (image , noisy 3D box , refinement trajectory ),where each trajectory encodes the visual reasoning that maps a perturbed projection back to a corrective action. We curate this data from Omni3D [3] through a four-stage pipeline summarized below; full construction details are in Appendix D. 
+
+Source datasets. We build on the Omni3D release, which unifies six existing 3D detection datasets into a single benchmark under a shared camera convention, spanning indoor and outdoor scenes, photographic and synthetic imagery, and over fifty object categories. This diversity is essential for RefineAny3D’s generalization across categories, scenes, and cameras. 
+
+Annotation filtering. The raw release contains many annotations unsuitable as positive training examples, including invalid 3D boxes, severe occlusion, and mis-categorized labels. We apply a two-stage filter, combining geometric checks on Omni3D’s metadata fields with a semantic check that queries a VLM to verify object recognizability and label correctness, retaining 335 K annotations. 
+
+Depth perturbation. For each filtered annotation, we synthesize noisy 3D boxes by perturbing the GT depth along the camera ray while keeping all other attributes fixed. Perturbation magnitudes are tied to the object’s own size sobj to match the object-relative action design in Sec. 3.2, and stratified so that all action-token outcomes are uniformly represented. This yields approximately 3.0M training samples with an action-token distribution balanced by construction. 
+
+Chain-of-thought reasoning. Supervising only the final action tokens leaves the model free to take shortcuts that do not generalize. We therefore pair each sample with a chain-of-thought (CoT) prefix ( Fig. 3) that the model produces before emitting the action. Each CoT is synthesized by a two-model pipeline: a VLM [1] identifies the target object from the image, and a text-only LLM [64] composes this object identification together with the sample metadata into a reasoning trace consistent with the corrective decision. This forces the model to ground every action in explicit visual evidence rather than memorize input-output shortcuts. 
+
+## 5 Experiments 
+
+We evaluate RefineAny3D along five complementary axes corresponding to the contributions in Sec. 1: as a standalone refiner on a controlled benchmark (Sec. 5.1), and as a plug-and-play module 6Table 1: Evaluation on Refine3D , our standalone refinement benchmark on Omni3D. RefineAny3D outperforms both off-the-shelf and fine-tuned Qwen3-VL baselines across all three settings.                                                  
+
+> Method Standard Novel Category Novel Camera DirAcc ↑FullAcc ↑DepthErr ↓DirAcc ↑FullAcc ↑DepthErr ↓DirAcc ↑FullAcc ↑DepthErr ↓
+> Qwen3-VL-8B [1] 28.7 11.4 0.32 27.5 10.9 0.37 28.3 11.1 0.33 Qwen3-VL-8B [1]w/ Our Data 75.6 55.4 0.21 56.3 41.2 0.27 68.7 49.8 0.23
+> RefineAny3D (Ours) 89.2 76.7 0.16 74.4 58.5 0.19 85.6 73.2 0.17
+
+Table 3: Improving open-vocabulary 3D detectors on Omni3D [3]. RefineAny3D refines DetAny3D [72] conditioned on ground-truth 2D boxes, the strongest variant of DetAny3D, evaluated across the six Omni3D sub-datasets. RefineAny3D lifts AP 3D by +4 .35 overall through depth refinement alone, demonstrating that the gain holds even on top of an oracle-grade detector.                                                    
+
+> Method AP kit 3D ↑AP nus 3D ↑AP sun 3D ↑AP ark 3D ↑AP obj 3D ↑AP hyp 3D ↑AP 3D ↑
+> Cube R-CNN [3] 32.50 30.06 15.33 41.73 50.84 7.48 23.26 OVMono3D [68] 25.45 24.33 15.20 41.60 58.87 7.75 22.98 DetAny3D [72] 31.61 30.97 18.96 46.13 54.42 7.17 24.92 DetAny3D [72 ]w/ Ground-Truth 2D Box 38.68 37.55 46.14 50.62 56.82 15.98 34.38
+> RefineAny3D (Ours) 43.47 44.13 48.58 54.20 59.29 17.80 38.73
+
+on top of three downstream pipelines, namely closed-set 3D detectors (Sec. 5.2), open-vocabulary 3D detectors (Sec. 5.3), and 3D auto-labeling methods (Sec. 5.4). We additionally verify that fine-tuning for refinement does not erode the underlying VLM’s general capability (Appendix H). 
+
+5.1 Refine3D: Refinement as a Standalone Capability 
+
+Refine3D is a controlled benchmark we construct on top of Omni3D: each test sample pairs a GT 3D box with a synthetically perturbed noisy version, and the task is to recover the GT. We evaluate on three settings: Standard (in-distribution), Novel Category (open-vocabulary split of OVMono3D [68]), and Novel Camera (rescaled images with updated intrinsics). We report DirAcc, FullAcc, and DepthErr (residual gap between refined and GT depths). Tab. 1 reveals three findings. First, off-the-shelf Qwen3-VL-8B falls below the random-guess baselines ( ∼ 28 DirAcc, ∼ 11 FullAcc), indicating systematic bias rather than uninformative priors. Second, fine-tuning Qwen3-VL with our data using plain-text actions lifts Standard performance substantially ( 75 .6/55 .4), confirming that the supervision signal is informative. Third, RefineAny3D outperforms both baselines on all settings and generalizes to both shifts: it retains nearly all accuracy under Novel Camera ( −3.6 DirAcc, −3.5 FullAcc) thanks to its camera-agnostic alignment design, and under Novel Category its FullAcc ( 58 .5) still exceeds the plain-text variant. 
+
+5.2 Improving Closed-Set 3D Detectors 
+
+Table 2: Improving closed-set 3D detectors 
+
+at IoU ≥ 0.7. Applying RefineAny3D on top of MonoCoP [75] yields consistent gains.                             
+
+> Method Val , AP 3D(↑)Easy Mod. Hard MonoDETR [73] 28.84 20.61 16.38 MonoCD [63] 26.45 19.37 16.38 FD3D [61] 28.22 20.23 17.04 MonoMAE [22] 30.29 20.90 17.61 MonoTAKD [31] 34.36 22.61 19.88 MonoDGP [43] 30.76 22.34 19.02 MonoCoP [75] 32.06 23.98 20.64
+> RefineAny3D (Ours) 35.62 27.47 21.31
+
+We first ask whether RefineAny3D can improve the depth quality of strong, well-tuned closed-set detec-tors, even within their own training domain. We apply RefineAny3D as a post-hoc refinement step on top of the recent state-of-the-art MonoCoP [75], evaluated on the KITTI [15] validation set under the standard AP 3D protocol at IoU ≥ 0.7.As shown in Tab. 2, applying RefineAny3D on top of MonoCoP yields consistent gains across all difficulty levels, raising AP 3D from 32 .06 → 35 .62 on Easy ,
+
+23 .98 → 27 .47 on Moderate , and 20 .64 → 21 .31 on 
+
+Hard . The improvements are most pronounced on the Moderate and Easy splits, where mid-range objects allow the visual signature of depth misalignment to be read most reliably. The result confirms that even mature closed-set detectors leave object-level depth as an under-addressed source of error, and that RefineAny3D recovers a substantial part of it without changing the underlying detector. 7Action: <depth_farther> <step_medium> Action: <depth_farther> <step_medium>       
+
+> Action: <depth_closer> <step_small>
+> Initial Box Intermediate Box Refined Box (Final)
+> Action: <depth_farther> <step_medium> à<depth_farther> <step_small>
+
+Figure 4: Single-step and iterative depth refinement. RefineAny3D refines DetAny3D [72]’s initial prediction (red) toward the refined result (green). Most cases are corrected in a single step; for some cases the model applies multiple action steps until the projected box aligns with the target. 
+
+5.3 Improving Open-Vocabulary 3D Detectors 
+
+Open-vocabulary detectors face a much harder regime: the upstream detector must localize categories it has never been trained on, and current methods compensate by relying on depth foundation models for 3D geometry, the very source of bias we identified in Sec. 1. We test whether RefineAny3D can correct this propagated bias by applying it on top of the state-of-the-art DetAny3D [72] across the full Omni3D [3] test split. To test RefineAny3D, in Tab. 3, we apply it on top of DetAny3D conditioned on ground-truth 2D boxes ( 34 .38 AP 3D), the strongest variant of DetAny3D in which 2D localization is already error-free. Even on this oracle baseline, refining only the object depth with RefineAny3D lifts AP 3D to 38 .73 (+4 .35 ), with consistent gains on every Omni3D sub-dataset. The improvement comes entirely from depth correction, since all other inputs to DetAny3D are held fixed, demonstrating that RefineAny3D’s refinement is not a low-hanging fruit on weak detectors: it provides a meaningful and orthogonal correction even on top of an oracle-grade open-vocabulary detector. Fig. 4 illustrates this qualitatively, with most cases corrected in a single decisive step and a few requiring a second pass; we quantify the convergence and inference in Appendix F, and provide additional comparisons in Appendix G. 
+
+5.4 Improving 3D Auto-Labeling Methods 
+
+Table 4: Improving 3D auto-labeling meth-ods. RefineAny3D refines LabelAny3D’s pseudo-labels, narrowing the gap to GT-trained accuracy.             
+
+> Method Easy Mod. Hard GT [15] 32.06 23.98 20.64 LabelAny3D [69] 13.57 11.78 10.27
+> RefineAny3D (Ours) 15.76 14.15 10.99
+
+Beyond detection, depth foundation models also prop-agate their bias into auto-labeling pipelines that dis-till them into pseudo-3D annotations. To evaluate whether RefineAny3D can correct this propagated bias, we adopt the following protocol: we use La-belAny3D [69] to auto-label a dataset with avail-able GT, refine the resulting pseudo-labels with Re-fineAny3D, and train a downstream 3D detector [75] on the refined pseudo-labels. Detection accuracy on the held-out test set, compared against a model trained on the original GT, measures how faithfully the auto-labeled data approximates the GT. Tab. 4 reports KITTI validation AP 3D for detectors trained on LabelAny3D’s pseudo-labels with and without RefineAny3D refinement. Refining the pseudo-labels lifts the downstream detector by +2 .19 / + 2 .37 / + 0 .72 on Easy / Moderate / Hard, narrowing the gap to GT-trained accuracy. Because the only change is a refinement pass on the auto-labels themselves, the gain isolates the contribution of RefineAny3D’s depth correction to label quality, and shows that refinement directly translates into better trained detectors downstream. 8Table 5: Ablation studies across three design dimensions of RefineAny3D. Default configurations are highlighted in gray and consistently outperform other alternatives.                         
+
+> Action vocabulary DirAcc FullAcc Plain text 75 .655 .4
+> Joint tokens 86 .872 .5
+> Dir + Mag 89 .276 .7
+> Initialization DirAcc FullAcc Random 86 .873 .2
+> Anchor 87 .674 .4
+> Semantic 89 .276 .7
+> Training recipe DirAcc FullAcc No freeze vision 82 .769 .6
+> No CoT 84 .570 .2
+> Ours 89 .276 .7
+
+5.5 Ablation Studies 
+
+We ablate three design dimensions central to RefineAny3D: how to surface the corrective action to the VLM, how to initialize the new action-token embeddings, and how to set up the training recipe. Each ablation in Tab. 5 compares our default against natural alternatives to support the design choices made in Secs. 3 and 3.3. We report DirAcc (direction prediction accuracy) and FullAcc (both direction and magnitude correct). More ablations are provided in Appendix I. 
+
+Action-token vocabulary. A natural alternative to introducing new tokens is to let the VLM verbalize the action in plain text and parse it back, or to introduce a single special token for each of the seven possible actions (six directional-magnitude combinations plus one standalone ok action). Plain text loses 13 .6 DirAcc and 21 .3 FullAcc compared to ours (Tab. 5, left): free-form generation introduces unnecessary lexical variability, making the supervision target sparse and harder to align consistently across samples. Joint tokens, which dedicate one special token to each action, recover most of the gap on DirAcc ( 86 .8) but still lag on FullAcc ( 72 .5 vs. 76 .7): each joint token is supervised on only 
+
+∼ 17 of training samples, while our factored direction and magnitude tokens each see ∼ 13 . Factoring direction and magnitude is therefore not just a clean abstraction; it provides substantially denser supervision for each token. 
+
+Action-token initialization. The six new tokens carry no meaning at initialization, so how we seed them shapes what the embeddings can become through Stage 1 warm-up. We compare three options: 
+
+random ; anchor , which copies the embedding of “depth” into all six tokens; and semantic (ours), where each token is initialized from a descriptive phrase (Tab. 7). All three reach comparable DirAcc after warm-up, but on FullAcc random costs 3.5 points and anchor costs 2.3 relative to semantic (Tab. 5, middle). The asymmetry reflects the structure of the two token groups. The three direction tokens are pairwise distinct categories, and random or identical initializations separate cleanly along this categorical axis during warm-up; DirAcc therefore recovers under any initialization. The three magnitude tokens, by contrast, form an ordinal progression (small → medium → large); semantic initialization provides a better inductive bias for this ordinal structure from the start, whereas random or single-anchor initializations must recover it from scratch within the limited warm-up budget. FullAcc requires magnitude to be correct, which is precisely where this gap appears. 
+
+Training recipe. Our training recipe makes two choices: it keeps the vision encoder frozen through-out, and it pairs each sample with a chain-of-thought (CoT) rationale rather than supervising on the action tokens alone. Both choices contribute substantially (Tab. 5, right). Unfreezing the vision encoder costs 6.5 DirAcc and 7.1 FullAcc, likely because the encoder drifts away from the broad visual priors acquired during VLM pretraining and over-specializes to the narrow distribution of wireframe overlays. Removing the CoT rationale costs 4.7 DirAcc and 6.5 FullAcc: without CoT, the supervision becomes concentrated almost entirely on the action tokens themselves, losing the denser reasoning supervision that explicitly connects each action to visual evidence and making the model more susceptible to shortcut learning. 
+
+## 6 Conclusion 
+
+We introduced 3D box refinement as a stand-alone task that operates on top of any monocular 3D pipeline. Our key insight is that depth error has a direct visual signature in image space, which lets us recast refinement from metric regression into a semantic alignment problem that a vision-language model can solve directly. We instantiate this view as RefineAny3D, which refines object depth through categorical action tokens grounded in chain-of-thought visual reasoning, without ever predicting a numerical depth value. Applied as a post-hoc step, RefineAny3D consistently improves closed-set detectors, open-vocabulary detectors, and 3D auto-labeling tools, even surpassing oracle detectors conditioned on ground-truth 2D boxes. Beyond the empirical gains, our results suggest a broader principle: when end-to-end models hit precision ceilings tied to numerical regression, reformulating the residual problem in a modality the model can reason about visually offers a practical path forward. 9References 
+
+[1] Shuai Bai, Yuxuan Cai, Ruizhe Chen, et al. Qwen3-vl technical report. arXiv preprint arXiv:2511.21631 ,2025. 2, 6, 7, 15, 19, 21, 25, 29 [2] Shuai Bai, Keqin Chen, Xuejing Liu, et al. Qwen2.5-vl technical report. arXiv preprint arXiv:2502.13923 ,2025. 2, 25 [3] Garrick Brazil, Abhinav Kumar, Julian Straub, Nikhila Ravi, Justin Johnson, and Georgia Gkioxari. Omni3d: A large benchmark and model for 3D object detection in the wild. In CVPR , 2023. 1, 3, 6, 7, 8, 17, 19, 22, 25, 26, 29 [4] Garrick Brazil and Xiaoming Liu. M3D-RPN: Monocular 3D region proposal network for object detection. In ICCV , 2019. 3 [5] Garrick Brazil, Gerard Pons-Moll, Xiaoming Liu, and Bernt Schiele. Kinematic 3d object detection in monocular video. In ECCV , 2020. 3 [6] Holger Caesar, Varun Bankiti, Alex H Lang, Sourabh Vora, Venice Erin Liong, Qiang Xu, Anush Krishnan, Yu Pan, Giancarlo Baldan, and Oscar Beijbom. nuscenes: A multimodal dataset for autonomous driving. In CVPR , 2020. 3, 29 [7] Mu Cai, Haotian Liu, Siva Karthik Mustikovela, Gregory P Meyer, Yuning Chai, Dennis Park, and Yong Jae Lee. Vip-llava: Making large multimodal models understand arbitrary visual prompts. In CVPR , 2024. 3 [8] Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander Kirillov, and Sergey Zagoruyko. End-to-end object detection with transformers. In ECCV , 2020. 3 [9] Boyuan Chen, Zhuo Xu, Sean Kirmani, Brain Ichter, Dorsa Sadigh, Leonidas Guibas, and Fei Xia. Spatialvlm: Endowing vision-language models with spatial reasoning capabilities. In CVPR , 2024. 3 [10] Li Chen, Penghao Wu, Kashyap Chitta, Bernhard Jaeger, Andreas Geiger, and Hongyang Li. End-to-end autonomous driving: Challenges and frontiers. TPAMI , 2024. 1 [11] Qiang Chen, Xiaokang Chen, Jian Wang, Shan Zhang, Kun Yao, Haocheng Feng, Junyu Han, Errui Ding, Gang Zeng, and Jingdong Wang. Group detr: Fast detr training with group-wise one-to-many assignment. In CVPR , 2023. 3 [12] Xiaozhi Chen, Kaustav Kundu, Ziyu Zhang, Huimin Ma, Sanja Fidler, and Raquel Urtasun. Monocular 3D object detection for autonomous driving. In CVPR , 2016. 1 [13] An-Chieh Cheng, Hongxu Yin, Yang Fu, Qiushan Guo, Ruihan Yang, Jan Kautz, Xiaolong Wang, and Sifei Liu. Spatialrgpt: Grounded spatial reasoning in vision-language models. In NeurIPS , 2024. 3 [14] Zhiwen Fan, Jian Zhang, Renjie Li, Junge Zhang, Runjin Chen, Hezhen Hu, Kevin Wang, Huaizhi Qu, Shijie Zhou, Dilin Wang, et al. Vlm-3r: Vision-language models augmented with instruction-aligned 3d reconstruction. arXiv preprint arXiv:2505.20279 , 2025. 3 [15] Andreas Geiger, Philip Lenz, and Raquel Urtasun. Are we ready for autonomous driving? the kitti vision benchmark suite. In CVPR , 2012. 3, 7, 8, 14, 24, 29 [16] Miran Heo, Min-Hung Chen, De-An Huang, Sifei Liu, Subhashree Radhakrishnan, Seon Joo Kim, Yu-Chiang Frank Wang, and Ryo Hachiuma. Omni-rgpt: Unifying image and video region-level understanding via token marks. In CVPR , 2025. 3 [17] Yining Hong, Haoyu Zhen, Peihao Chen, Shuhong Zheng, Yilun Du, Zhenfang Chen, and Chuang Gan. 3d-llm: Injecting the 3d world into large language models. NeurIPS , 2023. 3 [18] Wenbo Hu, Jingli Lin, Yilin Long, Yunlong Ran, Lihan Jiang, Yifan Wang, Chenming Zhu, Runsen Xu, Tai Wang, and Jiangmiao Pang. G2vlm: Geometry grounded vision language model with unified 3d reconstruction and spatial reasoning. arXiv preprint arXiv:2511.21688 , 2025. 3 [19] Kuan-Chih Huang, Tsung-Han Wu, Hung-Ting Su, and Winston H Hsu. Monodtr: Monocular 3D object detection with depth-aware transformer. In CVPR , 2022. 3 [20] Ting Huang, Zeyu Zhang, and Hao Tang. 3d-r1: Enhancing reasoning in 3d vlms for unified scene understanding. arXiv preprint arXiv:2507.23478 , 2025. 3 
+
+10 [21] Wenxuan Huang, Bohan Jia, Zijie Zhai, Shaosheng Cao, Zheyu Ye, Fei Zhao, Zhe Xu, Xu Tang, Yao Hu, and Shaohui Lin. Vision-r1: Incentivizing reasoning capability in multimodal large language models. 
+
+arXiv preprint arXiv:2503.06749 , 2025. 3 [22] Xueying Jiang, Sheng Jin, Xiaoqin Zhang, Ling Shao, and Shijian Lu. MonoMAE: Enhancing monocular 3D detection through depth-aware masked autoencoders. In NeurIPS , 2024. 7 [23] Moo Jin Kim, Karl Pertsch, Siddharth Karamcheti, Ted Xiao, Ashwin Balakrishna, Suraj Nair, Rafael Rafailov, Ethan Foster, Grace Lam, Pannag Sanketi, et al. Openvla: An open-source vision-language-action model. arXiv preprint arXiv:2406.09246 , 2024. 3 [24] Abhinav Kumar, Garrick Brazil, Enrique Corona, Armin Parchami, and Xiaoming Liu. Deviant: Depth equivariant network for monocular 3D object detection. In ECCV , 2022. 3 [25] Abhinav Kumar, Garrick Brazil, and Xiaoming Liu. GrooMeD-NMS: Grouped mathematically differen-tiable nms for monocular 3D object detection. In CVPR , 2021. 3 [26] Xin Lai, Zhuotao Tian, Yukang Chen, Yanwei Li, Yuhui Yuan, Shu Liu, and Jiaya Jia. Lisa: Reasoning segmentation via large language model. In CVPR , 2024. 2 [27] Fuhao Li, Wenxuan Song, Han Zhao, Jingbo Wang, Pengxiang Ding, Donglin Wang, Long Zeng, and Haoang Li. Spatial forcing: Implicit spatial representation alignment for vision-language-action model. 
+
+arXiv preprint arXiv:2510.12276 , 2025. 3 [28] Zhuoling Li, Zhan Qu, Yang Zhou, Jianzhuang Liu, Haoqian Wang, and Lihui Jiang. Diversity matters: Fully exploiting depth clues for reliable monocular 3D object detection. In CVPR , 2022. 3 [29] Zhuoling Li, Xiaogang Xu, SerNam Lim, and Hengshuang Zhao. Unimode: Unified monocular 3d object detection. In CVPR , 2024. 3 [30] Weifeng Lin, Xinyu Wei, Ruichuan An, Peng Gao, Bocheng Zou, Yulin Luo, Siyuan Huang, Shang-hang Zhang, and Hongsheng Li. Draw-and-understand: Leveraging visual prompts to enable mllms to comprehend what you want. arXiv preprint arXiv:2403.20271 , 2024. 3 [31] Hou-I Liu, Christine Wu, Jen-Hao Cheng, Wenhao Chai, Shian-Yun Wang, Gaowen Liu, Hugo Latapie, Jhih-Ciang Wu, Jenq-Neng Hwang, Hong-Han Shuai, et al. Monotakd: Teaching assistant knowledge distillation for monocular 3d object detection. In CVPR , 2025. 3, 7 [32] Luyang Liu, Hongyu Li, and Marco Gruteser. Edge assisted real-time object detection for mobile augmented reality. In MobiCom , 2019. 1 [33] Shilong Liu, Zhaoyang Zeng, Tianhe Ren, Feng Li, Hao Zhang, Jie Yang, Chunyuan Li, Jianwei Yang, Hang Su, Jun Zhu, et al. Grounding dino: Marrying dino with grounded pre-training for open-set object detection. arXiv preprint arXiv:2303.05499 , 2023. 3 [34] Xianpeng Liu, Ce Zheng, Kelvin B Cheng, Nan Xue, Guo-Jun Qi, and Tianfu Wu. Monocular 3D object detection with bounding box denoising in 3D by perceiver. In ICCV , 2023. 3 [35] Zechen Liu, Zizhang Wu, and Roland Tóth. SMOKE: Single-stage monocular 3D object detection via keypoint estimation. In CVPR Workshop , 2020. 3 [36] Yan Lu, Xinzhu Ma, Lei Yang, Tianzhu Zhang, Yating Liu, Qi Chu, Junjie Yan, and Wanli Ouyang. Geometry uncertainty projection network for monocular 3D object detection. In ICCV , 2021. 3, 14 [37] Xinzhu Ma, Yinmin Zhang, Dan Xu, Dongzhan Zhou, Shuai Yi, Haojie Li, and Wanli Ouyang. Delving into localization errors for monocular 3D object detection. In CVPR , 2021. 3 [38] Yongsen Mao, Junhao Zhong, Chuan Fang, Jia Zheng, Rui Tang, Hao Zhu, Ping Tan, and Zihan Zhou. Spatiallm: Training large language models for structured indoor modeling. In NeurIPS , 2025. 3 [39] Arsalan Mousavian, Dragomir Anguelov, John Flynn, and Jana Košecká. 3D bounding box estimation using deep learning and geometry. In CVPR , 2017. 14 [40] Maxime Oquab, Timothée Darcet, Théo Moutakanni, Huy Vo, Marc Szafraniec, Vasil Khalidov, Pierre Fernandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, et al. Dinov2: Learning robust visual features without supervision. arXiv preprint arXiv:2304.07193 , 2023. 15 [41] Liang Peng, Junkai Xu, Haoran Cheng, Zheng Yang, Xiaopei Wu, Wei Qian, Wenxiao Wang, Boxi Wu, and Deng Cai. Learning occupancy for monocular 3D object detection. In CVPR , 2024. 1 
+
+11 [42] Luigi Piccinelli, Christos Sakaridis, Yung-Hsu Yang, Mattia Segu, Siyuan Li, Wim Abbeloos, and Luc Van Gool. UniDepthV2: Universal monocular metric depth estimation made simpler, 2025. 1, 3 [43] Fanqi Pu, Yifan Wang, Jiru Deng, and Wenming Yang. Monodgp: Monocular 3D object detection with decoupled-query and geometry-error priors. arXiv preprint arXiv:2410.19590 , 2024. 3, 7 [44] Zequn Qin and Xi Li. Monoground: Detecting monocular 3D objects from the ground. In CVPR , 2022. 3 [45] Kevin Qu, Haozhe Qi, Mihai Dusmanu, Mahdi Rad, Rui Wang, and Marc Pollefeys. Loc3r-vlm: Language-based localization and 3d reasoning with vision-language models, 2026. 3 [46] Haozhan Shen, Peng Liu, Jingcheng Li, Chunxin Fang, Yibo Ma, Jiajia Liao, Qiaoli Shen, Zilun Zhang, Kangjia Zhao, Qianqian Zhang, et al. Vlm-r1: A stable and generalizable r1-style large vision-language model. arXiv preprint arXiv:2504.07615 , 2025. 3 [47] Shaoshuai Shi, Xiaogang Wang, and Hongsheng Li. PointRCNN: 3D object proposal generation and detection from point cloud. In CVPR , 2019. 1 [48] Xuepeng Shi, Qi Ye, Xiaozhi Chen, Chuangrong Chen, Zhixiang Chen, and Tae-Kyun Kim. Geometry-based distance decomposition for monocular 3D object detection. In ICCV , 2021. 1 [49] Xuepeng Shi, Qi Ye, Xiaozhi Chen, Chuangrong Chen, Zhixiang Chen, and Tae-Kyun Kim. Geometry-based distance decomposition for monocular 3D object detection. In ICCV , 2021. 14 [50] Aleksandar Shtedritski, Christian Rupprecht, and Andrea Vedaldi. What does clip know about a red circle? visual prompt engineering for vlms. In CVPR , 2023. 3 [51] Quan Sun, Yuxin Fang, Ledell Wu, Xinlong Wang, and Yue Cao. Eva-clip: Improved training techniques for clip at scale. arXiv preprint arXiv:2303.15389 , 2023. 3 [52] Shengbang Tong, Ellis Brown, Penghao Wu, Sanghyun Woo, Manoj Middepogu, Sai Charitha Akula, Jihan Yang, Shusheng Yang, Adithya Iyer, Xichen Pan, Austin Wang, Rob Fergus, Yann LeCun, and Saining Xie. Cambrian-1: A fully open, vision-centric exploration of multimodal llms, 2024. 25 [53] Jianyuan Wang, Minghao Chen, Nikita Karaev, Andrea Vedaldi, Christian Rupprecht, and David Novotny. Vggt: Visual geometry grounded transformer. In CVPR , 2025. 3 [54] Peng Wang, Shuai Bai, Sinan Tan, et al. Qwen2-vl: Enhancing vision-language model’s perception of the world at any resolution. arXiv preprint arXiv:2409.12191 , 2024. 2 [55] Ruicheng Wang, Sicheng Xu, Yue Dong, Yu Deng, Jianfeng Xiang, Zelong Lv, Guangzhong Sun, Xin Tong, and Jiaolong Yang. Moge-2: Accurate monocular geometry with metric scale and sharp details. In 
+
+NeurIPS , 2025. 1, 3, 18 [56] Tai Wang, Xiaohan Mao, Chenming Zhu, Runsen Xu, Ruiyuan Lyu, Peisen Li, Xiao Chen, Wenwei Zhang, Kai Chen, Tianfan Xue, et al. Embodiedscan: A holistic multi-modal 3d perception suite towards embodied ai. In CVPR , 2024. 1 [57] Tai Wang, ZHU Xinge, Jiangmiao Pang, and Dahua Lin. Probabilistic and geometric depth: Detecting objects in perspective. In CoRL , 2022. 3 [58] Yuxin Wang, Lei Ke, Boqiang Zhang, Tianyuan Qu, Hanxun Yu, Zhenpeng Huang, Meng Yu, Dan Xu, and Dong Yu. N3d-vlm: Native 3d grounding enables accurate spatial reasoning in vision-language models. 
+
+arXiv preprint arXiv:2512.16561 , 2025. 1, 3 [59] Zhenyu Wang, Yali Li, Taichi Liu, Hengshuang Zhao, and Shengjin Wang. Ov-uni3detr: Towards unified open-vocabulary 3d object detection via cycle-modality propagation. In ECCV , 2024. 3 [60] Zizhang Wu, Yuanzhu Gan, Lei Wang, Guilian Chen, and Jian Pu. Monopgc: Monocular 3D object detection with pixel geometry contexts. In ICRA , 2023. 3 [61] Zizhang Wu, Yuanzhu Gan, Yunzhe Wu, Ruihao Wang, Xiaoquan Wang, and Jian Pu. FD3D: Exploiting foreground depth map for feature-supervised monocular 3D object detection. In AAAI , 2024. 3, 7 [62] Runsen Xu, Xiaolong Wang, Tai Wang, Yilun Chen, Jiangmiao Pang, and Dahua Lin. Pointllm: Empower-ing large language models to understand point clouds. In ECCV , 2024. 3 [63] Longfei Yan, Pei Yan, Shengzhou Xiong, Xuanyu Xiang, and Yihua Tan. MonoCD: Monocular 3D object detection with complementary depths. In CVPR , 2024. 7 
+
+12 [64] An Yang, Anfeng Li, Baosong Yang, et al. Qwen3 technical report. arXiv preprint arXiv:2505.09388 ,2025. 6, 21 [65] Jianwei Yang, Hao Zhang, Feng Li, Xueyan Zou, Chunyuan Li, and Jianfeng Gao. Set-of-mark prompting unleashes extraordinary visual grounding in gpt-4v. arXiv preprint arXiv:2310.11441 , 2023. 3 [66] Senqiao Yang, Tianyuan Qu, Xin Lai, Zhuotao Tian, Bohao Peng, Shu Liu, and Jiaya Jia. Lisa++: An improved baseline for reasoning segmentation with large language model. arXiv preprint arXiv:2312.17240 ,2023. 3 [67] Yung-Hsu Yang, Luigi Piccinelli, Mattia Segu, Siyuan Li, Rui Huang, Yuqian Fu, Marc Pollefeys, Hermann Blum, and Zuria Bauer. 3d-mood: Lifting 2d to 3d for monocular open-set object detection. In ICCV ,2025. 1, 3 [68] Jin Yao, Hao Gu, Xuweiyi Chen, Jiayun Wang, and Zezhou Cheng. Open vocabulary monocular 3d object detection. In 3DV , 2026. 1, 3, 7, 23, 25 [69] Jin Yao, Radowan Mahmud Redoy, Sebastian Elbaum, Matthew B. Dwyer, and Zezhou Cheng. Labelany3d: Label any object 3d in the wild. In NeurIPS , 2025. 1, 3, 8 [70] Tianwei Yin, Xingyi Zhou, and Philipp Krahenbuhl. Center-based 3D object detection and tracking. In 
+
+CVPR , 2021. 1 [71] Yuqian Yuan, Hang Zhang, Wentong Li, Zesen Cheng, Boqiang Zhang, Long Li, Xin Li, Deli Zhao, Wenqiao Zhang, Yueting Zhuang, et al. Videorefer suite: Advancing spatial-temporal object understanding with video llm. In CVPR , 2025. 3 [72] Hanxue Zhang, Haoran Jiang, Qingsong Yao, Yanan Sun, Renrui Zhang, Hao Zhao, Hongyang Li, Hongzi Zhu, and Zetong Yang. Detect anything 3d in the wild. arXiv preprint arXiv:2504.07958 , 2025. 1, 3, 7, 8, 25, 26, 27 [73] Renrui Zhang, Han Qiu, Tai Wang, Ziyu Guo, Ziteng Cui, Yu Qiao, Hongsheng Li, and Peng Gao. Monodetr: Depth-guided transformer for monocular 3D object detection. In ICCV , 2023. 1, 3, 7 [74] Yunpeng Zhang, Jiwen Lu, and Jie Zhou. Objects are different: Flexible monocular 3D object detection. In CVPR , 2021. 3 [75] Zhihao Zhang, Abhinav Kumar, Girish Chandar Ganesan, and Xiaoming Liu. Unleashing the power of chain-of-prediction for monocular 3d object detection. In CVPR , 2026. 3, 7, 8, 14, 24 [76] Yian Zhao, Wenyu Lv, Shangliang Xu, Jinman Wei, Guanzhong Wang, Qingqing Dang, Yi Liu, and Jie Chen. Detrs beat yolos on real-time object detection. In CVPR , 2024. 3 [77] Haoyu Zhen, Xiaowen Qiu, Peihao Chen, Jincheng Yang, Xin Yan, Yilun Du, Yining Hong, and Chuang Gan. 3d-vla: 3d vision-language-action generative world model. arXiv preprint arXiv:2403.09631 , 2024. 3 [78] Yunsong Zhou, Hongzi Zhu, Quan Liu, Shan Chang, and Minyi Guo. Monoatt: Online monocular 3D object detection with adaptive token transformer. In CVPR , 2023. 3 [79] Menglong Zhu, Konstantinos G Derpanis, Yinfei Yang, Samarth Brahmbhatt, Mabel Zhang, Cody Phillips, Matthieu Lecce, and Kostas Daniilidis. Single image 3d object detection and pose estimation for grasping. In ICRA , 2014. 1 [80] Brianna Zitkovich, Tianhe Yu, Sichun Xu, Peng Xu, Ted Xiao, Fei Xia, Jialin Wu, Paul Wohlhart, Stefan Welker, Ayzaan Wahid, et al. Rt-2: Vision-language-action models transfer web knowledge to robotic control. In CoRL , 2023. 3 
+
+13 Table 6: Comparison with non-VLM refinement mechanisms. All methods refine MonoCoP [75] predictions on KITTI validation (AP 3D at IoU ≥ 0.7) and modify only the object depth. Both geometric-fitting variants are given the ground-truth tight 2D box as the fitting target, an oracle input RefineAny3D never receives.                                              
+
+> Method Box attributes Easy Mod. Hard ∆vs. MonoCoP MonoCoP [75] (unrefined) predicted 32.06 23.98 20.64 —Geometric projection fitting predicted 29.89 21.55 18.36 −2.17 /−2.43 /−2.28
+> Geometric projection fitting GT dims + yaw 30.56 21.79 18.43 −1.50 /−2.19 /−2.21
+> DINOv2 ViT-S/14 action classifier predicted 24.71 17.62 12.78 −7.35 /−6.36 /−7.86
+> RefineAny3D (Ours) predicted 35.62 27.47 21.31 +3 .56 /+ 3 .49 /+ 0 .67
+
+## A Why Simpler Alternatives Fall Short 
+
+RefineAny3D uses a VLM to judge image-space alignment. Two simpler mechanisms could in principle serve the same role: a purely geometric procedure that fits depth by projection, and a small discriminative network trained to emit the same action tokens. We implement both and find that neither recovers the improvement, for different reasons. All experiments in this section refine MonoCoP [75] predictions on KITTI [15] validation under the AP 3D protocol at IoU ≥ 0.7 used in Tab. 2, and modify only the object depth. 
+
+A.1 Geometric Projection Fitting Why the fitting objective is biased. Given predicted dimensions, yaw, and the camera ray, one may recover depth by searching for the value whose projected cuboid best overlaps the object’s tight 2D box. This resembles the alignment task we assign to the VLM, but the two objectives are not equivalent: a tight 2D box encloses the visible object pixels, whereas the projected cuboid also spans occluded corners and empty volume outside the visible silhouette. The mismatch is not a second-order effect. Consider a front-facing, on-axis cuboid with center depth z⋆, height H, and length L, under focal length f . Its projected envelope height at depth z is hcub (z) = f H/ (z − L/ 2) ,while the annotated tight box has height h2D = ρ h cub (z⋆) for some extent ratio ρ that is not 1 in general. Matching heights yields a recovered depth ˆz satisfying 
+
+ˆz − z⋆ =
+
+ 1 
+
+> ρ
+
+− 1
+
+ 
+
+z⋆ − L
+
+> 2
+
+
+
+, (7) so ρ < 1 pushes the recovered depth farther, ρ > 1 pulls it closer, and only ρ = 1 is exact—a condition that accurate 2D localization does not imply. At detection scale this residual is decisive: an 8% extent mismatch ( ρ = 0 .92 ) displaces a car centered at 40 m by roughly 3.3 m, far exceeding the longitudinal tolerance of the IoU 3D ≥ 0.7 criterion at that range. A visible-object mask inherits the same mismatch, since it too covers only the visible extent. The same difficulty appears in prior Mono3D work: Deep3DBox [39] recovers translation from this projected-box constraint, and later methods [36, 49] model the uncertainty of geometry-derived depth rather than treating it as exact. 
+
+Setup. We implement the baseline as a one-dimensional search along the original predicted camera ray, selecting the depth that maximizes the 2D IoU between the tight 2D box and the axis-aligned envelope of the projected cuboid, with dimensions, yaw, and confidence held fixed. We use the 
+
+ground-truth tight 2D box as the fitting target, an oracle input RefineAny3D itself never receives, since a predicted 2D box would only add localization noise to this target; the setting therefore favors the baseline. We report two variants: one using the detector’s predicted dimensions and yaw, and one in which these are replaced by their GT values, isolating how much of the baseline’s behavior is attributable to attribute noise. For the oracle variant, each prediction is matched to the same-class GT object with the highest 3D IoU, falling back to the object with the nearest projected center when no same-class GT overlaps it. A sanity check confirms the implementation: fitting the GT projected envelope with GT attributes recovers the GT depth exactly. 
+
+Results. Geometric fitting lowers AP 3D by 2.17 /2.43 /2.28 on Easy / Moderate / Hard (Tab. 6), while RefineAny3D improves the same predictions by 3.56 /3.49 /0.67 . Supplying GT dimensions and yaw recovers only 0.67 /0.24 /0.07 AP, leaving the baseline 1.50 /2.19 /2.21 below the unrefined detector. 14 Attribute noise is therefore not the primary cause: the degradation traces to the fitting objective itself, as Eq. (7) predicts. 
+
+A.2 A Lightweight Discriminative Action Classifier Setup. The second alternative keeps our action formulation but replaces the decision model. We train a classifier built on a pretrained DINOv2 ViT-S/14 [40] encoder with two lightweight heads predicting the direction and magnitude tokens. It receives the same object crop with the projected wireframe that RefineAny3D sees, and is trained on the same depth-perturbation data with the same target tokens. The vocabularies, object-relative step sizes, depth-update rule, and iterative procedure are identical, so the decision model is the only component that differs. 
+
+Results. Despite the pretrained encoder and identical supervision, the classifier reduces AP 3D
+
+by 7.35 /6.36 /7.86 on Easy / Moderate / Hard (Tab. 6), well below the unrefined detector, while RefineAny3D improves the same predictions by 3.56 /3.49 /0.67 . The predefined discrete action space is therefore not by itself sufficient to reproduce the improvement: what distinguishes the two methods is the visual judgment used to select among the actions, not the actions themselves. We attribute this to a distribution shift that the refinement loop amplifies. Training samples perturb depth on otherwise ground-truth boxes, so the classifier observes misalignments caused by depth alone; real detector outputs instead carry coupled residual errors in depth, dimensions, orientation, and projected position, which produce a considerably wider range of image–wireframe relationships. Because every predicted token pair is converted directly into a metric update, a decision model that does not transfer under this shift does more than fail to help: it moves initially reasonable predictions away from the target, consistent with the degradation we observe. 
+
+A.3 Discussion: What the VLM Contributes 
+
+Neither alternative can reliably assess image–wireframe consistency under realistic detector residuals, but they fail through different mechanisms. 
+
+Geometric fitting is limited by objective mismatch. It substitutes a surrogate, rectangular overlap between a tight 2D box and the projected cuboid envelope, for the judgment we actually want, namely whether the projected cuboid is consistent with the visible object. Maximizing that surrogate can favor a depth with better 2D agreement but worse 3D localization, and the failure persists under GT 2D conditioning and oracle attributes. 
+
+The classifier is limited by generalization. It optimizes the right objective over the right action space, yet a task-specific discriminative mapping from crop to class does not survive the shift from controlled perturbations to the coupled residual errors of a real detector, and under this formulation every mispredicted token is spent as a metric error. 
+
+RefineAny3D pairs broad visual priors with a constrained correction interface. The VLM is never asked to regress metric depth. It evaluates the relationship between the visible object and the projected cuboid, contour agreement, surface enclosure, internal projected structure, and the direction in which the mismatch points, rather than apparent size alone, and expresses the result through a small set of direction and magnitude tokens. The pretrained multimodal representation supports interpreting varied visual evidence, while the constrained vocabulary converts that judgment into bounded, object-relative metric updates. A further asymmetry is that RefineAny3D can abstain : the 
+
+⟨depth_ok ⟩ action leaves 37 .8% of objects unchanged (Appendix F), whereas a fitting procedure always commits to its argmax. The improvement therefore does not arise from discretization alone, but from pairing the discrete interface with a decision model that generalizes the alignment judgment to realistic detector outputs. 
+
+## B Implementation Details 
+
+Model architecture. We build RefineAny3D on top of Qwen3-VL-8B-Instruct [1], extending its tokenizer with six special action tokens that factor the corrective action into three direction tokens and three magnitude tokens (Tab. 7). Each new embedding row is initialized via semantic initialization :we tokenize a short phrase describing the token’s meaning (right column of Tab. 7) and mean-pool the corresponding sub-token embeddings of the frozen base model, placing each new token in a 15 region of the embedding space that already encodes its intended concept. Magnitudes correspond to object-relative shifts of 0.20 sobj , 0.55 sobj , and 1.10 sobj for small, medium, and large, where 
+
+sobj = ( w + h + l)/3 is the object’s mean linear extent. Table 7: Action-token vocabulary, inference contract, and semantic initialization. Each new token’s embedding is initialized by mean-pooling the sub-token embeddings of its init phrase.                                   
+
+> Token Meaning at inference Init phrase
+> <depth_closer> move box towards camera (decrease centre z)“move closer to camera”
+> <depth_farther> move box away from camera (increase centre z)“move farther from camera”
+> <depth_ok> no correction needed “no depth correction needed”
+> <step_small> apply 0.20 ×sm (midpoint of [0 .10 ,0.30) )“small step size”
+> <step_medium> apply 0.55 ×sm (midpoint of [0 .30 ,0.80) )“medium step size”
+> <step_large> apply 1.10 ×sm (representative for [0 .80 ,∞))“large step size”
+
+Training data and infrastructure. We train on the curated dataset of approximately 3.0M (image, target-tokens) samples (Secs. D.3 and D.4). All training is performed on 8 NVIDIA H100 ( 80 GB) GPUs in bfloat16 with DeepSpeed ZeRO-3 and FlashAttention-2, using AdamW with cosine learning-rate decay and standard auto-regressive cross-entropy loss applied to both the chain-of-thought tokens and the action tokens. Stage 1 takes approximately 1 hour and Stage 2 takes approximately 90 hours per configuration. 
+
+B.1 Two-Stage Training Protocol Single-step supervision. Both training stages use single-step supervision. Each training sample consists of (i) an input image with the candidate 3D box rendered as a wireframe overlay (Sec. D.3), (ii) a target chain-of-thought reasoning trace (Sec. D.4), and (iii) the GT action tokens (ad, a m)
+
+corresponding to the perturbation slot. We do not unroll the iterative update at training time. Each action is a local decision conditioned only on the current visual state I(t) and is therefore independent of the trajectory leading up to it; teaching the model a mapping from any current visual state to its locally correct action is sufficient for multi-turn inference to chain such decisions correctly. 
+
+Stage 1: action-token warm-up. The six action tokens are newly added to the VLM’s vocabulary. Directly co-training them with the full VLM is unstable, since the loss must simultaneously shape both the new embeddings and the LLM’s use of them, and the LLM cannot meaningfully attend to embeddings that are still essentially random. We therefore freeze every transformer block and train only the new token embedding rows ( embed_tokens and lm_head ) for one epoch on a stratified subsample, using AdamW with peak learning rate 5 × 10 −3, cosine schedule, and 5% warmup. This stage is intentionally short and has no goal beyond stabilizing the new embeddings before joint optimization. 
+
+Stage 2: joint fine-tuning. With the action-token embeddings warmed up, we fully fine-tune the language tower together with the action-token embeddings while keeping the vision encoder frozen. Freezing the vision encoder is a deliberate design choice: the encoder retains the general visual priors learned during VLM pretraining, which the trained RefineAny3D relies on to generalize across novel categories, scenes, and cameras at test time. We empirically observed that unfreezing the vision encoder during Stage 2 hurts generalization on Refine3D, particularly on the novel-scene split. We train for one epoch over the full curated dataset using AdamW with peak learning rate 1 × 10 −5,cosine schedule, 3% warmup, and gradient clipping at 1.0.
+
+B.2 Multi-Turn Inference Iterative refinement loop. At inference, RefineAny3D is applied iteratively to refine an initial noisy box b(0) produced by an upstream detector. At each step t, the loop performs four operations in sequence: 1. Render the current box b(t) as a wireframe on the input image to obtain I(t) =render( I, π (b(t); K)) .16 Table 8: Oracle study under the Omni3D evaluation protocol. Each row replaces one attribute of Cube R-CNN’s predictions with either the ground truth or the output of a depth foundation model.              
+
+> Variant AP 3D∆vs. baseline
+> Baseline (Cube R-CNN) 36.00 —Oracle dimensions 35.91 −0.09
+> Oracle angle 36.22 +0 .22
+> Foundation depth (MoGe2) 32.54 −3.68
+> Oracle depth 65.92 +29 .92
+
+2. Query the VLM with I(t) and a fixed instruction prompt; the model first emits a chain-of-thought reasoning trace, then the action tokens (a(t) 
+
+> d
+
+, a (t) 
+
+> m
+
+).3. Compute the depth update ∆d(t) = dir( a(t) 
+
+> d
+
+) · mag( a(t) 
+
+> m
+
+, s obj ) and update the box: d(t+1) =
+
+d(t) + ∆ d(t), with (ˆ x(t+1) , ˆy(t+1) ) re-derived along the camera ray to keep the box’s image location consistent with the new depth. 4. Continue if a(t) 
+
+> d
+
+∈ {⟨ depth_closer ⟩, ⟨depth_farther ⟩} ; terminate if a(t) 
+
+> d
+
+=
+
+⟨depth_ok ⟩ or if the maximum number of iterations Tmax is reached. We use Tmax = 2 in all experiments. The chain-of-thought reasoning trace is generated at every step but used only for action-token decoding; it is discarded after the action is parsed. 
+
+Why train-inference asymmetry is consistent. RefineAny3D is trained on single-step supervision but deployed in a multi-turn loop. This asymmetry is consistent because the action prediction at each step depends only on the current visual state I(t), not on the trajectory of past actions. The conditional distribution P (a(t) | I(t)) that the model learns at training is exactly the distribution it is queried with at each inference step, regardless of how many refinement iterations have already occurred. Single-step supervision therefore teaches a mapping that generalizes naturally to arbitrarily many inference steps, and multi-turn inference simply chains these per-step decisions until the model itself signals convergence via ⟨depth_ok ⟩.
+
+Decoding. We use greedy decoding for both the chain-of-thought reasoning and the action tokens, with the action-token positions restricted to the six special tokens via constrained decoding. This guarantees that each action prediction is one of the valid (ad, a m) combinations and prevents the model from emitting natural-language tokens at action positions. 
+
+Termination behavior. The over-representation of ⟨depth_ok ⟩ in the training distribution (Sec. D.3) gives the trained model a mild conservative bias: under uncertainty, it tends to terminate refinement rather than apply an aggressive correction. Empirically, refinement terminates with ⟨depth_ok ⟩ in 
+
+1.62 steps on average, well below the safeguard cap Tmax = 2 . The cap is rarely reached in practice; samples that hit it correspond to cases where the model oscillates between ⟨depth_closer ⟩ and 
+
+⟨depth_farther ⟩ near the alignment boundary. 
+
+## C Oracle Study Details 
+
+We provide additional details for the oracle study reported in Fig. 1. We use Cube R-CNN [3] trained on Omni3D as the baseline detector and report AP 3D under the standard Omni3D evaluation protocol. For each predicted box, we find its corresponding GT box via greedy assignment based on 3D IoU, with a matching threshold of 0.5. Each GT box can match at most one prediction. Predictions that do not match any GT are kept unmodified, and unmatched GT boxes contribute to recall as usual. Confidence scores from the original detector are always preserved so that AP ranking is unaffected. For each matched (prediction, GT) pair, we replace one or more attributes of the prediction with the corresponding GT values: • Oracle dimensions replaces ( ˆ w, ˆh, ˆl) with (w∗, h ∗, l ∗).• Oracle angle replaces ˆθ with θ∗.17 1.  Selection       
+
+> Outdoor Scenes
+> ...
+> I ndoor Scenes
+> ...
+> 3M Samples
+> 2. Filter ing
+> Geometr ic Filter
+> -Object truncation
+> -Object occlusion
+> VL M Semantic Filter
+> -Object truncation
+> -Object occlusion
+> -Object visibility
+> -Image quality
+> 335K Samples
+> 3. Per tur bing
+> Action Tokens
+> <depth_ok>
+> <depth_further>
+> <depth_closer>
+> 3M Samples
+> Random Sampler
+> <step_small>
+> <step_medium>
+> <step_large>
+> 4. CoT Reasoning
+> I dentify Obj ect
+> Wor ld K nowledge Recall
+> Find Visual Evidence
+> M ake Decision
+> 3M CoTs
+
+Figure 5: Data construction pipeline for training RefineAny3D. We collect diverse indoor and outdoor scenes ( Selection ), followed by geometric and VLM-based semantic filtering to remove low-quality or ambiguous samples ( Filtering ). We then generate training signals by sampling action tokens that encode directional and magnitude adjustments ( Perturbing ). Finally, we construct structured chain-of-thought (CoT) annotations to guide the model’s reasoning process, including object identification, world knowledge recall, visual evidence grounding, and decision making. • Oracle depth replaces the predicted object depth with the GT depth. Because changing depth alone while keeping the predicted (ˆ x, ˆy) fixed would cause the box to drift in the image, we re-derive (ˆ x, ˆy) from the camera ray of the original prediction and the new depth, so the projected box stays at the same image location and only depth changes. • Foundation depth replaces the predicted object depth with a depth derived from MoGe2 [55], a state-of-the-art depth foundation model. Since MoGe2 predicts the depth of the visible object surface rather than the object center that 3D detection requires, we apply a geometric correction rather than reading MoGe2’s output directly. Specifically, we (i) project the predicted 3D center onto the image plane to locate its corresponding pixel, (ii) read MoGe2’s depth at that pixel as a surface-depth estimate, and (iii) add an offset—computed from the predicted object dimensions and orientation—that accounts for the distance, along the camera ray, between the surface entry point of the box and its center. This converts the per-pixel surface depth produced by MoGe2 into a center depth comparable to what the detector regresses. As with oracle depth, (ˆ x, ˆy) is then re-derived along the camera ray to keep the box’s image location fixed. All other attributes remain unchanged in each variant. Tab. 8 reports the full numbers. The unmodified Cube R-CNN baseline reaches an AP 3D of 36.00. Replacing the predicted dimensions or yaw angle with their ground-truth values changes AP by less than 0.3 points in either direction, indicating that these two attributes are already well predicted by the in-domain detector. Replacing the predicted depth with the ground-truth depth boosts AP to 65.92 (a +29 .92 gain), nearly doubling the baseline. Replacing the predicted depth with the surface-to-center-corrected depth from MoGe2, in contrast, reduces AP to 32.54 (a −3.68 drop), worse than the baseline detector’s own predictions. Two observations emerge from these numbers. First, object depth is the single dominant bottleneck of monocular 3D detection: among the three 3D attributes we ablate, only depth shows a substantial gap to perfect prediction. The detector’s predicted dimensions and angles are already accurate enough that perfecting them yields negligible gain, while perfecting depth alone nearly doubles the baseline AP. This motivates RefineAny3D’s design of refining only the depth and leaving other attributes untouched. Second, depth foundation models do not yet provide the precision needed to close this bottleneck. Although MoGe2 demonstrates strong zero-shot performance on unseen scenes, its object-level depth estimates—even after the surface-to-center correction described above—remain less accurate than those of an in-domain detector. We attribute this to a mismatch in objective: depth foundation models are trained for dense, pixel-level supervision and are not optimized to be metrically precise at the object level. Under tight 3D IoU thresholds, even small object-level biases translate into substantial AP drops. 18 D Data Curation Details 
+
+We construct our training set from public 3D-annotated images in three stages: source dataset selection (Sec. D.1), per-annotation filtering (Sec. D.2), and depth-perturbation sample synthesis (Sec. D.3). The first two stages yield 335 ,167 filtered annotations with reliable 3D boxes, visually unambiguous objects, and trustworthy category labels; the third stage synthetically perturbs each annotation along the depth axis to generate approximately 3.0M (image, target-tokens) training samples that span all action-token outcomes. 
+
+D.1 Source Datasets 
+
+We build on the Omni3D release [3], which re-annotates six existing datasets into a shared COCO-style format under a common camera convention ( +x right, +y down, +z into the screen). The six sources are intentionally heterogeneous: KITTI and nuScenes provide outdoor driving scenes; Objectron contributes hand-held captures of common indoor objects; SUN RGB-D and ARKitScenes provide indoor scans; and Hypersim contributes photorealistic synthetic renderings. In total, this yields 3,303 ,211 annotations across 234 ,152 images, spanning 50 unified categories ( 96 raw category names before the Omni3D taxonomy merge). 
+
+D.2 Annotation Filtering 
+
+The raw release contains many annotations unsuitable as positive training examples, including invalid 3D boxes, behind-camera projections, tiny or heavily truncated objects, severe occlusion, mis-categorized labels, and rendering artifacts. We apply a two-stage filter: a geometric stage that uses metadata fields available in Omni3D, followed by a VLM-based semantic stage that catches errors no geometric rule can detect. 
+
+Geometric and metadata filter. An annotation is retained only if it is marked as a valid 3D box, projects in front of the camera, has a 2D footprint of at least 32 × 32 pixels, and satisfies 
+
+truncation ≤ 0.05 and visibility ≥ 0.8 (relaxed to ≥ 0.6 for nuScenes, whose visibility field is discretized into coarse bins). When both bbox2D_tight and bbox2D_proj are available, we additionally require their 2D IoU to exceed 0.85 , and we reject annotations whose geometric truncation 1 − area( bbox2D_trunc )/area( bbox2D_proj ) exceeds 0.05 . After this stage, 466 ,032 
+
+annotations across 162 ,002 images remain ( 14 .1% of the raw pool); per-dataset retention is reported in Tab. 9. 
+
+VLM-based semantic filter. Geometric rules cannot detect mis-categorized labels, semantic oc-clusion by foreground clutter, blurry captures, or rendering artifacts. We add a semantic stage that queries a vision-language model on each surviving annotation. For each annotation we extract a 
+
+336 × 336 RGB crop centered on the object using bbox2D_tight (or bbox2D_proj when unavail-able) expanded by a 1.5× context margin, with the original 2D box rendered in red as a visual anchor. We prompt Qwen3-VL-30B-A3B-Instruct [1] to return a structured judgment of whether the object is recognizable, its predicted category among a 54 -class closed set, agreement with the claimed category, occlusion severity, image-edge truncation, bounding-box tightness, and overall image quality. We retain an annotation when the object is visible, the predicted and claimed categories are not in clear conflict, and none of occlusion, truncation, box tightness, or image quality is rated in its worst category. This stage retains 71 .9% of the geometrically filtered pool, leaving 335 ,167 annotations. 
+
+D.3 Depth-Perturbation Training Set 
+
+To turn the 335 ,167 filtered annotations into supervision for RefineAny3D, we synthetically perturb each GT box along the camera-frame depth axis to generate (image, target-tokens) training pairs that span all action-token outcomes. 
+
+Per-annotation sampling schedule. For each filtered annotation we draw 9 perturbation samples, one per slot of a sampling schedule (Tab. 10) that exactly covers the action-token vocabulary. Each sample shifts the box’s center along the +z axis by ∆z = r · sobj , where sobj = ( w + h + l)/3 is the object’s mean linear extent and r is a slot-specific shift ratio sampled uniformly from a fixed range. Positive ∆z pushes the box farther from the camera, so the corrective action is ⟨depth_closer ⟩;negative ∆z pulls the box toward the camera, so the corrective action is ⟨depth_farther ⟩. Lateral 19 Table 9: Per-dataset retention through the two-stage filtering pipeline. The first “%” column reports retention from raw to after the geometric filter; the second reports retention from after the geometric filter to after the VLM-based semantic filter.                                         
+
+> Dataset Anns (raw) After geom. %After VLM %
+> KITTI 50,514 10,932 21.6 10,023 91.7 nuScenes 356,438 150,240 42.2 90,440 60.2 Objectron 54,214 41,578 76.7 39,898 96.0 SUN RGB-D 78,514 31,444 40.0 23,278 74.0 ARKitScenes 476,501 94,642 19.9 53,677 56.7 Hypersim 2,287,030 137,196 6.0 117,851 85.9
+> Total 3,303,211 466,032 14.1 335,167 71.9
+
+Table 10: Perturbation sampling schedule. Each annotation produces 9 samples, one per slot. The shift ratio r is drawn uniformly from the listed range, and the actual center shift is ∆z = r · sobj .                                         
+
+> Slot Direction Magnitude Shift ratio r
+> 0⟨depth_closer ⟩⟨step_small ⟩[+0 .10 ,+0 .30)
+> 1⟨depth_closer ⟩⟨step_medium ⟩[+0 .30 ,+0 .80)
+> 2⟨depth_closer ⟩⟨step_large ⟩[+0 .80 ,+1 .50]
+> 3⟨depth_farther ⟩⟨step_small ⟩[−0.30 ,−0.10)
+> 4⟨depth_farther ⟩⟨step_medium ⟩[−0.80 ,−0.30)
+> 5⟨depth_farther ⟩⟨step_large ⟩[−1.50 ,−0.80]
+> 6⟨depth_ok ⟩—0
+> 7⟨depth_ok ⟩dead-zone +[0 ,+0 .10)
+> 8⟨depth_ok ⟩dead-zone −(−0.10 ,0]
+
+position and orientation are kept at GT throughout, so every visible misalignment is purely a depth misalignment. The schedule allocates three slots to the ⟨depth_ok ⟩ outcome—an exact-zero shift and two narrow dead-zones around zero—reflecting that depth values inside this band are visually indistinguishable from the GT and should be reported as already aligned. 
+
+Inference contract for magnitude tokens. At inference, each magnitude token corresponds to a fixed corrective shift used by the iterative refinement step. We use the bucket midpoint of each slot’s shift-ratio range, so that ⟨step_small ⟩ applies 0.20 · sobj , ⟨step_medium ⟩ applies 0.55 · sobj , and 
+
+⟨step_large ⟩ applies 1.10 · sobj as a representative value for the open-tail [0 .80 , ∞) regime. 
+
+Image rendering. Each of the nine perturbation samples reuses the same 336 × 336 crop computed in Sec. D.2 from the unperturbed 2D box. On top of this fixed crop we render a wireframe of the 
+
+perturbed cuboid: the eight corners of the GT box are translated by ∆z along the camera-frame 
+
+z-axis, projected through the original intrinsics K, mapped into crop pixels, and connected by the twelve cuboid edges in green. Holding the crop region fixed across all nine slots is intentional: the only visual difference between samples of the same object is the wireframe itself, which prevents the model from exploiting crop-region cues as a shortcut for inferring the depth direction. 
+
+Geometric rejection. A perturbation is rejected and re-sampled if any cuboid corner falls behind the camera or if the projected cuboid becomes degenerately small in the crop, guarding against samples in which the perturbed box is invisible or unreasonably tiny. 
+
+Final perturbation pool. The full pipeline produces approximately 3.0M (image, target-tokens) training samples from the 335 ,167 distinct objects. By construction, the action-token distribution is uniform over the seven distinct token combinations: each of the six 
+
+⟨depth_closer ⟩/⟨depth_farther ⟩ direction-magnitude pairs appears in 19 of the samples, and 
+
+⟨depth_ok ⟩ accounts for the remaining 39 ≈ 33% (Tab. 11). The deliberate over-representation of 
+
+⟨depth_ok ⟩ introduces a mild conservative bias at inference: under uncertainty, the model prefers to terminate refinement, which costs at most one extra iteration while preventing unnecessary perturba-tion of already-aligned boxes. 
+
+Visualization. Fig. 6 shows three sample crops drawn from a single object: slot 6 ( ⟨depth_ok ⟩), slot 1 ( ⟨depth_closer ⟩ ⟨ step_medium ⟩), and slot 4 ( ⟨depth_farther ⟩ ⟨ step_medium ⟩). The three 20 Table 11: Action-token distribution in the perturbation training set. The six direction–magnitude combinations are matched in count, and ⟨depth_ok ⟩ is over-represented to encourage conservative termination at inference. 
+
+Token combination # samples Share 
+
+⟨depth_closer ⟩ ⟨ step_small ⟩ ≈ 335 K 11 .1% 
+
+⟨depth_closer ⟩ ⟨ step_medium ⟩ ≈ 335 K 11 .1% 
+
+⟨depth_closer ⟩ ⟨ step_large ⟩ ≈ 335 K 11 .1% 
+
+⟨depth_farther ⟩ ⟨ step_small ⟩ ≈ 335 K 11 .1% 
+
+⟨depth_farther ⟩ ⟨ step_medium ⟩ ≈ 335 K 11 .1% 
+
+⟨depth_farther ⟩ ⟨ step_large ⟩ ≈ 335 K 11 .1% 
+
+⟨depth_ok ⟩ ≈ 1.0M 33 .3% 
+
+Total ≈ 3.0M 100 .0% Rendered Images Action Tokens <depth_farther> <step_medium> <depth_ok> <depth_closer> <step_large> 
+
+Rendered Images Action Tokens <depth_ok> <depth_farther> <step_small> <depth_closer> <step_medium> 
+
+Figure 6: Examples of generated perturbed data. samples share the same crop region but differ only in the rendered wireframe, illustrating how a depth perturbation manifests visually as a wireframe that aligns with the object, sits in front of it, or sits behind it. 
+
+D.4 Chain-of-Thought Reasoning Targets 
+
+In preliminary experiments, fine-tuning the VLM to emit only action tokens led to a noticeable drop in its general instruction-following ability. We therefore pair every training sample with a short chain-of-thought (CoT) prefix that the model produces before emitting the action token. The CoT acts as a language-anchored intermediate signal: the model articulates which object it is looking at, what visual cue it is reading, and which direction the cue implies, before committing to a discrete action. 
+
+Generator choice. We synthesize each CoT with a two-model pipeline that splits the work by what each model can reliably do. A VLM (Qwen3-VL-235B-A22B-Instruct [1]) handles object identification and description : given the image crop, it produces a short caption naming the target object and noting salient appearance cues (e.g., “a black car viewed from behind on a street”), a task on which zero-shot VLMs are reliable. A text-only LLM (Qwen3-235B-A22B-Instruct-2507 [64]) then takes this caption together with the sample metadata (object category, GT direction, 21 GT magnitude token) and composes the full CoT, including the optional world-knowledge size recall, the visual-evidence framing of the misalignment, and the corrective decision. We deliberately keep the alignment judgment itself out of the VLM at this stage: reliably telling a well-fitted 3D wireframe from a poorly-fitted one is precisely the capability we aim to teach RefineAny3D, so soliciting that judgment from a zero-shot VLM would inject unreliable supervision into training. 
+
+Reasoning structure. Each CoT follows a fixed four-step structure that mirrors how a human annotator would reason about a perturbed wireframe. • Identify. The model first names the object visible in the crop, optionally with a brief scene hint ( e.g. , “A chair viewed slightly from above.”). • Recall (optional, skipped in 30% of samples). The model recalls a generic, world-knowledge size range for the object category in approximate units ( e.g. , “Chairs typically span around 60 cm wide and 90–110 cm tall.”). Precise metric values are forbidden, and the recalled range is decoupled from the actual GT. • Visual evidence. The model describes the misalignment between wireframe and object using either the size cue ( e.g. , “The wireframe is noticeably smaller than the chair’s outline.”), the enclosure cue ( e.g. , “The chair’s near surface protrudes in front of the wireframe’s near face.”), or both, depending on the framing label drawn for this sample. Specific camera-relative distances are forbidden. • Decision. The model concludes by stating the implied depth error and the corrective action, consistent with the GT direction and magnitude token ( e.g. , “This indicates the box is too far from the camera, requiring a closer correction by a medium step.”). 
+
+Visual cue diversification. Depth error is observable through two complementary visual cues, and we deliberately diversify the CoTs across both so that the trained VLM learns each independently: • Size cue. A box that is too far appears smaller than the object; too close, larger. • Enclosure cue. A box that is too far fails to enclose the object, with the object’s near surface protruding past the wireframe; too close, the wireframe encloses the object loosely, leaving empty volume. For each sample we draw a framing label from {size-only , enclosure-only , mixed } with weights 
+
+0.4/0.4/0.2, and the prompt for non-mixed framings forbids the opposite framing’s vocabulary, ensuring each CoT exercises a clean single-cue signal. 
+
+Training-time use. At training time, each sample’s target string is the concatenation of the generated reasoning prose and the canonical Action line, and the cross-entropy loss is applied uniformly over both. At inference, the reasoning prose is generated first and discarded; only the parsed Action 
+
+tokens drive the iterative refinement step. 
+
+## E Refine3D Benchmark Details 
+
+Refine3D is a controlled benchmark we construct on top of Omni3D [3] to evaluate 3D box refinement as a standalone capability. Each test sample consists of a ground-truth 3D box paired with a synthetically perturbed noisy version, and the task is to refine the noisy box back toward the GT. The benchmark spans two distribution-shift axes plus an in-distribution reference, which jointly probe the generalization properties RefineAny3D aims to achieve. We describe the construction of each split and the unified evaluation protocol below. 
+
+E.1 Test-Sample Construction 
+
+For each 3D annotation in the underlying source data, we generate noisy boxes following the same depth-perturbation protocol as the training set (Sec. D.3): the GT box’s center is shifted along the camera ray by ∆z = r · sobj , with r drawn uniformly from each of the perturbation slots in the schedule. All other attributes (lateral position, dimensions, orientation) are held at GT, so each test sample isolates a depth misalignment of known direction and magnitude. Test samples are stratified across the perturbation schedule so that each direction-magnitude combination is equally represented, preventing any setting from being dominated by samples of a particular noise pattern. 22 E.2 Standard 
+
+The Standard split serves as the in-distribution reference. Both training and test pools use the same Omni3D category vocabulary and camera intrinsics distribution. Training samples are drawn from Omni3D’s standard train split; test samples are drawn from Omni3D’s standard test split, following the construction protocol in Sec. E.1. 
+
+E.3 Novel Category 
+
+We follow the open-vocabulary monocular 3D detection setup of OVMono3D [68], which partitions the Omni3D category vocabulary into a base set and a novel set. During training, the data cura-tion pipeline (Appendix D) drops every annotation belonging to a novel category, so the trained RefineAny3D has never been supervised on these classes. At test time, we draw test samples (per Sec. E.1) from Omni3D’s standard test split, restricted to the held-out novel categories. 
+
+E.4 Novel Camera 
+
+To probe robustness to unseen camera intrinsics without changing the scene content, we synthetically rescale the original Omni3D test images while updating the camera intrinsics consistently. For each test image I with intrinsics K, we apply an isotropic scale factor s to obtain a rescaled image Is and the rescaled intrinsics 
+
+Ks = diag( s, s, 1) K,
+
+which preserves the geometric validity of the 3D-to-2D projection but shifts the distribution of projected box sizes away from the training distribution. Image rescaling alters the effective focal length while keeping the underlying scene unchanged: from the model’s perspective, the same physical object now appears at a different projected size on the image plane. Because all other factors (object identity, scene composition, occlusion) are held constant, any drop in performance can be attributed unambiguously to camera-induced distribution shift. Training uses the unscaled Omni3D train split; test samples are drawn from the rescaled Omni3D test split. 
+
+E.5 Evaluation Metrics 
+
+We report three metrics that jointly characterize refinement quality. 
+
+Direction accuracy (DirAcc). The fraction of test samples for which the refiner predicts the correct corrective direction token ad ∈ {⟨ depth_closer ⟩, ⟨depth_ok ⟩, ⟨depth_farther ⟩} at the first refinement step. This metric isolates the qualitative correctness of the refiner’s first-step decision from the magnitude prediction, providing a clean proxy for the model’s underlying alignment reasoning. Higher is better. 
+
+Full action accuracy (FullAcc). The fraction of test samples for which the refiner predicts both the correct direction ad and the correct magnitude am at the first refinement step. FullAcc strictly extends DirAcc by additionally requiring the magnitude bucket (small, medium, or large) to match the ground-truth bucket induced by the perturbation. Higher is better. 
+
+Depth error (DepthErr). The mean absolute residual between the refined and GT object depths after the iterative refinement loop terminates: 
+
+DepthErr = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+d(refined ) 
+
+> i
+
+− d∗ 
+
+> i
+
+,
+
+where d∗ 
+
+> i
+
+is the GT depth and d(refined ) 
+
+> i
+
+is the depth after refinement. To prevent objects at different scales from dominating the average, the per-sample residual is normalized by sobj before averaging. Lower is better. 
+
+Why three metrics together. DirAcc and FullAcc characterize the per-step prediction quality at the token level, while DepthErr captures the end-task refinement outcome after the iterative loop. A method can score high on DirAcc but biased magnitudes may still leave residual depth error after iteration; conversely, a method can produce low DepthErr by chance through cancellation of 23 0 1 2 3 4
+
+## Refinement Iteration 
+
+> 23 24 25 26 27 28
+> AP 3D
+> baseline = 23.98
+
+Figure 7: Iterative refinement convergence on KITTI Moderate. AP 3D as a function of forced iteration count K. A single refinement step recovers most of the gain ( +2 .95 AP 3D over the baseline); the second step adds another +0 .54 , after which performance plateaus and slightly drifts down. errors across iterations without making genuinely correct per-step decisions. Reporting all three lets readers distinguish whether a method is failing on deciding which direction, how much to move, or converging to the right answer. 
+
+## F Inference Analysis 
+
+RefineAny3D is trained with single-step supervision but applied iteratively at inference (Sec. 3.3): at each step, the model emits an action token that updates the candidate box’s depth, until either the model commits to ⟨depth_ok ⟩ or a safeguard cap of Tmax VLM calls is reached. We use Tmax = 2 
+
+in all main experiments. Two natural questions arise: how quickly does the loop converge in practice, and what is the actual inference cost in a deployment setting? We answer both below. 
+
+F.1 Convergence Behavior 
+
+We sweep the iteration count K ∈ { 0, 1, 2, 3, 4} on KITTI [15] validation Moderate, refining MonoCoP [75]’s predictions as the upstream detector. K = 0 corresponds to the unrefined MonoCoP baseline, and K ≥ 1 forces the loop to run exactly K steps regardless of self-termination. Fig. 7 shows three regimes. First step (K = 0 → 1): AP 3D jumps from 23 .98 to 26 .93 , a +2 .95 
+
+gain that accounts for ∼ 85% of the total improvement. Second step (K = 1 → 2): an additional 
+
++0 .54 AP 3D (26 .93 → 27 .47 ), addressing the subset of objects whose alignment cannot be diagnosed from a single look at the wireframe. Beyond two steps (K = 2 → 4): AP 3D plateaus and drifts down slightly ( 27 .47 → 27 .35 ), as a small fraction of already-aligned boxes is over-corrected. Based on this trade-off we set Tmax = 2 , which captures the peak accuracy at the lowest inference cost. 
+
+F.2 Iteration-Count Distribution under Self-Termination 
+
+With self-termination via ⟨depth_ok ⟩ enabled, each object is processed within Tmax = 2 VLM calls. On KITTI validation, 37 .8% of objects exit on the first call (the model judges the upstream prediction already aligned and applies no update), 46 .4% exit on the second call after one applied update, and the remaining 15 .8% apply two updates and reach the cap. The mean number of VLM calls per object is 1.62 , well below Tmax , indicating that the safeguard cap is exercised only on the minority of harder cases. 
+
+F.3 Inference Latency 
+
+We measure absolute latency on a single NVIDIA H100 80GB GPU with bfloat16 precision and FlashAttention-2. The wireframe rendering step is negligible ( < 5ms on CPU), and one VLM forward over the rendered object crop takes ∼ 320 ms on average. Combined with the empirical mean of 1.62 
+
+24 Table 12: Improving open-vocabulary 3D detectors on Omni3D [3] under a realistic 2D-box source. RefineAny3D refines DetAny3D [72] conditioned on Cube R-CNN’s [3] predicted 2D boxes, complementing the oracle-2D evaluation in Sec. 5.3. Method AP kit 3D ↑ AP nus 3D ↑ AP sun 3D ↑ AP ark 3D ↑ AP obj 3D ↑ AP hyp 3D ↑ AP 3D ↑                            
+
+> Cube R-CNN [3] 32.50 30.06 15.33 41.73 50.84 7.48 23.26 OVMono3D [68] 25.45 24.33 15.20 41.60 58.87 7.75 22.98 DetAny3D [72] 31.61 30.97 18.96 46.13 54.42 7.17 24.92
+> RefineAny3D (Ours) 33.94 32.29 21.07 47.83 56.36 9.05 26.96
+
+Table 13: General visual capability on CV-Bench [52]. RefineAny3D retains nearly all of the underlying Qwen3-VL-8B’s capability, indicating that fine-tuning for refinement does not erode general visual reasoning. Method Depth Distance Relation Count Overall Qwen2.5-VL-7B [2] 86.33 75.83 88.92 64.85 78.17 Qwen3-VL-8B [1] 94.17 87.00 93.54 72.59 85.94 
+
+RefineAny3D (Ours) 93.83 84.00 92.77 71.07 84.53 VLM calls per object, the average per-object refinement latency is ∼ 520 ms. At the typical KITTI validation density of ∼ 5.4 objects per image (measured on the validation split), this corresponds to an end-to-end refinement overhead of ∼ 2.8s per image. This overhead is non-trivial relative to the upstream detector itself but acceptable in offline use cases such as auto-labeling, dataset curation, and post-hoc accuracy improvement, where throughput is not the bottleneck. Two factors keep the cost bounded. First, refinement operates on localized object crops rather than the full image, so cost scales with the number of high-confidence proposals rather than image resolution. Second, the ⟨depth_ok ⟩ self-termination signal lets the model skip refinement entirely on ∼ 38% of objects, keeping the empirical mean below Tmax .
+
+## G More Results on Improving Open-Vocabulary 3D Detectors 
+
+Sec. 5.3 reports our main open-vocabulary result on top of DetAny3D [72] conditioned on ground-truth 2D boxes, an oracle setup chosen to isolate the contribution of depth refinement. To complement that stress-test, we also evaluate RefineAny3D under a more realistic configuration in which De-tAny3D is conditioned on 2D boxes predicted by Cube R-CNN [3], the standard closed-set detector used in the Omni3D benchmark. This setup reflects how an open-vocabulary refinement pipeline would be deployed in practice: an upstream 2D detector proposes object regions, a 3D detector lifts them to 3D, and RefineAny3D refines the resulting depth. Tab. 12 reports AP 3D on each of the six Omni3D sub-datasets. Applying RefineAny3D on top of DetAny3D with Cube R-CNN’s predicted 2D boxes lifts overall AP 3D from 24 .92 to 26 .96 (+2 .04 ), with consistent improvements across every sub-dataset. The gain is smaller in absolute terms than the oracle-2D setting ( +4 .35 ) because the upstream Cube R-CNN 2D detections themselves carry localization error that propagates into the 3D prediction and limits the headroom available to depth refinement. Even so, the consistent positive gains under noisy 2D conditioning indicate that RefineAny3D’s refinement signal does not require clean upstream input: it transfers from the oracle setting to a fully realistic pipeline without retraining. 
+
+## H Preserving General Visual Capability 
+
+A practical concern is that fine-tuning may erode the VLM’s general visual competence. On CV-Bench [52] (Tab. 13), RefineAny3D retains nearly all of the underlying Qwen3-VL-8B’s capability: the overall score changes by only 1.41 points ( 85 .94 → 84 .53 ), with no sub-task degrading by more than 3 points. This corroborates freezing the vision encoder throughout training (Sec. 3.3), which preserves the base model’s broad visual priors while adding refinement as a new capability on top. 25 250K 500K 1M ALL 
+
+## Training data scale 
+
+> 66 70 74 78 82 86 90
+> Accuracy (%)
+> DirAcc FullAcc
+
+Figure 8: Effect of training data scale. Both DirAcc and FullAcc improve sharply from 250 K to 
+
+1M and plateau beyond. 
+
+## I More Ablations 
+
+We sweep the size of the Stage 2 training subsample from 250 K to the full ∼ 3M pool (Fig. 8). Both metrics rise sharply from 250 K to 1M ( +6 .6 DirAcc, +6 .2 FullAcc), but the gain from 1M to the full pool is small ( +0 .4 DirAcc, +1 .2 FullAcc). The curated 1M subsample is therefore close to the saturation point for our supervision signal; further scaling continues to help marginally on FullAcc, the harder metric, but provides diminishing returns on DirAcc, suggesting that direction prediction has largely converged at this scale and the residual error is concentrated in fine-grained magnitude prediction. 
+
+## J Limitations and Future Work 
+
+RefineAny3D assumes the visual signature of depth misalignment is readable from the image; for heavily occluded or truncated objects this cue weakens and refinement becomes less reliable, particularly under tight 3D IoU thresholds. Future work could combine visual alignment with complementary cues such as scene context or temporal consistency. 
+
+## K More Visualization 
+
+We provide additional qualitative examples of RefineAny3D’s refinement behavior in Fig. 9, com-plementing the main-text examples in Fig. 4. The examples span the six Omni3D [3] sub-datasets and cover diverse object categories, scene types, and initial misalignment patterns. In each row, the leftmost column shows DetAny3D [72]’s initial prediction (red wireframe) overlaid on the input im-age, and the rightmost column shows RefineAny3D’s refined result (green wireframe). For cases that converge in more than one step, the intermediate columns show the projection after each successive action token. Across these examples, two qualitative patterns are visible. First, the projection tightens around the target object monotonically over iterations: each step either commits to ⟨depth_ok ⟩ when the alignment is judged sufficient or moves the projection in the visually correct direction (closer or farther). Second, harder cases tend to involve objects with weak alignment cues, such as small objects, occlusion, or unusual viewpoints, which is where multiple steps are most useful: the first step provides a coarse correction, and subsequent steps make finer adjustments once the projection is roughly in place. 
+
+## L Broader Impact 
+
+RefineAny3D is a refinement module for monocular 3D object detection, a perception capability with broad applications in autonomous driving, robotics, augmented reality, and assistive technologies. 26 Action: <depth_farther> <step_small>              
+
+> Action: <depth_farther> <step_medium>
+> Initial Box Intermediate Box Refined Box (Final)
+> Action: <depth_farther> <step_medium> à<depth_closer> <step_small>
+> Action: <depth_farther> <step_small>
+> Action: <depth_farther> <step_small> Action: <depth_farther> <step_medium>
+> Action: <depth_farther> <step_small> Action: <depth_closer> <step_small>
+
+Figure 9: Additional qualitative examples of single-step and iterative depth refinement on Omni3D. RefineAny3D refines DetAny3D [72]’s initial prediction (red) toward the refined result (green). Most cases are corrected in a single step; harder cases require multiple action steps until the projected box aligns with the target. By improving the object-level depth precision of existing 3D detectors, RefineAny3D can make downstream perception systems safer and more reliable. In autonomous driving, more accurate object localization translates directly into better trajectory prediction and collision avoidance, particularly in the long-tail open-vocabulary regime where current detectors are weakest. In indoor robotics and AR, more precise 3D geometry enables tighter manipulation and more stable scene understanding, which are critical for assistive applications such as service robots for elderly care or visually impaired users. RefineAny3D’s plug-and-play design lowers the barrier to adopting these improvements, since practitioners can integrate it on top of existing detectors without retraining the underlying perception stack. 27 NeurIPS Paper Checklist 
+
+1. Claims 
+
+Question: Do the main claims made in the abstract and introduction accurately reflect the paper’s contributions and scope? Answer: [Yes] Justification: The abstract and Sec. 1 clearly state our four contributions: formalizing 3D box refinement as a stand-alone task (Sec. 1), recasting it as semantic alignment (Sec. 3), instantiating it with action tokens (Sec. 3), and demonstrating consistent improvements as a plug-and-play module (Sec. 5). All claims are supported by the experimental results in Sec. 5. 2. Limitations 
+
+Question: Does the paper discuss the limitations of the work performed by the authors? Answer: [Yes] Justification: We discuss limitations throughout the paper. Sec. 5.1 acknowledges that performance degrades more under Novel Category than Novel Camera shifts, and Sec. 5.5 reports honest comparisons including cases where alternative designs achieve comparable results on certain metrics. The method depends on the upstream detector providing a reasonable initial 3D box, which we note as a scope condition. 3. Theory assumptions and proofs 
+
+Question: For each theoretical result, does the paper provide the full set of assumptions and a complete (and correct) proof? Answer: [N/A] Justification: The paper does not include formal theoretical results requiring proofs. The factorization in Sec. 3 is a standard application of the chain rule for autoregressive sequence modeling. 4. Experimental result reproducibility 
+
+Question: Does the paper fully disclose all the information needed to reproduce the main ex-perimental results of the paper to the extent that it affects the main claims and/or conclusions of the paper (regardless of whether the code and data are provided or not)? Answer: [Yes] Justification: Secs. 3 and 3.3 fully describe the architecture and training procedure. Ap-pendix B provides detailed implementation specifications including hyperparameters, opti-mizer settings, and hardware. Appendix E documents the Refine3D benchmark construction. 5. Open access to data and code 
+
+Question: Does the paper provide open access to the data and code, with sufficient instruc-tions to faithfully reproduce the main experimental results, as described in supplemental material? Answer: [No] Justification: Code and data are not released at submission time to preserve anonymity. We will release code, model checkpoints, and the curated training and benchmark data upon acceptance to enable full reproducibility. 6. Experimental setting/details 
+
+Question: Does the paper specify all the training and test details (e.g., data splits, hyperpa-rameters, how they were chosen, type of optimizer) necessary to understand the results? Answer: [Yes] Justification: Sec. 3.3 describes the two-stage training procedure. Appendix B reports detailed hyperparameters: learning rates ( 5 × 10 −3 for Stage 1, 1 × 10 −5 for Stage 2), AdamW optimizer with cosine schedule, gradient clipping, batch size, and training duration. Data splits are specified in Sec. 5 and Appendix E. 7. Experiment statistical significance 
+
+28 Question: Does the paper report error bars suitably and correctly defined or other appropriate information about the statistical significance of the experiments? Answer: [No] Justification: We do not report error bars due to the high computational cost of training the full model (approximately 90 hours on 8 H100 GPUs per Stage 2 run). We mitigate variability by evaluating on large stratified test sets that aggregate over many samples, and by reporting consistent improvements across multiple datasets and settings. 8. Experiments compute resources 
+
+Question: For each experiment, does the paper provide sufficient information on the com-puter resources (type of compute workers, memory, time of execution) needed to reproduce the experiments? Answer: [Yes] Justification: Appendix B reports that all experiments use 8 NVIDIA H100 80GB GPUs with bfloat16 precision, DeepSpeed ZeRO-3, and FlashAttention-2. Stage 1 takes approximately 
+
+1 hour and Stage 2 approximately 90 hours. 9. Code of ethics 
+
+Question: Does the research conducted in the paper conform, in every respect, with the NeurIPS Code of Ethics? Answer: [Yes] Justification: The research conforms to the NeurIPS Code of Ethics. We use only publicly available datasets (Omni3D, KITTI, Waymo, etc.) and pretrained models (Qwen3-VL) under their respective licenses, and our work does not involve human subjects or sensitive personal data. 10. Broader impacts 
+
+Question: Does the paper discuss both potential positive societal impacts and negative societal impacts of the work performed? Answer: [Yes] Justification: Our method improves monocular 3D perception, which has positive applica-tions in autonomous driving, robotics, and assistive technologies. Potential negative impacts include misuse for surveillance applications. As the method refines existing 3D detectors rather than introducing new perception capabilities, the marginal risk over existing detection systems is limited. 11. Safeguards 
+
+Question: Does the paper describe safeguards that have been put in place for responsible release of data or models that have a high risk for misuse? Answer: [N/A] Justification: Our model and curated data pose no high risk for misuse beyond what is already enabled by existing publicly available 3D detection systems and pretrained VLMs. The training data is derived from established academic datasets that are already publicly available under their respective licenses. 12. Licenses for existing assets 
+
+Question: Are the creators or original owners of assets (e.g., code, data, models), used in the paper, properly credited and are the license and terms of use explicitly mentioned and properly respected? Answer: [Yes] Justification: All datasets (Omni3D [3], KITTI [15], nuScenes [6]) and pretrained models (Qwen3-VL [1]) used in the paper are properly cited. Each asset is used in accordance with its respective license. 13. New assets 
+
+Question: Are new assets introduced in the paper well documented and is the documentation provided alongside the assets? 29 Answer: [Yes] Justification: We introduce two new assets: (i) a curated training dataset of ∼ 3M depth-perturbation samples with chain-of-thought annotations; and (ii) the Refine3D benchmark, documented in Appendix E. Both will be released with documentation upon acceptance. 14. Crowdsourcing and research with human subjects 
+
+Question: For crowdsourcing experiments and research with human subjects, does the paper include the full text of instructions given to participants and screenshots, if applicable, as well as details about compensation (if any)? Answer: [N/A] Justification: The paper does not involve crowdsourcing or human subjects research. All annotations used in training are derived programmatically from existing public 3D datasets. 15. Institutional review board (IRB) approvals or equivalent for research with human subjects 
+
+Question: Does the paper describe potential risks incurred by study participants, whether such risks were disclosed to the subjects, and whether Institutional Review Board (IRB) approvals (or an equivalent approval/review based on the requirements of your country or institution) were obtained? Answer: [N/A] Justification: The paper does not involve research with human subjects. 16. Declaration of LLM usage 
+
+Question: Does the paper describe the usage of LLMs if it is an important, original, or non-standard component of the core methods in this research? Answer: [Yes] We use LLM to check the grammar. 30

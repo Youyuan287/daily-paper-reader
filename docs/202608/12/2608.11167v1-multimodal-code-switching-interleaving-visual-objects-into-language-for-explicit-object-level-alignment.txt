@@ -1,0 +1,536 @@
+Title: MultiModal Code-Switching: Interleaving Visual Objects into Language for Explicit Object-Level Alignment
+
+URL Source: https://arxiv.org/pdf/2608.11167v1
+
+Published Time: Wed, 12 Aug 2026 01:27:43 GMT
+
+Number of Pages: 21
+
+Markdown Content:
+# MultiModal Code-Switching: Interleaving Visual Objects into Language for Explicit Object-Level Alignment 
+
+Changhao Xiang Shangyu Xing Zhen Wu * Jianbing Zhang Xinyu Dai 
+
+National Key Laboratory for Novel Software Technology, Nanjing University, China 
+
+{xiangch, xsy}@smail.nju.edu.cn {wuz, zjb, daixinyu}@nju.edu.cn 
+
+Code Dataset Abstract 
+
+Existing Multimodal Large Language Models (MLLMs) predominantly rely on image-text pairs for modality alignment pretraining, map-ping global image representations to long tex-tual descriptions. However, this image-level alignment suffers from referential ambiguity :models struggle to infer the correspondences between multiple visual objects and textual en-tities from the global representation, leading to data inefficiency and suboptimal semantic grounding. To address this, we propose Multi-Modal Code-Switching (MMCS), a novel pre-training paradigm that provides explicit object-level supervision. Inspired by the linguistic phenomenon of code-switching, MMCS inter-leaves vision and language by replacing tex-tual entities with their corresponding visual ob-jects, enforcing local vision-language ground-ing. We further develop a scalable data synthe-sis pipeline to generate a pretraining dataset of 773K samples with accurate object–entity cor-respondences. Experiments show that MMCS is highly data-efficient: with only 50K samples, it matches or surpasses models trained on 600K image–text pairs. Furthermore, MMCS consis-tently improves visual grounding and percep-tion capabilities across varying model scales. 
+
+1 Introduction 
+
+Multimodal Large Language Models (MLLMs) have established a new state-of-the-art in vision-language understanding, demonstrating excep-tional performance across visual question answer-ing (Goyal et al., 2017; Hudson and Manning, 2019), document understanding (Mathew et al., 2021), and visual grounding (Kazemzadeh et al., 2014; Mao et al., 2016). The dominant architec-ture for these models (Alayrac et al., 2022; Liu et al., 2023; Dai et al., 2023; Bai et al., 2025b; Zhu et al., 2025) generally comprises a vision encoder, a Large Language Model (LLM) backbone, and  
+
+> *Corresponding author.
+
+a projector (e.g., MLP or Q-Former) that bridges the modality gap. To unify these components, the standard training paradigm follows a two-stage pro-cess: 1) modality alignment pretraining, mapping visual features into the LLM’s semantic space via image-text pairs; and 2) multimodal supervised in-struction tuning (SFT), optimizing the model for downstream task execution. Within this framework, modality alignment is foundational, as the fidelity of this alignment dictates the upper bound of the model’s multimodal capabilities (Liu et al., 2023; McKinzie et al., 2024). The prevailing consensus in recent research is to utilize dense image captions for modality align-ment, providing detail-rich linguistic signals (Chen et al., 2024a,b; Li et al., 2024a, 2025; Deitke et al., 2025; Xing et al., 2025). In this paradigm, the model encodes the image into a global image rep-resentation, and is then trained to predict a lengthy text sequence based on this global representation, thereby achieving alignment at the image level. However, natural images are inherently complex, often containing multiple objects and background elements. As highlighted in Figure 1 (right), stan-dard dense caption datasets contain an average of 6.8 to 11.0 distinct entities per sample (Chen et al., 2024b; Onoe et al., 2024; Li et al., 2024a; Garg et al., 2024). While the captions meticulously enu-merate specific objects and attributes, the vision encoder and projector compress the entire scene into a generic, global representation. This discrepancy leads to the issue of referential ambiguity : the model must implicitly infer the cor-respondence between specific visual regions and the corresponding textual phrases from global rep-resentations. From a computational perspective, this “many-to-many” mapping forces the model to rely on statistical co-occurrences rather than gen-uine semantic grounding. Consequently, this im-plicit alignment paradigm is highly data-inefficient, necessitating massive-scale datasets to learn robust 1arXiv:2608.11167v1 [cs.CV] 11 Aug 2026 Image-Level Alignment: Referential Ambiguity      
+
+> MLLM
+> camera
+> book
+> potted plant
+> globe
+> MMCS: Explicit Object-Entity Correspondence
+> MLLM
+> camera
+> book
+> potted plant
+> globe
+> A sunlit desk with ,
+> ,and
+> ,avintage open
+> A sunlit desk with a globe, open book, a vintage camera,
+> and potted plant.
+> A sunlit desk with a globe, open book, a vintage camera, and potted plant. ShareGPT4V DOCCI DenseFusion IIW
+> Dataset
+> 0246810 12
+> Average Number of Entities
+> 6.83 7.85 9.00 11.01
+
+Figure 1: Left : Illustration of the referential ambiguity in standard image-level alignment (top), contrasted with our MultiModal Code-Switching (MMCS) paradigm (bottom). MMCS resolves ambiguity by replacing textual entities with their corresponding visual objects to provide explicit correspondence signals. Right: The large average number of entities in dense caption datasets highlights the complexity of natural images. 
+
+object-entity associations (McKinzie et al., 2024; Dong et al., 2025). Our analysis substantiates this by revealing that models pretrained with standard image-caption pairs exhibit diffuse attention pat-terns and suboptimal representation consistency. To address these limitations, we propose Mul-tiModal Code-Switching (MMCS), a novel pre-training paradigm that introduces explicit object-level supervision . Inspired by the linguistic phe-nomenon of code-switching (Poplack, 1981; Thara and Poornachandran, 2018), MMCS treats vision and language as distinct “codes”. Instead of re-lying solely on global image context, we create interleaved representations by substituting the em-beddings of textual entities with the embeddings of their corresponding visual objects (Figure 1, left). By conditioning the generation of the immediate textual context directly on these local visual fea-tures, MMCS imposes a structural constraint that enforces explicit grounding of textual entities to corresponding visual regions. This eliminates the need for the model to infer correspondences from global representations, thereby facilitating efficient object-level alignment. To implement this, we develop a data synthe-sis pipeline to generate 773K high-quality samples with accurate object-entity correspondences. Given an image, our pipeline generates a detailed caption, extracts textual entities, and employs a grounding model to localize the corresponding visual objects. Empirically, MMCS demonstrates extraordinary data efficiency compared to standard image-level pretraining. With only 50K samples, our model achieves performance exceeding models pretrained on 600K standard image-caption pairs. Moreover, MMCS maintains consistent gains when scaling up both the dataset size and model capacity, yielding average improvements of 7.9% on visual ground-ing and 2.1% on perception-centric benchmarks. Further in-depth analysis confirms that these gains stem from higher-fidelity representation alignment and sharper attention distributions. Our contributions are summarized as follows: • We introduce MultiModal Code-Switching (MMCS), a novel pretraining paradigm that interleaves visual objects into text, shifting alignment from implicit image-level associa-tions to explicit object-level correspondences. • We develop a scalable data synthesis pipeline that generates 773K samples with precise object-entity correspondences, bypassing the need for manual annotation. • We conduct extensive experiments across vari-ous model scales and vision encoders, demon-strating the effectiveness of MMCS. We fur-ther provide mechanistic insights into how MMCS enhances the internal feature space topology of MLLMs. 
+
+2 Related Works 
+
+Multimodal Large Language Models Current mainstream MLLMs adopt the ViT-MLP-LLM paradigm (An et al., 2025; Zhu et al., 2025; Guo et al., 2025). Specifically, this architecture employs an MLP-based projector to align image features from a pretrained vision encoder with the input embedding space of an LLM backbone. These 2Large Language Model     
+
+> Vision Encoder Projector
+> A cat and a dog are playing with a ball
+> Text Token Image Token
+> Object Features Extraction Original Text Reconstruction
+> A cat and a dog are playing with a ball Figure 2: Overview of MMCS pretraining paradigm. We construct an interleaved image-text sequence by substituting textual entities with corresponding extracted visual objects. The generation of these entities and the subsequent context are conditioned on their visual counterparts, thereby facilitating object-level alignment.
+
+mapped visual tokens serve as soft prompts for con-ditional text generation. Training typically follows a two-stage strategy: the projector is first pretrained on image-caption pairs for modality alignment, fol-lowed by joint optimization of the projector and LLM on multimodal instruction data during SFT (Liu et al., 2024a; Ye et al., 2023). The prevailing consensus in recent research is to utilize dense im-age captions during the modality alignment stage to provide detail-rich linguistic signals (Chen et al., 2024b; Li et al., 2024a; Deitke et al., 2025). Despite these advancements, models trained on holistic, detailed captions still suffer from referen-tial ambiguity: they must implicitly infer the corre-spondences between textual entities and their spe-cific visual regions from a global image represen-tation. Consequently, these models often struggle to disentangle individual visual concepts in com-plex scenes, relying instead on learned statistical co-occurrence patterns. This implicit alignment process leads to data inefficiency and suboptimal semantic grounding. In contrast, our approach pro-vides explicit object-entity mappings, directly en-forcing the grounding of textual descriptions in their corresponding visual regions. 
+
+Fine-Grained Multimodal Alignment The limi-tations of image-level alignment have motivated two lines of fine-grained methodologies. The first, patch-level alignment, pairs individual visual patches with textual labels through auxiliary objec-tives, such as contrastive loss over CLIP-assigned labels (Yin et al., 2025) or similarity maximization with vision-expert labels (Jiang et al., 2025). The second, grounding-capable MLLMs, establishes object-entity correspondences either via dedicated region-interaction modules (Rasheed et al., 2024; Lai et al., 2024; You et al., 2024) or by encoding regions as textual coordinates or location tokens within the language interface (Chen et al., 2023; Peng et al., 2023; Li et al., 2024b). MMCS differs from both lines along distinct axes. Compared to patch-level methods, MMCS adopts complete visual objects as the alignment unit—patches rarely correspond to complete se-mantic units, yielding fragmented signals, whereas object-level supervision is cleaner and semanti-cally coherent. Compared to grounding-capable MLLMs, which target task-level grounding ca-pability through specialized modules or coordi-nate tokens, MMCS instead targets higher-fidelity representation-level alignment, introducing neither auxiliary modules nor coordinate supervision. 
+
+3 Methods 
+
+3.1 Insight: Code-Switching 
+
+Our method draws inspiration from the linguistic phenomenon of code-switching, defined as the in-terleaving of two or more languages within a single utterance (Thara and Poornachandran, 2018). For example, in the sentence “The Klavier is a versatile keyboard instrument,” the German term Klavier (pi-ano) functions as a code-switched entity embedded within the English context. Conceptually, code-switching implies that the switched term must be semantically compatible with its context. We leverage this principle by treating visual objects as distinct “codes” carry-ing specific semantic information. Just as a bilin-gual speaker selects appropriate words from either language, we substitute textual entities with their visual counterparts. This forces the model to re-solve the visual representation to satisfy the seman-tic expectations of the sentence, thereby achieving explicit object-level grounding. 33.2 Multimodal Code-Switching Pretraining 
+
+Building on this insight, we introduce Multi-modal Code-Switching (MMCS), a novel align-ment paradigm that establishes correspondence be-tween visual objects and textual entities. As illus-trated in Figure 2, we construct interleaved code-switching image-text sequences by replacing the entity tokens with their corresponding visual ob-jects. This substitution strategy creates a depen-dency chain: the generation of the subsequent tex-tual context, as well as the reconstruction of the entity itself, is directly conditioned on the visual counterparts. Therefore, the model is compelled to ground entities to their corresponding visual re-gions, eliminating the need to infer such correspon-dences solely from global representations. Formally, let X denote the original sequence of text tokens. Consider a contiguous textual entity segment e = [ xi, . . . , x i+m] starting at index i.Let vobject denote the visual representation of the corresponding object, defined as the set of image tokens whose spatial regions intersect with the ob-ject’s bounding box. The interleaved image-text sequence XMMCS is constructed by replacing the textual entity with the extracted object tokens: 
+
+XMMCS = Concat (X<i , vobject , X>i +m). (1) We employ a language modeling objective where the loss is computed exclusively on text tokens, treating the visual tokens as conditioning context for next-token prediction: 
+
+LLM = − X
+
+> xt
+> MMCS ∈Text
+
+log pθ(xt 
+
+> MMCS
+
+| X<t 
+
+> MMCS
+
+).
+
+(2) To further enforce explicit supervision on object-entity correspondence, we additionally minimize the negative log-likelihood of the original textual entity segment given the preceding context: 
+
+Lentity = − log pθ(e | X<i 
+
+> MMCS
+
+, vobject ), (3) where e represents the substituted textual entity tokens in the original text sequence. The over-all MMCS pretraining objective combines the lan-guage modeling loss and the entity reconstruction loss: 
+
+LMMCS = LLM + Lentity . (4) Since visual tokens replace the textual entity e
+
+in XMMCS , these two losses are non-overlapping and complementary. Lentity serves as the dedicated semantic anchor for entity reconstruction, while 
+
+LLM handles contextual integration. Captioner    
+
+> Entity Extractor
+> cat
+> dog
+> ball
+> Grounding DINO
+> Filtering cat dog
+> Input Image
+> Object-Entity Pairs
+> confidence score
+> bbox area
+> mask area ball
+> A cat and a dog are playing with a ball
+
+Figure 3: Data synthesis pipeline. 
+
+3.3 Data Synthesis Pipeline 
+
+As shown in Figure 3, we develop a data synthe-sis pipeline to generate interleaved code-switching image-text sequences with precise object-entity cor-respondence. For each input image, the pipeline proceeds through the following steps: 
+
+Detailed Image Captioning We begin by utiliz-ing Qwen3-VL-32B-Instruct (Bai et al., 2025a) to generate detailed image captions. To capture gran-ular visual details, we prompt the caption model to exhaustively describe the attributes of all visible elements within the scene. 
+
+Textual Entity Extraction Given the gener-ated detailed captions, we employ Qwen2.5-72B-Instruct (Yang et al., 2024) to extract textual enti-ties. The output comprises a list of noun phrases, often accompanied by brief attribute descriptions (e.g., a white mug labeled “O.CO”). These at-tributes are essential for disambiguating instances where multiple objects of the same category are present in a single image. 
+
+Visual Object Grounding We leverage Ground-ing DINO (Liu et al., 2024c) to anchor these textual entities to their corresponding visual regions. For each successfully localized entity, the output is a tuple containing the bounding box coordinates, the text label, and an associated confidence score. 
+
+Filtering To ensure high-quality, one-to-one object-entity correspondence, we implement a multi-stage filtering process. First, Grounding DINO predictions are filtered using a box threshold of 0.4 and a text threshold of 0.3. Subsequently, we calculate the area of each retained bounding box 40 25k 50k 100k 200k 400k 600k 42 44 46 48 50 52             
+
+> Average Score
+> 49.0 48.6
+> All
+> 025k 50k 100k 200k 400k 600k 40 42 44 46 48 50 52
+> 49.1 49.2
+> Perception
+> MMCS Patch Aligned Image Aligned
+> 025k 50k 100k 200k 400k 600k 35 40 45 50 55 60
+> 47.4 47.3
+> Grounding
+> Number of Pretraining Data Samples
+
+Figure 4: Analysis of data efficiency. We utilize Qwen2.5-3B as the LLM backbone and evaluate data efficiency by varying the pretraining dataset size from 0 to 600K, while keeping the SFT dataset fixed at 200K. The curves depict average scores across our benchmark suite, demonstrating that MMCS achieves superior data efficiency over both the Patch Aligned method and image-level pretraining (Image Aligned). Detailed compositions of the benchmarks used to calculate the average scores are provided in Appendix A.3. 
+
+and prune those violating spatial constraints (e.g., smaller than a single visual patch or exceeding 50% of the total image area). Finally, SAM-2.1 (Ravi et al., 2025) is employed to generate segmentation masks. Objects whose mask areas account for less than 20% of their bounding-box areas are discarded to exclude heavily occluded instances. We curate a diverse collection of images and apply the aforementioned synthesis pipeline. The generated pretraining dataset comprises 773K sam-ples, each containing a source image, its detailed caption, and a set of visual objects paired with their bounding boxes and textual entity labels. A statisti-cal summary and a detailed quality analysis of the synthesized dataset are presented in Appendix A. 
+
+4 Experiments 
+
+4.1 Experiment Setup Model Architecture 1) Vision Encoder : Un-less otherwise specified, we use SigLIP2-SO-400M (Tschannen et al., 2025) equipped with a tile-wise dynamic resolution strategy (Liu et al., 2024b). 2) LLM : MMCS is integrated with Qwen2.5-3B-Instruct (Yang et al., 2024), Qwen3-8B (Yang et al., 2025), and Llama3-8B-Instruct (Team, 2024). 3) 
+
+Projector : We employ a two-layer MLP with a 
+
+2 × 2 pixel unshuffle operation (Chen et al., 2024d) to reduce the number of image tokens. 
+
+Training Dataset For pretraining, we use the 773K dataset synthesized via the pipeline described in Section 3.3. Crucially, both MMCS and the image-level baseline are trained on identical im-age–caption pairs, ensuring that any observed gains are attributable to our proposed approach rather than higher data quality. For SFT, we adopt the LLaVA-NeXT (Liu et al., 2024b) dataset, which contains 779K high-quality instruction-following samples. We revert to using standard global image representations during SFT. 
+
+Evaluation Our evaluation covers a comprehen-sive suite of benchmarks categorized into three domains: 1) Visual Grounding : evaluating region understanding and grounding capabilities on refer-ring expression comprehension (REC) tasks. 2) 
+
+Visual Perception : including OCR-related tasks and real-world fine-grained perception. 3) Gen-eral VQA : covering broad visual understanding and reasoning tasks. For details on training setting and more evalua-tion results, please refer to Appendix B. 
+
+4.2 Analysis of Data Efficiency 
+
+We first investigate the data efficiency of MMCS by varying the scale of the pretraining dataset. Specif-ically, we compare MMCS against standard image-level supervision and Patch Aligned Training (Jiang et al., 2025) across dataset sizes ranging from 0 to 600K samples. To isolate the impact of pretraining, we use a constant subset of 200K SFT samples. As illustrated in Figure 4, MMCS exhibits superior data efficiency. With only 50K samples, MMCS achieves downstream performance that surpasses the image-level baseline trained on 600K samples. We attribute this advantage to the explicit object-entity supervision introduced in our method, which enables the model to efficiently align visual objects with their corresponding textual entities. 
+
+4.3 Scaling Up Training Data and Model Sizes 
+
+To investigate the universality of MMCS, we scale up the training to utilize the full 773K pretraining 5LLM Method RefCOCO RefCOCO+ RefCOCOg AVG testA testB val testA testB val test val Qwen2.5 3B Caption 65.00 54.64 61.68 63.88 47.49 56.62 61.27 62.39 59.12 MMCS 80.66 68.75 75.18 74.35 56.23 65.49 70.32 71.31 70.29                                       
+
+> Qwen3 8B Caption 85.40 74.15 81.51 80.89 64.98 72.82 76.61 78.76 76.89 MMCS 85.02 77.80 84.21 83.93 68.71 76.98 80.11 81.58 79.79
+> Llama3 8B Caption 73.29 56.23 65.94 70.10 50.62 60.59 63.86 64.65 63.16 MMCS 83.08 70.99 78.79 77.35 57.84 68.51 72.38 74.30 72.91
+
+Table 1: Performance on referring expression comprehension. “Caption” denotes image-level pretraining with image-caption pairs. We report Acc@0.5 across all splits.                                                                           
+
+> LLM ViT Method Perception General CVBench OCR VQA TV* MMB MME MMStar Qwen2.5 3B SigLIP2 Caption 61.26 44.70 58.29 48.17 67.53 60.36 42.77 MMCS 66.87 47.60 59.35 50.79 68.56 62.75 43.98
+> Qwen2.5 3B QwenViT Caption 56.33 58.80 62.87 57.59 67.70 62.82 45.21 MMCS 59.78 62.40 64.97 57.59 68.47 65.68 45.31
+> Qwen3 8B SigLIP2 Caption 69.71 50.60 64.37 50.79 74.48 68.14 48.67 MMCS 72.82 53.30 65.23 53.40 76.63 68.54 51.49
+> Llama3 8B SigLIP2 Caption 65.66 47.00 62.59 51.31 70.79 63.43 44.96
+> MMCS 69.48 48.90 64.50 53.93 68.99 65.54 43.15
+
+Table 2: Performance on perception-centric and general VQA benchmarks. “OCR”, “VQA T”, “V*”, and “MMB” denote OCRBench, TextVQA, V-Star, and MMBench, respectively. We report the normalized score for MME. 
+
+and 779K instruction-following datasets. To verify robustness across different model sizes and archi-tectures, we extend our evaluation to larger LLMs, including Qwen3-8B and Llama3-8B. 
+
+Visual Grounding We evaluate visual grounding capabilities on referring expression comprehension tasks. As shown in Table 1, MMCS exhibits con-siderable improvements over the image captioning baseline across RefCOCO/+/g datasets, achieving an average gain of 7.9%. Notably, since MMCS does not introduce bounding box coordinates of visual objects during pretraining, these improve-ments stem directly from enhanced object recog-nition and region understanding capabilities, high-lighting the effectiveness of explicit object-level supervision during modality alignment. 
+
+Visual Perception As shown in Table 2, MMCS consistently outperforms the standard image-captioning paradigm in perception tasks, maintain-ing robust gains as data volumes and model sizes increase. Our method demonstrates considerable performance gains in fine-grained visual perception tasks, achieving average improvements of 4.0% on CVBench, 2.8% on OCRBench and 2.0% on V-Star. These results suggest that by grounding tex-tual descriptions to specific visual regions, MMCS effectively facilitates precise visual perception. 
+
+General VQA MMCS also improves perfor-mance on general VQA tasks, as shown in Table 2. We attribute this improvement to enhanced vi-sual perception and region understanding, which provide more accurate visual evidence. The gain is more modest than those on grounding and per-ception because general VQA additionally depends on world knowledge, commonsense reasoning, and instruction-following priors that MMCS does not directly target. Nevertheless, our analysis in Ap-pendix D.5 shows that the improvement is statisti-cally significant across multiple independent runs. For more evaluation results, please refer to Ap-pendix F. 
+
+4.4 Generalization Across Vision Encoders 
+
+Beyond tile-wise approaches, native dynamic res-olution (Wang et al., 2024; Bai et al., 2025b) con-stitutes another prominent strategy for processing high-resolution images. This strategy encodes im-ages into a variable number of visual tokens while preserving original aspect ratios (Dehghani et al., 2023). We demonstrate our method’s general ef-fectiveness using QwenViT, the vision encoder uti-6Method General Perception Grounding Caption 51.19 55.77 59.12 SEA 50.78 55.69 60.96 Patch Aligned 51.78 56.43 66.55 Text BBox 51.64 56.62 64.44 MMCS (ours) 51.84 58.24 70.29         
+
+> w/o Lentity 51.45 54.23 67.55 w/o LLM 51.37 56.26 65.44
+> Table 3: Comparison with fine-grained alignment base-lines and ablation on loss components. All methods and ablations are implemented under the same pretraining and SFT setup using Qwen2.5-3B-Instruct.
+
+lized in Qwen2.5-VL (Bai et al., 2025b), which employs this native dynamic resolution mechanism. As evidenced in Table 2, MMCS maintains its su-perior performance in this setting. These results validate our method’s compatibility across diverse vision encoders. 
+
+4.5 Comparison with Fine-grained Alignment Strategies 
+
+We compare MMCS against three fine-grained alignment baselines without introducing additional modules under the same pretraining and SFT setup. SEA (Yin et al., 2025) and Patch Aligned Train-ing (Jiang et al., 2025) operate at the patch level, aligning individual visual patches with text tokens through auxiliary objectives. The third baseline, Text BBox, instantiates the textualized spatial repre-sentation paradigm of Section 2 (Chen et al., 2023; Peng et al., 2023) at the pretraining stage. Specifi-cally, each entity’s bounding-box coordinates are appended as a text string after the entity in the cap-tion, while retaining the standard image-caption training format. As shown in Table 3, MMCS consistently out-performs all three baselines across general, percep-tion, and grounding tasks. The gains over SEA and Patch Aligned confirm that aligning semanti-cally complete objects yields cleaner supervision. Text BBox shares MMCS’s principle of explicit object-entity correspondence, but it conveys corre-spondence symbolically through coordinate strings, requiring the model to resolve tokens into spatial regions before reaching visual content. MMCS in-stead binds visual objects to textual entities at the representation level, and this binding proves more effective for modality alignment than symbolic co-ordinate cues. See Appendix A.3 for the benchmark composi-tions of these average scores. 
+
+4.6 Ablation Study 
+
+We perform an ablation study on the components of Eq. 4. The results in Table 3 demonstrate that both objectives are crucial for optimal performance. 
+
+Lentity enforces semantic precision. Removing the entity reconstruction loss Lentity leads to the most pronounced drop on perception benchmarks (-4.0%). This indicates that Lentity acts as a se-mantic anchor . By requiring the model to trans-late visual object embeddings back into their corre-sponding textual entities, it compels the projector to encode discriminative, identity-bearing visual features, thereby enhancing visual perception. 
+
+LLM facilitates contextual integration. Remov-ing the language modeling loss LLM , in contrast, causes the largest drop on grounding benchmarks (-4.9%). We attribute this to its role in contextual integration . It trains the model to predict the textual context surrounding each visual object, encourag-ing it to reason about how the object relates to its descriptive attributes and to other entities in the scene, which is critical for both visual perception and referring expression comprehension. 
+
+5 Discussion 
+
+5.1 Representation Alignment Measurement 
+
+To investigate whether MMCS achieves superior multimodal alignment at the feature level compared to standard image-level pretraining, we directly quantify vision-language representational align-ment after pretraining. We employ three metrics: CKA (Kornblith et al., 2019) to evaluate global 
+
+geometric correspondence, and Mutual k-NN and CKNNA (Huh et al., 2024) to assess local neigh-borhood consistency. Detailed definitions of these metrics are provided in Appendix E. Specifically, we input 1,000 image-caption pairs sampled from the COCO2014 validation set into the MLLM and extract hidden states from all lay-ers. These states are partitioned into visual and tex-tual components to compute layer-wise alignment metrics. As shown in Figure 5, MMCS achieves superior representational alignment compared to image-level supervision. These findings align with the hypothesis that representational alignment cor-relates with model capability (Huh et al., 2024), offering a rationale for the performance improve-ments observed in downstream tasks. 70 10 20 30 0.3 0.4 0.5 0.6        
+
+> Alignment Score CKA
+> 010 20 30
+> Layer Index
+> 0.10 0.11 0.12 0.13
+> CKNNA
+> 010 20 30 0.12 0.13 0.14 0.15 0.16
+> Mutual k-NN
+> Image-Level Pretraining MMCS
+
+Figure 5: Layer-wise representation alignment. To evaluate cross-modal integration, we extract hidden states from each LLM decoder layer for input image-text pairs and partition them by modality. We then quantify the alignment using three distinct metrics: CKA, CKNNA and Mutual k-NN. MMCS achieves better representation alignment than standard image-level pretraining across most layers. a black remote control  several people       
+
+> a coiled white hose a single front landing gear wheel
+> Original Caption MMCS Original Caption MMCS
+
+Figure 6: Visualization of attention maps. Each example displays a triplet containing: (Left) the original image with a red bounding box highlighting the target object; (Middle) the attention map from an MLLM pretrained with standard captioning; and (Right) the attention map from our MMCS method. Warmer colors indicate higher attention weights (min-max normalized). The specific text entity driving the attention is noted below each example. 
+
+5.2 Attention Map Analysis 
+
+Figure 6 presents a qualitative comparison of at-tention maps. We analyze the cross-modal atten-tion distribution from textual entity tokens to vi-sual features by feeding image-caption pairs into the MLLM. The model pretrained with MMCS ac-curately attends to visual regions corresponding to specific textual entity descriptions. In contrast, the model trained with image-caption pairs often produces diffuse or misaligned attention patterns. Since the LLM backbone is frozen during pretrain-ing, these results show that training the projector with explicit object–entity correspondence yields more semantically precise and interpretable fea-tures. These features align better with the LLM’s pre-existing semantic space. Further analyses on model capabilities, robust-ness and scalability of our approach, and additional qualitative results are provided in the Appendix C, D and G, respectively. 
+
+6 Conclusion 
+
+In this paper, we propose MMCS, a modality align-ment pretraining paradigm for explicit object-entity correspondence. Extensive experiments show that MMCS considerably improves both data efficiency and downstream performance. We further ana-lyze how MMCS facilitates multimodal represen-tation alignment through internal feature space topology. Our findings highlight the importance of object-level alignment in developing data-efficient MLLMs with advanced performance. 8Limitations 
+
+While MMCS demonstrates considerable improve-ments in data efficiency and downstream perfor-mance, our current implementation primarily fo-cuses on visual objects within natural images. The core methodology of establishing explicit corre-spondence between local visual features and tex-tual entities is generalizable to broader scenarios. Extending MMCS to domains such as chart under-standing or scene text recognition will be further explored in our future work. Furthermore, explor-ing bootstrapping mechanisms for iterative self-improvement and extending the MMCS paradigm to encompass complex relations and actions repre-sent highly promising directions that we intend to investigate. 
+
+Dataset licenses and privacy. We use images from established research datasets but do not re-distribute them. Our release contains only newly generated captions and object-entity annotations. All source materials remain subject to their original terms. COCO and GQA annotations are licensed under CC BY 4.0, while their images retain the applicable source licenses. Flickr30K images re-tain their original copyrights and are provided for non-commercial research and educational use. Ob-jects365 annotations are licensed under CC BY 4.0, while its image rights are source-specific. Open Images lists its images under CC BY 2.0 and its annotations under CC BY 4.0. SA-1B is governed by the SA-1B Dataset Research License. Our re-lease grants no additional rights to the underlying images, which users must obtain from the official providers. We introduce no newly scraped images or identity labels. However, the source images may contain faces, license plates, or location cues, and our generated annotations may reflect such infor-mation. The released annotations may therefore inherit privacy risks from the source datasets. 
+
+Bias and potential misuse. The synthesized data may inherit biases from both its source datasets and the automatic captioning and grounding models. Its object-category coverage may be uneven, par-ticularly for rare, culturally specific, or otherwise underrepresented objects, potentially resulting in unequal grounding accuracy across categories and contexts. Moreover, stronger object-localization capabilities could be combined with identification systems for surveillance or tracking. We discour-age such uses and recommend source-specific data filtering, domain-specific risk assessments, and ap-propriate safeguards before deployment. 
+
+References             
+
+> Jean-Baptiste Alayrac, Jeff Donahue, Pauline Luc, Antoine Miech, Iain Barr, Yana Hasson, Karel Lenc, Arthur Mensch, Katherine Millican, Malcolm Reynolds, Roman Ring, Eliza Rutherford, Serkan Cabi, Tengda Han, Zhitao Gong, Sina Samangooei, Marianne Monteiro, Jacob L. Menick, Sebastian Borgeaud, and 8 others. 2022. Flamingo: a visual language model for few-shot learning. In Advances in Neural Information Processing Systems 35: An-nual Conference on Neural Information Processing Systems 2022, NeurIPS 2022, New Orleans, LA, USA, November 28 - December 9, 2022 .Xiang An, Yin Xie, Kaicheng Yang, Wenkang Zhang, Xiuwei Zhao, Zheng Cheng, Yirui Wang, Songcen Xu, Changrui Chen, Chunsheng Wu, Huajie Tan, Chunyuan Li, Jing Yang, Jie Yu, Xiyao Wang, Bin Qin, Yumeng Wang, Zizhen Yan, Ziyong Feng, and 3 others. 2025. Llava-onevision-1.5: Fully open frame-work for democratized multimodal training. CoRR ,abs/2509.23661. Shuai Bai, Yuxuan Cai, Ruizhe Chen, Keqin Chen, Xionghui Chen, Zesen Cheng, Lianghao Deng, Wei Ding, Chang Gao, Chunjiang Ge, Wenbin Ge, Zhi-fang Guo, Qidong Huang, Jie Huang, Fei Huang, Binyuan Hui, Shutong Jiang, Zhaohai Li, Mingsheng Li, and 45 others. 2025a. Qwen3-vl technical report.
+> Preprint , arXiv:2511.21631. Shuai Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wen-bin Ge, Sibo Song, Kai Dang, Peng Wang, Shijie Wang, Jun Tang, Humen Zhong, Yuanzhi Zhu, Ming-Hsuan Yang, Zhaohai Li, Jianqiang Wan, Pengfei Wang, Wei Ding, Zheren Fu, Yiheng Xu, and 8 oth-ers. 2025b. Qwen2.5-vl technical report. CoRR ,abs/2502.13923. Guiming Hardy Chen, Shunian Chen, Ruifei Zhang, Jun-ying Chen, Xiangbo Wu, Zhiyi Zhang, Zhihong Chen, Jianquan Li, Xiang Wan, and Benyou Wang. 2024a. Allava: Harnessing gpt4v-synthesized data for A lite vision-language model. CoRR , abs/2402.11684. Keqin Chen, Zhao Zhang, Weili Zeng, Richong Zhang, Feng Zhu, and Rui Zhao. 2023. Shikra: Unleashing multimodal llm’s referential dialogue magic. CoRR ,abs/2306.15195. Lin Chen, Jinsong Li, Xiaoyi Dong, Pan Zhang, Con-ghui He, Jiaqi Wang, Feng Zhao, and Dahua Lin. 2024b. Sharegpt4v: Improving large multi-modal models with better captions. In Computer Vision - ECCV 2024 - 18th European Conference, Milan, Italy, September 29-October 4, 2024, Proceedings, Part XVII , volume 15075 of Lecture Notes in Com-puter Science , pages 370–387. Springer.
+
+9Lin Chen, Jinsong Li, Xiaoyi Dong, Pan Zhang, Yuhang Zang, Zehui Chen, Haodong Duan, Jiaqi Wang, Yu Qiao, Dahua Lin, and Feng Zhao. 2024c. Are we on the right way for evaluating large vision-language models? In Advances in Neural Information Pro-cessing Systems 38: Annual Conference on Neural Information Processing Systems 2024, NeurIPS 2024, Vancouver, BC, Canada, December 10 - 15, 2024 .Zhe Chen, Weiyun Wang, Yue Cao, Yangzhou Liu, Zhangwei Gao, Erfei Cui, Jinguo Zhu, Shenglong Ye, Hao Tian, Zhaoyang Liu, Lixin Gu, Xuehui Wang, Qingyun Li, Yimin Ren, Zixuan Chen, Jiapeng Luo, Jiahao Wang, Tan Jiang, Bo Wang, and 21 others. 2024d. Expanding performance boundaries of open-source multimodal models with model, data, and test-time scaling. CoRR , abs/2412.05271. Wenliang Dai, Junnan Li, Dongxu Li, Anthony Meng Huat Tiong, Junqi Zhao, Weisheng Wang, Boyang Li, Pascale Fung, and Steven C. H. Hoi. 2023. Instructblip: Towards general-purpose vision-language models with instruction tuning. In Ad-vances in Neural Information Processing Systems 36: Annual Conference on Neural Information Pro-cessing Systems 2023, NeurIPS 2023, New Orleans, LA, USA, December 10 - 16, 2023 .Google DeepMind. 2025. Gemini 3.1 pro. https:// deepmind.google/models/gemini/pro/ .Mostafa Dehghani, Basil Mustafa, Josip Djolonga, Jonathan Heek, Matthias Minderer, Mathilde Caron, Andreas Steiner, Joan Puigcerver, Robert Geirhos, Ibrahim M. Alabdulmohsin, Avital Oliver, Piotr Padlewski, Alexey A. Gritsenko, Mario Lucic, and Neil Houlsby. 2023. Patch n’ pack: Navit, a vision transformer for any aspect ratio and resolution. In 
+
+Advances in Neural Information Processing Systems 36: Annual Conference on Neural Information Pro-cessing Systems 2023, NeurIPS 2023, New Orleans, LA, USA, December 10 - 16, 2023 .Matt Deitke, Christopher Clark, Sangho Lee, Rohun Tripathi, Yue Yang, Jae Sung Park, Mohammadreza Salehi, Niklas Muennighoff, Kyle Lo, Luca Soldaini, Jiasen Lu, Taira Anderson, Erin Bransom, Kiana Ehsani, Huong Ngo, Yen-Sung Chen, Ajay Patel, Mark Yatskar, Chris Callison-Burch, and 31 others. 2025. Molmo and pixmo: Open weights and open data for state-of-the-art vision-language models. In 
+
+IEEE/CVF Conference on Computer Vision and Pat-tern Recognition, CVPR 2025, Nashville, TN, USA, June 11-15, 2025 , pages 91–104. Computer Vision Foundation / IEEE. Hongyuan Dong, Zijian Kang, Weijie Yin, LiangXiao LiangXiao, ChaoFeng ChaoFeng, and Ran Jiao. 2025. Scalable vision language model training via high quality data curation. In Proceedings of the 63rd An-nual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), ACL 2025, Vi-enna, Austria, July 27 - August 1, 2025 , pages 33272– 33293. Association for Computational Linguistics. Chaoyou Fu, Peixian Chen, Yunhang Shen, Yulei Qin, Mengdan Zhang, Xu Lin, Zhenyu Qiu, Wei Lin, Jin-rui Yang, Xiawu Zheng, Ke Li, Xing Sun, and Ron-grong Ji. 2023. MME: A comprehensive evaluation benchmark for multimodal large language models. 
+
+CoRR , abs/2306.13394. Roopal Garg, Andrea Burns, Burcu Karagol Ayan, Yonatan Bitton, Ceslee Montgomery, Yasumasa Onoe, Andrew Bunner, Ranjay Krishna, Jason Baldridge, and Radu Soricut. 2024. Imageinwords: Unlocking hyper-detailed image descriptions. In Pro-ceedings of the 2024 Conference on Empirical Meth-ods in Natural Language Processing, EMNLP 2024, Miami, FL, USA, November 12-16, 2024 , pages 93– 127. Association for Computational Linguistics. Yash Goyal, Tejas Khot, Douglas Summers-Stay, Dhruv Batra, and Devi Parikh. 2017. Making the V in VQA matter: Elevating the role of image understanding in visual question answering. In 2017 IEEE Conference on Computer Vision and Pattern Recognition, CVPR 2017, Honolulu, HI, USA, July 21-26, 2017 , pages 6325–6334. IEEE Computer Society. Dong Guo, Faming Wu, Feida Zhu, Fuxing Leng, Guang Shi, Haobin Chen, Haoqi Fan, Jian Wang, Jianyu Jiang, Jiawei Wang, Jingji Chen, Jingjia Huang, Kang Lei, Liping Yuan, Lishu Luo, Pengfei Liu, Qinghao Ye, Rui Qian, Shen Yan, and 81 oth-ers. 2025. Seed1.5-vl technical report. CoRR ,abs/2505.07062. Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. 2022. Lora: Low-rank adaptation of large language models. In The Tenth International Conference on Learning Representations, ICLR 2022, Virtual Event, April 25-29, 2022 . OpenReview.net. Drew A. Hudson and Christopher D. Manning. 2019. GQA: A new dataset for real-world visual reason-ing and compositional question answering. In IEEE Conference on Computer Vision and Pattern Recogni-tion, CVPR 2019, Long Beach, CA, USA, June 16-20, 2019 , pages 6700–6709. Computer Vision Founda-tion / IEEE. Minyoung Huh, Brian Cheung, Tongzhou Wang, and Phillip Isola. 2024. Position: The platonic represen-tation hypothesis. In Forty-first International Con-ference on Machine Learning, ICML 2024, Vienna, Austria, July 21-27, 2024 . OpenReview.net. Jiachen Jiang, Jinxin Zhou, Bo Peng, Xia Ning, and Zhihui Zhu. 2025. Analyzing fine-grained alignment and enhancing vision understanding in multimodal language models. CoRR , abs/2505.17316. Kushal Kafle, Brian L. Price, Scott Cohen, and Christo-pher Kanan. 2018. DVQA: understanding data vi-sualizations via question answering. In 2018 IEEE Conference on Computer Vision and Pattern Recog-nition, CVPR 2018, Salt Lake City, UT, USA, June 18-22, 2018 , pages 5648–5656. Computer Vision Foundation / IEEE Computer Society. 
+
+10 Sahar Kazemzadeh, Vicente Ordonez, Mark Matten, and Tamara L. Berg. 2014. Referitgame: Referring to objects in photographs of natural scenes. In Proceed-ings of the 2014 Conference on Empirical Methods in Natural Language Processing, EMNLP 2014, Octo-ber 25-29, 2014, Doha, Qatar, A meeting of SIGDAT, a Special Interest Group of the ACL , pages 787–798. ACL. Aniruddha Kembhavi, Mike Salvato, Eric Kolve, Min Joon Seo, Hannaneh Hajishirzi, and Ali Farhadi. 2016. A diagram is worth a dozen images. In Com-puter Vision - ECCV 2016 - 14th European Confer-ence, Amsterdam, The Netherlands, October 11-14, 2016, Proceedings, Part IV , volume 9908 of Lecture Notes in Computer Science , pages 235–251. Springer. Geewook Kim, Teakgyu Hong, Moonbin Yim, JeongYeon Nam, Jinyoung Park, Jinyeong Yim, Won-seok Hwang, Sangdoo Yun, Dongyoon Han, and Se-unghyun Park. 2022. Ocr-free document understand-ing transformer. In Computer Vision - ECCV 2022 - 17th European Conference, Tel Aviv, Israel, Octo-ber 23-27, 2022, Proceedings, Part XXVIII , volume 13688 of Lecture Notes in Computer Science , pages 498–517. Springer. Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloé Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alexander C. Berg, Wan-Yen Lo, Piotr Dollár, and Ross B. Girshick. 2023. Segment anything. In IEEE/CVF International Conference on Computer Vision, ICCV 2023, Paris, France, October 1-6, 2023 , pages 3992–4003. IEEE. Simon Kornblith, Mohammad Norouzi, Honglak Lee, and Geoffrey E. Hinton. 2019. Similarity of neural network representations revisited. In Proceedings of the 36th International Conference on Machine Learn-ing, ICML 2019, 9-15 June 2019, Long Beach, Cali-fornia, USA , volume 97 of Proceedings of Machine Learning Research , pages 3519–3529. PMLR. Ranjay Krishna, Yuke Zhu, Oliver Groth, Justin John-son, Kenji Hata, Joshua Kravitz, Stephanie Chen, Yannis Kalantidis, Li-Jia Li, David A. Shamma, Michael S. Bernstein, and Li Fei-Fei. 2017. Vi-sual genome: Connecting language and vision us-ing crowdsourced dense image annotations. Int. J. Comput. Vis. , 123(1):32–73. Alina Kuznetsova, Hassan Rom, Neil Alldrin, Jasper R. R. Uijlings, Ivan Krasin, Jordi Pont-Tuset, Shahab Kamali, Stefan Popov, Matteo Malloci, Alexander Kolesnikov, Tom Duerig, and Vittorio Ferrari. 2020. The open images dataset V4. Int. J. Comput. Vis. ,128(7):1956–1981. Xin Lai, Zhuotao Tian, Yukang Chen, Yanwei Li, Yuhui Yuan, Shu Liu, and Jiaya Jia. 2024. LISA: rea-soning segmentation via large language model. In 
+
+IEEE/CVF Conference on Computer Vision and Pat-tern Recognition, CVPR 2024, Seattle, WA, USA, June 16-22, 2024 , pages 9579–9589. IEEE. Xiangtai Li, Tao Zhang, Yanwei Li, Haobo Yuan, Shihao Chen, Yikang Zhou, Jiahao Meng, Yueyi Sun, Shilin Xu, Lu Qi, Tianheng Cheng, Yi Lin, Zilong Huang, Wenhao Huang, Jiashi Feng, and Guang Shi. 2025. Denseworld-1m: Towards detailed dense grounded caption in the real world. CoRR ,abs/2506.24102. Xiaotong Li, Fan Zhang, Haiwen Diao, Yueze Wang, Xinlong Wang, and Lingyu Duan. 2024a. Densefusion-1m: Merging vision experts for com-prehensive multimodal perception. In Advances in Neural Information Processing Systems 38: Annual Conference on Neural Information Processing Sys-tems 2024, NeurIPS 2024, Vancouver, BC, Canada, December 10 - 15, 2024 .Zhaowei Li, Qi Xu, Dong Zhang, Hang Song, Yiqing Cai, Qi Qi, Ran Zhou, Junting Pan, Zefeng Li, Vu Tu, Zhida Huang, and Tao Wang. 2024b. Groundinggpt: Language enhanced multi-modal grounding model. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), ACL 2024, Bangkok, Thailand, Au-gust 11-16, 2024 , pages 6657–6678. Association for Computational Linguistics. Tsung-Yi Lin, Michael Maire, Serge J. Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr Dollár, and C. Lawrence Zitnick. 2014. Microsoft COCO: common objects in context. In Computer Vision -ECCV 2014 - 13th European Conference, Zurich, Switzerland, September 6-12, 2014, Proceedings, Part V , volume 8693 of Lecture Notes in Computer Science , pages 740–755. Springer. Haotian Liu, Chunyuan Li, Yuheng Li, and Yong Jae Lee. 2024a. Improved baselines with visual instruc-tion tuning. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, CVPR 2024, Seat-tle, WA, USA, June 16-22, 2024 , pages 26286–26296. IEEE. Haotian Liu, Chunyuan Li, Yuheng Li, Bo Li, Yuanhan Zhang, Sheng Shen, and Yong Jae Lee. 2024b. Llava-next: Improved reasoning, ocr, and world knowledge. Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. 2023. Visual instruction tuning. In Advances in Neural Information Processing Systems 36: Annual Conference on Neural Information Processing Sys-tems 2023, NeurIPS 2023, New Orleans, LA, USA, December 10 - 16, 2023 .Shilong Liu, Zhaoyang Zeng, Tianhe Ren, Feng Li, Hao Zhang, Jie Yang, Qing Jiang, Chunyuan Li, Jian-wei Yang, Hang Su, Jun Zhu, and Lei Zhang. 2024c. Grounding DINO: marrying DINO with grounded pre-training for open-set object detection. In Com-puter Vision - ECCV 2024 - 18th European Confer-ence, Milan, Italy, September 29-October 4, 2024, Proceedings, Part XLVII , volume 15105 of Lecture Notes in Computer Science , pages 38–55. Springer. 
+
+11 Yuan Liu, Haodong Duan, Yuanhan Zhang, Bo Li, Songyang Zhang, Wangbo Zhao, Yike Yuan, Ji-aqi Wang, Conghui He, Ziwei Liu, Kai Chen, and Dahua Lin. 2024d. Mmbench: Is your multi-modal model an all-around player? In Computer Vision - ECCV 2024 - 18th European Conference, Milan, Italy, September 29-October 4, 2024, Proceedings, Part VI , volume 15064 of Lecture Notes in Computer Science , pages 216–233. Springer. Yuliang Liu, Zhang Li, Mingxin Huang, Biao Yang, Wenwen Yu, Chunyuan Li, Xu-Cheng Yin, Cheng-Lin Liu, Lianwen Jin, and Xiang Bai. 2024e. Ocr-bench: on the hidden mystery of OCR in large multi-modal models. Sci. China Inf. Sci. , 67(12). Junhua Mao, Jonathan Huang, Alexander Toshev, Oana Camburu, Alan L. Yuille, and Kevin Murphy. 2016. Generation and comprehension of unambiguous ob-ject descriptions. In 2016 IEEE Conference on Com-puter Vision and Pattern Recognition, CVPR 2016, Las Vegas, NV, USA, June 27-30, 2016 , pages 11–20. IEEE Computer Society. Ahmed Masry, Do Xuan Long, Jia Qing Tan, Shafiq R. Joty, and Enamul Hoque. 2022. Chartqa: A bench-mark for question answering about charts with visual and logical reasoning. In Findings of the Association for Computational Linguistics: ACL 2022, Dublin, Ireland, May 22-27, 2022 , pages 2263–2279. Associ-ation for Computational Linguistics. Minesh Mathew, Dimosthenis Karatzas, and C. V. Jawa-har. 2021. Docvqa: A dataset for VQA on document images. In IEEE Winter Conference on Applications of Computer Vision, WACV 2021, Waikoloa, HI, USA, January 3-8, 2021 , pages 2199–2208. IEEE. Brandon McKinzie, Zhe Gan, Jean-Philippe Faucon-nier, Sam Dodge, Bowen Zhang, Philipp Dufter, Dhruti Shah, Xianzhi Du, Futang Peng, Anton Be-lyi, Haotian Zhang, Karanjeet Singh, Doug Kang, Hongyu Hè, Max Schwarzer, Tom Gunter, Xiang Kong, Aonan Zhang, Jianyu Wang, and 10 others. 2024. MM1: methods, analysis and insights from multimodal LLM pre-training. In Computer Vision - ECCV 2024 - 18th European Conference, Milan, Italy, September 29-October 4, 2024, Proceedings, Part XXIX , volume 15087 of Lecture Notes in Com-puter Science , pages 304–323. Springer. Anand Mishra, Shashank Shekhar, Ajeet Kumar Singh, and Anirban Chakraborty. 2019. OCR-VQA: visual question answering by reading text in images. In 
+
+2019 International Conference on Document Analy-sis and Recognition, ICDAR 2019, Sydney, Australia, September 20-25, 2019 , pages 947–952. IEEE. Yasumasa Onoe, Sunayana Rane, Zachary Berger, Yonatan Bitton, Jaemin Cho, Roopal Garg, Alexander Ku, Zarana Parekh, Jordi Pont-Tuset, Garrett Tanzer, Su Wang, and Jason Baldridge. 2024. DOCCI: de-scriptions of connected and contrasting images. In 
+
+Computer Vision - ECCV 2024 - 18th European Con-ference, Milan, Italy, September 29-October 4, 2024, Proceedings, Part LX , volume 15118 of Lecture Notes in Computer Science , pages 291–309. Springer. Zhiliang Peng, Wenhui Wang, Li Dong, Yaru Hao, Shaohan Huang, Shuming Ma, and Furu Wei. 2023. Kosmos-2: Grounding multimodal large language models to the world. CoRR , abs/2306.14824. Shana Poplack. 1981. Syntactic structure and social function of code-switching. In Richard P. Durán, edi-tor, Latino Language and Communicative Behavior ,pages 169–184. Ablex, Norwood, NJ. Hanoona Abdul Rasheed, Muhammad Maaz, Sa-hal Shaji Mullappilly, Abdelrahman M. Shaker, Salman H. Khan, Hisham Cholakkal, Rao Muham-mad Anwer, Eric P. Xing, Ming-Hsuan Yang, and Fa-had Shahbaz Khan. 2024. Glamm: Pixel grounding large multimodal model. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, CVPR 2024, Seattle, WA, USA, June 16-22, 2024 , pages 13009–13018. IEEE. Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Rong-hang Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman Rädle, Chloé Rolland, Laura Gustafson, Eric Mintun, Junting Pan, Kalyan Va-sudev Alwala, Nicolas Carion, Chao-Yuan Wu, Ross B. Girshick, Piotr Dollár, and Christoph Fe-ichtenhofer. 2025. SAM 2: Segment anything in images and videos. In The Thirteenth International Conference on Learning Representations, ICLR 2025, Singapore, April 24-28, 2025 . OpenReview.net. Christoph Schuhmann, Romain Beaumont, Richard Vencu, Cade Gordon, Ross Wightman, Mehdi Cherti, Theo Coombes, Aarush Katta, Clayton Mullis, Mitchell Wortsman, Patrick Schramowski, Srivatsa Kundurthy, Katherine Crowson, Ludwig Schmidt, Robert Kaczmarczyk, and Jenia Jitsev. 2022. LAION-5B: an open large-scale dataset for training next generation image-text models. In Ad-vances in Neural Information Processing Systems 35: Annual Conference on Neural Information Process-ing Systems 2022, NeurIPS 2022, New Orleans, LA, USA, November 28 - December 9, 2022 .Shuai Shao, Zeming Li, Tianyuan Zhang, Chao Peng, Gang Yu, Xiangyu Zhang, Jing Li, and Jian Sun. 2019. Objects365: A large-scale, high-quality dataset for object detection. In 2019 IEEE/CVF In-ternational Conference on Computer Vision, ICCV 2019, Seoul, Korea (South), October 27 - November 2, 2019 , pages 8429–8438. IEEE. Amanpreet Singh, Vivek Natarajan, Meet Shah, Yu Jiang, Xinlei Chen, Dhruv Batra, Devi Parikh, and Marcus Rohrbach. 2019. Towards VQA models that can read. In IEEE Conference on Computer Vision and Pattern Recognition, CVPR 2019, Long Beach, CA, USA, June 16-20, 2019 , pages 8317–8326. Com-puter Vision Foundation / IEEE. Llama Team. 2024. The llama 3 herd of models. CoRR ,abs/2407.21783. 
+
+12 S. Thara and Prabaharan Poornachandran. 2018. Code-mixing: A brief survey. In 2018 International Con-ference on Advances in Computing, Communications and Informatics, ICACCI 2018, Bangalore, India, September 19-22, 2018 , pages 2382–2388. IEEE. Peter Tong, Ellis Brown, Penghao Wu, Sanghyun Woo, Adithya Iyer, Sai Charitha Akula, Shusheng Yang, Jihan Yang, Manoj Middepogu, Ziteng Wang, Xi-chen Pan, Rob Fergus, Yann LeCun, and Saining Xie. 2024. Cambrian-1: A fully open, vision-centric ex-ploration of multimodal llms. In Advances in Neural Information Processing Systems 38: Annual Confer-ence on Neural Information Processing Systems 2024, NeurIPS 2024, Vancouver, BC, Canada, December 10 - 15, 2024 .Michael Tschannen, Alexey A. Gritsenko, Xiao Wang, Muhammad Ferjad Naeem, Ibrahim Alabdulmohsin, Nikhil Parthasarathy, Talfan Evans, Lucas Beyer, Ye Xia, Basil Mustafa, Olivier J. Hénaff, Jeremiah Harmsen, Andreas Steiner, and Xiaohua Zhai. 2025. Siglip 2: Multilingual vision-language encoders with improved semantic understanding, localization, and dense features. CoRR , abs/2502.14786. Peng Wang, Shuai Bai, Sinan Tan, Shijie Wang, Zhi-hao Fan, Jinze Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Yang Fan, Kai Dang, Mengfei Du, Xuancheng Ren, Rui Men, Dayiheng Liu, Chang Zhou, Jingren Zhou, and Junyang Lin. 2024. Qwen2-vl: Enhancing vision-language model’s perception of the world at any resolution. CoRR , abs/2409.12191. Penghao Wu and Saining Xie. 2024. V*: Guided vi-sual search as a core mechanism in multimodal llms. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, CVPR 2024, Seattle, WA, USA, June 16-22, 2024 , pages 13084–13094. IEEE. xAI Team. 2024. Grok-1.5 Vision Preview. Long Xing, Xiaoyi Dong, Yuhang Zang, Yuhang Cao, Jianze Liang, Qidong Huang, Jiaqi Wang, Feng Wu, and Dahua Lin. 2025. Caprl: Stimulating dense im-age caption capabilities via reinforcement learning. 
+
+CoRR , abs/2509.22647. An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, Chujie Zheng, Day-iheng Liu, Fan Zhou, Fei Huang, Feng Hu, Hao Ge, Haoran Wei, Huan Lin, Jialong Tang, and 40 others. 2025. Qwen3 technical report. CoRR ,abs/2505.09388. An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan Li, Dayi-heng Liu, Fei Huang, Haoran Wei, Huan Lin, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Yang, Ji-axi Yang, Jingren Zhou, Junyang Lin, Kai Dang, and 22 others. 2024. Qwen2.5 technical report. CoRR ,abs/2412.15115. Qinghao Ye, Haiyang Xu, Jiabo Ye, Ming Yan, Anwen Hu, Haowei Liu, Qi Qian, Ji Zhang, Fei Huang, and Jingren Zhou. 2023. mplug-owl2: Revolutionizing multi-modal large language model with modality col-laboration. CoRR , abs/2311.04257. Yuanyang Yin, Yaqi Zhao, Yajie Zhang, Yuanxing Zhang, Ke Lin, Jiahao Wang, Xin Tao, Pengfei Wan, Wentao Zhang, and Feng Zhao. 2025. SEA: Super-vised embedding alignment for token-level visual-textual integration in MLLMs. In Proceedings of the 2025 Conference on Empirical Methods in Natu-ral Language Processing , pages 1058–1070, Suzhou, China. Association for Computational Linguistics. Haoxuan You, Haotian Zhang, Zhe Gan, Xianzhi Du, Bowen Zhang, Zirui Wang, Liangliang Cao, Shih-Fu Chang, and Yinfei Yang. 2024. Ferret: Refer and ground anything anywhere at any granularity. In 
+
+The Twelfth International Conference on Learning Representations, ICLR 2024, Vienna, Austria, May 7-11, 2024 . OpenReview.net. Peter Young, Alice Lai, Micah Hodosh, and Julia Hock-enmaier. 2014. From image descriptions to visual denotations: New similarity metrics for semantic in-ference over event descriptions. Trans. Assoc. Com-put. Linguistics , 2:67–78. Weihao Yu, Zhengyuan Yang, Linjie Li, Jianfeng Wang, Kevin Lin, Zicheng Liu, Xinchao Wang, and Lijuan Wang. 2024. Mm-vet: Evaluating large multimodal models for integrated capabilities. In Forty-first In-ternational Conference on Machine Learning, ICML 2024, Vienna, Austria, July 21-27, 2024 . OpenRe-view.net. Xiang Yue, Yuansheng Ni, Tianyu Zheng, Kai Zhang, Ruoqi Liu, Ge Zhang, Samuel Stevens, Dongfu Jiang, Weiming Ren, Yuxuan Sun, Cong Wei, Botao Yu, Ruibin Yuan, Renliang Sun, Ming Yin, Boyuan Zheng, Zhenzhu Yang, Yibo Liu, Wenhao Huang, and 3 others. 2024. MMMU: A massive multi-discipline multimodal understanding and reasoning benchmark for expert AGI. In IEEE/CVF Conference on Com-puter Vision and Pattern Recognition, CVPR 2024, Seattle, WA, USA, June 16-22, 2024 , pages 9556– 9567. IEEE. Kaichen Zhang, Bo Li, Peiyuan Zhang, Fanyi Pu, Joshua Adrian Cahyono, Kairui Hu, Shuai Liu, Yuan-han Zhang, Jingkang Yang, Chunyuan Li, and Ziwei Liu. 2025. Lmms-eval: Reality check on the evalua-tion of large multimodal models. In Findings of the Association for Computational Linguistics: NAACL 2025, Albuquerque, New Mexico, USA, April 29 -May 4, 2025 , pages 881–916. Association for Com-putational Linguistics. Jinguo Zhu, Weiyun Wang, Zhe Chen, Zhaoyang Liu, Shenglong Ye, Lixin Gu, Hao Tian, Yuchen Duan, Weijie Su, Jie Shao, Zhangwei Gao, Erfei Cui, Xue-hui Wang, Yue Cao, Yangzhou Liu, Xingguang Wei, Hongjie Zhang, Haomin Wang, Weiye Xu, and 32 others. 2025. Internvl3: Exploring advanced train-ing and test-time recipes for open-source multimodal models. CoRR , abs/2504.10479. 
+
+13 A Dataset Details 
+
+A.1 MMCS Pretraining Dataset         
+
+> # Samples # Objects Avg. Chars Avg. Objects 773,779 5,145,630 961.65 6.65
+> Table 4: Statistics of the synthesized pretraining dataset. “Avg. Chars” denotes the average character count per detailed caption, while “Avg. Objects” repre-sents the average number of visual objects identified per sample after filtering.
+
+The image sources utilized in Section 3.3 in-clude MS COCO (Lin et al., 2014), Flickr30k (Young et al., 2014), GQA (Hudson and Manning, 2019), Objects365 (Shao et al., 2019), OpenIm-ages (Kuznetsova et al., 2020), and SA-1B (Kirillov et al., 2023). We select 773K images from these sources and apply our data synthesis pipeline to construct the pretraining dataset. Table 4 presents a statistical summary of the dataset, and Figure 8 provides two illustrative examples. Prompts for VLM Judge You are judging whether a bounding box correctly localizes the target described by a phrase. The image contains a highlighted bbox. Decide if it covers the intended object. Target phrase: {phrase} Bbox (xyxy): [{x1, y1, x2, y2}] Image size (w ×h): [{width, height}] Criteria: - YES: the highlighted region matches the phrase, and the target object is mostly inside the box. - NO: the box highlights the wrong object or attribute, or the target is clearly outside the box. Answer exactly: YES or NO 
+
+Data Quality To validate the quality of our syn-thesized pretraining dataset, we use Gemini-3-Pro (DeepMind, 2025) as an automated Vision-Language Model (VLM) judge and conduct an independent human evaluation to verify the reli-ability of its assessments. For each source dataset, we sample 200 objects to compute the VLM score. Specifically, the judge is prompted to assign a bi-nary score (1 for correct, 0 for incorrect) indicating whether a textual entity is accurately localized by the provided bounding box. To assess the relia-bility of the VLM evaluations, human annotators independently verify a subset of 20 randomly se-lected objects per dataset. The evaluation results, representing the average grounding accuracy, are summarized in Table 5. Instruction for Human Annotators Task: Each sample shows an image with a colored bounding box and a target phrase. Judge whether the box correctly highlights the object described by the phrase. Label: YES or NO YES: acceptable bbox - The box covers the correct object matching the phrase. - The object is mostly inside the box (minor over-/under-coverage is fine). - Slight attribute ambiguity is tolerable if the object identity is correct. e.g. phrase="red car", the car is dark red — still YES. NO: wrong bbox - Wrong object: the box highlights a differ-ent object than what the phrase describes. - Wrong attribute: any key attribute clearly conflicts. - Missed target: the described object is mostly outside the box. 
+
+A.2 SFT Dataset 
+
+For SFT, we utilize the LLaVA-NeXT dataset (Liu et al., 2024b), which comprises 779K instruction-following samples covering general VQA, OCR-related tasks and document/chart understanding. Specifically, this dataset incorporates data from AI2D (Kembhavi et al., 2016), ChartQA (Masry et al., 2022), DocVQA (Mathew et al., 2021), DVQA (Kafle et al., 2018), GQA, LAION-GPT4V (Schuhmann et al., 2022), OCR-VQA (Mishra et al., 2019), ShareGPT4V (Chen et al., 2024b), SynthDoG-EN (Kim et al., 2022) and Visual Genome (Krishna et al., 2017). 14 Judge COCO Flickr30k GQA Objects365 OpenImages SA-1B AVG VLM 0.935 0.920 0.965 0.980 0.970 0.925 0.949 Human 0.950 0.900 0.900 1.000 1.000 0.900 0.942 
+
+Table 5: Quality evaluation of the synthesized MMCS pretraining dataset. Both the VLM judge and human annotators assign binary scores indicating whether a textual entity is accurately grounded by its corresponding visual bounding box. The reported values represent the average grounding accuracy. 
+
+A.3 Benchmarks 
+
+We conduct a comprehensive evaluation across a suite of benchmarks organized into three distinct domains: • Visual Grounding : We evaluate referring expression comprehension capability using RefCOCO, RefCOCO+ (Kazemzadeh et al., 2014), and RefCOCOg (Mao et al., 2016). • Perception-centric tasks : We employ AI2D and ChartQA for diagram and chart under-standing; OCRBench (Liu et al., 2024e) and TextVQA (Singh et al., 2019) to assess OCR capabilities; and CVBench (Tong et al., 2024), RealWorldQA (xAI Team, 2024), and V-Star (Wu and Xie, 2024) for real-world visual per-ception. • General VQA : We encompass MMBench (Liu et al., 2024d), MME (Fu et al., 2023), MMStar (Chen et al., 2024c), and MMVet (Yu et al., 2024) for general visual under-standing; MMMU (Yue et al., 2024) for multi-disciplinary reasoning requiring college-level knowledge; and GQA (Hudson and Manning, 2019) for real-world compositional visual rea-soning. To ensure reproducibility, all evaluations are conducted using the lmms-eval framework (Zhang et al., 2025). The full evaluation results are in Table 13, Table 14, and Table 15. 
+
+B Implementation Details 
+
+Table 6 details the hyperparameters employed for both modality alignment pretraining and SFT stages. High-resolution images are divided into smaller image tiles of the resolution that the ViT is originally trained for, and encoded independently. All experiments are conducted on 8 NVIDIA A6000 GPUs. During the SFT stage, we apply LoRA (Hu et al., 2022) to the LLM backbone. For 8B-scale models, pretraining completes within 10 hours, while SFT completes within 20 hours.                     
+
+> Hyperparameter Pretrain Finetune Trainable MLP MLP+LLM Global batch size 128 64 Learning rate 1e-3 2e-4 Epochs 1Max image tiles 4 + 1 Optimizer AdamW LR schedule Cosine decay Warm up ratio 0.03 Weight decay 0LoRA r -32 LoRA alpha -64 LoRA dropout -0.05
+
+Table 6: Hyperparameters for model training. “4+1” indicates that the high-resolution image is divided into at most 4 localized tiles with an additional thumbnail tile that provides a global view. 
+
+C Extended Analysis 
+
+C.1 Learning of Actions and Relationships 
+
+While MMCS explicitly grounds noun phrases, we hypothesize that its learning signal is not limited to nouns. Since the visual object tokens are inserted into the surrounding sentence context, the language modeling objective also supervises non-entity to-kens such as verbs and prepositions. Therefore, actions and relations can be learned through their contextual dependence on the grounded visual ob-jects. To verify this, we evaluate how well the model predicts different types of text tokens con-ditioned on the entire image. Given an image I
+
+and a caption token sequence X = {x1, . . . , x N },we compute the token-level prediction probabil-ity p(xi|I, x <i ), and report the average negative log-likelihood for each part-of-speech category C:
+
+LC = − 1
+
+|SC (X)|
+
+X 
+
+> i∈SC(X)
+
+log p(xi|I, x <i ), (5) where SC (X) is the set of token positions in cap-tion X that belong to category C. Lower LC in-dicates that the model predicts the corresponding tokens with higher probability, suggesting better understanding of that semantic category. Specifi-cally, we sample 1,000 image-caption pairs from 15 Method Verb Prep Noun All Caption 3.4773 1.1833 2.2005 1.8097 Patch Aligned 3.4660 1.1711 1.9974 1.7309 MMCS 3.2645 1.0845 1.9222 1.6362  
+
+> Table 7: Token-level negative log-likelihood ( LC) by part-of-speech category. Verbs, prepositions, and nouns correspond to actions, relationships, and objects, respec-tively.
+
+the ShareGPT-4V (Chen et al., 2024b) dataset and use spaCy ( en_core_web_sm ) to group tokens into verbs, prepositions, and nouns, corresponding to actions, relationships, and objects, respectively. All evaluated models are pretraining-only checkpoints without undergoing SFT. As reported in Table 7, although MMCS only substitutes noun-phrase entities, it also yields notable NLL reductions on verbs and preposi-tions. Since these non-entity tokens are not di-rectly replaced, they receive visual supervision only through the LM loss over the surrounding context, indicating that explicit object-level grounding im-plicitly propagates to actions and relations. By contrast, Patch Aligned improves nouns but barely affects verbs or prepositions (-0.01). Patch-level supervision aligns visual fragments with discon-nected labels, offering little signal on how objects act or relate. MMCS instead grounds complete objects within their natural sentence context, pro-viding alignment signals on both concrete entities and the abstract concepts that bind them. 
+
+C.2 Emergent OCR Capability 
+
+As shown in Table 2, MMCS improves perfor-mance on OCR-related benchmarks (e.g., OCR-Bench, TextVQA) despite the absence of dedicated OCR pretraining data. We attribute this emergent capability to two primary factors: 
+
+Implicit OCR Supervision from Natural Ob-jects Natural images frequently contain objects with embedded text (e.g., street signs, product la-bels). While standard image-level pretraining heav-ily compresses these small regions into global fea-tures, MMCS explicitly crops and aligns them with textual descriptions, acting as an implicit OCR training objective. To quantify this, we utilized Gemini-3-Pro to evaluate 500 random object crops per source dataset. As shown in Table 8, a notable proportion of natural objects (10.0% to 30.8%) con-tain legible text, providing substantial implicit su-pervision. 0 100 200 300 400 500 MMCS Caption 281.3 480.0 
+
+> # Average Image Tokens
+> Figure 7: Comparison of the average number of image tokens between MMCS and standard image-level pre-training.
+
+Generalization via Enhanced Modality Align-ment By explicitly resolving the referential am-biguity inherent in global image-text pairs, MMCS establishes a more precise modality alignment. This fundamental improvement enables the model to accurately localize and parse fine-grained visual details, a capability that naturally generalizes to text recognition tasks. 
+
+C.3 Token Efficiency and Training Cost 
+
+In standard image-level pretraining, the entire im-age is encoded into a fixed set of image tokens. In contrast, MMCS operates explicitly on local-ized visual objects. As defined in Eq. 1, only the image patches that spatially intersect with the target bounding boxes are retained and fed into the LLM backbone, inherently reducing the input sequence length. To quantify this, we randomly selected 3,000 instances from each source dataset and compared the average number of image tokens per sample under identical dynamic resolution con-figurations. As shown in Figure 7, MMCS reduces the token count by approximately 41.4% compared to standard image-level pretraining. 
+
+D Robustness and Scalability Analysis 
+
+D.1 Robustness to Caption Quality 
+
+A natural concern is whether the gains of MMCS stem from the code-switching formulation itself or from the quality of our teacher-generated cap-tions. To disentangle these factors, we randomly sample 500K image-caption pairs from ShareGPT-4V (Chen et al., 2024b), apply the same MMCS pipeline (entity extraction, grounding, and substitu-tion) directly on top of these existing captions, and compare against a standard image-caption baseline trained on the same data. As shown in Table 9, both methods exhibit lower absolute scores than our default setup, but MMCS still considerably out-performs the caption baseline. This confirms that the improvement arises from the MMCS formu-16 Metric COCO Flickr30k GQA Objects365 OpenImages SA-1B # Has Text 91 50 107 82 119 154 Ratio (%) 18.2 10.0 21.4 16.4 23.8 30.8 
+
+Table 8: Proportion of visual objects containing legible text across different source datasets. Statistics are based on a random sample of 500 objects per dataset, evaluated by a VLM judge.                      
+
+> Method General Perception Grounding Caption 51.19 55.77 59.12 MMCS 51.84 58.24 70.29
+> Varying caption source
+> Caption (ShareGPT-4V) 49.35 53.64 58.70 MMCS (ShareGPT-4V) 52.16 56.96 65.55
+> Perturbing object-entity correspondence
+> MMCS (10% pert.) 51.43 56.93 66.44 MMCS (30% pert.) 50.75 54.83 62.86
+
+Table 9: Robustness to varying caption source and noisy object-entity correspondences. 
+
+lation itself rather than from the specific teacher pipeline. 
+
+D.2 Robustness to Noisy Object-Entity Correspondence 
+
+Since our object-entity correspondences are pro-duced by an automated grounding pipeline, they inevitably contain mismatches. To assess the ro-bustness of MMCS to such errors, we randomly replace a proportion (10% and 30%) of the correct bounding boxes with irrelevant regions sampled from the same image, constrained to be of com-parable size (80%–125% of the original) and to have minimal overlap with other valid objects (IoU 
+
+< 0.1). As shown in Table 9, under 10% pertur-bation MMCS remains highly robust, still surpass-ing the caption baseline across all task categories. Even under the more aggressive 30% corruption, the model does not collapse and continues to de-liver clear gains on grounding, while general and perception scores stay close to the baseline. These results show that MMCS does not require pixel-perfect object localization to be effective, making it amenable to scaling with imperfect automatic annotations. 
+
+D.3 Robustness to Image Resolution 
+
+We evaluate the robustness of MMCS across vary-ing input image resolutions. By adjusting the max-imum number of tiles (ranging from 1 to 12), we compare our method against the standard caption baseline with a fixed set of 600K pretraining sam-                                        
+
+> Max Res. Method General Perception Grounding
+> 384 2×1Caption 46.62 38.32 41.78 MMCS 49.45 42.75 44.76
+> 384 2×4Caption 48.95 49.16 46.61 MMCS 50.47 51.21 58.29
+> 384 2×9Caption 48.70 50.51 46.05 MMCS 50.86 53.08 58.96
+> 384 2×12 Caption 49.00 48.36 50.44 MMCS 50.73 54.39 58.07
+
+Table 10: Performance comparison across different maximum image resolutions . The input resolution is dynamically scaled by varying the maximum number of 
+
+384 × 384 tiles. MMCS consistently outperforms the standard image-level pretraining baseline.                          
+
+> # Samples Method General Perception Grounding 50K Caption 47.25 42.60 37.86 MMCS 49.68 49.12 47.38 600K Caption 48.95 49.16 46.61 MMCS 50.47 51.21 58.29 1M Caption 48.60 48.78 49.85 MMCS 50.04 51.51 60.27
+
+Table 11: Performance comparison across varying pre-training dataset sizes . MMCS maintains an advantage over the standard baseline at 1M pretraining scales. 
+
+ples and 200K SFT samples. As shown in Ta-ble 10, higher dynamic resolutions generally yield better performance in perception and grounding tasks. Crucially, MMCS consistently outperforms the baseline across all resolution configurations, underscoring the efficacy of our method regardless of the visual input granularity. 
+
+D.4 Scaling to More Pretraining Data 
+
+To investigate the scalability of our approach, we further expand the pretraining dataset to 1M sam-ples by incorporating additional images from Ob-jects365 and SA-1B. The SFT dataset is fixed to 200K for a fair comparison. All newly added sam-ples are processed using the same data synthesis pipeline detailed in Section 3.3. As presented in Table 11, MMCS maintains an advantage over stan-dard image-level pretraining across all data scales. 17 This confirms that our explicit object-level align-ment paradigm can effectively leverage larger vol-umes of pretraining data to achieve more robust semantic grounding. 
+
+D.5 Statistical Significance of Improvements 
+
+While MMCS yields gains across all three task categories, the magnitude varies: improvements are most pronounced on grounding (+7.9%) and perception (+2.1%), and more modest on general VQA. To verify that the smaller gains on general VQA are statistically robust rather than artifacts of random initialization, we conduct four independent training runs under the Qwen2.5-3B + SigLIP2 configuration with different random seeds. The remaining setup is identical to that described in Section 4.1. As shown in Table 12, MMCS outperforms the image-level baseline in every run, with an aver-age improvement of +1.67% on general VQA. A one-sided paired t-test over the four matched runs yields p = 0 .028 , indicating that this improvement is statistically significant despite its smaller magni-tude. We attribute the differential gain magnitudes to the nature of each task category. MMCS directly strengthens object-level vision-language alignment, which most immediately benefits fine-grained per-ception and grounding. These enhanced visual capabilities also propagate to general VQA, but general VQA performance additionally depends on factors that MMCS does not directly target, such as world knowledge, commonsense reasoning, and instruction-tuning priors. As a result, MMCS pro-duces the largest gains on perception and ground-ing tasks, while delivering smaller but statistically significant improvements on general VQA. 
+
+E Representation Alignment Metrics 
+
+In this section, we provide detailed definitions of the representation alignment metrics used in Sec-tion 5.1. We adopt the notation from Huh et al. (2024). 
+
+CKA CKA (Centered Kernel Alignment) reflects the global similarity between two representation spaces by comparing their kernel matrices. Let 
+
+ϕi ∈ Rn and ψi ∈ Rm be vectorized features of two modalities (e.g. language and vision). Let 
+
+Kij = κ(ϕi, ϕ j ) and Lij = κ(ψi, ψ j ) be the ker-nel matrices computed from a dataset using some kernel function κ. For an inner-product kernel, the                                    
+
+> Method Run General Perception Grounding Caption 151.19 55.77 59.12 250.49 54.44 55.59 350.34 54.38 62.58 449.13 54.20 60.55 AVG 50.29 54.69 59.46 MMCS 151.84 58.24 70.29 251.35 56.99 70.45 352.59 56.85 67.17 452.05 58.02 71.30 AVG 51.96 57.52 69.80
+> Table 12: Multi-seed comparison between image-level captioning and MMCS under the Qwen2.5-3B + SigLIP2 setting. Each block reports four independent training runs with different random seeds. AVG denotes the per-column mean.
+
+ij -th entry of the centered counterpart of these ker-nel matrices is given by 
+
+¯Kij = ⟨ϕi, ϕ j ⟩ − El[⟨ϕi, ϕ l⟩],
+
+¯Lij = ⟨ψi, ψ j ⟩ − El[⟨ψi, ψ l⟩]. (6) Then the cross-covariance of K and L is: HSIC (K, L) = 1(n − 1) 2 Trace ( ¯K¯L). (7) Finally, CKA is obtained by normalizing this quan-tity: CKA (K, L) = HSIC (K, L)
+
+pHSIC (K, K)HSIC (L, L) .
+
+(8) 
+
+CKNNA CKNNA (Centered Kernel Nearest-Neighbor Alignment) is a relaxed variation of CKA that emphasizes local structural alignment. It mod-ifies the measure by replacing HSIC (K, L) with Align (K, L), which computes Eq. 7 considering only the k-nearest neighbors in the dataset: Align (K, L) = X
+
+> i
+
+X
+
+> j
+
+α(i, j ) ¯Kij ¯Lij , (9) where α(i, j ) is an indicator function that selects common nearest neighbors: 
+
+α(i, j ) = 1[ϕj ∈ knn (ϕi)∧ψj ∈ knn (ψi)∧i̸ = j].
+
+(10) This term acts as a mask, preserving only the inter-actions between sample i and j if j is a neighbor of i in both representation spaces. The normalized CKNNA score is then defined as: CKNNA (K, L) = Align (K, L)
+
+pAlign (K, K)Align (L, L) .
+
+(11) 18 Mutual k-NN Mutual k-NN (Mutual k-Nearest Neighbor) measures the average overlap of nearest neighbor sets of representations. Let {ϕi, ψ i}bi=1 
+
+denote a mini-batch of paired features from two modalities, where the collections of these fea-tures are denoted as Φ = {ϕ1, . . . , ϕ b} and Ψ = 
+
+{ψ1, . . . , ψ b}. For each feature pair (ϕi, ψ i), we compute the respective nearest neighbor sets S(ϕi)
+
+and S(ψi):
+
+S(ϕi) = dknn (ϕi, Φ \ ϕi),
+
+S(ψi) = dknn (ψi, Ψ \ ψi), (12) where dknn returns the set of indices of the k-nearest neighbors. We then measure the alignment via the average intersection: 
+
+mNN (ϕi, ψ i) = 1
+
+k |S (ϕi) ∩ S (ψi)|, (13) where | · | denotes the cardinality of the set. In Section 5.1, CKA is calculated using all 1000 image-caption pairs in the dataset. For CKNNA and Mutual k-NN, we report results with k = 10 .
+
+F More Evaluation Results 
+
+Tables 13, 14, and 15 report the per-benchmark results that underlie the averaged scores, covering visual grounding, perception-centric, and general VQA benchmarks, respectively. 
+
+G More Qualitative Results 
+
+Figure 9 presents a representative case demon-strating our model’s dynamic attention behavior when processing scenes with multiple target ob-jects. Specifically, given an input image of a framed mosaic artwork alongside a dense caption, we ob-serve clear spatial shifts in the model’s visual atten-tion as it processes different textual entities. This capability indicates that our model can effectively disentangle multiple localized objects within a sin-gle complex image. Furthermore, this dynamic lo-calization behavior suggests that the explicit object-entity correspondence established by our MMCS paradigm successfully guides the model to decou-ple semantic regions. 19 Method RefCOCO RefCOCO+ RefCOCOg AVG testA testB val testA testB val test val 
+
+Qwen2.5-3B + SigLIP2 
+
+Caption 65.00 54.64 61.68 63.88 47.49 56.62 61.27 62.39 59.12 SEA 68.33 60.46 64.08 62.81 48.02 57.80 61.09 65.05 60.96 Patch Aligned 77.82 64.08 71.84 71.34 50.83 61.95 66.67 67.90 66.55 Text BBox 75.91 60.35 67.60 69.37 49.15 60.30 65.03 67.83 64.44 MMCS 80.66 68.75 75.18 74.35 56.23 65.49 70.32 71.31 70.29 
+
+w/o Lentity 78.50 64.59 73.18 72.14 52.38 63.06 68.04 68.49 67.55 w/o LLM 77.60 62.65 71.52 69.87 49.85 60.55 65.06 66.43 65.44 
+
+Table 13: More results on referring expression comprehension. We report Acc@0.5 across all splits. 
+
+Method AI2D ChartQA CVBench OCR RWQA VQA T V* Avg 
+
+Qwen2.5-3B + SigLIP2 
+
+Caption 66.13 56.52 61.26 44.70 55.29 58.29 48.17 55.77 SEA 66.77 53.48 63.15 44.90 55.42 58.48 47.64 55.69 Patch Aligned 67.45 56.08 61.87 46.70 55.16 59.58 48.17 56.43 Text BBox 67.10 56.60 65.39 44.00 54.64 58.38 50.26 56.62 MMCS 68.72 57.36 66.87 47.60 56.99 59.35 50.79 58.24 
+
+w/o Lentity 67.10 54.40 60.88 43.80 52.94 57.57 42.93 54.23 w/o LLM 67.13 57.40 61.60 46.30 53.72 60.04 47.64 56.26 
+
+Qwen2.5-3B + QwenViT 
+
+Caption 69.40 70.36 56.33 58.80 55.16 62.87 57.59 61.50 MMCS 71.15 71.92 59.78 62.40 56.86 64.97 57.59 63.52 
+
+Qwen3-8B + SigLIP2 
+
+Caption 72.51 62.48 69.71 50.60 58.17 64.37 50.79 61.23 MMCS 73.93 64.96 72.82 53.30 60.13 65.23 53.40 63.40 
+
+Llama3-8B + SigLIP2 
+
+Caption 72.31 58.28 65.66 47.00 59.87 62.59 51.31 59.57 MMCS 71.96 60.20 69.48 48.90 59.08 64.50 53.93 61.15 
+
+Table 14: More results on perception-centric benchmarks. “OCR”, “RWQA”, “VQA T”, and “V*” denote OCRBench, RealWorldQA, TextVQA, and V-Star, respectively. 
+
+Method MMB MME MMMU MMStar MMVet GQA Avg 
+
+Qwen2.5-3B + SigLIP2 
+
+Caption 67.53 60.36 40.60 42.77 35.64 60.22 51.19 SEA 68.81 60.86 40.40 42.54 31.83 60.26 50.78 Patch Aligned 69.76 63.71 41.30 43.45 32.11 60.36 51.78 Text BBox 67.87 60.32 41.10 44.41 35.69 60.45 51.64 MMCS 68.56 62.75 40.90 43.98 33.30 61.57 51.84 
+
+w/o Lentity 66.75 63.50 40.80 44.00 33.02 60.61 51.45 w/o LLM 69.07 61.82 40.20 43.71 33.03 60.41 51.37 
+
+Qwen2.5-3B + QwenViT 
+
+Caption 67.70 62.82 39.20 45.21 39.27 60.12 52.39 MMCS 68.47 65.68 42.90 45.31 39.31 60.66 53.72 
+
+Qwen3-8B + SigLIP2 
+
+Caption 74.48 68.14 47.10 48.67 44.72 62.54 57.61 MMCS 76.63 68.54 48.80 51.49 41.56 63.02 58.34 
+
+Llama3-8B + SigLIP2 
+
+Caption 70.79 63.43 39.20 44.96 39.36 63.17 53.48 MMCS 68.99 65.54 40.90 43.15 42.06 63.40 54.01 
+
+Table 15: More results on general VQA benchmarks. We report the normalized score for MME, and evaluate MMVet using GPT-4.1 as the judge. 
+
+20 A black CRT computer monitor is turned on, displaying a windowed interface with 
+
+lists of text. In front of the monitor sits a beige keyboard with raised keys and a blue pen resting on it. To the right of the keyboard is a white computer mouse on a blue mousepad. A black landline telephone with a coiled cord is placed near the mouse. The desk surface is wooden and cluttered with various items including 
+
+a green and black notebook with a circuit board design, yellow sticky notes, a 
+
+stack of white papers, and a small photo frame showing a person. Another smaller photo frame with a picture of two people is positioned near the monitor. A white desktop computer tower is under the desk. On the left side of the desk, there is a container holding pens and markers, a paper clip holder, and a tray with 
+
+scissors and other office supplies. A calendar for October is hanging on the wall 
+
+to the right. An orange sweater or jacket is draped over the back of a black office chair. The wall behind the desk is plain and light-colored, with visible vertical paneling A man wearing a dark jacket, black pants, and black shoes is walking across a crosswalk. He has short dark hair and is carrying a gray backpack. The crosswalk consists of white painted stripes on the asphalt road. A pedestrian signal mounted on a metal pole displays the word \"WALK\" in orange letters. Behind the man, a red compact car with a visible license plate is stopped at the curb. The sidewalk is made of red brick pavers and runs alongside a modern building with large glass windows featuring a blue-tinted pattern. Several bare trees line the sidewalk and street. In the background, a tall red-brick apartment or office 
+
+building with many windows stands behind a green chain-link fence. To the left, 
+
+there are green-leaved trees and another multi-story building with a blue facade. The sky is bright and mostly clear. A few other vehicles are parked along the street further back .Figure 8: Illustrative examples from the pretraining dataset. Left : The original image with annotated bounding boxes of visual objects. Right : The dense caption of the image, in which successfully localized textual entities are highlighted. The textual entities are color-coded to match the corresponding grounded visual objects. black  border  white  head  covering  red  cap  green  garment  with 
+
+red  accents 
+
+Figure 9: Visualization of dynamic attention shifts for a complex scene containing multiple target objects. The heatmaps illustrate how the model’s visual attention shifts to focus on the specific region as the corresponding textual entity is processed. 
+
+21

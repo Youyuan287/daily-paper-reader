@@ -1,0 +1,306 @@
+Title: EgoTrack3D: A Modular Framework for Egocentric 3D Object Tracking
+
+URL Source: https://arxiv.org/pdf/2608.08016v1
+
+Published Time: Tue, 11 Aug 2026 00:39:59 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# EgoTrack3D: A Modular Framework for Egocentric 3D Object Tracking 
+
+Jan Kulik ∗
+
+ETH Z¨ urich 
+
+jkulik@ethz.ch 
+
+Bjarni Dagur Thor K´ arason ∗
+
+ETH Z¨ urich 
+
+bkarason@ethz.ch 
+
+Yung-Hsu Yang ETH Z¨ urich 
+
+yunghsu.yang@inf.ethz.ch 
+
+Boyang Sun ETH Z¨ urich 
+
+boysun@ethz.ch 
+
+Marc Pollefeys ETH Z¨ urich & Microsoft Research 
+
+marc.pollefeys@inf.ethz.ch 
+
+Xi Wang ETH Z¨ urich & TUM & MCML 
+
+xi.wang@inf.ethz.ch 
+
+Abstract: Understanding 3D scenes from egocentric video is fundamental for robotics and autonomous navigation, yet rapid viewpoint changes and partial oc-clusions make building structured representations challenging. Existing 3D track-ing and scene graph construction methods primarily address explicit interactions or assume static scenes, limiting their ability to capture complex dynamics. We introduce EgoTrack3D, a modular framework that reconstructs and maintains a dynamic 3D scene representation directly from egocentric RGB video. The framework lifts 2D segmentation masks into a global 3D coordinate frame, us-ing a point-based motion scoring mechanism alongside a voxel-based merging heuristic to associate object tracks. EgoTrack3D maintains accurate representa-tions over time, achieving an 11% improvement in percentage of correct locations (PCL) relative to the strongest baseline on the Aria Digital Twin (ADT) dataset, while addressing the more general setting of persistent 3D tracking for both static and dynamic objects. Furthermore, to demonstrate the system’s robustness un-der degraded conditions that simulate real-world deployment constraints, we re-place dense depth maps with sparse 3D bounding box estimation and integrate interaction-guided dynamic association, enabling EgoTrack3D to maintain accu-rate spatial representations despite noisy observations. 
+
+Keywords: Egocentric 3D Perception, 3D Object Tracking, Dynamic Scene Re-construction 
+
+## 1 Introduction 
+
+Understanding 3D scenes is fundamental for robotics, autonomous navigation, and embodied AI. Robots must build structured representations of their surroundings to plan safe, goal-directed mo-tion. Scene graphs provide such a structure by describing objects, their attributes, and their spatial or semantic relationships, enabling efficient reasoning over complex environments. Although 2D scene graphs have advanced high-level reasoning in vision tasks such as image retrieval and visual question answering [1, 2], 3D scene graphs extend these ideas to real-world perception and interaction [3, 4, 5]. However, existing approaches typically assume static scenes [6, 7, 8, 9] or rely on precomputed representations to track dynamic objects [10]. Egocentric videos provide rich, temporally continuous observations from a first-person perspective, but introduce major challenges, including rapid viewpoint changes, partial occlusions, truncated fields of view, and objects frequently entering or leaving the scene. Recent methods leverage ego-centric video for 3D object tracking [11, 12, 13], but they address related yet narrower settings: 
+
+> ∗
+
+Equal contribution arXiv:2608.08016v1 [cs.CV] 8 Aug 2026 some focus on predefined or interacted objects, while others refine 2D tracks or localize objects using compact 3D representations. Boxer [14] lifts 2D detections into globally consistent 3D boxes, but is designed for static object localization rather than dynamic egocentric tracking. As a result, ex-isting methods do not fully address persistent full-scene tracking of all observed static and dynamic objects. To address these challenges, we introduce EgoTrack3D, a modular framework for constructing and updating a 3D scene representation directly from egocentric video. EgoTrack3D lifts segmenta-tion masks into a shared 3D coordinate frame using depth maps, camera intrinsics, and poses, and tracks both static and moving objects using geometric and visual features. Object motion is detected through a point-based 3D motion scoring mechanism built on CoTracker3 [15], so that observations of static objects can be aggregated while moving objects are updated more dynamically. Object tracks are merged using a 3D voxel-based heuristic to prune duplicates. Unlike existing 3D object tracking methods, EgoTrack3D captures an object’s entire point cloud, providing richer cues for 3D tracking. A practical challenge is that dense metric depth is difficult to obtain reliably in unconstrained ego-centric videos. While the Aria Digital Twin (ADT) dataset [16] provides ground-truth depth, directly replacing it with monocular predictions leads to unstable object point clouds and unreliable 3D asso-ciation. We therefore treat EgoTrack3D as a modular framework rather than a fixed pipeline: when dense depth is available, masks are lifted through per-pixel depth; when only sparse geometry is available, the lifting module can be replaced by a learned 3D box lifter. Our contributions are: (i) a modular pipeline for lifting 2D segmentations into temporally consistent 3D object tracks; (ii) a motion-aware association mechanism combining geometry and appearance; 
+
+(iii) a sparse-input variant using BoxerNet-based 3D boxes and interaction-guided dynamic associ-ation; and (iv) evaluation on ADT and HD-EPIC showing improved 3D tracking consistency under dense and sparse inputs. 
+
+## 2 Related work 
+
+Recent open-world video models enable object-level perception: the SAM model family [17, 18, 19] provides promptable segmentation and mask propagation; DEVA, Track Anything, and SAM-PT [20, 21, 22] improve temporal consistency. Despite these advances, purely 2D methods still struggle to preserve object identity through long occlusions, large viewpoint changes, and hand-object interactions. Incorporating 3D information has recently improved egocentric object tracking and localization. IT3DEgo [11] projects 2D detections into 3D using depth and pose, but remains limited to prede-fined interactive objects. OSNOM [12] introduced the Lift–Match–Keep strategy to retain out-of-sight objects via 3D lifting, while EgoSeg3D [13] refines 2D tracks from pretrained video segmenta-tion models using 3D cues. Boxer [14] lifts open-vocabulary 2D detections from posed images into globally consistent static 3D bounding boxes, demonstrating the value of 3D lifting for static object localization. However, these methods either address static 3D localization or track a restricted set of task-relevant objects, rather than maintaining persistent 3D representations for all visible objects in dynamic egocentric observations. EgoTrack3D differs by tracking all visible objects using both geo-metric and appearance features, constructing full 3D scene representations directly from egocentric RGB video. Depth estimation provides essential 3D information for 3D lifting, with recent monocular methods predicting metric depth [23, 24, 25], relative depth [26, 27, 28], or temporally consistent video depth [29, 30, 31]. However, egocentric motion remains challenging, so our dense setting uses ADT ground-truth depth to isolate tracking and scene reconstruction from depth-prediction errors. Point tracking has progressed from independent point trajectories [32, 33] to joint transformer-based tracking with cross-track attention [34]. We use the more efficient CoTracker3 [15] to derive per-point 3D motion scores for selective object updates. 2Finally, 3D scene graphs provide structured representations linking geometry, semantics, and rela-tionships. Early works [7, 6, 35] modeled static environments, later extended by SceneGraphFu-sion [8], ConceptGraphs [4], and Open3DSG [9] to incrementally build or predict 3D graphs from RGB-D data. Lost&Found [10] introduced dynamic tracking but relies on a precomputed static map. While EgoTrack3D does not produce a scene graph, it generates a 3D representation of the environment entirely from egocentric video, without requiring any prior environment model. This representation can be turned into a scene graph by incorporating semantics and inferring relation-ships. 
+
+## 3 Method 
+
+Given an egocentric video with T RGB frames, our goal is to construct a temporally consistent 3D representation of the environment containing both static and dynamic objects observed throughout the sequence. Unlike prior works that either track only a restricted set of interacted or task-relevant objects, localize static objects without maintaining temporal tracks, or represent objects only by their centers, our method estimates and tracks full 3D bounding boxes for all visible objects at every frame 1 ≤ t ≤ T .EgoTrack3D is formulated as a modular tracking framework whose lifting module can be instanti-ated with different sources of 3D information. We consider two variants. The dense variant uses per-pixel metric depth to lift segmentation masks into object point clouds and is used for controlled evaluation on ADT. The sparse variant replaces dense lifting with BoxerNet-based [14] 3D box pre-diction from sparse geometry, enabling evaluation under more realistic inputs where dense depth is unavailable or unreliable. 
+
+3.1 EgoTrack3D-Dense 
+
+Our pipeline is shown in Figure 1. It consists of (i) per-frame segmentation and depth estimation, 
+
+(ii) motion detection via CoTracker3 [15], (iii) appearance embedding extraction using MASA [36], 
+
+(iv) 3D lifting of segmented masks, and (v) 3D multi-object tracking and merging.       
+
+> Generate seg-mentation masks
+> Generate depth maps
+> Find moving objects using CoTracker3 Generate MASA features
+> Âfor every frame t
+> Preprocessing
+> RGB Aria data
+> Input
+> Filter segmen-tation masks
+> Lift masks to 3D and extract bounding boxes Match and combine Existing object tracks from t−1
+> Merge tracks
+> Âfor every frame t
+> Tracking
+> All object tracks at time t
+> Output
+
+Figure 1: Pipeline overview for generating 3D dynamic scene representations from egocentric RGB video. For each frame, the RGB input is processed to generate segmentation masks and depth maps, which are used to extract visual features (MASA) and detect moving objects (CoTracker3). The segmentation masks are then filtered, lifted to 3D bounding boxes, and matched to existing object tracks to maintain consistent identities across the entire video sequence. 33.1.1 Detecting moving objects 
+
+To determine whether an object is moving at frame t, we track an N × N grid of points over ∆t
+
+frames using CoTracker3 [15]. A tracked 3D point pn,t yields a trajectory Pn,t = {pn,t,i }∆ti=1 ,where ∆pn,t,i denotes the 3D displacement of point n between consecutive frames. Its motion and direction scores are: 
+
+mn,t =
+
+> ∆t
+
+X
+
+> i=2
+
+|| ∆pn,t,i || 2, dn,t = 1∆t − 1
+
+> ∆t
+
+X
+
+> i=2
+
+∆pn,t,i 
+
+|| ∆pn,t,i || 2
+
+. (1) Per-object scores are obtained by averaging over all points belonging to mask Mj :
+
+mMj 
+
+> t
+
+= 1
+
+|P(Mj )|
+
+X 
+
+> pn,t ∈P(Mj)
+
+mn,t , dMj 
+
+> t
+
+= 1
+
+|P(Mj )|
+
+X 
+
+> pn,t ∈P(Mj)
+
+dn,t . (2) An object is classified as moving if mMj 
+
+> t
+
+≥ τm and |dMj 
+
+> t
+
+| ≥ τd. We use N = 60 , ∆t = 10 ,
+
+τm = τd = 0 .1, and only consider points within 1 m of the camera. 
+
+3.1.2 Instance appearance features 
+
+We extract per-object appearance embeddings using MASA [36]. For each segmentation mask, we use its 2D bounding box to pool features from MASA’s backbone and obtain an object embedding 
+
+q. This embedding similarity provides robust cross-frame association signals. 
+
+3.1.3 3D detection via lifting 
+
+Each 2D image point u = [ u, v, 1] ⊤ is projected from image space to world coordinates using its depth d, the camera intrinsics matrix K, and the camera-to-world pose Tcw , using 
+
+[X Y Z 1] ⊤ = Tcw ·
+
+d · K−1u
+
+1
+
+
+
+. (3) For each object, we gather its 3D points, apply voxel downsampling, and fit an oriented bound-ing box using principal component analysis (PCA) over the object’s point cloud P , yielding BOX PCA (P ).
+
+3.1.4 Tracking objects in 3D 
+
+Let T t−1 
+
+> i
+
+= {P t−1 
+
+> i
+
+, o t−1 
+
+> i
+
+, qt−1 
+
+> i
+
+} denote an existing track and Dtj = {P tj , o tj , qtj } a new detection. Here, P is the object’s 3D point cloud, o is its oriented bounding box, and q is its visual feature embedding. We define the matching cost 
+
+cij = λiou · (1 − IoU (i, j )) + λchamfer · Chamfer (i, j ) + λfeat · (1 − s(i, j )) , (4) and solve the assignment using the Hungarian algorithm. The 3D intersection over union (IoU) captures overlap, Chamfer distance incorporates shape similarity and distance, and the feature term ensures visual consistency. Matched pairs are merged as 
+
+P ti =
+
+P t−1 
+
+> i
+
+∪ P tj if j is static at time tP tj otherwise , qt = α · qt−1 
+
+> i
+
++ (1 − α) · qtj , (5) and we recompute oti = BOX PCA (P ti ). Unmatched detections initialize new tracks and unmatched tracks are propagated to the next frame. 43.1.5 Track merging 
+
+To eliminate duplicates arising from partial or occluded views, we merge tracks whose 3D point clouds overlap substantially. Let V (P ) denote the occupied 3D voxels of a point cloud. Tracks i, j 
+
+are merged if 
+
+|V (P ti )| + |V (P tj )| − | V (P ti ∪ P tj )||V (P ti )| + |V (P tj )| > τ, (6) indicating significant overlap between the point clouds. 
+
+3.2 EgoTrack3D-Sparse 
+
+The sparse variant replaces dense mask lifting with BoxerNet-based 3D box prediction. For each frame, we obtain instance masks with CropFormer [37] and convert them to 2D box prompts. Given the RGB image, camera calibration, pose, sparse world points, and prompts, BoxerNet predicts one oriented 3D bounding box per object. We retain high-confidence predictions and discard prompts near image borders or overlapping excluded hand regions, which often produce unstable boxes in egocentric video. Since sparse-depth box predictions are less naturally tied to per-object point clouds, we use hand-object interaction as the main dynamic-object cue. We run Hands23 [38] on each frame to detect hands and their interacted objects. A segmentation mask is marked as dynamic when it overlaps a Hands23 primary-object mask above a threshold. This design targets a common and important source of object motion in egocentric scenes: objects manipulated by the camera wearer. Because BoxerNet is designed for lifting 2D detections into static 3D boxes, its predictions for manipulated or hand-held objects can be noisy and temporally unstable. To address this, we intro-duce a dynamic mask associator. When a mask is classified as dynamic, we initialize a short-term SAM2 [18] track from the corresponding mask and propagate it for K frames. For each subse-quent frame, detections whose masks overlap the propagated SAM2 mask above a threshold are hard-associated to the same object identity before geometric assignment is performed. This creates a temporary 2D anchor for manipulated objects whose 3D box estimates are too noisy for reliable box-level matching. The tracker assigns BoxerNet detections to existing tracks using the cost in Eq. (4). Static tracks are smoothed by confidence-weighted box interpolation, while dynamic tracks use the current prediction to avoid fusing objects across different physical locations. Duplicate tracks are merged using 3D box and appearance similarity, except when protected by distinct dynamic-mask identities. 
+
+## 4 Experiments 
+
+4.1 Datasets and input settings 
+
+We use the ADT dataset [16] for quantitative evaluation on eight sequences. ADT provides ground-truth camera poses, segmentation masks, depth maps, and oriented 3D bounding boxes. All experi-ments use camera poses provided by Project Aria, and the image data are devignetted and converted from the Fisheye624 lens model to a standard pinhole camera model. We also use HD-EPIC [39] for qualitative evaluation on unconstrained real-world egocentric videos. Since HD-EPIC lacks dense metric depth, ground-truth instance masks, and temporally consistent 3D object tracks, we do not report quantitative PCL scores on this dataset. EgoTrack3D-Dense is evaluated on ADT with ground-truth masks, depth maps, and poses to isolate tracking from perception noise. EgoTrack3D-Sparse removes the dense-depth assumption and uses model-generated masks, sparse point clouds, and poses; it is evaluated quantitatively on ADT and qualitatively on HD-EPIC. 54.2 Metrics 
+
+To evaluate scenes reconstructed using ground-truth depth and masks, we use the percentage of correct locations (PCL) metric introduced by OSNOM [12], as traditional tracking metrics do not evaluate object tracks that are out of sight. For a distance threshold R, a predicted object is correct if 
+
+(i) its ID matches the ground-truth object ID, and (ii) the Euclidean distance between their bounding box centers is ≤ R meters. The score PCL R is the ratio between the number of correct predictions and the total number of unique ground-truth and predicted IDs. This penalizes both ID switches and missed or duplicate detections. For instance, if a ground-truth object is lost and later reappears under a new predicted ID, both predictions are considered incorrect. When reconstructing dynamic scenes using predicted segmentation masks, the correspondence be-tween predicted and ground-truth objects is unknown. We therefore evaluate overall 3D scene re-construction quality using both the F1 score and Average Precision (AP). We treat all detections as valid and assume them to be above a fixed confidence threshold. In this setting, F1 provides a direct measure of scene completeness and correctness. At each timestep t, only ground-truth objects visible up to t are considered, ensuring metric compa-rability between sequences with different visibility patterns. 
+
+4.3 3D tracking baselines 
+
+We compare against IT3DEgo [11], OSNOM [12], EgoSeg3D [13], and Boxer [14], adapting each method to ADT using ground-truth poses, intrinsics, segmentation masks, and depth where applica-ble. IT3DEgo is evaluated in its Single-View Object Enrollment (SVOE) setting and is given one enrollment box per object. OSNOM associates lifted detections using 3D location and appearance features. EgoSeg3D is evaluated with and without ground-truth object-ID cues. Boxer is evalu-ated using the post-processed scene-level object set returned by the released pipeline in the online tracking setting. Additional adaptation details are provided in Appendix A. 
+
+## 5 Results 
+
+5.1 Dense-input tracking on ADT 
+
+We evaluate all methods using ground-truth segmentation masks and depth maps to isolate track-ing performance from segmentation noise. For the CoTracker3 motion module, we select a looka-head window of W = 10 based on ADT ground-truth trajectories, obtaining 48 .96% precision and 
+
+94 .69% recall for detecting objects whose 3D box centers move by at least 0.10 m over the next 
+
+∆t = 10 frames. Table 1 reports the mean PCL scores at the final timestep across all sequences. As expected, EgoSeg3D with αc = 10 4 outperforms both EgoSeg3D ( αc = 0 ) and OSNOM due to access to ground-truth object IDs during association. When αc = 0 , EgoSeg3D behaves similarly to OSNOM but inherits DEVA’s unreliable track IDs in cluttered egocentric scenes, leading to reduced consistency. For Boxer, we report final-scene PCL using the post-processed output returned by the released pipeline, hence we omit it from temporal tracking curves. Moreover, Boxer is designed for static object fusion rather than dynamic-object tracking. Our method, EgoTrack3D-Dense, achieves the best overall performance. Its track-merging heuristic primarily reduces duplicate tracks rather than directly improving localization. Although occasional overmerges occur when (near-)overlapping point clouds are incorrectly matched, the net effect is strongly positive. The heuristic improves average PCL by 83.38%. Figure 2 shows the evolution of PCL 0.3 over time. PCL generally decreases as errors and duplicate tracks accumulate, except for IT3DEgo, which delays initialization until the object is clearly visible, and EgoSeg3D ( αc = 0 ), which struggles with consistent localization but recovers slightly toward 6Table 1: Average PCL scores (%) for each method over all videos using ground-truth input data. († IT3DEgo knows how many objects to track and therefore never generates duplicate object tracks. ‡ Boxer tracks static scene objects and does not maintain persistent dynamic-object identi-ties.) 
+
+Method PCL 0.1 PCL 0.2 PCL 0.3 PCL 0.6 PCL 0.9 PCL 1.2 Average 
+
+IT3DEgo † 23.94 30.07 33.88 40.15 44.51 46.72 36.55 Boxer ‡ 40.89 55.72 58.70 60.98 61.33 61.56 56.53 OSNOM 8.34 13.11 16.54 23.93 30.49 36.05 21.41 EgoSeg3D ( αc = 0 ) 4.51 7.03 8.72 12.20 14.64 15.51 10.44 EgoSeg3D ( αc = 10 4) 13.23 19.19 21.79 26.54 28.93 30.28 23.33 EgoTrack3D-Dense (no merge) 30.42 32.91 34.25 35.96 36.21 36.38 34.36 EgoTrack3D-Dense (merge) 56.28 60.14 62.56 65.88 66.48 66.72 63.01 
+
+the end. Disabling EgoTrack3D’s merging heuristic causes a sharper decay, confirming its role in maintaining temporal consistency. 0 500 1000 1500 2000 2500   
+
+> Frame index
+> 0.0 0.2 0.4 0.6 0.8
+> PCL [%]
+> EgoTrack3D-Dense (merge) EgoTrack3D-Dense (no merge) EgoSeg3D ( c = 10 )
+> EgoSeg3D ( c = 0)
+> OSNOM IT3DEgo
+
+Figure 2: PCL 0.3 over time for EgoTrack3D-Dense and baselines on ADT. Boxer is omitted because its output is a post-processed scene-level object set rather than per-frame dynamic tracks. 
+
+5.2 Sparse-input adaptation on ADT 
+
+We evaluate EgoTrack3D-Sparse in a setting where dense metric depth and ground-truth masks are unavailable. Instead, the method receives model-generated 2D masks and sparse point clouds, and lifts detections into 3D using BoxerNet. This setting is substantially more challenging than the dense-input setting, since both the 2D object hypotheses and the 3D lifting step are noisy. We com-pare against Boxer, the closest baseline under sparse-geometry inputs. Table 2 reports the average AP and F1 scores across a range of 3D IoU thresholds (0.05–0.50 in increments of 0.05). Following Cube-RCNN/Omni3D [40], we average AP and F1 over relaxed 3D IoU thresholds, since partial observations often yield under-approximated boxes despite plausible 3D localization. Table 2: Sparse-input reconstruction and ablations on ADT. Scores are averaged over 3D IoU thresholds from 0.05 to 0.50 (step size 0.05). 
+
+Method AP @[ .05 : .05 : .50] (%) F1 @[ .05 : .05 : .50] (%) Boxer 14.12 29.88 EgoTrack3D-Sparse (full) 24.49 40.79 
+
+w/o 2D dynamic anchoring 24.11 39.28 w/o interaction-guided dynamics 23.13 40.43 EgoTrack3D-Sparse improves F1 from 29.88 to 40.79, showing that temporal tracking remains use-ful when dense depth is replaced by sparse, noisy 3D observations. The full variant performs best overall, but removing either 2D dynamic anchoring or interaction-guided dynamics has only a mod-est effect on aggregate metrics. This is expected, since scene-level AP and F1 are dominated by 7static objects, whereas these components target a narrower but important failure mode: manipulated objects whose noisy 3D box estimates make geometric association unreliable. We therefore interpret these mechanisms primarily as robustness components for real-world egocentric interactions, which we examine qualitatively in section 5.3. 
+
+5.3 Qualitative transfer to real-world video 
+
+We qualitatively evaluate EgoTrack3D-Sparse on HD-EPIC using CropFormer-generated masks, sparse geometry, and BoxerNet-based 3D lifting to assess whether the sparse-input variant produces plausible temporally consistent 3D tracks under realistic perception noise. Figure 3 shows that EgoTrack3D-Sparse reconstructs static scene elements while preserving the identities of manipulated objects across large viewpoint changes. The notepad and pot are chal-lenging because hand-held objects produce noisy BoxerNet predictions; without interaction-guided dynamic association, both objects are incorrectly associated.            
+
+> (a) t= 3 .9s(b) t= 12 .3s(c) t= 14 .5s
+
+Figure 3: Qualitative real-world tracking with EgoTrack3D-Sparse on HD-EPIC. Gray boxes show other reconstructed objects, while colored boxes highlight hand-interacted objects. EgoTrack3D-Sparse preserves the notepad (red) and pot (blue) tracks across large viewpoint changes, whereas removing interaction-guided dynamic association causes these objects to be lost or incorrectly associated. 
+
+## 6 Limitations 
+
+EgoTrack3D is a modular pipeline and therefore inherits errors from its perception modules. In the dense setting, it depends on accurate masks, poses, and metric depth. While ADT provides ground-truth depth, replacing it with estimated dense depth remains challenging, as egocentric motion can produce noisy depth, unstable object point clouds, and unreliable 3D associations. Thus, dense results should be interpreted as tracking performance under accurate geometric inputs rather than fully end-to-end real-world perception. The sparse-input variant reduces the dependence on dense depth, but remains sensitive to BoxerNet errors for hand-held or moving objects, whose 3D boxes can be unstable. Several limitations remain in the tracking itself. Association relies strongly on geometric costs, so re-identification becomes difficult when an object’s estimated 3D location changes substantially and visual evidence is insufficient to recover the match. Motion handling can also remove useful history: when an object is classified as moving, prior observations are discarded to avoid outdated geometry, but this can underrepresent large static objects if they are misclassified as dynamic. Future work should explore confidence-aware track management, stronger long-term re-identification via temporally aware or interaction-based association models, and motion-aware 3D box estimation. 87 Conclusion 
+
+We presented EgoTrack3D, a modular framework for constructing temporally consistent 3D object-centric scene representations from egocentric video. EgoTrack3D-Dense uses accurate masks, depth, and poses to lift objects into a shared 3D frame, combining motion scoring, geometric and appearance-based association, and voxel-based track merging to improve tracking consistency on ADT. EgoTrack3D-Sparse replaces dense mask lifting with sparse 3D box estimation from model-generated masks and point clouds, and uses interaction-guided dynamic association to preserve ma-nipulated objects under noisy sparse inputs. Together, these variants show that EgoTrack3D can operate across both accurate geometric inputs and noisier sparse inputs, while maintaining temporally consistent 3D object tracks. EgoTrack3D moves toward generalizable dynamic 3D scene reconstruction for robotics, augmented reality, and embodied spatial reasoning. 
+
+Acknowledgments 
+
+This work was supported by the Swiss National Science Foundation Advanced Grant 216260: Be-yond Frozen Worlds: Capturing Functional 3D Digital Twins from the Real World. 
+
+## References 
+
+[1] J. Johnson, R. Krishna, M. Stark, L.-J. Li, D. Shamma, M. Bernstein, and L. Fei-Fei. Image retrieval using scene graphs. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 3668–3678, 2015. [2] R. Krishna, Y. Zhu, O. Groth, J. Johnson, K. Hata, J. Kravitz, S. Chen, Y. Kalantidis, L.-J. Li, D. A. Shamma, et al. Visual genome: Connecting language and vision using crowdsourced dense image annotations. International journal of computer vision , 123:32–73, 2017. [3] N. Hughes, Y. Chang, and L. Carlone. Hydra: A real-time spatial perception system for 3d scene graph construction and optimization. arXiv preprint arXiv:2201.13360 , 2022. [4] Q. Gu, A. Kuwajerwala, S. Morin, K. M. Jatavallabhula, B. Sen, A. Agarwal, C. Rivera, W. Paul, K. Ellis, R. Chellappa, et al. Conceptgraphs: Open-vocabulary 3d scene graphs for perception and planning. In 2024 IEEE International Conference on Robotics and Automation (ICRA) , pages 5021–5028. IEEE, 2024. [5] N. Gorlo, L. Schmid, and L. Carlone. Long-term human trajectory prediction using 3d dynamic scene graphs. arXiv preprint arXiv:2405.00552 , 2024. [6] I. Armeni, Z.-Y. He, J. Gwak, A. R. Zamir, M. Fischer, J. Malik, and S. Savarese. 3d scene graph: A structure for unified semantics, 3d space, and camera. In Proceedings of the IEEE/CVF international conference on computer vision , pages 5664–5673, 2019. [7] U.-H. Kim, J.-M. Park, T.-J. Song, and J.-H. Kim. 3-d scene graph: A sparse and semantic rep-resentation of physical environments for intelligent agents. IEEE transactions on cybernetics ,50(12):4921–4933, 2019. [8] S.-C. Wu, J. Wald, K. Tateno, N. Navab, and F. Tombari. Scenegraphfusion: Incremental 3d scene graph prediction from rgb-d sequences. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 7515–7525, 2021. [9] S. Koch, N. Vaskevicius, M. Colosi, P. Hermosilla, and T. Ropinski. Open3dsg: Open-vocabulary 3d scene graphs from point clouds with queryable objects and open-set relation-ships. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-tion , pages 14183–14193, 2024. 9[10] T. Behrens, R. Zurbr¨ ugg, M. Pollefeys, Z. Bauer, and H. Blum. Lost & found: Tracking changes from egocentric observations in 3d dynamic scene graphs. IEEE Robotics and Au-tomation Letters , 2025. [11] Y. Zhao, H. Ma, S. Kong, and C. Fowlkes. Instance tracking in 3d scenes from egocentric videos. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recog-nition , pages 21933–21944, 2024. [12] C. Plizzari, S. Goel, T. Perrett, J. Chalk, A. Kanazawa, and D. Damen. Spatial cognition from egocentric video: Out of sight, not out of mind. In 2025 International Conference on 3D Vision (3DV) , 2025. [13] Y. Bhalgat, V. Tschernezki, I. Laina, J. F. Henriques, A. Vedaldi, and A. Zisserman. 3d-aware instance segmentation and tracking in egocentric videos. In Proceedings of the Asian Conference on Computer Vision , pages 2562–2578, 2024. [14] D. DeTone, T. Shen, F. Zhang, L. Ma, J. Straub, R. Newcombe, and J. Engel. Boxer: Robust lifting of open-world 2d bounding boxes to 3d. arXiv preprint arXiv:2604.05212 , 2026. [15] N. Karaev, I. Makarov, J. Wang, N. Neverova, A. Vedaldi, and C. Rupprecht. Co-tracker3: Simpler and better point tracking by pseudo-labelling real videos. arXiv preprint arXiv:2410.11831 , 2024. [16] X. Pan, N. Charron, Y. Yang, S. Peters, T. Whelan, C. Kong, O. Parkhi, R. Newcombe, and Y. C. Ren. Aria digital twin: A new benchmark dataset for egocentric 3d machine perception. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 20133– 20143, 2023. [17] A. Kirillov, E. Mintun, N. Ravi, H. Mao, C. Rolland, L. Gustafson, T. Xiao, S. Whitehead, A. C. Berg, W.-Y. Lo, et al. Segment anything. In Proceedings of the IEEE/CVF international conference on computer vision , pages 4015–4026, 2023. [18] N. Ravi, V. Gabeur, Y.-T. Hu, R. Hu, C. Ryali, T. Ma, H. Khedr, R. R¨ adle, C. Rolland, L. Gustafson, et al. Sam 2: Segment anything in images and videos. arXiv preprint arXiv:2408.00714 , 2024. [19] N. Carion, L. Gustafson, Y.-T. Hu, S. Debnath, R. Hu, D. Suris, C. Ryali, K. V. Alwala, H. Khedr, A. Huang, J. Lei, T. Ma, B. Guo, A. Kalla, M. Marks, J. Greer, M. Wang, P. Sun, R. R¨ adle, T. Afouras, E. Mavroudi, K. Xu, T.-H. Wu, Y. Zhou, L. Momeni, R. Hazra, S. Ding, S. Vaze, F. Porcher, F. Li, S. Li, A. Kamath, H. K. Cheng, P. Doll´ ar, N. Ravi, K. Saenko, P. Zhang, and C. Feichtenhofer. Sam 3: Segment anything with concepts, 2025. URL https: //arxiv.org/abs/2511.16719 .[20] H. K. Cheng, S. W. Oh, B. Price, A. Schwing, and J.-Y. Lee. Tracking anything with decoupled video segmentation. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 1316–1326, 2023. [21] J. Yang, M. Gao, Z. Li, S. Gao, F. Wang, and F. Zheng. Track anything: Segment anything meets videos. arXiv preprint arXiv:2304.11968 , 2023. [22] F. Rajiˇ c, L. Ke, Y.-W. Tai, C.-K. Tang, M. Danelljan, and F. Yu. Segment anything meets point tracking. In 2025 IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) ,pages 9302–9311. IEEE, 2025. [23] S. F. Bhat, R. Birkl, D. Wofk, P. Wonka, and M. M¨ uller. Zoedepth: Zero-shot transfer by combining relative and metric depth. arXiv preprint arXiv:2302.12288 , 2023. [24] W. Yin, C. Zhang, H. Chen, Z. Cai, G. Yu, K. Wang, X. Chen, and C. Shen. Metric3d: Towards zero-shot metric 3d prediction from a single image. In Proceedings of the IEEE/CVF international conference on computer vision , pages 9043–9053, 2023. 10 [25] L. Piccinelli, C. Sakaridis, M. Segu, Y.-H. Yang, S. Li, W. Abbeloos, and L. Van Gool. Unik3d: Universal camera monocular 3d estimation. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 1028–1039, 2025. [26] L. Yang, B. Kang, Z. Huang, X. Xu, J. Feng, and H. Zhao. Depth anything: Unleashing the power of large-scale unlabeled data. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 10371–10381, 2024. [27] L. Yang, B. Kang, Z. Huang, Z. Zhao, X. Xu, J. Feng, and H. Zhao. Depth anything v2. 
+
+Advances in Neural Information Processing Systems , 37:21875–21911, 2024. [28] B. Ke, A. Obukhov, S. Huang, N. Metzger, R. C. Daudt, and K. Schindler. Repurposing diffusion-based image generators for monocular depth estimation. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 9492–9502, 2024. [29] J. Shao, Y. Yang, H. Zhou, Y. Zhang, Y. Shen, V. Guizilini, Y. Wang, M. Poggi, and Y. Liao. Learning temporally consistent video depth from video diffusion priors. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 22841–22852, 2025. [30] W. Hu, X. Gao, X. Li, S. Zhao, X. Cun, Y. Zhang, L. Quan, and Y. Shan. Depthcrafter: Generating consistent long depth sequences for open-world videos. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 2005–2015, 2025. [31] S. Chen, H. Guo, S. Zhu, F. Zhang, Z. Huang, J. Feng, and B. Kang. Video depth anything: Consistent depth estimation for super-long videos. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 22831–22840, 2025. [32] A. W. Harley, Z. Fang, and K. Fragkiadaki. Particle video revisited: Tracking through oc-clusions using point trajectories. In European Conference on Computer Vision , pages 59–75. Springer, 2022. [33] C. Doersch, A. Gupta, L. Markeeva, A. Recasens, L. Smaira, Y. Aytar, J. Carreira, A. Zis-serman, and Y. Yang. Tap-vid: A benchmark for tracking any point in a video. Advances in Neural Information Processing Systems , 35:13610–13626, 2022. [34] N. Karaev, I. Rocco, B. Graham, N. Neverova, A. Vedaldi, and C. Rupprecht. Cotracker: It is better to track together. In European conference on computer vision , pages 18–35. Springer, 2024. [35] A. Rosinol, A. Gupta, M. Abate, J. Shi, and L. Carlone. 3d dynamic scene graphs: Ac-tionable spatial perception with places, objects, and humans. arxiv 2020. arXiv preprint arXiv:2002.06289 , 2020. [36] S. Li, L. Ke, M. Danelljan, L. Piccinelli, M. Segu, L. Van Gool, and F. Yu. Matching anything by segmenting anything. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 18963–18973, 2024. [37] L. Qi, J. Kuen, W. Guo, T. Shen, J. Gu, J. Jia, Z. Lin, and M.-H. Yang. High-quality entity segmentation, 2023. URL https://arxiv.org/abs/2211.05776 .[38] T. Cheng, D. Shan, A. S. Hassen, R. E. L. Higgins, and D. Fouhey. Towards a richer 2d un-derstanding of hands at scale. In Thirty-seventh Conference on Neural Information Processing Systems , 2023. [39] T. Perrett, A. Darkhalil, S. Sinha, O. Emara, S. Pollard, K. Parida, K. Liu, P. Gatti, S. Bansal, K. Flanagan, J. Chalk, Z. Zhu, R. Guerrier, F. Abdelazim, B. Zhu, D. Moltisanti, M. Wray, H. Doughty, and D. Damen. Hd-epic: A highly-detailed egocentric video dataset. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2025. 11 [40] G. Brazil, A. Kumar, J. Straub, N. Ravi, J. Johnson, and G. Gkioxari. Omni3d: A large benchmark and model for 3d object detection in the wild. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 13154–13164, 2023. 12 A Baseline adaptation details 
+
+IT3DEgo. IT3DEgo [11] requires one 2D bounding box per object in its Single-View Object En-rollment setting. For each ground-truth object, we automatically select a frame in which the object is clearly visible by choosing the mask with the highest segmentation area-to-perimeter ratio, and use the corresponding 2D bounding box for enrollment. This gives IT3DEgo the number of objects and their video-specific features, meaning that it never produces more tracks than necessary. Since the authors did not release their 3D-guided Kalman filter implementation, we evaluate IT3DEgo using only 2D DINOv2 features for association and lift the resulting tracks to 3D for PCL evaluation. 
+
+OSNOM. OSNOM [12] receives ground-truth segmentation masks and depth maps. For each de-tection, it either associates the instance with an existing track or initializes a new one based on the 3D location of the 2D bounding box center and appearance features. This design is conceptually closest to EgoTrack3D-Dense, but OSNOM maintains compact object locations rather than accumulating full object point clouds. 
+
+EgoSeg3D. EgoSeg3D [13] refines 2D tracker outputs using predicted class labels, track IDs, 3D center points, and appearance features. To adapt it to ADT, we modify DEVA to use ground-truth segmentation masks and replace class labels with unique object instance IDs. We evaluate EgoSeg3D with αc = 0 , which disables the object-ID cue, and with αc = 10 4, the value recom-mended by Bhalgat et al. [13], to isolate the effect of object-ID information. 
+
+Boxer. Boxer [14] lifts 2D bounding boxes from posed images into globally consistent 3D boxes. The released implementation provides an offline fusion mode and an online tracking mode; however, both modes export a post-processed scene-level object set. We therefore evaluate the native exported output rather than extracting intermediate track states. For the dense-input ADT comparison, we replace sparse 3D points with dense ground-truth depth when lifting detections. Since Boxer targets fused static scene objects rather than dynamic-object identities, we include it only in final-scene metrics and omit it from temporal tracking curves. 
+
+## B Additional dense-input results 
+
+Figure 4 shows the performance split by PCL radius thresholds. As expected, larger radii lead to higher scores, with diminishing returns beyond R = 0 .6 m. 0 500 1000 1500 2000 2500 
+
+> Frame index
+> 0.6 0.7 0.8 0.9 1.0
+> PCL [%]
+> 0.1 m 0.2 m 0.3 m 0.6 m 0.9 m 1.2 m
+
+Figure 4: PCL of EgoTrack3D-Dense with the track merging heuristic split by threshold. Additionally, we present qualitative results on the ADT Meal 132 sequence, comparing recon-structed 3D scene across different settings. Specifically, we visualize the final scene produced by EgoTrack3D-Dense with and without the track merging heuristic, and compare them to the ground-truth scene. We also include the final predicted object locations produced by the 3D tracking base-lines. All visualizations are shown from a bird’s-eye view. Figure 5 compares the reconstructed 3D scenes of EgoTrack3D-Dense to the ground truth. Ground-truth bounding boxes are shown in blue, and the agent trajectory in red. In the predicted scenes, green 13 boxes indicate correctly localized objects according to the PCL 0.3 metric, orange boxes represent objects displaced by more than 30 cm, and red boxes denote duplicated object tracks.     
+
+> (a) EgoTrack3D without track merging.
+> (b) Ground truth. (c) EgoTrack3D with track merg-ing.
+
+Figure 5: A qualitative comparison of the generated scene representations of the ADT Meal 132 sequence compared to the ground-truth representation. Green boxes are those that are at most 30 cm away from their ground-truth locations and count as positive detections toward the PCL 0.3 metric, while the orange boxes are further away. The red boxes correspond to false-positive duplicate predictions. The agent’s trajectory is shown in red. The ground-truth scene contains 211 visible objects. Without the track merging heuristic, EgoTrack3D-Dense predicts 267 objects, including 96 duplicates. Enabling the heuristic reduces this to 182 objects, with only 28 duplicates. As illustrated in Figure 5, the track merging heuris-tic effectively eliminates redundant tracks, producing a more compact and accurate representation. However, in rare cases, erroneous associations between nearby but distinct objects cause the heuris-tic to merge unrelated tracks. 14
