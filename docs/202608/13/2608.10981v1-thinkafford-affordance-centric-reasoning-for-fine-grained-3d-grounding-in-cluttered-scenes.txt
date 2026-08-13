@@ -1,0 +1,454 @@
+Title: ThinkAfford: Affordance-Centric Reasoning for Fine-Grained 3D Grounding in Cluttered Scenes
+
+URL Source: https://arxiv.org/pdf/2608.10981v1
+
+Published Time: Wed, 12 Aug 2026 01:12:59 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# ThinkAfford: Affordance-Centric Reasoning for Fine-Grained 3D Grounding in Cluttered Scenes 
+
+Xinrui Lin 1, †, Sha Zhang 2, †, Shumin Wang 1,Zenghuan Zhu 1, Jiajun Deng 1,* , Yanyong Zhang 1,* 
+
+> 1
+
+University of Science and Technology of China, Hefei, China 
+
+> 2
+
+The Chinese University of Hong Kong, Hong Kong SAR, China 
+
+Abstract 
+
+Task-driven 3D affordance grounding aims to localize the functional region in a cluttered 3D scene that enables an action specified by a natural-language instruction. Existing methods either predict 3D masks directly or construct them by selecting and fusing intermediate 2D/3D regions. How-ever, they remain vulnerable to two intertwined failure modes: the predicted or selected regions may miss the target inter-action area or have unsuitable granularity, while language grounding may confuse visually similar alternatives under relational instructions. To this end, We introduce ThinkAf-ford, which decouples high-recall affordance proposal gener-ation from instruction-grounded reasoning. Specifically, the Affordance Proposal Generation module first uses learnable affordance prompts and multi-level visual features to pre-dict interaction-conditioned heatmaps, extracting a variable number of fine-grained proposals without parsed object or part names as segmentation prompts. Visual-Prompted Affor-dance Reasoning then reasons over labeled proposal overlays using the full instruction, returning identifiers in a structured “think-then-answer” response. Moreover, Group Relative Pol-icy Optimization uses proposal-level rewards from lifted 3D overlap to align VPAR selection with final 3D grounding. On the SceneFun3D validation split, ThinkAfford achieves 10.69% AP 50 and 25.46% AP 25 under the official evaluator, outperforming comparable 3D open-vocabulary and vision-language-model-based 2D-to-3D baselines. Module-level di-agnostics further show that APG attains 77.5% recall at 25% intersection-over-union, while GRPO-trained VPAR achieves 72.1% selection accuracy on APG-covered queries, compared with 63.4% under supervised fine-tuning. 
+
+1 Introduction 
+
+Grounding a task instruction to a functional part in a 3D en-vironment is a fundamental capability for embodied agents. Given a reconstructed indoor scene and a natural-language instruction, an agent must find the 3D region that enables the requested interaction. Unlike conventional object grounding, the target is often a small contact region rather than an entire object. For example, “open the top-right drawer of the cabi-net with the TV on top” requires the agent to find the correct cabinet, identify the top-right drawer, and finally localize its pullable region. Predicting the entire cabinet or drawer 
+
+> †
+
+Equal contribution. 
+
+> ∗
+
+Correspondence: dengjj@ustc.edu.cn; yanyongz@ustc.edu.cn. 
+
+is insufficient for interaction. Such targets are often small, occluded, and similar to nearby parts, making them difficult to localize in cluttered scenes (Wu et al. 2025; Zheng et al. 2025; Li et al. 2024b). Direct methods ground language in point clouds, radi-ance fields, or 3D instance masks (Takmaz et al. 2023; Kerr et al. 2023; Li et al. 2024c; Chu et al. 2025). Although these representations preserve geometric consistency across views, existing 3D features often lack the spatial granularity needed to delineate small functional regions, while language-conditioned 3D models remain limited in resolving compo-sitional and relational instructions. These limitations have motivated 2D vision-language rea-soning in 3D grounding. Fun3DU (Corsetti et al. 2025) parses the instruction into functional and contextual objects, asks a VLM to place point prompts in selected views, converts them into masks with a promptable segmentor, and lifts the masks into 3D. TASA (He et al. 2026) builds on this point-to-mask route with task-aware view processing and geometric refine-ment, while Scene-R1 (Yuan et al. 2025) trains temporal and image grounding with GRPO before 2D segmentation and lifting. AffordBot (Wang et al. 2026) instead extracts 3D affordance elements with Mask3D (Schult et al. 2023), projects their identifiers and geometry-semantic descriptors into surround views, and prompts an MLLM to select them. Whether produced in 2D or 3D, these intermediate regions define the candidates for later selection or fusion; we call each a proposal . This common structure exposes two problems. First, the proposal set may omit the interaction region or rep-resent it at the wrong granularity. With point-to-mask meth-ods, a parsed concept such as “drawer” can lead a promptable segmentor to return the drawer body rather than its handle or contact region; with 3D candidates such as those used by AffordBot, the small region may be absent from the Mask3D proposal set. Second, selecting among repeated, functionally similar proposals requires jointly satisfying spatial, ordinal, and part–whole constraints that prompting alone may not reliably resolve. Consequently, stronger language reasoning cannot recover a missing target, and high proposal recall alone does not ensure correct selection. We therefore formulate task-driven 3D affordance ground-ing as two complementary problems: high-recall affordance proposal generation , which ensures that the functional re-gion is represented, and instruction-grounded affordance arXiv:2608.10981v1 [cs.CV] 11 Aug 2026 reasoning , which selects it. Based on this decomposition, we present ThinkAfford, with APG and VPAR addressing the two problems, respectively. Affordance Proposal Gen-eration (APG) predicts affordance-conditioned heatmaps instead of prompting a generic segmentor with parsed ob-ject or part names. Learnable affordance context and multi-level features preserve functional semantics and local detail; variable-number extraction retains small handles, switches, buttons, and other contact regions rather than one object-or part-level mask. Visual-Prompted Affordance Reason-ing (VPAR) selects identifiers from a labeled APG overlay using the image and full instruction. Its structured think-then-answer format makes relation-aware selection verifi-able. We train VPAR with Group Relative Policy Optimiza-tion (GRPO) (Shao et al. 2024), rewarding sampled choices by lifted 3D overlap with the ground truth. Within-group re-ward differences compare scene proposals to teach spatial, ordinal, and part–whole relations. Experiments on SceneFun3D show that ThinkAfford out-performs comparable baselines under the official evaluation protocol, while module-level analyses validate both APG proposal coverage and GRPO-based selection. Our contributions are summarized as follows: 
+
+• We decompose task-driven 3D affordance grounding into high-recall proposal generation and instruction-grounded reasoning, enabling separate measurement of proposal misses and selection errors. 
+
+• We develop APG to produce interaction-level propos-als rather than object- or part-level masks. It combines affordance-specific context learning, multi-level image features, and variable-number proposal extraction to re-tain small functional regions with high recall. 
+
+• We propose VPAR, a structured think-then-answer policy that selects labeled proposals under the full instruction. GRPO optimization with rewards computed from lifted 3D overlap improves relation-sensitive selection over su-pervised fine-tuning. 
+
+2 Related Work 
+
+3D Affordance Grounding. Earlier image-based methods learn affordance maps from 2D supervision or demonstra-tions, but typically operate on object-centric views with-out scene-level 3D masks. SceneFun3D (Delitzas et al. 2024) introduces task-driven language and 3D functional-part annotations for cluttered scenes. OpenMask3D (Takmaz et al. 2023), LERF (Kerr et al. 2023), and OpenMask3D-F (Delitzas et al. 2024) support open-vocabulary or func-tional 3D grounding, but their object-scale point-cloud or fea-ture representations can miss thin interaction regions speci-fied by actions. Preserving geometry across views therefore does not guarantee localization at the interaction granularity. 
+
+VLM-Based 2D-to-3D Grounding. Fun3DU (Corsetti et al. 2025) parses functional and contextual objects, con-verts VLM point prompts into masks, and aggregates them in 3D; TASA (He et al. 2026) adds affordance-weighted frame selection, point validation, and geometric refinement. Scene-R1 (Yuan et al. 2025) trains temporal and image grounding with GRPO before box prediction and segmentation, whereas AffordBot (Wang et al. 2026) asks an MLLM to select pro-jected Mask3D affordance elements and infer motion. De-spite these different pipelines, all rely on intermediate can-didates, so errors in object hypotheses, localization, or gran-ularity propagate to the final 3D mask. 
+
+Reinforcement Learning for Visual Reasoning 
+
+GRPO (Shao et al. 2024) learns from groups of sampled re-sponses and has been used to improve reasoning models. Re-cent visual reasoning systems use reinforcement learning to improve view selection, answer format, or chain-of-thought behavior (Yuan et al. 2025; Wang et al. 2025). In particular, Scene-R1 (Yuan et al. 2025) shows that GRPO can improve video-level snippet selection and downstream box ground-ing. In our work, the policy action is instead the selection of affordance-proposal identifiers. Proposal targets are con-structed by lifting each candidate to the annotated 3D scene, so reward differences correspond to concrete choices among physically distinct functional regions. 
+
+3 Method 
+
+Let P = {pi}Ni=1 be a 3D scene point cloud and let 
+
+I = {Iv }v∈V be RGB views with known camera param-eters. Given a natural-language instruction q, the goal is to predict a 3D affordance mask M3D ⊆ P for the interactable region described by q.As shown in Fig. 1, ThinkAfford first uses a VLM to parse the instruction and retain video views in which the contextual object is visible. APG then generates affordance proposals for each retained view, and VPAR selects the proposal(s) that best match the instruction. The selected 2D masks are lifted and fused into the final 3D affordance mask. This design makes proposal coverage and instruction-grounded reason-ing separately measurable. 
+
+3.1 Context-Guided View Pruning 
+
+We prune the video into a compact view set V⋆, aiming to reduce computation and eliminate views irrelevant to the instructed region before finer-grained reasoning. Given an instruction q, we first prompt a VLM to extract the target object or part, contextual anchors, and coarse relations. For example, in “open the top-left drawer of the cabinet with the TV on its top,” the cabinet is used as the view-pruning anchor, while the TV provides scene-level context for disambiguating the correct cabinet. When no part–whole relation exists, the target itself serves as the anchor. We uniformly sample the input video at a fixed interval and query the VLM with a binary visibility prompt to identify where the anchor is visible. Around each positive frame, we retain a fixed temporal neighborhood to include nearby view-points of the same object and to reduce sensitivity to a single VLM decision. When the instruction contains a coarse con-textual relation, we issue a second verification prompt, such as whether the TV is on top of the cabinet, and discard frames that are inconsistent with the parsed relation. The retained frames form V⋆, providing compact contextual evidence for subsequent fine-grained grounding. Context-Guided 
+
+View Pruning 
+
+Instruction 
+
+Open the bottom drawer of 
+
+the cabinet located to the left of the TV 
+
+Input Video 
+
+画一段 video 
+
+Affordance 
+
+Proposal Generation 
+
+Visual Prompted 
+
+Affordance Reasoning 
+
+（GRPO Optimized ） Lift 
+
+Trainable  VLM  2D Affordance model Frozen 
+
+… … … … …
+
+To 3D Figure 1: Overview of ThinkAfford. The method keeps a compact set of views, generates affordance-centric proposals, selects proposal identifiers with a GRPO-trained VLM, and fuses the selected evidence into a 3D mask. 
+
+3.2 Affordance Proposal Generation 
+
+Generic open-vocabulary segmentors produce object- or named-part masks, which may be too coarse for interaction. For example, “drawer” can yield the drawer front rather than its pullable handle. We therefore introduce APG to generate a high-recall set of interaction-level candidates. Given q, the parsing VLM predicts an affordance type 
+
+a⋆ ∈ A , such as foot_push or pinch_pull . From 
+
+(Iv , a ⋆), APG predicts a heatmap Sa⋆ 
+
+> v
+
+and extracts a pro-posal set Mv = {Mv,j }Jv
+
+> j=1
+
+. This interaction conditioning avoids exact object or part names as segmentation prompts; VPAR later uses the full instruction to select candidates. Text Text Text                    
+
+> Ft
+> Text
+> Fv
+> Optimize 🚀
+> Text Encoder 🧊
+> CLS-Guided Transformer Decoder 🔥
+> Add & Norm 🔥
+> FFN 🔥
+> Add & Norm 🔥
+> Masked Attention
+> 🔥
+> K, V Q
+> Sigmoid 🔥
+> Mask ××
+> [CLS] Token 🧊
+> GT Masks Yva*
+> Loss Lseg FtFv
+> ×Score Map Sva*
+> Vision Encoder
+> Layers Fusion 🔥
+> Embedder 🔥
+> Layer n Layer n-j+1
+> 🧊
+> ...
+> Learnable Context Vectors 🔥
+> foot_push, hook_pull, ..., unplug
+> v₁v₂[Affordance labels] ...
+> Ft'
+> 🧊 Frozen
+> 🔥 Trainable
+> K
+
+Figure 2: An illustration of the APG module. Frozen CLIP/DINOv2 encoders with learnable context vectors feed a CLS-guided decoder to produce affordance heatmaps. 
+
+Data Preparation from 3D Labels. APG requires 2D af-fordance masks, whereas the dataset provides labels only on the 3D point cloud. Direct projection causes occlusion bleed-through, because hidden annotated points may appear in the 2D images. To address this, we render the point cloud for each RGB view and build a visibility-aware index map 
+
+Id v . A depth-tolerant z-buffer resolves most pixels; ambigu-ous pixels are resolved by fitting a local plane and selecting the closest ray–plane intersection. Thus, only visible points contribute to the target. For each affordance type a ∈ A ,we project its 3D instance masks {M 3Da,k }Ka 
+
+> k=1
+
+and filter them with Id v . Their visible union forms the 2D target Y av , provid-ing visibility-consistent supervision. The geometry-derived 
+
+Y av is used only as supervision. 
+
+Architecture and Training. As shown in Fig. 2, APG fol-lows the OOAL architecture (Li et al. 2024a): frozen DI-NOv2 (Oquab et al. 2023) visual and CLIP (Radford et al. 2021) text encoders with a lightweight CLS-guided cross-attention decoder. To handle small affordance regions in clut-tered scenes, we use CoOp (Zhou et al. 2022) for affordance-specific prompts and fuse multi-level features to preserve spatial detail. These adaptations make the heatmap localize interaction regions rather than the full named object. During training, APG takes Iv and the ground-truth type 
+
+a to predict Sav , supervised by the visibility-aware target Y av
+
+through pixel-wise binary cross-entropy: 
+
+Lseg = BCE ( Sav , Y av ) . (1) The encoders remain frozen; only the context vectors and decoder are updated. At inference, a is replaced by the VLM-predicted type a⋆.
+
+Proposal Extraction The resulting heatmap Sa⋆ 
+
+> v
+
+is resized to the original image resolution and thresholded at γ. DB-SCAN then separates the foreground into disconnected com-ponents without assuming a fixed instance count, yielding the variable-length proposal set Mv . To maximize recall, APG retains all confident components, including repeated regions such as drawer handles, and assigns each a unique letter (A, B, . . . , Z, AA, . . . ) for downstream selection. 
+
+3.3 Visual-Prompted Affordance Reasoning 
+
+APG may return several regions with the same affordance type, such as handles on multiple drawers. Distinguishing them requires spatial, ordinal, or part–whole constraints. VPAR selects the proposal that satisfies the full instruction. 
+
+Discrete Proposal Selection with Visual Prompts. For each selected view Iv , we overlay APG proposals and their identifiers to form I′ 
+
+> v
+
+. The original image supplies scene context, while the overlay defines a compact discrete ac-tion space. Given (q, I v , I ′ 
+
+> v
+
+), VPAR outputs proposal iden-tifiers, yielding ˆCv = πθ (q, I v , I ′ 
+
+> v
+
+) ⊆ { 1, . . . , J v }. Because the choice may depend on spatial, ordinal, or part–whole constraints, the prompt uses a structured think-then-answer format. The <think> field resolves the relevant object and Instruction        
+
+> Open the bottom drawer of cabinet located to the left of the TV.
+> Input Image
+> VLM policy
+> 𝝅 𝜽(𝒕)
+> <think>The bottom... so I
+> count... that would be M
+> and Q...</think>
+> <think>I need to …There are Q and P...</think>
+> <think>...</think>
+> …
+> \boxed{M, Q}
+> \boxed{Q,P}
+> \boxed{…}
+> …
+> R = λ·1 + (1−λ)· 1
+> R = λ· 𝑹 𝒇𝒎𝒕 + (1−λ)· 𝑹 𝒂𝒄𝒄
+> Objective
+> max A·log π-β· KL
+> Trainable
+> VLM
+> …
+
+Reasoning  Answer  Reward 
+
+update       
+
+> <think>The top drawer is labeled L...</think \boed{L}
+> R = λ·1 + (1−λ)· 0.16
+> R=λ·0 + (1−λ)· 0
+
+Figure 3: GRPO training for VPAR. Given an instruction and a labeled proposal overlay, the trainable VLM samples a group of structured think-then-answer responses. Each response is parsed into proposal identifiers and scored by format correctness and proposal-level grounding accuracy, producing group-relative advantages for policy optimization. relations, while <answer> returns identifiers, making the final choice verifiable. 
+
+GRPO Optimization and Reward. As illustrated in Fig. 3, we train VPAR with Group Relative Policy Optimiza-tion (GRPO) (Shao et al. 2024). APG provides competing candidates, so sampled responses often select different phys-ical regions. Their lifted 3D overlap yields relative rewards without manually constructed negatives, teaching the policy which choice better satisfies the instruction. To construct targets, each proposal Mv,j is lifted to Pv,j 
+
+and compared with the ground-truth mask M3D 
+
+> gt
+
+using point-level IoU, ov,j = |P v,j ∩ M 3D 
+
+> gt
+
+|/|P v,j ∪ M 3D 
+
+> gt
+
+|. Proposals with ov,j ≥ ρ form the target set C⋆v . If none reaches ρ,the sample is an APG coverage failure and is excluded from VPAR training because no valid selection target exists; it remains in APG and end-to-end evaluation. For each prompt, πθ samples responses {yi}Gi=1 , each parsed into ˆCv,i . The reward combines proposal accuracy and output-format correctness: 
+
+R(yi, C⋆v ) = (1 − λfmt ) · Racc ( ˆCv,i , C⋆v ) + λfmt · Rfmt (yi).
+
+(2) 
+
+Rfmt checks that the response is parsable and follows the required structure. We keep λfmt small so grounding accu-racy dominates. The accuracy reward is defined as 
+
+Racc = J( ˆCv,i , C⋆v )
+
+
+
+1 − 12 (rmiss + rspur )
+
+
+
+,rmiss = |C ⋆v \ ˆCv,i |
+
+max(1 , |C ⋆v |) ,rspur = | ˆCv,i \ C ⋆v |
+
+max(1 , | ˆCv,i |) .
+
+(3) where J(·, ·) is Jaccard similarity. The two penalties discour-age missed and spurious selections, assigning low reward to a visually similar but incorrect neighbor. Using the group mean ¯R, we compute the relative advan-tage 
+
+ˆAi = R(yi) − ¯R
+
+std( {R(yi)}Gi=1 ) + ϵ , (4) and optimize the KL-regularized objective 
+
+JGRPO = Eyi∼πθ
+
+h ˆAi log πθ (yi)
+
+i
+
+− β · KL ( πθ ∥ πref ) .
+
+(5) Here, πref is the frozen reference policy and β controls KL regularization. 
+
+3.4 2D-to-3D Lifting and Fusion 
+
+For each retained view, we merge the VPAR-selected pro-posals as M sel  
+
+> v
+
+= S  
+
+> j∈ˆCv
+
+Mv,j . We then re-query VPAR with the highlighted mask and use its yes-probability wv to down-weight unreliable views. Lifting M sel  
+
+> v
+
+with Id v gives 
+
+Pv ⊆ P . We fuse the multi-view evidence by weighted vot-ing: 
+
+σ(pi) = 
+
+P 
+
+> v∈V ⋆
+
+wv 1[pi ∈ P v ]
+
+P 
+
+> v∈V ⋆
+
+wv
+
+. (6) The final mask is M3D = {pi : σ(pi) ≥ η}.
+
+4 Experiments 
+
+4.1 Experimental Setup 
+
+Datasets and metrics. We train on SceneFun3D’s 200-scene training split and report in-domain results on its 30-scene validation split (Delitzas et al. 2024). To test distribu-tion shift rather than only SceneFun3D appearance statistics, we additionally annotate 20 scenes with 15 instructions each from ScanNet (Dai et al. 2017), ScanNet++ (Yeshwanth et al. 2023), 3RScan (Wald et al. 2019), and MultiScan (Mao et al. 2022); these samples are used only for evaluation. Following the official evaluator, we report AP 25 and AP 50 at IoU thresh-olds 0.25 and 0.50, and AP averaged from 0.50 to 0.95 in 0.05 increments when available. R@ τ measures whether at least one lifted proposal reaches 3D IoU τ ; proposal-selection ac-curacy measures whether VPAR selects the target proposal Table 1: Official SceneFun3D validation results. Best and second best are bold and underlined. † marks our reproduc-tions; Mask3D-F is fine-tuned Mask3D (Schult et al. 2022).                                     
+
+> Method Input AP AP 50 AP 25
+> Non-VLM-based methods:
+> OpenMask3D (Takmaz et al. 2023) PCD+RGB –0.00 0.00 LERF (Kerr et al. 2023) RGB (multi-view) –4.90 11.30 Mask3D-F †(Schult et al. 2022) RGB (multi-view) 0.95 1.70 2.57
+> VLM-based methods:
+> TASA †(He et al. 2026) RGB+PCD 0.05 0.22 1.50 AffordBot †(Wang et al. 2026) RGB+PCD 3.90 6.37 10.70 Fun3DU †(Corsetti et al. 2025) RGB 1.66 4.55 12.56
+> ThinkAfford (Ours) RGB 4.42 10.69 25.46
+
+set. Relation subsets may overlap and are therefore diagnostic slices rather than a partition of the overall score. 
+
+Implementation and baselines. We use Qwen-VL mod-els (Bai et al. 2025) for zero-shot view pruning and VPAR. APG is trained on projected 2D affordance masks, and VPAR is trained with GRPO on APG proposals; 3D IoU ρ = 0 .25 
+
+defines a positive proposal and the APG-covered subset. We use K = 25 views, fusion threshold η = 0 .3, GRPO group size 8, and KL coefficient 5 × 10 −3. We compare with 3D open-vocabulary methods (OpenMask3D, LERF, and Mask3D-F (Schult et al. 2022)) and VLM-based 2D-to-3D methods (Fun3DU, TASA, and AffordBot). For cross-dataset transfer, we use Fun3DU because its re-leased training-free implementation supports unseen scenes. 
+
+4.2 Quantitative Results 
+
+Table 1 uses the official SceneFun3D evaluator. Open-Mask3D and LERF are Fun3DU’s split0 reproductions; the other four baselines are reproduced by us and converted to the official format. ThinkAfford reaches 25.46 AP 25 (+12.90 over Fun3DU) and 10.69 AP 50 (+4.32 over AffordBot), while its averaged-AP margin is only +0.52. The shrinking lead at stricter thresh-olds shows that our main gain is finding the correct interac-tion region; exact high-IoU boundaries remain difficult. 
+
+4.3 Qualitative Results 
+
+Figure 4 reflects the two problems identified in the Intro-duction. The repeated-drawer examples probe proposal se-lection: several candidates have the same function, and only ordinal or relative-position constraints identify the target. The remote, microwave, and socket examples probe pro-posal granularity: the candidate must isolate the actionable region rather than its parent object. Baselines often return the contextual object or wrong repeated instance, whereas ThinkAfford follows the contact region. These examples are illustrative successes, not evidence that high-IoU boundary errors have disappeared. 
+
+4.4 Ablation Studies 
+
+Architectural design. Table 2 isolates each design choice while retaining the official evaluator, so its deltas can be compared directly with the main result. Table 2: Ablation on key components. Official AP scores are reported; ∆ is relative to the full model.                                              
+
+> Configuration AP 50 ∆50 AP 25 ∆25
+> ThinkAfford full 10.69 –25.46 –
+> Proposal generation
+> w/o APG, parsed-object Grounded-SAM 6.8 -3.89 18.3 -7.16 APG w/o CoOp prompts 8.5 -2.19 22.1 -3.36 APG w/o visibility-aware projection 9.1 -1.59 23.8 -1.66
+> Proposal selection
+> w/o GRPO (base VLM) 6.1 -4.59 16.8 -8.66 SFT, think-then-answer 8.0 -2.69 20.75 -4.71 GRPO w/o format reward 9.9 -0.79 24.9 -0.56 GRPO w/o think format 8.8 -1.89 22.6 -2.86
+> View selection and fusion
+> uniform frame sampling 8.9 -1.79 23.1 -2.36 uniform view weights( wv= 1 )9.7 -0.99 24.2 -1.26
+
+Table 3: Proposal generation coverage across different affordance types. Values are R@50/R@25 (%).                                             
+
+> Affordance (#Queries) Mask3D-F TASA AffordBot Fun3DU APG
+> foot_push (1) 0.0/0.0 0.0/0.0 100.0/100.0 0.0/0.0 0.0/0.0 hook_pull (136) 2.2/2.9 1.5/20.6 11.8/16.2 13.2/45.6 41.2/71.3
+> hook_turn (56) 16.1/23.2 1.8/14.3 32.1/35.7 12.5/37.5 48.2/85.7
+> key_press (23) 4.3/4.3 13.0/30.4 8.7/21.7 43.5/82.6 78.3/91.3
+> pinch_pull (110) 2.7/5.5 16.4/45.5 13.6/24.5 29.1/70.0 61.8/90.0
+> plug_in (24) 0.0/0.0 0.0/8.3 0.0/20.8 4.2/16.7 41.7/79.2
+> rotate (40) 0.0/0.0 5.0/10.0 0.0/7.5 25.0/47.5 52.5/62.5
+> tip_push (42) 2.4/2.4 7.1/14.3 0.0/4.8 16.7/26.2 42.9/64.3
+> unplug (13) 0.0/0.0 7.7/30.8 15.4/30.8 15.4/46.2 53.8/69.2 Overall (445) 3.8/5.6 6.7/24.5 12.1/20.0 19.6/49.2 50.6/77.5
+
+The two largest AP 25 losses come from weakening pro-posal selection by removing GRPO (-8.66) and weakening proposal generation by replacing APG with parsed-object Grounded-SAM (-7.16). Within APG, affordance prompts matter more than visibility-aware projection (-3.36 vs. -1.66). Within VPAR, the reasoning trace matters more than the format reward (-2.86 vs. -0.56), so the gain is not merely parseable output. Frame selection and learned fusion weights provide smaller but consistent gains (-2.36 and -1.26). 
+
+Proposal generation coverage. Table 3 asks whether proposal generation retains the target region on cropped 
+
+laser_scan_5mm support, using each method’s available candidates. APG uses an oracle best-view union, so the table diagnoses coverage rather than ranking end-to-end predic-tions. APG reaches 77.5 R@25 and 50.6 R@50, exceeding Fun3DU by 28.3/31.0 points. On hook_pull, the largest class, gains remain 25.7/28.0, so rare classes do not drive the av-erage. The sole reversal is the one-sample foot_push class. APG’s 26.9-point R@25–R@50 gap reveals the remaining issue: targets are often present but not tightly bounded. 
+
+Proposal selection accuracy. Table 4 evaluates whether VPAR selects the correct proposal set once APG has covered Fun3dU  TASA  AffordBot  Ours Mask3d -F GT 
+
+Open the bottom 
+
+closet  drawer 
+
+between the door 
+
+and the cabinet 
+
+Open the top 
+
+drawer of the 
+
+counter to the left 
+
+of the oven 
+
+Turn on TV using 
+
+the remote on the 
+
+white cabinet 
+
+Select a micro -
+
+wave function 
+
+Open the trash 
+
+bin below the 
+
+sink 
+
+Plug the device 
+
+in one of the 
+
+sockets next to 
+
+the fireplace 
+
+RGB Figure 4: Qualitative comparison. Columns compare four baselines and ThinkAfford with ground truth on repeated-part disambiguation and functional-region localization. Fun3dU Ours 
+
+> Scannet-Afford:
+> “Plug the device in one of the sockets near the foot of the bed.”
+> 3RScan-Afford:
+> “Select the oven settings with the knobs to the right of the display.”
+> MultiScan-Afford:
+> “Unplug the range hood from the socket above the stove.”
+> Scannet++-Afford:
+> “Open the microwave between the red lamp and the window.”
+
+Figure 5: Qualitative zero-shot cross-dataset transfer. Predictions on the four unseen datasets in Table 5; boxes magnify the red 3D affordance regions. Figure 6: Qualitative real-world deployment. Five manipulation examples with scene-level robot approach views (top) and close-up execution views of the localized interaction regions (bottom). Table 4: Proposal selection accuracy. Accuracies are per-centages and relation subsets may overlap; AP 50 /AP 25 is end-to-end on all queries.                                                      
+
+> Setting Selection Acc. (%) ↑End-to-end ↑
+> Overall Spatial Ordinal Part-of AP 50 /AP 25
+> Qwen-VL2.5
+> 3B Base 19.6 19.2 11.5 17.6 3.08/9.13 3B +GRPO 43.6 46.0 46.9 46.8 6.23/16.90 7B Base 40.9 42.9 43.1 41.2 5.88/15.03 7B +GRPO 54.2 57.1 60.8 61.6 8.08/23.90
+> Qwen-VL3-8B
+> Base (no tuning) 51.3 54.1 41.2 60.3 6.1/16.8 SFT 63.4 67.2 55.8 71.4 8.0/20.75 GRPO w/o format 68.1 72.3 64.5 75.8 9.9/24.9 GRPO w/o trace 65.8 68.9 59.7 73.2 8.8/22.6
+> Full GRPO (Ours) 72.1 76.5 69.8 79.3 10.69/25.46
+
+the target. Accuracy is measured on the APG-covered subset; relation slices overlap. Full GRPO raises Qwen-VL3-8B selection from 51.3% to 72.1% (+8.7 over SFT), with the largest gains on ordinal (+28.6) and spatial (+22.4) queries. This is not scale alone: 3B+GRPO exceeds untuned 7B in both selection (43.6 vs. 40.9) and AP 25 (16.90 vs. 15.03). Removing the trace costs 6.3 selection points and 2.86 AP 25 , versus 4.0 and 0.56 with-out the format reward; reasoning contributes more down-stream than compliance. Proposal coverage and selection accuracy use different query sets and are not numerically composable, but together they expose the remaining errors: APG misses 22.5% of all queries at IoU 0.25, while VPAR misselects 27.9% of covered queries. Improving proposal tightness and relation-sensitive selection therefore remains complementary rather than interchangeable. 
+
+4.5 Cross-Dataset Generalization 
+
+We compare zero-shot transfer with Fun3DU under the same point-mask protocol. ThinkAfford is trained only on Scene-Fun3D, Fun3DU is training-free, and neither method uses target-dataset samples. ThinkAfford raises average AP 50 /AP 25 from 18.1/30.2 to 23.0/36.8, winning AP 25 on all datasets and AP 50 on three. MultiScan is the informative exception: AP 25 rises Table 5: Zero-shot cross-dataset transfer. AP 50 /AP 25 (%); neither method uses target-dataset samples.                
+
+> Method 3RScan MultiScan ScanNet ScanNet++ Average Fun3DU 12.1/22.2 29.7 /49.7 15.0/25.0 15.5/24.0 18.1/30.2
+> ThinkAfford 20.0/32.3 26.4/ 57.2 21.6/28.3 23.8/29.2 23.0/36.8
+
+by 7.5 while AP 50 falls by 3.3. Thus the transferred prior finds the approximate region, but boundary quality does not adapt equally across reconstruction domains, matching the proposal-tightness gap in Table 3. 
+
+4.6 Real-World Deployment 
+
+We pass ThinkAfford’s scene-coordinate contact region to an existing robot execution stack. Figure 6 presents five real-robot manipulation episodes and checks sensing-to-coordinate transfer outside the benchmark. This is quali-tative, not a manipulation success-rate study: ThinkAfford predicts neither force, orientation, nor trajectory, and we do not evaluate the controller. 
+
+5 Conclusion 
+
+We present ThinkAfford, a task-driven 3D affordance grounding framework that decomposes the problem into high-recall affordance proposal generation and instruction-grounded reasoning. This decomposition separates two key failure modes in existing approaches: missing the interaction region during proposal construction and confusing similar candidates during language-guided selection. APG gener-ates fine-grained affordance-aware proposals without prede-fined object or part prompts, while VPAR selects propos-als under the full instruction and is optimized with GRPO using 3D grounding rewards. Experiments on SceneFun3D demonstrate the effectiveness of ThinkAfford, with both pro-posal coverage and reasoning optimization contributing to improved grounding performance. Cross-dataset and real-world results further indicate transfer beyond the benchmark. 
+
+References 
+
+Bai, S.; Chen, K.; Liu, X.; Wang, J.; Ge, W.; Song, S.; Dang, K.; Wang, P.; Wang, S.; Tang, J.; et al. 2025. Qwen2. 5-vl technical report. arXiv preprint arXiv:2502.13923 .Chu, H.; Deng, X.; Lv, Q.; Chen, X.; Li, Y.; Hao, J.; and Nie, L. 2025. 3d-affordancellm: Harnessing large language mod-els for open-vocabulary affordance detection in 3d worlds. 
+
+arXiv preprint arXiv:2502.20041 .Corsetti, J.; Giuliari, F.; Fasoli, A.; Boscaini, D.; and Poiesi, F. 2025. Functionality understanding and segmentation in 3D scenes. In Proceedings of the Computer Vision and Pattern Recognition Conference , 24550–24559. Dai, A.; Chang, A. X.; Savva, M.; Halber, M.; Funkhouser, T.; and Nießner, M. 2017. Scannet: Richly-annotated 3d reconstructions of indoor scenes. In Proceedings of the IEEE conference on computer vision and pattern recogni-tion , 5828–5839. Delitzas, A.; Takmaz, A.; Tombari, F.; Sumner, R.; Polle-feys, M.; and Engelmann, F. 2024. Scenefun3d: Fine-grained functionality and affordance understanding in 3d scenes. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vi-sion and Pattern Recognition , 14531–14542. He, L.; Liu, M.; Ye, Q.; Zhou, Y.; Deng, X.; and Ding, G. 2026. Task-aware 3d affordance segmentation via 2d guid-ance and geometric refinement. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 40, 4654–4662. Kerr, J.; Kim, C. M.; Goldberg, K.; Kanazawa, A.; and Tan-cik, M. 2023. Lerf: Language embedded radiance fields. In 
+
+Proceedings of the IEEE/CVF international conference on computer vision , 19729–19739. Li, G.; Sun, D.; Sevilla-Lara, L.; and Jampani, V. 2024a. One-shot open affordance learning with foundation models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 3086–3096. Li, X.; Zhang, M.; Geng, Y.; Geng, H.; Long, Y.; Shen, Y.; Zhang, R.; Liu, J.; and Dong, H. 2024b. Manipllm: Embodied multimodal large language model for object-centric robotic manipulation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 18061–18070. Li, Y.; Zhao, N.; Xiao, J.; Feng, C.; Wang, X.; and Chua, T.-s. 2024c. Laso: Language-guided affordance segmentation on 3d object. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 14251–14260. Mao, Y.; Zhang, Y.; Jiang, H.; Chang, A.; and Savva, M. 2022. Multiscan: Scalable rgbd scanning for 3d environments with articulated objects. Advances in neural information processing systems , 35: 9058–9071. Oquab, M.; Darcet, T.; Moutakanni, T.; Vo, H.; Szafraniec, M.; Khalidov, V.; Fernandez, P.; Haziza, D.; Massa, F.; El-Nouby, A.; et al. 2023. Dinov2: Learning robust visual fea-tures without supervision. arXiv preprint arXiv:2304.07193 .Radford, A.; Kim, J. W.; Hallacy, C.; Ramesh, A.; Goh, G.; Agarwal, S.; Sastry, G.; Askell, A.; Mishkin, P.; Clark, J.; et al. 2021. Learning transferable visual models from natural language supervision. In International conference on machine learning , 8748–8763. PmLR. Schult, J.; Engelmann, F.; Hermans, A.; Litany, O.; Tang, S.; and Leibe, B. 2022. Mask3d: Mask transformer for 3d seman-tic instance segmentation. arXiv preprint arXiv:2210.03105 .Schult, J.; Engelmann, F.; Hermans, A.; Litany, O.; Tang, S.; and Leibe, B. 2023. Mask3d: Mask transformer for 3d semantic instance segmentation. In 2023 IEEE Inter-national Conference on Robotics and Automation (ICRA) ,8216–8223. IEEE. Shao, Z.; Wang, P.; Zhu, Q.; Xu, R.; Song, J.; Bi, X.; Zhang, H.; Zhang, M.; Li, Y.; Wu, Y.; et al. 2024. Deepseekmath: Pushing the limits of mathematical reasoning in open lan-guage models. arXiv preprint arXiv:2402.03300 .Takmaz, A.; Fedele, E.; Sumner, R. W.; Pollefeys, M.; Tombari, F.; and Engelmann, F. 2023. Openmask3d: Open-vocabulary 3d instance segmentation. arXiv preprint arXiv:2306.13631 .Wald, J.; Avetisyan, A.; Navab, N.; Tombari, F.; and Nießner, M. 2019. Rio: 3d object instance re-localization in chang-ing indoor environments. In Proceedings of the IEEE/CVF International Conference on Computer Vision , 7658–7667. Wang, H.; Wang, S.; Zhong, Y.; Yang, Z.; Wang, J.; Cui, Z.; Yuan, J.; Han, Y.; Liu, M.; and Ma, Y. 2025. Affordance-R1: Reinforcement Learning for Generalizable Affordance Reasoning in Multimodal Large Language Model. arXiv preprint arXiv:2508.06206 .Wang, X.; Yang, X.; Xu, Y.; Wu, Y.; Li, Z.; and Zhao, N. 2026. Affordbot: 3d fine-grained embodied reasoning via multimodal large language models. Advances in Neural In-formation Processing Systems , 38: 140367–140387. Wu, H.; Yang, P.; Asano, Y. M.; and Snoek, C. G. 2025. Segment Any 3D-Part in a Scene from a Sentence. arXiv preprint arXiv:2506.19331 .Yeshwanth, C.; Liu, Y.-C.; Nießner, M.; and Dai, A. 2023. Scannet++: A high-fidelity dataset of 3d indoor scenes. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision , 12–22. Yuan, Z.; Jiang, S.; Feng, C.-M.; Zhang, Y.; Cui, S.; Li, Z.; and Zhao, N. 2025. Scene-R1: Video-Grounded Large Language Models for 3D Scene Reasoning without 3D An-notations. arXiv preprint arXiv:2506.17545 .Zheng, H.; Shi, H.; Peng, Q.; Chng, Y. X.; Huang, R.; Weng, Y.; Shi, Z.; and Huang, G. 2025. Densegrounding: Improving dense language-vision semantics for ego-centric 3d visual grounding. arXiv preprint arXiv:2505.04965 .Zhou, K.; Yang, J.; Loy, C. C.; and Liu, Z. 2022. Learning to prompt for vision-language models. International Journal of Computer Vision , 130(9): 2337–2348.

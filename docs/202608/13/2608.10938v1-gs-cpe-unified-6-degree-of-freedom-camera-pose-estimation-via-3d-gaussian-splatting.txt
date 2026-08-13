@@ -1,0 +1,622 @@
+Title: GS-CPE: Unified 6-Degree-of-Freedom Camera Pose Estimation via 3D Gaussian Splatting
+
+URL Source: https://arxiv.org/pdf/2608.10938v1
+
+Published Time: Wed, 12 Aug 2026 01:10:12 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# GS-CPE: Unified 6-Degree-of-Freedom Camera Pose Estimation via 3D Gaussian Splatting 
+
+Huaiyuan Weng 1, Chul Min Yeum 1 and Su-Min Kang 2
+
+Abstract — Despite substantial progress in visual localization, from scene coordinate regression to direct camera pose regres-sion, achieving both robust generalization and high accuracy remain challenging. This study introduces GS-CPE (Gaussian Splatting based Camera Pose Estimation), a coarse-to-fine framework for 6-DoF camera pose estimation that unifies geometry-based coarse pose estimation with robust 3D Gaussian Splatting (3DGS) warping-based pose refinement. GS-CPE first estimates a coarse pose via retrieval-guided geometric pose estimation on a 3DGS scene representation, then refines it by minimizing an visibility-aware masked RGB warping objective in a multi-scale optimization framework, with adap-tive re-rendering. Extensive experiments on indoor and out-door benchmarks—including 7Scenes, Cambridge Landmarks, FAST-LIVO2 datasets, and a custom dataset demonstrate state-of-the-art performance, consistently outperforming in both accuracy and generalization. Code is released at GS-CPE. 
+
+I. INTRODUCTION Precise 6-Degree-of-Freedom (6-DoF) visual localization within a pre-built 3D map is a fundamental capability in robotics, enabling autonomous navigation, inspection, and interaction in both indoor and outdoor environments. Its applications span navigation in GPS-denied scenarios [1], [2], augmented reality [3], and robotic inspection in struc-tured environments [4]. Despite steady progress, achieving accurate localization remains challenging in practice, as real-world systems must jointly balance accuracy with robustness and efficiency, while also depending on the choice of 3D map representation. Classical structure-based localization methods estimate camera pose by establishing explicit 2D–3D correspondences between query keypoints and sparse map points, followed by Perspective-n-Point (PnP) with RANSAC [5], [6]. Both handcrafted [7] and learned feature methods [8], [9], [10] have been proposed to improve matching robustness. Despite their broad adoption, these methods often suffer from limited accuracy because they rely on explicit feature extraction and the geometric fidelity of the 3D reconstruction. Learning-based approaches aim to overcome these limi-tations. Absolute Pose Regression (APR) methods directly regress camera poses from images, offering computational                          
+
+> 1Huaiyuan Weng and Chul Min Yeum are with the Department of Civil and Environmental Engineering, University of Waterloo, 200 University Ave. W., Waterloo, ON N2L 3G1, Canada.
+
+{h22weng, cmyeum }@uwaterloo.ca  
+
+> 2Su-Min Kang is with School of Architecture, Soongsil University, 369 Sangdo-ro, Dongjak District, Seoul, South Korea
+
+kangsm@ssu.ac.kr 
+
+> This work was supported in part by the Ontario Research Fund – Research Excellence program (Project #ORF-RE012-051) from the Province of Ontario. The views expressed herein are those of the authors and do not necessarily reflect those of the Province.
+
+Fig. 1: Teaser of GS-CPE . Given a query image, we estimate a coarse pose and refine it by multi-scale, visibility-masked photometric warping with adaptive re-rendering. Insets show improved alignment after refinement. efficiency but often sacrificing accuracy and generalization [11]. Scene Coordinate Regression (SCR) improves geomet-ric consistency by predicting dense scene representations, but typically requires substantial training and optimization effort to achieve state-of-the-art performance [12], which may limit real-time applicability in robotics. Moreover, many learning-based methods rely on scene-specific training or adaptation, reducing practicality when scaling to new environments. In parallel, neural 3D scene representations such as Neural Radiance Fields (NeRF) [13] and 3DGS [14], [15] have significantly advanced high-fidelity view synthesis, enabling Neural Render Pose (NRP) estimation. However, NeRF-based NRP commonly entails substantial computational cost during training and inference, limiting its use in real-world robotics. In contrast, 3DGS significantly improves rendering efficiency and has recently inspired a growing number of localization methods that estimate or refine poses by backpropagating through rendered views [16], [17]. However, pose refinement via differentiable rendering in 3DGS is still highly non-convex and strongly initialization-sensitive, which makes high accuracy difficult in practice. To alleviate this issue, this study adopts warping-based optimization for pose refinement, which formulates pose refinement as an image alignment problem. Specifically, the camera pose is refined by minimizing a photometric-or feature-based error between the observed target image and a reference view warped under the current pose esti-mate. However, warping-based refinement remains challeng-ing due to: (1) sensitivity to initial large viewpoint gaps make linearized warping inaccurate, leading to unreliable color/intensity transfer; (2) occlusions and visibility changes that introduce invalid pixel correspondences; and (3) op-arXiv:2608.10938v1 [cs.CV] 11 Aug 2026 timization instability under large viewpoint or appearance gaps, where fixed linearization can easily drift. To overcome these issues, we propose GS-CPE, a coarse-to-fine visual localization framework that unifies retrieval-initialized, geometry-based coarse pose estimation with ro-bust 3DGS warping-based pose refinement. Given a query image, we first obtain a coarse pose through image retrieval and iterative geometry-based camera pose estimation. We then refine the pose by iteratively minimizing a visibility-aware masked RGB warping objective with 3DGS rendering updates in a multi-scale optimization framework (Fig. 2). This unified design combines the global robustness of geometry-based initialization with efficient warping refine-ment for accurate 6-DoF localization. Our main contributions are:  
+
+> •
+
+We propose a coarse-to-fine visual localization frame-work built on a pre-trained 3DGS scene representa-tion, which combines retrieval-based initialization and geometry-based pose estimation.  
+
+> •
+
+We introduce a robust warping-based pose refinement that optimizes pose by aligning 3DGS-rendered images with the query RGB image, and improves robustness via (i) adaptive re-linearization through re-rendering, (ii) multi-scale optimization, and (iii) a visibility-aware warping mask.  
+
+> •
+
+We validate GS-CPE on indoor and outdoor benchmarks as well as additional real-world datasets, showing con-sistent improvements over representative APR, SCR, and NRP baselines. II. Related Works 
+
+A. Geometry-based Pose Estimation 
+
+Deep learning has improved keypoint detection and de-scription, boosting feature matching for visual localization. CNN-based methods such as SuperPoint [8], D2-Net [18], and R2D2 [19] learn robust local features, while transformer-based models like LoFTR [20], SuperGlue [9], and MASt3R [21] capture long-range context for stronger correspondences. These learned matches have been widely used for pose estimation and refinement in localization pipelines [22]. 
+
+B. Neural Render Pose (NRP) a) NeRF based NRP: Neural Radiance Fields (NeRF) model scenes as volumetric radiance fields, encoding geometry and appearance for novel view synthesis. Methods, like iNeRF [23], optimize 6-DoF poses by minimizing photometric error with a frozen NeRF, while others use NeRF-rendered views for data augmentation to improve APR generalization. Direct-PoseNet [24] and DFNet [25] refine poses via photometric or feature map errors, significantly boosting localization ac-curacy. PNeRFLoc [26] performs visual localization by itera-tively refining camera poses using warping-based photometric consistency, but its reliance on computationally expensive NeRF rendering makes it inefficient. 
+
+b) 3DGS based NRP: 3DGS has recently emerged as a powerful explicit scene representation using ellipsoidal 3D Gaussians. This formulation offers both a clear spatial structure and enables fast, high-quality novel view synthesis. In the con-text of visual localization, 3DGS has been primarily utilized in two ways: data augmentation and pose optimization. For data augmentation, methods like 3DGS-ReLoc [27] fuses LiDAR and camera inputs to construct a joint 3DGS map, employing normalized cross-correlation and PnP-based refinement for relocalization. Other approaches [28], [29] render synthetic views from 3DGS scenes to expand training or retrieval sets. More commonly, 3DGS has been integrated into pose estimation and refinement pipelines. GSLoc [30] introduces a differentiable renderer that backpropagates pose gradients through the rendering process, enabling gradient-based op-timization. HGSLoc [17] proposes a lightweight, plug-and-play refinement module that enhances coarse localization results. GS-CPR [29] adopts a similar rendering-based pose refinement strategy, focusing on optimization from initially estimated poses. GSplatLoc [31] employs a two-stage pipeline that combines dense keypoint matching with warping-based photometric refinement. GSVisLoc [32] proposes a general-izable 3DGS feature matching framework for coarse-to-fine 3D–2D localization without image retrieval. Motivated by recent progress in geometric pose estimation and warping-based localization, we propose GS-CPE, a unified pipeline that combines retrieval-initialized geometry-based pose estimation with visibility-aware multi-scale warping-based refinement and adaptive re-linearization, improving robustness to poor initialization and occlusions. III. Preliminaries 3DGS represents a scene as 𝑀 anisotropic 3D Gaussians 
+
+G = {( 𝜇 𝑖 , Σ𝑖 , 𝑐 𝑖 , 𝛼 𝑖 )} 𝑀 𝑖 =1, where 𝜇 𝑖 ∈ R3 denotes the mean, 
+
+Σ𝑖 ∈ R3×3 denotes the covariance, 𝑐 𝑖 ∈ R3 denotes the RGB color, and 𝛼 𝑖 ∈ ( 0, 1] denotes the opacity [14]. The set G
+
+provides an explicit scene representation. Given intrinsics 𝐾 and pose 𝑇 = (𝑅, 𝑡 ) ∈ 𝑆𝐸 (3), Gaussians are projected and rasterized into 2D Gaussians. Through alpha blending along the viewing direction, this process produces a rendered RGB and depth images. For notational simplicity, we denote the differentiable 3DGS renderer as a function that maps the scene representation and camera parameters to image outputs: 
+
+( ˜𝐼 (𝑇 ), ˜𝐷 (𝑇 )) = R (G , 𝐾, 𝑇 ),
+
+where ˜ 𝐼 (𝑇 ) and ˜𝐷 (𝑇 ) are rendered RGB and depth images, both generated from the same rendering pass under pose 𝑇 .IV. Methodology We assume a pre-trained 3DGS scene representation G
+
+(Sec. III) with a differentiable renderer R. Given a query image 𝐼 𝑞 , our system follows a two-stage coarse-to-fine pose estimation pipeline (Fig. 2). In the first stage, we estimate a coarse camera pose via retrieval-based initialization followed by iterative geometric pose estimation using cues rendered from G (Sec. IV-A). In the second stage, we refine the Fig. 2: Overview of GS-CPE : The proposed method assumes that a 3DGS model is pre-built. A coarse pose is first estimated via 2D keypoint matching between the query and rendered views, followed by RANSAC-PnP. Next, pose refinement aligns the 3DGS-rendered image to the query using a visibility-aware masked RGB warping loss in a multi-scale test-time optimization. pose using a robust 3DGS warping-based alignment with adaptive re-rendering and visibility-aware mask, in multi-scale optimization framework (Sec. IV-B). 
+
+A. Coarse Camera Pose Estimation 
+
+Given a query image 𝐼 𝑞 , we estimate an initial camera pose through a retrieval-and-geometry pipeline consisting of (1) Image Retrieval-Based Reference Initialization, (2) Rendering and 2D Feature Matching, (3) 2D–3D Correspondences, and (4) Pose estimation with PnP-RANSAC. Algorithm 1 outlines the coarse camera pose estimation procedure. 
+
+1) Image Retrieval-Based Reference Initialization: We first perform fast image retrieval using a retrieval operator 
+
+Q implemented with NetVLAD [33]. The query image is embedded into a global descriptor f𝑞 , which is compared against a database of reference images I𝑟 = {𝐼 𝑟 , 𝑗 }𝑁 𝑗 =1 with known camera poses. Based on descriptor similarity, we select the top-ranked reference image 𝐼 ∗ 
+
+> 𝑟
+
+and use its associated pose 
+
+𝑇 ∗ 
+
+> 𝑟
+
+as the initial pose prior for subsequent processing. 
+
+2) Rendering and 2D Feature Matching: We initialize 
+
+𝑇 𝑡 = 𝑇 ∗ 
+
+> 𝑟
+
+, then render an RGB and depth image from the 3DGS model G using the rendering function R defined in Sec. III: 
+
+( ˜𝐼 𝑡 , ˜𝐷 𝑡 ) = R (G , 𝐾, 𝑇 𝑡 ). (1) After initialization, we iteratively update the pose 𝑇 𝑡 . At each iteration, we update 𝑇 𝑡 and re-render ˜ 𝐼 𝑡 to remain consistent with the current pose estimate. We then establish 2D–2D correspondences between the query image 𝐼 𝑞 and the rendered image ˜ 𝐼 𝑡 using a matcher 
+
+M. The matcher outputs a set of correspondences 
+
+C (2-2 ) 
+
+> 𝑞,𝑡
+
+= {( X𝑞 , X𝑡 )} , (2) where X𝑞 and X𝑡 denote matched feature locations in 𝐼 𝑞 and ˜ 𝐼 𝑡 ,respectively. In our implementation, M is a transformer-based matcher (VGGT[34]) that provides robust correspondences. 
+
+3) 2D–3D Correspondences: We obtain query 2D–3D correspondences by lifting the rendered-side features ( X𝑟 ) to 3D using the rendered depth ( ˜ 𝐷 𝑡 ). For each match (X𝑞 , X𝑡 ) ∈ C (2-2 ) 
+
+> 𝑞,𝑡
+
+, we back-project X𝑡 = {( 𝑢, 𝑣 )} with depth ˜ 𝐷 𝑡 :
+
+X(3) 
+
+> 𝑡
+
+= 𝜋 −1 X𝑡 , ˜𝐷 𝑡 , 𝐾 , (3) where 𝜋 −1 (·) denotes the camera back-projection operator. We then form the query 2D–3D correspondence set 
+
+C (2-3 ) 
+
+> 𝑞,𝑡
+
+= {( X𝑞 , X(3) 
+
+> 𝑡
+
+)} , (4) which is used for pose estimation. 
+
+4) Pose Estimation: Given the query 2D-3D correspon-dences C (2-3 ) 
+
+> q,t
+
+, we estimate the query camera pose using a Perspective-𝑛 -Point (PnP) solver with a RANSAC loop [6]. Specifically, we compute 
+
+𝑇 q = PnP-RANSAC 
+
+
+
+C (2-3 ) 
+
+> q
+
+, 𝐾, 𝑇 𝑡 
+
+
+
+(5) where 𝑇 𝑡 provides an initial pose prior for RANSAC sampling. We then update the reference pose by setting 𝑇 𝑡 ← 𝑇 𝑞 , re-render ( ˜𝐼 𝑡 , ˜𝐷 𝑡 ), and repeat the matching and PnP steps for a fixed number of iterations or until convergence, measured by the relative transform Δ𝑇 = 𝑇 −1 
+
+> 𝑡
+
+𝑇 𝑞 , i.e., ∥Δ𝑡 ∥ ≤ 𝜖 𝑡 and 
+
+∠(Δ𝑅 ) ≤ 𝜖 𝑅 , where Δ𝑡 and Δ𝑅 denote the translational and rotational components of Δ𝑇 .Algorithm 1 Coarse Camera Pose Estimation  
+
+> 1:
+
+Inputs: database images Ir = {𝐼 r, 𝑗 }𝑁 𝑗 =1 with poses {𝑇 r, 𝑗 };3DGS model G; Image retrieval Q; Image Matcher M;Intrinsics 𝐾 ; Convergence thresholds (𝜖 𝑡 , 𝜖 𝑅 ). 
+
+> 2:
+
+Output: query image pose 𝑇 t. 
+
+> 3:
+
+while a new query image 𝐼 q arrives do  
+
+> 4:
+
+fq ← Q ( 𝐼 q) 
+
+> 5:
+
+𝑇 ∗ 
+
+> r
+
+← TopK (fq, Ir, 1) {get pose of closest image from Ir} 
+
+> 6:
+
+𝑇 𝑡 ← 𝑇 ∗ 
+
+> r
+> 7:
+
+for iterative index 𝑖 ∈ Nc do  
+
+> 8:
+
+𝐼 t, 𝐷 t ← R (G , 𝐾, 𝑇 𝑡 ) {rendering from G} 
+
+> 9:
+
+𝐶 (2-2 ) 
+
+> 𝑞,𝑡
+
+← M ( 𝐼 𝑞 , 𝐼 𝑡 ) 
+
+> 10:
+
+X(3) 
+
+> 𝑡
+
+← LiftTo3D 
+
+
+
+X(2) 
+
+> 𝑡
+
+, 𝐷 𝑡 , 𝐾 
+
+ 
+
+> 11:
+
+𝐶 (2-3 ) 
+
+> 𝑞,𝑡
+
+← { X(2) 
+
+> q
+
+, X(3) 
+
+> t
+
+} 
+
+> 12:
+
+𝑇 q ← PnP-RANSAC (𝐶 (2-3 ) 
+
+> 𝑞,𝑡
+
+, 𝐾, 𝑇 𝑡 ) 
+
+> 13:
+
+Δ𝑇 ← 𝑇 −1t 𝑇 q {relative pose update } 
+
+> 14:
+
+if ∥trans (Δ𝑇 )∥ ≤ 𝜖 𝑡 and ∠(rot (Δ𝑇 )) ≤ 𝜖 𝑅 then  
+
+> 15:
+
+break {exits FOR; WHILE ends next check } 
+
+> 16:
+
+end if  
+
+> 17:
+
+𝑇 t ← 𝑇 q 
+
+> 18:
+
+end for  
+
+> 19:
+
+end while 
+
+B. Warping-based Camera Pose Refinement 
+
+Inspired by warping-based refinement approaches such as PNeRFLoc [35] and GSplatLoc [31], we employ a warping-based refinement that aligns 3DGS-rendered images with the query image 𝐼 𝑞 . However, warping-based refinement is sensitive to poor initialization and can be destabilized by unreliable rendered depths. To improve robustness, we incor-porate: (i) adaptive re-linearization via re-rendering to reduce linearization drift IV-B.2, (ii) a visibility-aware warping mask to suppress occlusion artifacts IV-B.3 and (iii) multi-scale optimization for improved convergence IV-B.4. Algorithm 2 outlines the warping-based camera pose refinement. 
+
+1) Basic Warping-based Pose Refinement: The anchor pose 𝑇 𝑎 is initialized from the coarse estimated pose 𝑇 𝑞 . We treat the anchor as a fixed reference view during refinement; therefore, the anchor is not re-rendered within a refinement stage. Specifically, the anchor image ˜ 𝐼 𝑎 and depth image ˜𝐷 𝑎 
+
+are rendered once from the 3DGS model at 𝑇 𝑎 :
+
+( ˜𝐼 𝑎 , ˜𝐷 𝑎 ) = R (G , 𝐾, 𝑇 𝑎 ).
+
+During the warping-based refinement, we estimate an in-cremental pose update Δ𝑇 such that the refined pose is 
+
+𝑇 𝑓 = Δ 𝑇 𝑇 𝑎 . Using the rendered depth, we align the anchor view to the query image through pose-induced reprojection. For each pixel in the anchor image ˜ 𝐼 𝑎 , we first back-project it to 3D using the depth ˜ 𝐷 𝑎 :
+
+X(3) = 𝜋 −1 ( ˜𝐼 𝑎 , ˜𝐷 𝑎 , 𝐾 ) (6) where X(3) = {𝑋 𝑗 }𝑁 𝑗 =1, and then we transform it to the query camera under 𝑇 𝑓 , and reproject it to the image plane: 
+
+X′ ( 2) = 𝜋 
+
+
+
+𝐾 𝑇 𝑓 𝑇 −1 
+
+> 𝑎
+
+X(3) 
+
+(7) where 𝜋 (·) and 𝜋 −1 (·) denote the camera projection and back-projection operators, respectively. And X′ ( 2) = {𝑥 ′ 
+
+> 𝑗
+
+}𝑁 𝑗 =1
+
+Fig. 3: Visibility-aware mask generation: multi-view RGB– depth renders are converted to occupancy graphs and fused by voting to suppress depth-inconsistent regions. denotes the set of reprojected warp pixel locations in the query image. By construction, the index 𝑗 establishes a one-to-one correspondence between each anchor pixel 𝑥 𝑗 and its warped location 𝑥 ′ 
+
+> 𝑗
+
+, forming pose-induced pixel correspondences. We then define the photometric warping loss as 
+
+Lwarp (Δ𝑇 ) =∑︁ 
+
+> 𝑥
+
+˜𝐼 𝑎 (𝑥 ) − 𝐼 𝑞 (𝑥 ′) 22 , (8) where 𝐼 𝑞 (𝑥 ′) denotes the query image sampled at the repro-jected location (via bilinear interpolation). We minimize Lwarp over Δ𝑇 using Adam optimizer: 
+
+Δ𝑇 ∗ = arg min  
+
+> Δ𝑇
+
+Lwarp (Δ𝑇 ) (9) 
+
+2) Adaptive Re-linearization via Re-rendering: The warp-ing formulation assumes locally consistent visibility and depth around the anchor pose. When the pose update becomes large, 3D transformation will become not accurate enough for local refinement, leading to linearization drift. To mitigate this issue, we adopt adaptive re-linearization via re-rendering. Specifically, we assign the latest refined pose as anchor pose ( 𝑇 𝑎 ← 𝑇 𝑓 ), and re-render new anchor images ( ˜𝐼 𝑎 , ˜𝐷 𝑎 ) =
+
+R (G , 𝐾, 𝑇 ) only when the accumulated pose change Δ𝑇 =
+
+(Δ𝑅, Δ𝑡 ) exceeds predefined thresholds on translation or rotation, i.e., ∥Δ𝑡 ∥ > ˜𝜖 𝑡 or ∠(Δ𝑅 ) > ˜𝜖 𝑅 , where ˜ 𝜖 𝑅 and ˜𝜖 𝑡 denote the rotation and translation re-render threshold. By refreshing the anchor view only when necessary, this strategy preserves depth/visibility consistency for subsequent refinement while avoiding unnecessary rendering overhead. 
+
+3) Visibility-Aware Warping Mask: We introduce avisibility-aware mask 𝑀 ∈ { 0, 1}𝐻 ×𝑊 to suppress occlusion-induced artifacts during the pose refinement. From the anchor viewpoint 𝑇 𝑎 , we build 𝑉 nearby viewpoints {𝑇 𝑣 }𝑉 𝑣 =1 by applying small perturbations around the anchor pose in SE(3). We also render RGB–depth pairs {( ˜𝐼 𝑣 , ˜𝐷 𝑣 )} 𝑉 𝑣 =1. For anchor image ˜ 𝐼 𝑎 , we back-project its 3D point in the camera frame of 
+
+𝑇 𝑎 as X(3) = 𝜋 −1 ( ˜𝐼 𝑎 , ˜𝐷 𝑎 ). We then project it into view 𝑣 :
+
+𝑍 (2) 
+
+> 𝑣
+
+= 𝜋 
+
+
+
+𝐾 (𝑇 −1 
+
+> 𝑣
+
+𝑇 𝑎 ) X(3) 
+
+(10) where 𝑍 (2) 
+
+> 𝑣
+
+is the projected depth in view 𝑣 . A view 𝑣 votes 
+
+consistent if 𝑥 𝑣 lies inside the image domain and the rendered depth agrees within a threshold 𝜏 𝑑 :
+
+𝑐 𝑣 (𝑥 ) = 1
+
+h ˜𝐷 𝑣 − 𝑍 (2) 
+
+> 𝑣
+
+< 𝜏 𝑑 
+
+i
+
+(11) We define the inconsistency score and final mask as 
+
+𝑒 (𝑥 ) = 1 − 1
+
+𝑉 
+
+> 𝑉
+
+∑︁ 
+
+> 𝑣 =1
+
+𝑐 𝑣 (𝑥 ) (12) 
+
+𝑀 (𝑥 ) =
+
+(
+
+1, 𝛼 (𝑥 ) > 𝜏 𝛼 and 𝑒 (𝑥 ) < 𝜏 𝑒 ,
+
+0, otherwise , (13) where 𝛼 (𝑥 ) ∈ [0, 1] is the per-pixel accumulated opacity of the anchor rendering, obtained by alpha-compositing the Gaussians along the ray of pixel 𝑥 , as mentioned in Sec. III. 
+
+4) Multi-scale Optimization.: As shown in Fig. 4, we construct an image pyramid with levels 𝑠 ∈ { 𝑆, . . . , 0}, where 
+
+𝑆 is an integer, denoting the number of pyramid downsampling steps. In each level, both anchor images and query images are downsampled by a factor of 2 𝑠 to 𝐼 (𝑠 ) 
+
+> 𝑎
+
+(𝑥 ) and 𝐼 (𝑠 ) 
+
+> 𝑞
+
+(𝑥 ′)
+
+respectively. At each scale, we compute a warping loss using the corresponding downsampled query and anchor images: 
+
+L (𝑠 ) 
+
+> warp
+
+(Δ𝑇 ) =∑︁ 
+
+> 𝑥
+
+𝑀 (𝑥 ) ˜𝐼 (𝑠 ) 
+
+> 𝑎
+
+(𝑥 ) − 𝐼 (𝑠 ) 
+
+> 𝑞
+
+(𝑥 ′) 22 (14) During the optimization, pose refinement proceeds from coarse to fine. Starting at 𝑠 = 𝑆 , we optimize Δ𝑇 at each level and use the resulting estimates to initialize the next finer level, repeating until 𝑠 = 0. This coarse-to-fine schedule improves convergence stability and enlarges the basin of attrac-tion without introducing additional scale-specific weighting hyperparameters. 
+
+Fig. 4: Multi-scale warping-based optimization: query and rendered images are processed in a multi-scale pyramid and optimized from coarse (downsampled) to the full resolution. V. Experiment 
+
+A. Experiment Dataset 1) Benchmark Dataset: We evaluate the performance of GS-CPE across two widely used public visual localization datasets. The 7Scenes dataset [48] comprises seven indoor scenes with volumes ranging from 1–18 m 3. The Cambridge Landmarks dataset [36] represents outdoor scenarios, char-acterized by challenges such as moving objects and varying lighting conditions between query and training images. 
+
+Algorithm 2 Warping-based Camera Pose Refinement 
+
+Inputs: 3DGS model G; Intrinsics 𝐾 ; Re-rendering thresholds 
+
+( ˜𝜖 𝑡 , ˜𝜖 𝑅 ); Image Downsample: DS  
+
+> 2:
+
+Output: Refined query image pose 𝑇 𝑓 .
+
+while a new query image 𝐼 q and coarse pose 𝑇 q arrives do  
+
+> 4:
+
+𝑇 𝑎 ← 𝑇 𝑞 
+
+( ˜𝐼 𝑎 , ˜𝐷 𝑎 ) = R (G , 𝐾, 𝑇 𝑎 ) 
+
+> 6:
+
+𝑀 ← Visibility-Mask (𝑇 𝑎 , G) 
+
+for scale layer 𝑠 ∈ { 𝑆, . . . , 0} do  
+
+> 8:
+
+𝐼 (𝑠 ) 
+
+> 𝑎
+
+, 𝐼 (𝑠 ) 
+
+> 𝑞
+
+, 𝑀 (𝑠 ) ← DownSample ( ˜𝐼 𝑎 , ˜𝐷 𝑎 , 𝑀, 2𝑠 )
+
+for iterative index 𝑖 ∈ Nr do  
+
+> 10:
+
+X(3) = 𝜋 −1 ( ˜𝐼 (𝑠 ) 
+
+> 𝑎
+
+, ˜𝐷 (𝑠 ) 
+
+> 𝑎
+
+, 𝐾 ) {2D-to-3D projection }
+
+X′ ( 2) = 𝜋 
+
+
+
+𝐾 𝑇 𝑓 𝑇 −1 
+
+> 𝑎
+
+X(3)
+
+
+
+{X′ ( 2) = {𝑥 ′ 
+
+> 𝑗
+
+}𝑁 𝑗 =1 } 
+
+> 12:
+
+L (𝑠 ) 
+
+> warp
+
+(Δ𝑇 ) = Í𝑥 𝑀 (𝑠 ) (𝑥 ) ˜𝐼 (𝑠 ) 
+
+> 𝑎
+
+(𝑥 ) − 𝐼 (𝑠 ) 
+
+> 𝑞
+
+(𝑥 ′) 22
+
+Δ𝑇 ∗ = arg min Δ𝑇 L (𝑠 ) 
+
+> warp
+
+(Δ𝑇 ) 
+
+> 14:
+
+if ∥trans (Δ𝑇 ∗)∥ ≥ ˜𝜖 𝑡 and ∠(rot (Δ𝑇 ∗)) ≥ ˜𝜖 𝑅 then 
+
+𝑇 𝑎 ← 𝑇 𝑓 ← Δ𝑇 ∗ 𝑇 𝑎  
+
+> 16:
+
+( ˜𝐼 𝑎 , ˜𝐷 𝑎 ) = R (G , 𝐾, 𝑇 𝑎 ) {re-rendering }
+
+𝑀 ← Visibility-Mask (𝑇 𝑎 , G)  
+
+> 18:
+
+𝐼 (𝑠 ) 
+
+> 𝑎
+
+, 𝐼 (𝑠 ) 
+
+> 𝑞
+
+, 𝑀 (𝑠 ) ← DownSample ( ˜𝐼 𝑎 , ˜𝐷 𝑎 , 𝑀, 2𝑠 )
+
+end if  
+
+> 20:
+
+end for end for  
+
+> 22:
+
+𝑇 𝑓 ← Δ𝑇 ∗ 𝑇 𝑎 
+
+end while 
+
+2) Additional Real-World Datasets: We further evaluate our method on real-world outdoor and indoor datasets. Specif-ically, we use the public FAST-LIVO2 dataset [49]. We report results on two sequences, CBD Building 2 and SYSU. In addition, we introduce a private AC1 dataset collected with a Robosense AC1. The collected sequences are designed to reflect challenging real-world scenarios, including narrow indoor spaces, severe occlusions and clutter. 
+
+B. Experiment Setup & 3DGS Training 
+
+We train one 3DGS model per scene using 3DGS [14] for 30,000 iterations with depth regularization. All experiments run on a workstation with an NVIDIA RTX A5000 GPU and an AMD Ryzen Threadripper PRO 5955WX (16-core) CPU. We split each dataset into training and testing sets using different split ratios. The training set is used to train the 3DGS model and build the retrieval database, while the test set is kept fully unseen for evaluation. Dataset-specific reconstruction sources and evaluation protocols are as follows. 
+
+7Scenes : We use the aligned poses from [50] as pseudo ground truth, and follow the same training/testing sequence split as [50]. We train the 3DGS model using the improved sparse point clouds from [29]. Cambridge Landmarks : Point clouds and initial camera poses are reconstructed with COLMAP [51]. To mitigate dynamic objects, we apply temporal object filtering to mask moving regions before 3DGS training. FAST-LIVO2 : We use FAST-LIVO2[49] to obtain point clouds and camera poses for 3DGS initialization, adopt a 1:3 test/train split. SLAM poses serve as ground truth during evaluation. AC1 Private Dataset : We use COLMAP [51] to obtain camera poses and sparse point cloud for 3DGS initialization, adopt a 1:3 test/train split. Colmap-estimated TABLE I: Comparison of median translational and rotational errors (cm/ ◦) computed from GS-CPE and existing method using 7Scenes datasets. As mentioned before, APR represents pose regression, SCR represents scene coordinate, and NRP represents for nerual render pose estimation.                                                                                                                                     
+
+> Methods Chess Fire Heads Office Pumpkin Redkitchen Stairs Avg. ↓[cm/ ◦]
+> APR
+> PoseNet [36] 10/4.02 27/10.0 18/13.0 17/5.97 19/4.67 22/5.91 35/10.5 21.0 / 7.74 MS-Transformer [37] 11/6.38 23/11.5 13/13.0 18/8.14 17/8.42 16/8.92 29/10.3 18.0 / 9.51 DFNet [38] 3/1.12 6/2.30 4/2.29 6/1.54 7/1.92 7/1.74 12/2.63 6.0 / 1.93 Marepo [39] 1.90/0.83 2.30/0.92 2.1/1.24 2.9/0.93 2.5/0.88 2.9/0.98 5.9/1.48 2.9 / 1.04
+> SCR
+> DSAC* [40] 0.5/0.17 0.8/0.28 0.5 /0.34 1.2/0.34 1.0/0.28 0.7 /0.21 2.7/0.78 1.1 / 0.34 ACE [41] 0.6/0.18 0.9/0.34 0.6/0.33 1.0 /0.32 1.1/0.26 0.9/0.31 2.9/0.81 1.2 / 0.37 GLACE [42] 0.6/0.18 0.9/0.34 0.6/0.34 1.1/0.29 0.9 /0.23 0.8/ 0.2 3.2/0.93 1.2 / 0.36
+> NRP
+> FQN-MN [43] 4.1/1.14 10.5/2.97 9.2/2.45 3.6/2.36 4.6/1.76 16.1/4.42 139.5/34.67 8.7 / 2.77 CrossFire [44] 1/0.4 5/1.9 3/2.3 2/1.6 3/0.8 2/0.8 12/1.9 4.4 / 1.38 PNeRFLoc [26] 0.8/0.4 2.5/0.7 2.0/1.3 1.5/0.9 2.0/0.9 2.5/1.2 32/5.73 7.3/1.76 NeRFMatch [45] 0.9/0.3 1.1/0.4 1.5/1.0 3.0/0.8 2.2/0.6 1.0/0.3 10.1/1.7 2.8 / 0.7 GSplatLoc [46] 0.39 /0.13 0.91/0.29 0.94 /0.50 1.41/0.32 1.41/0.26 1.32/0.29 3.44/0.82 1.4/0.37 ACE+HGSLoc [17] 0.5/0.17 0.6 /0.25 0.5 /0.29 1.0 /0.25 1.1/ 0.21 0.7 /0.2 2.8/0.69 1.0/ 0.29 GS-CPE (Coarse) 0.51/0.15 0.97/0.32 0.7/0.42 1.28/ 0.21 1.47/0.28 0.74/0.32 1.9/0.47 1.08/0.31
+> GS-CPE (Refine) 0.43/0.147 0.66/ 0.24 0.67/0.52 1.02/ 0.18 1.13/0.25 0.72/0.27 1.75 /0.43 0.91 /0.29
+> * Best results are highlighted as 1st and 2nd. (lower is better)
+
+TABLE II: Comparison of methods across Cambridge dataset using median translational and rotational error (cm/ ◦).                                            
+
+> Methods Kings Hospital Shop Church
+> APR PoseNet [36] 93/2.73 224/7.88 147/6.62 237/5.94 MS-Transformer [37] 85/1.45 175/2.43 88/3.2 166/4.12 LENS [47] 33/0.5 44/0.9 27/1.6 53/1.6 DFNet [38] 73/2.37 200/2.98 67/2.21 137/4.02 SCR ACE [41] 29/0.38 31/0.61 5/0.3 19/0.6 NRP CrossFire [44] 47/0.7 43/0.7 20/1.2 39/1.4 PNeRFLoc [35] 24/ 0.29 28/ 0.37 6/ 0.27 40/0.55
+> GS-CPE (Coarse) 23/0.31 24/0.52 5/0.34 18/0.44
+> GS-CPE (Refine) 21 /0.3 22 /0.53 5/0.32 16 /0.39
+> * Best results are highlighted as 1st and 2nd. (lower is better)
+
+poses are used as ground truth during evaluation. 
+
+C. Implementation Details 
+
+In coarse pose estimation, we set the number of RANSAC iterations to 2000, iteration limit 𝑁 𝑐 = 3, convergence thresholds 𝜖 𝑡 = 0.02 and 𝜖 𝑅 = 0.02 ◦. In pose refinement, we use Adam to jointly optimize translation and rotation (quaternion parameterization) with a learning rate of 3 × 10 −4,iteration limit of each multi-scale level 𝑁 𝑓 = 20, adaptive re-rendering thresholds ˜ 𝜖 𝑡 = 0.5 and ˜ 𝜖 𝑅 = 0.5◦, 𝜏 𝑑 = 0.02 𝑚 
+
+and 𝜏 𝑒 = 0.3 for visibility-aware warping mask, 𝑆 = 2 for multi-scale pose optimization. 
+
+D. Performance Results on Benchmarks 
+
+We compare GS-CPE with representative state-of-the-art methods and report median translation and rotation errors (cm/ ◦) for each scene as well as the average across scenes in Tables I and II. 
+
+a) 7Scenes.: On the indoor 7Scenes benchmark, GS-CPE achieves competitive performance against SOTA neural rendering–based localization methods. The coarse stage ob-tains an average error of 1.08 cm / 0.31 ◦, which is further TABLE III: Comparison of methods across FAST-LIVO2 and private dataset AC1 datasets using median translational and rotational error (cm/ ◦) across various approaches.                         
+
+> Dataset Fast-livo2 AC1 Methods CBD2 Sculpture Lab Lounge APR Marepo [39] 1542.88/42.29 141.98/3.56 24.85/3.29 24/2.49
+> SCR ACE [41] 9.4 /0.5 6.8/0.2 0.8/0.1 1.3/0.2
+> NRP GS-CPE (Coarse) 9.71/0.569 2.68/0.133 0.65/0.103 0.93/0.14
+> GS-CPE (Refine) 9.68/0.567 2.12 /0.131 0.61 /0.096 0.88 /0.13
+> * Best results are highlighted as 1st and 2nd. (lower is better)
+
+reduced to 0.91 cm / 0.29 ◦ after refinement (Table I). Com-pared with the prior NRP method GSplatLoc (1.4 cm / 0.37 ◦), GS-CPE improves translation accuracy while maintaining comparable rotational performance. While GS-CPE is not the top method in every scene, it consistently achieves first-or second-tier results, demonstrating strong generalization without per-scene training or descriptor fine-tuning. 
+
+b) Cambridge Landmarks.: On the outdoor Cambridge Landmarks dataset, GS-CPE also delivers consistent improve-ments. Averaged across scenes, the coarse stage achieves 23cm / 0.44 ◦, which is reduced to 21cm / 0.39 ◦ after refinement (Table II). Compared with other NPR or APR methods, GS-CPE improves translation accuracy while achieving compara-ble rotational performance. We note that the absolute errors on Cambridge Landmarks are generally higher than those on 7Scenes because Cambridge contains larger-scale outdoor scenes with stronger viewpoint, illumination, and dynamic changes, making both coarse retrieval and local photometric refinement more challenging. 
+
+E. Performance Results in Public Datasets a) FAST-LIVO2: As shown in Table III , on FAST-LIVO2 dataset, GS-CPE achieves competitive performance with respect to the SCR baseline ACE. On the Sculpture sequence, GS-CPE achieves the best accuracy (2.12,cm / TABLE IV: Comparison of methods on Lounge Sequence of AC1 Custom Dataset. Accuracy is reported as the percentage of frames within pose thresholds (10cm/5 ◦, 5cm/5 ◦, 2cm/2 ◦,1cm/1 ◦), along with median translation/rotation errors (cm/ ◦). Best results are shown in bold .                          
+
+> 10cm/5 ◦5cm/5 ◦2cm/2 ◦1cm/1 ◦Median Error
+> Methods ↑(%) ↑(%) ↑(%) ↑(%) ↑[cm/ ◦]
+> APR Marepo [39] 7.69 0.0 0.0 0.0 24.85/3.29
+> SCR ACE [41] 96.2 96.2 94.2 69.2 0.8/0.1
+> NRP GS-CPE 100.0 99.0 96.1 76.5 0.61/0.096
+
+0.131 ◦), improving over both the coarse stage and ACE, while on CBD2 ACE is slightly better. We attribute this gap to lower 3DGS reconstruction quality in CBD2 due to inaccurate SLAM poses and point-cloud initialization, which degrades rendering fidelity. Overall, refinement consistently improves the coarse estimate, validating our approach. 
+
+b) AC1 (Private Dataset).: As shown in Table III , on AC1 dataset, GS-CPE significantly outperforms the APR base-line (Marepo) and matches or exceeds ACE. After refinement, GS-CPE achieves the best median errors on both Lab (0.61 cm / 0.096 ◦) and Lounge (0.88 cm / 0.13 ◦). We further make frame-level accuracy under strict thresholds in Lounge Sequence as summarized in Tables IV: on Lounge, it achieves 100% at 10 cm/5 ◦ and 76.5% at 1 cm/1 ◦, outperforming ACE and Marepo across thresholds. 
+
+F. Runtime Analysis 
+
+We report the per-query runtime of GS-CPE on the 7Scenes dataset using the same workstation described in Section V-B. The runtime is averaged over all test queries and decomposed into the main processing modules. The complete pipeline requires 1.608 s per query, corresponding to approximately 
+
+0.62 FPS . The coarse localization and pose refinement stages take 1.255 s and 0.353 s , respectively. Image retrieval and feature matching require approximately 0.024 s per query. Each 3DGS rendering operation takes only 0.003 s , while visibility-mask generation requires approximately 0.020 s per rendered frame. For comparison, the NeRF-based pNeRFLoc method [26] requires approximately 5.5 s per query, with NeRF rendering accounting for a substantial portion of the runtime. In contrast, GS-CPE benefits from the high rendering efficiency of 3DGS. Although the proposed method performs multiple rendering operations during coarse pose estimation and iterative re-finement, the associated rendering overhead remains small. As a result, GS-CPE achieves substantially faster image relocalization while still enabling repeated rendering for pose verification and refinement. 
+
+G. Ablation 
+
+We conduct an ablation study in Table. V to assess the impact of (1) multi-scale warping-based optimization and (2) the visibility-aware consistency mask. Starting from a single-scale baseline, we incrementally enable each component. Multi-scale optimization improves convergence robustness, while TABLE V: Ablation Study on Office Sequence of 7Scenes dataset. The table reports the percentage of frames within different position/orientation thresholds and the median trans-lation/rotation errors (cm/ °). Best results are in bold .                   
+
+> 5cm/5 ◦2cm/2 ◦1cm/1 ◦Median Error
+> Methods ↑(%) ↑(%) ↑(%) ↑[cm/ ◦]w/o multi-scale 100 97.5 34.2 1.08/0.197 w/o artificial mask 100 98.6 37.8 1.14/0.191 full 100 99 43.0 1.02 /0.184
+
+the visibility-aware mask reduces occlusion-induced errors. Their combination achieves the best overall performance, highlighting their complementary contributions. VI. Conclusion and Future Work We presented GS-CPE, a unified coarse-to-fine 3DGS-based visual localization framework that combines retrieval-initialized geometry-based pose estimation from 2D–3D cor-respondences with robust warping-based refinement. By uni-fying structure-based matching with efficient 3DGS synthesis and test-time pose refinement, GS-CPE achieves improved accuracy and practical efficiency. Experiments on benchmark and datasets demonstrate consistent gains over representative APR, SCR, and NeRF-based NRP baselines. For future work, we will extend GS-CPE to Gaussian Splatting models built with different Gaussian construction algorithms, evaluate scalability in larger real-world scenes, and deploy the system in real robotic applications. References                               
+
+> [1] K. Yabuuchi, D. R. Wong, T. Ishita, Y. Kitsukawa, and S. Kato, “Visual localization for autonomous driving using pre-built point cloud maps,” in 2021 IEEE Intelligent Vehicles Symposium (IV) , pp. 913–919, IEEE, Jul 2021. [2] J. Q. Sun, H. Weng, X. Xing, C. M. Yeum, and M. Crowley, “View invariant learning for vision-language navigation in continuous environments,” IEEE Robotics and Automation Letters , 2026. [3] M. P. Das, Z. Dong, and S. Scherer, “Joint point cloud and image based localization for efficient inspection in mixed reality,” in 2018 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) ,pp. 6357–6363, IEEE, 2018. [4] D. Lattanzi and G. Miller, “Review of robotic infrastructure inspection systems,” Journal of Infrastructure Systems , vol. 23, p. 04017004, Sep 2017. [5] V. Lepetit, F. Moreno-Noguer, and P. Fua, “Epnp: An accurate o(n) solution to the pnp problem,” International Journal of Computer Vision ,vol. 81, pp. 155–166, Feb 2009. [6] M. A. Fischler and R. C. Bolles, “Random sample consensus: a paradigm for model fitting with applications to image analysis and automated cartography,” Communications of the ACM , vol. 24, no. 6, pp. 381– 395, 1981. [7] T. Sattler, B. Leibe, and L. Kobbelt, “Efficient & effective prioritized matching for large-scale image-based localization,” IEEE transactions on pattern analysis and machine intelligence , vol. 39, no. 9, pp. 1744– 1756, 2016. [8] D. DeTone, T. Malisiewicz, and A. Rabinovich, “Superpoint: Self-supervised interest point detection and description,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition Workshops , pp. 224–236, IEEE, 2018. [9] P.-E. Sarlin, D. DeTone, T. Malisiewicz, and A. Rabinovich, “Superglue: Learning feature matching with graph neural networks,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recogni-tion , pp. 4938–4947, 2020.
+
+[10] H. Taira, M. Okutomi, T. Sattler, M. Cimpoi, M. Pollefeys, J. Sivic, T. Pajdla, and A. Torii, “Inloc: Indoor visual localization with dense matching and view synthesis,” in Proceedings of the IEEE conference on computer vision and pattern recognition , pp. 7199–7209, 2018. [11] P.-E. Sarlin, A. Unagar, M. Larsson, H. Germain, C. Toft, V. Larsson, M. Pollefeys, V. Lepetit, L. Hammarstrand, F. Kahl, et al. , “Back to the feature: Learning robust camera localization from pixels to pose,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 3247–3257, 2021. [12] J. Miao, K. Jiang, T. Wen, Y. Wang, P. Jia, B. Wijaya, X. Zhao, Q. Cheng, Z. Xiao, J. Huang, et al. , “A survey on monocular re-localization: From the perspective of scene map representation,” IEEE Transactions on Intelligent Vehicles , 2024. [13] B. Mildenhall, P. P. Srinivasan, M. Tancik, J. T. Barron, R. Ramamoorthi, and R. Ng, “Nerf: Representing scenes as neural radiance fields for view synthesis,” Communications of the ACM , vol. 65, no. 1, pp. 99–106, 2021. [14] B. Kerbl, G. Kopanas, T. Leimk¨ uhler, and G. Drettakis, “3d gaussian splatting for real-time radiance field rendering,” ACM Transactions on Graphics , vol. 42, July 2023. [15] H. Weng, H. Li, and C. M. Yeum, “Structured-li-gs: Structured 3d gaussians splatting with lidar incorporation and spatial constraints,” 2026. [16] H. Matsuki, R. Murai, P. H. J. Kelly, and A. J. Davison, “Gaussian Splatting SLAM,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024. [17] Z. Niu, Z. Tan, J. Zhang, X. Yang, and D. Hu, “Hgsloc: 3dgs-based heuristic camera pose refinement,” arXiv preprint arXiv:2409.10925 ,Sep 2024. [18] M. Dusmanu, I. Rocco, T. Pajdla, M. Pollefeys, J. Sivic, A. Torii, and T. Sattler, “D2-net: A trainable cnn for joint description and detection of local features,” in Proceedings of the ieee/cvf conference on computer vision and pattern recognition , pp. 8092–8101, 2019. [19] J. Revaud, C. De Souza, M. Humenberger, and P. Weinzaepfel, “R2d2: Reliable and repeatable detector and descriptor,” Advances in neural information processing systems , vol. 32, 2019. [20] J. Sun, Z. Shen, Y. Wang, H. Bao, and X. Zhou, “Loftr: Detector-free local feature matching with transformers,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,pp. 8922–8931, 2021. [21] V. Leroy, Y. Cabon, and J. Revaud, “Grounding image matching in 3d with mast3r,” 2024. [22] S. Chen, Y. Bhalgat, X. Li, J.-W. Bian, K. Li, Z. Wang, and V. A. Prisacariu, “Neural refinement for absolute pose regression with feature synthesis,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 20987–20996, 2024. [23] L. Yen-Chen, P. Florence, J. T. Barron, A. Rodriguez, P. Isola, and T.-Y. Lin, “inerf: Inverting neural radiance fields for pose estimation,” in 2021 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pp. 1323–1330, IEEE, Sep 2021. [24] S. Chen, Z. Wang, and V. Prisacariu, “Direct-posenet: Absolute pose regression with photometric consistency,” in 2021 International Conference on 3D Vision (3DV) , pp. 1175–1185, IEEE, Dec 2021. [25] Y. Zou, Z. Luo, and J.-B. Huang, “Df-net: Unsupervised joint learning of depth and flow using cross-task consistency,” in Proceedings of the European Conference on Computer Vision (ECCV) , pp. 36–53, 2018. Accessed: Mar. 13, 2025. [26] B. Zhao, L. Yang, M. Mao, H. Bao, and Z. Cui, “Pnerfloc: Visual localization with point-based neural radiance fields,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 38, pp. 7450–7459, 2024. [27] P. Jiang, G. Pandey, and S. Saripalli, “3dgs-reloc: 3d gaussian splat-ting for map representation and visual relocalization,” arXiv preprint arXiv:2403.11367 , Mar 2024. [28] V. Ress, J. Meyer, W. Zhang, D. Skuddis, U. Soergel, and N. Haala, “3d gaussian splatting aided localization for large and complex indoor-environments,” arXiv preprint arXiv:2502.13803 , Feb 2025. [29] C. Liu, S. Chen, Y. S. Bhalgat, S. HU, M. Cheng, Z. Wang, V. A. Prisacariu, and T. Braud, “GS-CPR: Efficient camera pose refinement via 3d gaussian splatting,” in The Thirteenth International Conference on Learning Representations , 2025. [30] K. Botashev, V. Pyatov, G. Ferrer, and S. Lefkimmiatis, “Gsloc: Visual localization with 3d gaussian splatting,” in 2024 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pp. 5664–5671, IEEE, 2024. [31] G. Sidorov, M. Mohrat, D. Gridusov, R. Rakhimov, and S. Kolyubin, “Gsplatloc: Grounding keypoint descriptors into 3d gaussian splatting for improved visual localization,” arXiv preprint arXiv:2409.16502 ,Mar 2025. [32] F. Khatib, D. Moran, G. Trostianetsky, Y. Kasten, M. Galun, and R. Basri, “Gsvisloc: Generalizable visual localization for gaussian splatting scene representations,” 2025. [33] R. Arandjelovic, P. Gronat, A. Torii, T. Pajdla, and J. Sivic, “Netvlad: Cnn architecture for weakly supervised place recognition,” in Proceedings of the IEEE conference on computer vision and pattern recognition ,pp. 5297–5307, 2016. [34] J. Wang, M. Chen, N. Karaev, A. Vedaldi, C. Rupprecht, and D. Novotny, “Vggt: Visual geometry grounded transformer,” in Proceedings of the Computer Vision and Pattern Recognition Conference , pp. 5294–5306, 2025. [35] B. Zhao, L. Yang, M. Mao, H. Bao, and Z. Cui, “PNeRFLoc: Visual Localization with Point-based Neural Radiance Fields,” Dec. 2023. arXiv:2312.10649 [cs]. [36] A. Kendall, M. Grimes, and R. Cipolla, “Posenet: A convolutional network for real-time 6-dof camera relocalization,” in Proceedings of the IEEE international conference on computer vision , pp. 2938–2946, 2015. [37] Y. Shavit, R. Ferens, and Y. Keller, “Learning multi-scene absolute pose regression with transformers,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 2733–2742, 2021. [38] S. Chen, X. Li, Z. Wang, and V. Prisacariu, “Dfnet: Enhance absolute pose regression with direct feature matching,” in Proceedings of the European Conference on Computer Vision (ECCV) , 2022. [39] S. Chen, T. Cavallari, V. A. Prisacariu, and E. Brachmann, “Map-relative pose regression for visual re-localization,” in CVPR , 2024. [40] E. Brachmann and C. Rother, “Visual camera re-localization from rgb and rgb-d images using dsac,” IEEE transactions on pattern analysis and machine intelligence , vol. 44, no. 9, pp. 5847–5865, 2021. [41] E. Brachmann, T. Cavallari, and V. A. Prisacariu, “Accelerated coordi-nate encoding: Learning to relocalize in minutes using rgb and poses,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 5044–5053, 2023. [42] F. Wang, X. Jiang, S. Galliani, C. Vogel, and M. Pollefeys, “Glace: Global local accelerated coordinate encoding,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pp. 21562–21571, 2024. [43] H. Germain, D. DeTone, G. Pascoe, T. Schmidt, D. Novotny, R. New-combe, C. Sweeney, R. Szeliski, and V. Balntas, “Feature query networks: Neural surface description for camera pose refinement,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 5071–5081, 2022. [44] A. Moreau, N. Piasco, M. Bennehar, D. Tsishkou, B. Stanciulescu, and A. de La Fortelle, “Crossfire: Camera relocalization on self-supervised features from an implicit representation,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 252– 262, 2023. [45] Q. Zhou, M. Maximov, O. Litany, and L. Leal-Taix´ e, “The nerfect match: Exploring nerf features for visual localization,” in European Conference on Computer Vision , pp. 108–127, Springer, 2024. [46] G. Sidorov, M. Mohrat, D. Gridusov, R. Rakhimov, and S. Kolyubin, “GSplatLoc: Grounding Keypoint Descriptors into 3D Gaussian Splat-ting for Improved Visual Localization,” Mar. 2025. arXiv:2409.16502 [cs]. [47] A. Moreau, N. Piasco, D. Tsishkou, B. Stanciulescu, and A. de La Fortelle, “Lens: Localization enhanced by nerf synthesis,” in Conference on Robot Learning , pp. 1347–1356, PMLR, 2022. [48] B. Glocker, S. Izadi, J. Shotton, and A. Criminisi, “Real-time rgb-d camera relocalization,” in 2013 IEEE International Symposium on Mixed and Augmented Reality (ISMAR) , pp. 173–179, IEEE, 2013. [49] C. Zheng, W. Xu, Z. Zou, T. Hua, C. Yuan, D. He, B. Zhou, Z. Liu, J. Lin, F. Zhu, et al. , “Fast-livo2: Fast, direct lidar-inertial-visual odometry,” 
+
+IEEE Transactions on Robotics , 2024. [50] E. Brachmann, M. Humenberger, C. Rother, and T. Sattler, “On the Limits of Pseudo Ground Truth in Visual Camera Re-Localization,” in 
+
+International Conference on Computer Vision (ICCV) , 2021. [51] A. Fisher, R. Cannizzaro, M. Cochrane, C. Nagahawatte, and J. L. Palmer, “Colmap: A memory-efficient occupancy grid mapping frame-work,” Robotics and Autonomous Systems , vol. 142, p. 103755, 2021.

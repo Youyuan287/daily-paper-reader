@@ -1,0 +1,423 @@
+Title: Seed2GS: Camera-Free, Training-Free Object Extraction from 3D Gaussian Scenes via a Single Reference-View Grounding
+
+URL Source: https://arxiv.org/pdf/2608.11928v1
+
+Published Time: Thu, 13 Aug 2026 00:47:29 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# Seed2GS: Camera-Free, Training-Free Object Extraction from 3D Gaussian Scenes via a Single Reference-View Grounding 
+
+## Zongjian Ding 1,2, †, Yudong Gao 4, †, Jiale Liu 3, Yu Xinglin 5, Junxing Ren 1,2 ,Dong Wei 1,2 , Yajing Chen 1, Shan Huang 3, Mingjun Cheng 3,* , Li Min 1,2,* 
+
+> 1
+
+University of Chinese Academy of Sciences 
+
+> 2
+
+Institute of Information Engineering, Chinese Academy of Sciences 
+
+> 3
+
+Zhejiang University 
+
+> 4
+
+The Hong Kong University of Science and Technology 
+
+> 5
+
+Beijing Institute of Technology 
+
+> †
+
+Equal contribution. *Corresponding authors. 
+
+Abstract 
+
+Extracting a target object from a pre-built 3D Gaussian Splat-ting (3DGS) scene enables interactive 3D editing. Existing methods either train for tens of minutes per scene, sacrifice accuracy, or require original reconstruction cameras that pre-built assets may not include. We present Seed2GS, which achieves the highest reported LERF-MASK accuracy without original reconstruction cameras or scene-specific represen-tation training. Its key insight is to separate target identity from 3D coverage. QD-SAM3 selects one reliable reference mask from several open-vocabulary candidates, fixing iden-tity once. Seed lift and visibility-adaptive virtual orbits then expose the object from new viewpoints, while tracking prop-agates the seed without repeated detection. Because the scene remains frozen, these masks supervise only one temporary foreground logit per Gaussian. On LERF-MASK, Seed2GS reaches 92.1% mean intersection over union (mIoU) with a measured compute-only latency of 9.3 seconds, 3.7 points above the strongest scene-trained baseline and 7.6 points above the closest camera-free baseline. With one fixed test reference per scene, the complete pipeline retains 91.1% mIoU; re-placing its predicted seed with a ground-truth mask improves mIoU by only 0.72 points. On 3D-OVS, Seed2GS reaches 95.7% mIoU. 
+
+## 1 Introduction 
+
+Many 3D editing workflows receive finished 3D Gaussian Splatting (3DGS) scenes without the source images, capture cameras, or reconstruction pipeline (Kerbl et al. 2023). Their explicit primitives render in real time and remain directly manipulable. Editing one object in such an asset first requires identifying which Gaussians form the target. Existing 3DGS segmentation methods impose one of three costs. One class attaches language features to primitives or learns instance identities during reconstruction, so that Gaus-sians carry queryable semantics (Kerr et al. 2023; Qin et al. 2024; Ye et al. 2024; Zhu et al. 2025b). These methods achieve high accuracy but optimize a representation for ev-ery target scene. Building that representation takes tens of minutes and prevents on-demand queries. A second class lifts 2D masks into 3D, but reads visibility from the original re-construction cameras (Shen, Yang, and Wang 2024; Chacko 5s 10s 15s 20 40 60 80 90     
+
+> LERF-MASK mIoU
+> Ours B3-Seg FlashSplat-R FlashSplat-U
+> 10m 20m 30m 40m 50m
+> Gaga LangSplat Unified-Lift SA3D Gaussian Grouping LERF ObjectGS
+> Runtime
+
+// // 
+
+Figure 1: Accuracy–runtime trade-off on LERF-MASK us-ing the reported runtimes in Table 1. Gray, blue, and red denote scene-specific methods, scene-training-free methods, and Seed2GS; the broken axis separates seconds and min-utes. et al. 2025). A finished asset may omit these cameras, mak-ing such methods unavailable in the target setting. A third class removes both requirements by rendering virtual views from the frozen scene. B3-Seg (Kamata, Munro, and Homma 2026) repeatedly selects its next view by analytic expected information gain, then re-detects the target there with an open-vocabulary detector. Each detection updates a Bayesian foreground belief for every Gaussian. B3-Seg needs neither original reconstruction cameras nor scene-specific training and answers in seconds, but it still trails the best scene-trained method in accuracy. No method in the LERF-MASK comparison therefore combines accuracy, low latency, and weak operating assumptions. The central design question is where to spend query-time computation. Target identity and 3D coverage require dif-ferent evidence. Grounding determines which instance the prompt denotes, whereas additional views reveal where that fixed instance extends in 3D. Re-grounding every view re-peatedly solves the semantic problem and can switch among similar instances; costly view scheduling cannot repair a poor initial identity. We therefore invest semantic computation in arXiv:2608.11928v1 [cs.CV] 12 Aug 2026 one reliable seed, then use tracking and simple object-centric trajectories to expand its coverage. We present Seed2GS to close this gap on LERF-MASK. Seed2GS requires the user’s current reference view and pose, but no reconstruction images or camera set. Here, camera-free means independent of that reconstruction camera set, and 
+
+training-free means no scene model or persistent semantic representation. Query-time refinement fits only disposable membership logits. The resulting pipeline is simple: ground once, propagate, and fit. QD-SAM3 selects one reference seed from several open-vocabulary candidates. A flat orbit and a visibility-adaptive ascending orbit expose new surfaces, and tracking propagates the seed without another detection. The frozen scene fixes all rasterization weights, so Seed2GS fits one temporary foreground logit per Gaussian while preserving geometry, color, and opacity. Figure 2 summarizes the work-flow. Our contributions are threefold: 
+
+• Ground-once extraction from frozen 3DGS assets. 
+
+Seed2GS separates target identity from coverage, prop-agates one seed along virtual orbits, and fits disposable Gaussian membership logits. 
+
+• A stronger accuracy–latency–assumption trade-off. 
+
+Among reported LERF-MASK results, Seed2GS achieves the highest accuracy and lowest query latency without reconstruction cameras or scene-specific repre-sentation training. 
+
+• Component-level validation. Two benchmarks, fixed-reference and multi-reference studies, and controlled ab-lations evaluate seed acquisition, trajectory design, track-ing structure, and view weighting. 
+
+## 2 Related Work 
+
+2.1 Scene-Specific 3DGS Segmentation 
+
+Scene-specific methods build an auxiliary representation for each scene before interaction begins. One category attaches language or open-vocabulary features to NeRF or Gaussian primitives, so that users can query scene regions with text, as in LERF, 3D-OVS, LangSplat, and OpenGaussian (Kerr et al. 2023; Liu et al. 2023; Qin et al. 2024; Wu et al. 2024). Another category learns instance identity, affinity, grouping cues, or object-level codes for segmentation and editing, as in Gaussian Grouping, SAGA, Gaga, Unified-Lift, ObjectGS, and OpenSplat3D (Ye et al. 2024; Cen et al. 2025; Lyu et al. 2026; Zhu et al. 2025a,b; Piekenbrinck et al. 2025). Al-though their implementations differ, both categories assume that the target scene already contains a persistent semantic or instance representation. These persistent representations support query-time segmentation but take tens of minutes to build for each new scene. This per-scene cost prevents im-mediate queries on newly received assets. Seed2GS instead keeps the input 3DGS frozen and estimates only prompt-specific foreground membership for the current query. 
+
+2.2 Mask Lifting and Camera-Free Segmentation 
+
+Mask-lifting methods avoid persistent semantic fields by transferring 2D mask evidence directly to 3D primitives. SA3D, FlashSplat, and LBG assign that evidence through mask lifting, multi-view fusion, or closed-form label estima-tion (Cen et al. 2023; Shen, Yang, and Wang 2024; Chacko et al. 2025). The three methods solve for labels differently, but all require the relationship between Gaussians and the original reconstruction cameras. Users who hold only the asset cannot supply those cameras. iSegMan avoids scene-specific training for click-based interaction by propagating a 2D click across posed views and voting through Gaussian visibility (Zhao et al. 2025). It targets interactive clicks rather than open-vocabulary text and uses a posed multiview set. Camera-free methods remove this requirement by render-ing virtual views from the frozen scene. B3-Seg (Kamata, Munro, and Homma 2026) is the closest method to ours. Each round selects the next view by analytic expected information gain, then re-detects the target there with an open-vocabulary detector. The new mask folds into a Beta–Bernoulli fore-ground belief for every Gaussian. This loop needs no origi-nal reconstruction cameras or scene training and answers a query in seconds. Seed2GS meets the same constraints with a simpler division of labor: one grounding fixes the target iden-tity, and tracking preserves it across rendered views. Where B3-Seg optimizes an acquisition criterion to choose each next view, Seed2GS uses reference-anchored trajectories and makes one coverage-based decision about whether to render the ascending clip. Table 1 shows that this one-grounding pipeline achieves higher accuracy with lower reported la-tency. Under a fixed test-reference protocol, replacing the predicted seed with a ground-truth mask provides only 0.72 mIoU points of headroom. 
+
+## 3 Method 
+
+3.1 Overview 
+
+Seed2GS receives a frozen 3DGS scene G = {gi}Ni=1 , a text prompt p, and the user’s current reference camera cr .It outputs the Gaussian subset that forms the target object. The method uses the reference pose only to anchor virtual trajectories and accesses no original reconstruction cameras. It freezes every scene parameter, trains no network, builds no persistent representation, and estimates only one disposable foreground logit per Gaussian (Sec. 3.2). The pipeline separates target identity, view coverage, and Gaussian membership. QD-SAM3 grounds p into one seed mask m⋆, and seed lift converts it into a conservative 3D support G0 and estimates its center o (Sec. 3.3). VAAS ex-pands coverage with flat and ascending virtual orbits around 
+
+o, while tracking preserves identity across views. Gaussian refinement fits membership logits to the propagated masks; thresholding qi = σ(li) then exports the object. Algorithm 1 states the procedure; Figure 2 visualizes the data flow. 
+
+3.2 Preliminaries: 3D Gaussian Splatting 
+
+3D Gaussian Splatting (3DGS) (Kerbl et al. 2023) represents a scene with anisotropic Gaussian primitives. Each primitive 
+
+gi has a 3D center μi, covariance Σi, spherical-harmonic color coefficients hi, and opacity αi. For a camera c, ras-terization projects visible Gaussians to the image plane and render as two independent clips 
+
+A Seed acquisition B 3D support and virtual-view supervision C Gaussian membership refinement       
+
+> 1QD-SAM3 2Seed Lift 3VAAS + SAM2
+> GroundingDINO direct text candidate masks �(p)
+> SELECTED SEED inside
+
+m*      
+
+> depth check 3D connect.
+> G₀· center
+> o· ext
+> ascending-spiral clip
+> {Y ⁽
+> ᶜ
+> ⁾}
+> initialize
+> { l
+> ᵢ
+> }
+> from
+> G₀
+> frozen
+> Gand
+> c
+> 4Gaussian Refinement
+> q
+> ᵢ
+> = σ(l
+> ᵢ
+> )
+> frozen rasterizer
+> D_c ω_c
+> weighted BCE
+> update only
+> { l
+> ᵢ
+> }
+> soft prediction
+> P⁽
+> ᶜ
+> ⁾
+> q
+> ᵢ
+> > τ Y⁽
+> ᶜ
+> ⁾
+> extracted subset
+> G_f
+> Extract the stone bear!
+> p
+> SCORE & SELECT Shared SAM3 flat-orbit clip
+> A = A_max(1-v)^γ
+> Qwen3VL
+> Ground Once ent
+
+Figure 2: Seed2GS overview. (A) QD-SAM3 scores open-vocabulary candidates to select one seed. (B) Seed lift initializes 3D support, and VAAS with SAM2 propagates that seed along two virtual clips. (C) Frozen rasterization and reliability-weighted mask fitting optimize only Gaussian membership logits. alpha-composites their contributions in depth order. We de-note the final contribution of Gaussian gi to pixel u by w(c)
+
+> u,i
+
+.Applying the same compositing weights to a per-Gaussian foreground variable qi ∈ [0 , 1] produces a soft object mask 
+
+P (c) 
+
+> u
+
+= X
+
+> i
+
+w(c) 
+
+> u,i
+
+qi. (1) Stacking the U pixels of view c turns Eq. (1) into P (c) =
+
+W (c)q, where W (c) ∈ RU ×N collects the compositing weights and q = ( q1, . . . , q N )⊤.The frozen scene fixes every entry of W (c), leaving no unknown in the operator. Promptable extraction therefore becomes a box-constrained inverse problem with a fixed lin-ear forward operator: given fixed operators {W (c)} and target masks {Y (c)}, recover q ∈ [0 , 1] N with W (c)q ≈ Y (c) in every view. Seed2GS writes qi = σ(li) to enforce the box constraint, fits one temporary logit per Gaussian, and dis-cards the logits after object export. Two design choices distinguish methods that share this formulation. The first concerns the inverse solver: Flash-Splat (Shen, Yang, and Wang 2024) uses a closed form, B3-Seg (Kamata, Munro, and Homma 2026) uses Bayesian updates, and Seed2GS minimizes the reliability-weighted objective of Sec. 3.4. The second concerns the source of targets Y (c): Seed2GS derives every target mask from one grounding. 
+
+3.3 QD-SAM3 Seed Acquisition 
+
+QD-SAM3 produces the only semantically grounded mask in the pipeline. Here, one grounding means one reference-view semantic stage that returns one selected seed, not one localization-model call. Because all later masks descend from this seed, an error would propagate through seed lift, the virtual orbits, and the logit fit. QD-SAM3 reduces this risk by selecting among candidates from several sources rather than trusting one text-grounding result. QD-SAM3 combines three released models: Qwen3-VL, GroundingDINO, and SAM3 (Bai et al. 2025; Liu et al. 2024; Carion et al. 2025). The first two models supply lo-calization cues; SAM3 converts each cue into a mask. Given the rendered reference canvas Ir = R(G, c r ) and prompt p,Qwen3-VL and GroundingDINO return semantic and detec-tion boxes, respectively. The prompt p provides a third cue because SAM3 also accepts text directly. Writing {ak}Kk=1 
+
+for these cues, the same SAM3 model processes them all: 
+
+M(p) = {mk = SAM3( Ir , a k)}Kk=1 . (2) Using one mask generator holds the segmentation backend fixed, so candidate differences primarily reflect the local-ization cues. Every model uses released weights; Seed2GS fine-tunes none of them. QD-SAM3 then selects the final seed mask with a three-term weighted score: 
+
+m⋆ = arg max  
+
+> mk∈M (p)
+
+wsSsrc (mk) + wcSconf (mk)+ wtSlang (mk, p ).
+
+(3) The three terms score different evidence. Ssrc assigns a prior to the candidate’s localization source, Sconf uses that source model’s confidence, and Slang measures compatibility be-tween the source and the semantic type of the query. The highest-scoring candidate becomes the reference seed m⋆.
+
+3.4 Seed Lift, Virtual Orbits, and Refinement 
+
+Seed lift, virtual orbits, and Gaussian refinement carry m⋆
+
+into 3D. Because Seed2GS does not assume access to the Algorithm 1 Seed2GS inference 
+
+Input: frozen 3DGS G, text prompt p, reference camera cr 
+
+> 1:
+
+Ir ← R (G, c r ) {render reference canvas}  
+
+> 2:
+
+m⋆ ← QD-SAM3 (Ir , p ) {Eq. (3)}  
+
+> 3:
+
+G0, o ← SeedLift (G, m ⋆, c r ) 
+
+> 4:
+
+{Y (c)} ← VAAS (G, G0, o, m ⋆, c r ) {Eq. (4)}  
+
+> 5:
+
+li ← init (G0) for all i 
+
+> 6:
+
+{l⋆i }Ni=1 ← arg min {li}Ni=1 L {Eqs. (5)–(6)}  
+
+> 7:
+
+qi ← σ(l⋆i ) for all i
+
+Output: object subset Gf = {gi : qi > τ }
+
+original reconstruction cameras, it renders all supervision views with virtual cameras. Seed lift first locates the object center needed by the orbits. The orbits then supply supervi-sion views, and refinement fits the logits to their masks. 
+
+Seed lift. Seed lift converts the reference mask m⋆ into a conservative 3D Gaussian support before generating new su-pervision views. Three constraints localize foreground Gaus-sians projected into the reference view. Let πi and zi de-note the projected center and depth of gi, and let Dr de-note the rendered reference depth map. The mask and depth constraints retain candidates satisfying m⋆(πi) = 1 and 
+
+|zi − Dr (πi)| ≤ ϵd. Connected-component filtering on the resulting 3D candidate graph then retains the component at-tached to the target body and removes projection outliers. The resulting support G0 initializes the foreground logits. The support also estimates the object center o and 3D extent that parameterize the VAAS virtual orbits. 
+
+Virtual orbit supervision. VAAS expands 3D coverage without making another semantic decision. Re-detecting the target in every rendered view would require one open-vocabulary call per view. Seed2GS instead grounds the tar-get once and propagates that result. Given the lifted support 
+
+G0 and object center o, VAAS renders object-centric virtual views from the frozen scene G. SAM2 video tracking (Ravi et al. 2024) propagates the reference seed m⋆ to these views. VAAS ( Visibility-Adaptive Ascending Spiral) constructs a reference-anchored flat orbit and an ascending spiral orbit around o. Both trajectories start at the reference camera cr ,where SAM2 receives the canvas Ir and seed mask m⋆. The flat orbit mainly provides horizontal observations, while the ascending orbit complements it with vertical observations of top, bottom, and occluded regions. Orbit height adapts to missing visibility. A flat orbit sees the object from the side but can miss top, bottom, and self-occluded surfaces, so poorly observed targets may require a taller climb. VAAS measures ¯V as the mean fraction of G0
+
+visible under depth-consistent projection across the flat-orbit views and sets the ascending pitch amplitude to 
+
+A = Amax (1 − ¯V )γ . (4) Well-covered targets have large ¯V and keep the trajectory near-planar; poorly covered targets have small ¯V and climb higher. When A < 5◦, VAAS omits the near-duplicate as-cending clip and uses only the flat clip. Otherwise, it renders both reference-anchored clips. The skip rule spends addi-tional views only when the flat orbit indicates missing cov-erage. The masks propagated over all VAAS views form the supervision set {Y (c)} for refinement. 
+
+Gaussian refinement. Gaussian refinement uses the masks propagated by VAAS to optimize per-Gaussian foreground membership. The initial support G0 only initializes the fore-ground logits and parameterizes the virtual orbits. The original scene geometry, color, and opacity remain frozen throughout. Let qi = σ(li) denote the foreground proba-bility of Gaussian gi, and let rasterization produce the soft foreground mask P (c) for view c. Occlusion and tracking drift can corrupt propagated masks, so Seed2GS weights each view by its running BCE residual Dc. Specifically, us-ing the median residual mD and a MAD-based robust scale 
+
+sD , we define the view weight as 
+
+ωc = Norm 
+
+
+
+rmin + (1 − rmin )σ
+
+ mD + sD − Dc
+
+λτ sD
+
+ 
+
+,
+
+(5) where Norm[ ·] denotes mean normalization. This weight reduces the influence of high-residual views that conflict with the current 3D foreground estimate. The nonzero floor 
+
+rmin preserves supervision from difficult viewpoints early in optimization. The foreground logits are optimized with a reliability-weighted multi-view mask objective, 
+
+L = X
+
+> c,u
+
+ωc BCE 
+
+
+
+P (c) 
+
+> u
+
+, Y (c)
+
+> u
+
+
+
+, (6) where Y (c) is the propagated supervision mask for view c.After convergence, thresholding the foreground probabilities gives the target Gaussian subset: 
+
+Gf = {gi | qi > τ }. (7) 
+
+## 4 Experiments 
+
+4.1 Experimental Setup 
+
+Evaluation protocol. The experiments evaluate the ground-once, propagate, and fit design on two datasets with-out original reconstruction cameras or scene-level semantic training. Unless otherwise stated, every experiment uses a frozen 3DGS scene as input. Each query consists of a text prompt and one reference view with its camera pose. The headline LERF-MASK result uses one user-selected refer-ence per query, chosen from rendered RGB views in which the target is visible. Reference selection uses neither evalua-tion masks nor downstream 3D scores, but the result does not average over reference choices. A fixed-test-reference control and a 230-run favorable-reference sweep separately test this dependence. Beyond this reference pose, Seed2GS accesses no original reconstruction images or cameras and no ground-truth masks. It performs no scene-specific semantic training. The evaluation counts queries without valid predictions as zero in the corresponding scene average. Method Figurines Ramen Teatime Mean Time Train Views mIoU mBIoU mIoU mBIoU mIoU mBIoU mIoU mBIoU LERF 33.5 30.6 28.3 14.7 49.7 42.6 37.2 29.3 45 min Yes Yes SA3D 24.9 23.8 7.4 7.0 42.5 39.2 24.9 23.3 35 min Yes Yes LangSplat 52.8 50.5 50.4 44.7 69.5 65.6 57.6 53.6 19 min Yes Yes Gauss. Group. 69.7 67.9 77.0 68.8 71.7 66.1 72.8 67.6 37 min Yes Yes Gaga 90.7 89.0 64.1 61.6 69.3 66.0 74.7 72.2 13 min Yes Yes Unified-Lift – – – – – – 80.9 77.1 40 min Yes Yes ObjectGS 88.2 89.0 88.0 79.9 88.9 88.6 88.4 85.8 ∼50 min Yes Yes OpenSplat3D 92.3 89.4 75.9 68.2 83.7 78.8 84.0 78.8 – Yes Yes LBG 82.2 – 73.2 – 86.6 – 80.7 – – Yes Yes FlashSplat-U 60.2 57.5 68.4 61.5 80.4 76.3 69.6 65.1 10.2 s No Yes FlashSplat-R 71.6 69.1 71.4 66.3 86.6 83.9 76.5 73.1 10.1 s No Yes B3-Seg 88.3 85.4 75.3 69.7 89.8 88.0 84.5 81.0 12.1 s No No            
+
+> Seed2GS 93.1 91.8 91.5 85.2 91.8 88.9 92.1 88.6 9.3 s No No
+
+Table 1: LERF-MASK accuracy, reported time, and operating assumptions. Mean averages scenes equally. “Train” marks scene-specific representation training; “Views” marks use of original reconstruction views. Time reports representation construction for trained methods and query latency otherwise. Seed2GS is shown in bold .
+
+Datasets. LERF-MASK (Ye et al. 2024) annotates 23 text-query targets in three LERF scenes (Kerr et al. 2023): Fig-urines, Ramen, and Teatime. The targets cover common ob-jects, thin structures, relational prompts, and semantic ambi-guities between containers and contents. 3D-OVS (Liu et al. 2023) contains four scenes: Bed, Bench, Sofa, and Lawn. For 3D-OVS, we follow the public B3-Seg setting for scene selection, test split, and supplied reference camera poses, but not its inference procedure. Metric definitions and computa-tion follow the public Gaussian Grouping protocol (Ye et al. 2024). 
+
+Metrics. We report mean IoU (mIoU), mean boundary IoU (mBIoU), and per-query runtime. For each target, evaluation first averages all official test views and then averages targets within each scene, counting missing predictions as zero. The dataset-level Mean weights all scene scores equally. Both native evaluators threshold foreground probability at 0.40. Seed2GS runtime is measured on an NVIDIA H800 PCIe GPU and includes query-time model inference, virtual-view processing, and Gaussian refinement. It excludes process startup, model and scene loading, evaluation rendering, and metric computation. For scene-training-free baselines, we quote query latency from published results; for scene-specific baselines, Table 1 reports their per-scene representation-construction time. 
+
+Baselines. We compare Seed2GS with language-driven and instance-level 3DGS segmentation methods, includ-ing LERF (Kerr et al. 2023), SA3D (Cen et al. 2023), LangSplat (Qin et al. 2024), Gaussian Grouping (Ye et al. 2024), Gaga (Lyu et al. 2026), Unified-Lift (Zhu et al. 2025a), ObjectGS (Zhu et al. 2025b), OpenSplat3D (Piekenbrinck et al. 2025), LBG (Chacko et al. 2025), FlashSplat (Shen, Yang, and Wang 2024), and B3-Seg (Kamata, Munro, and Homma 2026). The tables expose two operating assump-tions: whether each method requires semantic or instance training for the target scene and whether its reported in-ference pipeline depends on original reconstruction views. FlashSplat and B3-Seg are the closest baselines that do not require scene-level semantic training, and B3-Seg also avoids original reconstruction cameras. 
+
+4.2 Results and Analysis 
+
+Overall comparison. LERF-MASK. Seed2GS leads the camera-free, scene-training-free setting on LERF-MASK (Table 1), reaching 92.1% mIoU and 88.6% mBIoU under the evaluated reference views. Against B3-Seg, Seed2GS gains 7.6 points on both metrics; their separately reported runtimes are 9.3 and 12.1 seconds, respectively. These end-to-end results show that the reported accuracy and latency are achievable without repeated detection. They do not isolate the effect of any single component. Seed2GS also exceeds scene-trained ObjectGS by 3.7 mIoU points despite building no persistent semantic or instance representation. 
+
+3D-OVS. On 3D-OVS, Seed2GS leads the camera-free comparison by a narrower margin (Table 2). The method reaches 95.7% mean mIoU, 0.7 points above B3-Seg, and records the best per-scene result on Lawn. All methods in Table 2 exceed 91% mIoU on this four-scene setting. LERF-MASK produces larger empirical separation among meth-ods; its queries include thin structures, relational phrases, and container/contents ambiguities. 
+
+Runtime. On an H800, the loaded pipeline averages 9.26 ±
+
+0.97 seconds across the 23 LERF-MASK targets; QD-SAM3 and VAAS account for 47.7% and 52.3% of runtime (Ta-ble 3). B3-Seg code is unavailable, so its reported 12.1 sec-onds and our measured 9.3 seconds are not same-hardware measurements. 
+
+Repeated backend audit. Three complete passes per view budget produce 138 successful runs. The default 24-view set-ting adds only 0.373 seconds of backend time over 12 views, while improving LERF-MASK by 0.24 mIoU and 0.19 mBIoU points (Table 4). Across both budgets, within-scene Gaussian Grouping OpenSplat3D FlashSplat Gaga Seed2GS (Ours) 
+
+> "red bag"
+> "green grape"
+> "red toy chair"
+> 3D-OVS LERF-Mask
+
+Figure 3: Qualitative comparison on 3D-OVS (top two rows) and LERF-MASK (bottom row). Columns show the reference/query, Gaussian Grouping, OpenSplat3D, FlashSplat, Gaga, and Seed2GS. Across these examples, Seed2GS preserves the target while reducing background leakage.                                    
+
+> Method Bed Bench Sofa Lawn Mean FlashSplat-R 94.3 90.3 85.7 96.3 91.7 LangSplat 92.5 94.2 90.0 96.1 93.2 FastLGS (Ji et al. 2025) 94.7 95.1 90.6 96.2 94.2 LBG 97.7 96.3 97.3 87.4 94.7 B3-Seg 97.1 92.2 94.1 96.8 95.0
+> Seed2GS 97.1 95.9 92.7 97.1 95.7
+
+Table 2: 3D-OVS mIoU under the B3-Seg data/pose setting and Gaussian Grouping evaluation protocol. Mean averages scenes equally; baseline values come from the corresponding papers. Seed2GS is shown in bold.                               
+
+> Scene NQD-SAM3 VAAS Total mean ±SD Figurines 74.624 4.708 9.332 ±1.439
+> Ramen 64.363 5.277 9.640 ±0.799
+> Teatime 10 4.294 4.678 8.972 ±0.372
+> Overall 23 4.412 4.843 9.256 ±0.965
+
+Table 3: Per-scene runtime in seconds. Overall median/P95: 8.861/11.195 seconds. correlations between initial foreground count and warm la-tency remain small ( |ρ| ≤ 0.321 , all p ≥ 0.482 ). On Teatime, the initial support spans 212–26,874 Gaussians ( 126 .8×), yet the < 1K, 1K–10K, and > 10 K groups average 8.754, 9.108, and 8.807 seconds per full query. Together, these measure-ments tie runtime primarily to scene-wide rendering and the rendered view budget rather than target size; the supplemen-tary material provides both audits in detail.           
+
+> Views/clip Runs Backend (s) ∆(s) 12 69 4.657 –
+> 24 (default) 69 5.030 +0.373
+
+Table 4: Repeated VAAS-backend timing on LERF-MASK. Each view budget runs all 23 targets three times.                             
+
+> Protocol Figurines Ramen Teatime Mean
+> mIoU
+> Fixed QD-SAM3 91.74 90.38 91.29 91.14 Fixed GT oracle 92.93 90.90 91.73 91.86 Top-10 sweep 92.96 89.32 91.23 91.17
+> mBIoU
+> Fixed QD-SAM3 90.06 83.02 89.24 87.44 Fixed GT oracle 91.45 83.30 90.14 88.30
+> Top-10 sweep 91.31 82.22 87.90 87.15
+
+Table 5: LERF-MASK reference-view study. Fixed protocols use test views 0/2/0; the top-10 sweep averages favorable training references. 
+
+Reference-view sensitivity. Fixed test references. Using one fixed test reference per scene, QD-SAM3 reaches 91.14% mIoU (Table 5). Replacing only its seed with the reference ground truth raises mIoU by 0.72 points and mBIoU by 0.86 points, leaving limited headroom from the initial mask alone. All three fixed-reference scene means remain above 90% mIoU, so the result does not depend on one favorable scene. 
+
+Favorable-reference sweep. Across 230 runs, Seed2GS averages 91.17% scene-equal mIoU with a 1.16-point within-mIoU mBIoU 
+
+> (a) Mean accuracy across ten favorable references
+> F1 F2 F3 F4 F5 F6 F7 R1 R2 R3 R4 R5 R6 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10
+> Target ID (F: Figurines, R: Ramen, T: Teatime) mIoU mBIoU
+> (b) Within-target reference-view deviation
+> 70 80 90 100
+> Score (%)
+> 0.03 0.1 0.3 1310
+> SD (points)
+
+Figure 4: Per-target reference-view robustness over 230 runs. Each column summarizes ten favorable references for one target. Top: mean extraction accuracy. Bottom: within-target standard deviation, where lower values indicate greater stability. 
+
+Variant Figurines Ramen Teatime Mean 
+
+Selection policy 
+
+max-confidence 93.11 78.99 91.08 87.73 
+
+three-term selector 93.13 91.51 91.77 92.14 
+
+Candidate-source removal 
+
+w/o Qwen3-VL 83.42 77.97 91.62 84.34 w/o GroundingDINO 93.13 84.03 91.77 89.64 w/o SAM3-text 93.12 91.49 89.76 91.46 
+
+Selection-term removal 
+
+w/o Ssrc 93.12 91.53 91.64 92.10 w/o Sconf 93.13 84.03 90.32 89.16 w/o lexical Slang 93.13 91.48 89.76 91.46 
+
+Table 6: QD-SAM3 ablation on LERF-MASK (mIoU). 
+
+Dataset Setting ∆mIoU ∆mBIoU 
+
+Trajectory policy; relative to flat orbit 
+
+LERF-MASK Fixed (48.0) +0.76 +0.38 
+
+Adaptive (27.1) +2.17 +2.08 
+
+3D-OVS Fixed (48.0) +0.86 -0.26 
+
+Adaptive (38.4) +0.89 +0.00 
+
+Orbit-view count; relative to 24 views 
+
+LERF-MASK 12 views -0.24 -0.19 48 views -0.84 -0.95 3D-OVS 12 views -0.17 -0.78 48 views +0.28 -0.19 
+
+Table 7: VAAS ablations. Parentheses give average trajectory views; orbit-view counts are per clip. target deviation (Table 5 and Figure 4). Only five of 23 targets exceed one point of mIoU deviation, and the two largest deviations occur on Ramen. Even the target-equal worst-reference average remains 88.98% mIoU and 83.90% mBIoU, and all 230 runs return valid extractions. The fixed and multi-reference controls therefore preserve the main ac-curacy advantage while removing dependence on a single selected seed or view. 
+
+Variant LERF Bed Bench Sofa Lawn Mean Single clip 81.58 95.76 86.87 62.93 67.16 78.18 No reweighting 90.89 96.99 91.37 91.68 97.09 94.28 
+
+Full 92.14 97.07 95.90 92.66 97.08 95.68 
+
+Table 8: Tracking and view-weighting ablation (mIoU). 
+
+4.3 Ablation Studies 
+
+Seed acquisition. QD-SAM3 improves max-confidence selection by 4.41 mIoU points; Qwen3-VL and confidence are its strongest source and score term, respectively (Table 6). 
+
+Trajectory design. Under fixed scenes and downstream settings, VAAS gains come from adapting its trajectory rather than simply rendering more views. Adaptive VAAS improves LERF-MASK mIoU by 2.17 points over the flat orbit and by 1.41 points over the fixed ascending orbit, while using 27.1 rather than 48 views on average. The view-count sweep supports the same conclusion: 24 views performs best on LERF-MASK; 48 views adds 0.28 mIoU points on 3D-OVS but slightly lowers boundary IoU (Table 7). 
+
+Propagation and weighting. Replacing one continuous clip with two reference-anchored clips improves mIoU by 10.56 points on LERF-MASK and 17.50 points on 3D-OVS, while view reliability weighting adds 1.25 and 1.40 points, respectively (Table 8). 
+
+## 5 Limitations 
+
+A single grounding creates one point of failure because an incorrect seed propagates through lift, tracking, and refine-ment. Severe occlusion, same-class instances, or complex references can still defeat QD-SAM3. The 230-run sweep covers favorable references, not arbitrary views where the target may be tiny, hidden, or absent. Virtual views can-not recover missing geometry, and large viewpoint changes can cause tracking drift. Multi-reference initialization and uncertainty-aware propagation could address these failures. Because that single grounding is delegated to off-the-shelf recognition weights, Seed2GS also inherits whatever those weights encode: a corrupted backbone can respond to trig-gers that stay invisible in both the spatial and frequency domains (Gao et al. 2024a), and screening a released check-point for such behavior requires dedicated procedures rather than clean-input accuracy (Gao et al. 2024b). We assume a trusted detector and do not audit it. 
+
+## 6 Conclusion 
+
+Seed2GS grounds identity once, collects coverage through tracking, and fits one temporary foreground logit per Gaus-sian through fixed rasterization. The method reaches 92.1% mIoU in 9.3 seconds on LERF-MASK and 95.7% on 3D-OVS without reconstruction cameras or scene-specific repre-sentation training. The extracted subset can be directly trans-formed, removed, duplicated, or recolored while the original asset remains unchanged. Thus prompt semantics need not be stored in the scene or recomputed across views. 
+
+## References 
+
+Bai, S.; Cai, Y.; Chen, R.; Chen, K.; Chen, X.; Cheng, Z.; Deng, L.; Ding, W.; Gao, C.; Ge, C.; Ge, W.; Guo, Z.; Huang, Q.; Huang, J.; Huang, F.; Hui, B.; Jiang, S.; Li, Z.; Li, M.; Li, M.; Li, K.; Lin, Z.; Lin, J.; Liu, X.; Liu, J.; Liu, C.; Liu, Y.; Liu, D.; Liu, S.; Lu, D.; Luo, R.; Lv, C.; Men, R.; Meng, L.; Ren, X.; Ren, X.; Song, S.; Sun, Y.; Tang, J.; Tu, J.; Wan, J.; Wang, P.; Wang, P.; Wang, Q.; Wang, Y.; Xie, T.; Xu, Y.; Xu, H.; Xu, J.; Yang, Z.; Yang, M.; Yang, J.; Yang, A.; Yu, B.; Zhang, F.; Zhang, H.; Zhang, X.; Zheng, B.; Zhong, H.; Zhou, J.; Zhou, F.; Zhou, J.; Zhu, Y.; and Zhu, K. 2025. Qwen3-VL Technical Report. arXiv preprint arXiv:2511.21631 .Carion, N.; Gustafson, L.; Hu, Y.-T.; Debnath, S.; Hu, R.; Suris, D.; Ryali, C.; Alwala, K. V.; Khedr, H.; Huang, A.; Lei, J.; Ma, T.; Guo, B.; Kalla, A.; Marks, M.; Greer, J.; Wang, M.; Sun, P.; Rädle, R.; Afouras, T.; Mavroudi, E.; Xu, K.; Wu, T.-H.; Zhou, Y.; Momeni, L.; Hazra, R.; Ding, S.; Vaze, S.; Porcher, F.; Li, F.; Li, S.; Kamath, A.; Cheng, H. K.; Dollár, P.; Ravi, N.; Saenko, K.; Zhang, P.; and Feichtenhofer, C. 2025. SAM 3: Segment Anything with Concepts. 
+
+arXiv preprint arXiv:2511.16719 .Cen, J.; Fang, J.; Yang, C.; Xie, L.; Zhang, X.; Shen, W.; and Tian, Q. 2025. Segment Any 3D Gaussians. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, 1971–1979. Cen, J.; Zhou, Z.; Fang, J.; Yang, C.; Shen, W.; Xie, L.; Jiang, D.; Zhang, X.; and Tian, Q. 2023. Segment Anything in 3D with NeRFs. In Advances in Neural Information Processing Systems (NeurIPS) .Chacko, R.; Häni, N.; Khaliullin, E.; Sun, L.; and Lee, D. 2025. Lifting by Gaussians: A Simple, Fast and Flexible Method for 3D Instance Segmentation. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) , 3497– 3507. Gao, Y.; Chen, H.; Sun, P.; Li, J.; Zhang, A.; Wang, Z.; and Liu, W. 2024a. A Dual Stealthy Backdoor: From Both Spatial and Frequency Perspectives. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 38, 1851–1859. Gao, Y.; Chen, H.; Sun, P.; Li, Z.; Li, J.; and Shao, H. 2024b. Energy-based Backdoor Defense without Task-Specific Samples and Model Retraining. In Proceedings of the 41st International Conference on Machine Learning (ICML) , 14611–14637. Ji, Y.; Zhu, H.; Tang, J.; Liu, W.; Zhang, Z.; Tan, X.; and Xie, Y. 2025. FastLGS: Speeding up Language Embedded Gaussians with Feature Grid Mapping. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, 3922–3930. Kamata, H.; Munro, S. A.; and Homma, F. 2026. B 3-Seg: Camera-Free, Training-Free 3DGS Segmentation via Analytic EIG and Beta-Bernoulli Bayesian Updates. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) ,26867–26876. Kerbl, B.; Kopanas, G.; Leimkühler, T.; and Drettakis, G. 2023. 3D Gaussian Splatting for Real-Time Radiance Field Rendering. ACM Transactions on Graphics , 42(4): 1–14. Kerr, J.; Kim, C. M.; Goldberg, K.; Kanazawa, A.; and Tancik, M. 2023. LERF: Language Embedded Radiance Fields. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 19729–19739. Liu, K.; Zhan, F.; Zhang, J.; Xu, M.; Yu, Y.; Saddik, A. E.; Theobalt, C.; Xing, E.; and Lu, S. 2023. Weakly Supervised 3D Open-vocabulary Segmentation. In Advances in Neural Information Pro-cessing Systems (NeurIPS) .Liu, S.; Zeng, Z.; Ren, T.; Li, F.; Zhang, H.; Yang, J.; Jiang, Q.; Li, C.; Yang, J.; Su, H.; Zhu, J.; and Zhang, L. 2024. Grounding DINO: Marrying DINO with Grounded Pre-Training for Open-Set Object Detection. In Proceedings of the European Conference on Computer Vision (ECCV) , 38–55. Lyu, W.; Li, X.; Kundu, A.; Tsai, Y.-H.; and Yang, M.-H. 2026. Gaga: Group Any Gaussians via 3D-aware Memory Bank. Trans-actions on Machine Learning Research (TMLR) .Piekenbrinck, J.; Schmidt, C.; Hermans, A.; Vaskevicius, N.; Lin-der, T.; and Leibe, B. 2025. OpenSplat3D: Open-Vocabulary 3D Instance Segmentation using Gaussian Splatting. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recog-nition Workshops (CVPRW) , 5285–5294. Qin, M.; Li, W.; Zhou, J.; Wang, H.; and Pfister, H. 2024. LangSplat: 3D Language Gaussian Splatting. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) ,20051–20060. Ravi, N.; Gabeur, V.; Hu, Y.-T.; Hu, R.; Ryali, C.; Ma, T.; Khedr, H.; Rädle, R.; Rolland, C.; Gustafson, L.; Mintun, E.; Pan, J.; Alwala, K. V.; Carion, N.; Wu, C.-Y.; Girshick, R.; Dollár, P.; and Feichten-hofer, C. 2024. SAM 2: Segment Anything in Images and Videos. 
+
+arXiv preprint arXiv:2408.00714 .Shen, Q.; Yang, X.; and Wang, X. 2024. FlashSplat: 2D to 3D Gaussian Splatting Segmentation Solved Optimally. In Proceedings of the European Conference on Computer Vision (ECCV) , 456–472. Wu, Y.; Meng, J.; Li, H.; Wu, C.; Shi, Y.; Cheng, X.; Zhao, C.; Feng, H.; Ding, E.; Wang, J.; and Zhang, J. 2024. OpenGaussian: Towards Point-Level 3D Gaussian-Based Open Vocabulary Understanding. In Advances in Neural Information Processing Systems (NeurIPS) .Ye, M.; Danelljan, M.; Yu, F.; and Ke, L. 2024. Gaussian Grouping: Segment and Edit Anything in 3D Scenes. In Proceedings of the European Conference on Computer Vision (ECCV) , 162–179. Zhao, Y.; Xu, W.; Zheng, R.; Qiao, P.; Liu, C.; and Chen, J. 2025. iSegMan: Interactive Segment-and-Manipulate 3D Gaussians. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 661–670. Zhu, R.; Qiu, S.; Liu, Z.; Hui, K.-H.; Wu, Q.; Heng, P.-A.; and Fu, C.-W. 2025a. Rethinking End-to-End 2D to 3D Scene Segmentation in Gaussian Splatting. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 3656–3665. Zhu, R.; Yu, M.; Xu, L.; Jiang, L.; Li, Y.; Zhang, T.; Pang, J.; and Dai, B. 2025b. ObjectGS: Object-aware Scene Reconstruction and Scene Understanding via Gaussian Splatting. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) ,8350–8360.

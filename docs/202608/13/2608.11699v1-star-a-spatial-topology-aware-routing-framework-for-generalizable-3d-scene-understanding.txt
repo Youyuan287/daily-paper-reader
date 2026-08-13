@@ -1,0 +1,377 @@
+Title: STAR: A Spatial-Topology Aware Routing Framework for Generalizable 3D Scene Understanding
+
+URL Source: https://arxiv.org/pdf/2608.11699v1
+
+Published Time: Thu, 13 Aug 2026 00:32:26 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# STAR: A Spatial-Topology Aware Routing Framework for Generalizable 3D Scene Understanding 
+
+## Mingwei Xing * Xinliang Wang * Yifeng Shi †
+
+## KE Holdings Inc. Beijing, China 
+
+xingmingwei@stu.xmu.edu.cn wangxinliang@buaa.edu.cn shiyifeng@tju.edu.cn 
+
+## Abstract 
+
+Constructing a unified 3D scene understanding model has long been hindered by the topological discrepancies across sensor modalities. While applying the Mixture-of-Experts (MoE) architecture is a flexible approach for multi-domain 3D understanding, we observe that conventional feature-only MoE routers may underrepresent local sampling topol-ogy under semantic supervision, making expert alloca-tion difficult when semantic consistency coexists with ge-ometric heterogeneity. To overcome this challenge, we propose STAR (Spatial-Topology Aware Routing Frame-work). Specifically, we introduce a multi-attribute self-supervised pre-training branch, covering topological and textural variations, to anchor cross-domain structural pri-ors. Building upon this, we design a domain-aware ex-pert branch with two mechanisms: Domain-Spatial-Guided Routing (DSR), which captures local topological varia-tions from spatial context, and Entropy-controlled Dy-namic Allocation (EDA), which adjusts the number of ac-tivated experts according to routing uncertainty. Together, these branches combine stable cross-domain representation learning with adaptive expert allocation. Extensive experi-ments across various tasks, encompassing both indoor and outdoor scenes, demonstrate the effectiveness of STAR. It achieves 80.1% mIoU on the ScanNet validation set and 77.2% mIoU on S3DIS, consistently improving over strong baselines. Code is available at our project page. 
+
+## 1. Introduction 
+
+Recent advances in visual representation learning have en-abled diverse perception systems, spanning dense visual understanding [44, 52], autonomous and multi-sensor per-ception [7, 13, 17, 18, 21, 26, 39], and multimodal un-derstanding and tracking [24, 25, 28]. In parallel, rapid progress in 3D reconstruction, generation, and spatial mod-
+
+> *
+
+Equal contribution. †Corresponding author. 80.1 87.3 37.2 47.9 77.2 82.5 57.1 68.2 60.8 51.9 ScanNet mIoU ScanNet mAcc ScanNet200 mIoU ScanNet200 mAcc S3DIS mIoU S3DIS mAcc Matterport3D mIoU Matterport3D mAcc ARKitScenes F1@0.25 IoU ARKitScenes F1@0.5 IoU STAR (Ours) Sonata (CVPR 2025) PPT (CVPR 2024) PTv3 (CVPR 2024) 
+
+Figure 1. Performance of STAR . STAR achieves state-of-the-art performance across multiple 3D scene understanding benchmarks. 
+
+eling [14, 15, 19, 27, 45, 54] has diversified the sensing modalities, acquisition pipelines, and geometric represen-tations used to capture and model 3D scenes. While these developments provide increasingly rich and complementary sources of 3D data, they create a growing need for general-izable representations that can integrate heterogeneous data and support unified scene understanding across domains. Toward this goal, leveraging large-scale multi-source 3D data for unified scene understanding has become a promi-nent research direction [6, 46, 49, 50]. However, joint learning across heterogeneous 3D domains remains chal-lenging because different sensing, acquisition, and gener-ation pipelines impose fundamentally different sampling structures on the same underlying geometry. For ex-ample, LiDAR produces sparse, ray-wise measurements, whereas RGB-D fusion, multi-view reconstruction, and mesh-surface sampling generally yield denser and more continuous surface observations. Consequently, the same semantic object, such as a wall, may exhibit markedly dif-ferent local structures across domains, ranging from sparse and discontinuous point patterns to dense and nearly com-arXiv:2608.11699v1 [cs.CV] 12 Aug 2026 Original Vanilla MoE    
+
+> E. 2,6 E. 0,1,2,3,4 E. 0,3,7 E. 3,4,7 E. 0,1,3,6
+> Density Variation Completeness Variation Ours Scene
+> mIoU: -19.8% mAcc: -16.5% allAcc: -22.0% mIoU: -11.8%
+> mAcc: -12.3%
+> allAcc: -8.5% mIoU: -11.4%
+> mAcc: -10.9%
+> allAcc: -5.6% mIoU: -9.9%
+> mAcc: -7.9%
+> allAcc: -4.1%
+> Expert Selection
+> Point MoE  E. 1,2
+> E. 1,3 E. 1,4
+> mIoU: -17.8%
+> mAcc: -15.9% allAcc: -21.2% mIoU: -11.2% mAcc: -11.6% allAcc: -7.6%
+
+Figure 2. Routing behavior under topology variations. Vanilla MoE denotes our standard feature-only MoE baseline. We compare Vanilla MoE, Point-MoE [6], and STAR under controlled density and completeness perturbations. For samples from the same semantic category (e.g., “bed” or “floor”), feature-only routers tend to keep similar expert assignments despite local geometric changes, causing larger performance drops (e.g., a 19.8% mIoU drop under density variation for Vanilla MoE). In contrast, STAR incorporates spatial-topology cues into routing, adjusts expert subsets, and shows smaller degradation under fine-grained geometric variations. 
+
+plete surfaces. This semantic consistency yet topological heterogeneity makes it difficult for a unified model to rec-oncile conflicting geometric patterns during joint training, potentially degrading learned representations and causing negative transfer across domains. To address this challenge, existing joint training meth-ods primarily follow two paradigms: unified representa-tion learning and modularized adaptation. Unified repre-sentation learning seeks a shared feature space for multi-source data [32, 50, 53]. However, such alignment may sup-press sensor-specific geometric details when fitting hetero-geneous cross-domain distributions, compromising preci-sion. In contrast, modularized adaptation paradigms main-tain flexibility by introducing specialized modules into a shared backbone, yet they are limited by insufficient mod-eling of 3D heterogeneity. Static strategies such as [46, 49] can only learn globally fixed parameters and do not respond dynamically to drastic variations in density within 3D point clouds. Although dynamic strategies such as 3D Mixture of Experts (MoE) [6, 56, 58] introduce routing mechanisms, most routers use intermediate task features as routing in-puts. Under semantic supervision, such feature-only routing may underrepresent local sampling topology, as illustrated in Figure 2 and further discussed in Section 4. As a result, when semantically similar objects exhibit different density, completeness, or neighborhood patterns across sensors, ex-pert allocation can become suboptimal, leading to degraded cross-domain performance. Thus, we propose STAR, a topology-sensitive rout-ing framework for multi-domain 3D scene understanding. Our primary setting is multi-domain joint training: STAR learns a shared backbone from multiple source datasets, while dataset-specific heads or fine-tuning are used only when label spaces or task formats differ. STAR has two complementary branches. The frozen Unified Repre-sentation branch (Re) uses multi-attribute self-supervised pre-training to provide stable cross-domain structural pri-ors. The Domain-aware branch (Do) introduces Domain-Spatial-Guided Routing (DSR) and Entropy-controlled Dy-namic Allocation (EDA) for adaptive expert allocation. DSR injects local spatial context into routing, enabling expert selection to respond to density, completeness, and neighborhood-structure variations, while EDA adjusts ac-tivated experts according to routing uncertainty for stable training. Through these branches, STAR combines sta-ble cross-domain representation learning with topology-sensitive expert routing. As illustrated in Figure 1, STAR shows consistent gains across multiple 3D understanding benchmarks. Our contributions are as follows: 
+
+• Topology-sensitive routing for 3D MoE. We iden-tify that feature-only routers may underrepresent sensor-induced local geometric variations under semantic su-pervision. STAR incorporates spatial context into rout-ing, improving sensitivity to density, completeness, and neighborhood-structure variations. 
+
+• Synergistic design of dual-branch framework. STAR decouples representation learning into two mutually re-inforcing branches. The frozen Re branch employs self-supervised augmentations simulating physical variations to filter domain noise and establish a robust cross-domain structural anchor. Grounded in this prior, the Do branch leverages DSR and EDA for highly adaptive, topology-aware expert allocation. 
+
+• Comprehensive evaluation. Extensive experiments on multiple indoor and outdoor 3D understanding bench-marks demonstrate that STAR consistently outperforms existing approaches. Specifically, it achieves 80.1% mIoU on ScanNet Val and 77.2% mIoU on S3DIS, show-ing consistent gains over strong baselines. 
+
+## 2. Related Work 
+
+2.1. 3D Understanding 
+
+3D scene understanding is fundamental to computer vi-sion, covering tasks such as semantic segmentation [33– 35, 43, 53], object detection [22, 38, 63], and instance segmentation [12, 16]. While early voxel-based methods faced scalability limits, modern point-based [34, 43] and transformer-based [47, 48] architectures have significantly improved performance. However, most models remain domain-specific and lack robust cross-domain generaliza-tion. In this context, our proposed STAR serves as a gener-alizable 3D backbone that improves domain-adaptive repre-sentation learning for downstream 3D understanding tasks. 
+
+2.2. Unified and Adaptive 3D Representation Learning 
+
+Building a generalizable 3D scene understanding model re-quires balancing cross-domain generalization and domain-specific adaptation. Current joint training paradigms can be roughly categorized into two groups. Unified representation learning constructs a shared feature space through large-scale self-supervised pre-training [20, 32, 40, 50, 53, 59, 62]. While effective for generalization, such shared rep-resentations may suppress sensor-specific geometric details when aligning heterogeneous point-cloud distributions. In contrast, modularized adaptation paradigms [46, 49, 51] in-troduce specialized parameters to improve flexibility, but are usually less responsive to fine-grained local topology variations. Different from purely unified or static adapta-tion strategies, STAR complements shared structural pri-ors with topology-sensitive routing. By incorporating local geometric cues into expert allocation, STAR enables fine-grained adaptation across heterogeneous point clouds while preserving cross-domain representation stability. 
+
+2.3. Mixture-of-Experts 
+
+Mixture of Experts (MoE) has been extensively applied to address multi-domain joint training and domain generaliza-tion. In 2D vision, existing works [9, 23, 55, 61] inte-grate experts into Transformer architectures to achieve ef-fective adaptation for large-scale image distributions. Con-currently, recent research has begun to explore the applica-tion of MoE in the 3D domain, including Point-MoE [6], Uni3D-MoE [58], and LiMoE [56]. However, most exist-ing 3D MoE methods route tokens using learned task fea-tures. While effective, these features may not explicitly en-code local sampling topology, making expert allocation less responsive to density, completeness, and neighborhood-structure variations. In contrast, STAR introduces dynamic spatial routing to perceive such variations and adapt expert scheduling across heterogeneous sensor distributions. 
+
+## 3. Method 
+
+3.1. Overview 
+
+We propose STAR, a spatial-topology aware routing frame-work for generalizable 3D understanding. It jointly mod-els domain-aware expert features and unified representation features, enabling adaptive modeling of diverse domain dis-tributions while maintaining cross-domain consistency and generalization capability. The overall architecture is illus-trated in Figure 3. Specifically, we first employ a teacher-student network framework [42] to conduct multi-attribute self-supervised learning across multiple datasets, thereby learning geometric domain-structure priors that generalize across domains. Subsequently, the STAR architecture un-dergoes multi-domain supervised joint training, with its weights initialized from the student network. FFN weights are duplicated for both the Re and Do branches, while the Re branch remains frozen. The Do branch consists of two components: Domain-Spatial-Guided Routing (DSR) and Entropy-Controlled Dynamic Allocation (EDA). DSR leverages local geometric cues to enable the model to per-ceive topological variations, while EDA maintains the sta-bility of the system by balancing the distribution of experts. By integrating these two mechanisms, the model adaptively activates expert subsets conditioned on spatial and source-domain structural cues. 
+
+3.2. Unified Representation Branch 
+
+We introduce a frozen Unified Representation branch (Re), constructed via large-scale multi-attribute self-supervised learning to provide robust cross-domain feature represen-tations. Motivated by common discrepancies across point-cloud domains, we focus on three variation factors that af-fect cross-domain generalization: color distribution, point density, and object completeness caused by occlusions or limited viewpoints. Accordingly, we design three self-supervised alignment tasks tailored to color, density, and completeness, respectively. Specifically, we partition the point cloud into multiple patches. Within each patch, points ScanNet S3DIS Structured3D 
+
+E3
+
+(b) Multi-attribute Re SSL (c) STAR Framework 
+
+> Init Init
+
+(a) Dataset 
+
+> ...
+> LayerNorm
+> Attention
+> STAR Layer
+> LayerNorm
+> MLP
+
+×B 
+
+> DSR EDA
+
+E1Unified   
+
+> Representation
+> Downstream Tasks
+> Color Completeness
+> Density
+> Color Completeness
+> Density
+
+En   
+
+> MLP Gate MLP
+> ...
+> (d) DSR Spatial Conv
+> LayerNorm
+> 01
+> k
+> KNorm. entropy
+> ...
+> 01
+> k
+> KNorm. entropy
+> ...
+> SoftMax Norm. Entropy
+> ... ...
+> ... ...
+> Select topk (e) EDA Input Feature Output Feature
+> ...
+
+E2 E4    
+
+> …………
+> …………
+> domain embedding
+> Domain
+> Mapping
+
+E5 
+
+> Original Augmentation
+> Calculate k
+> ... ... ...
+
+Figure 3. STAR architecture. It combines two branches: a domain-aware branch (Do) and a unified-representation branch (Re). STAR starts with a pretrained model generated through self-supervised learning on multi-attribute data. Re freezes this pretrained knowledge to extract cross-domain geometric and structural patterns. Do uses Domain-Spatial-Guided Routing (DSR) and Entropy-Controlled Dynamic Allocation (EDA) to capture domain-specific features. Together, these branches enhance both domain adaptability and generalization. 
+
+are randomly assigned black coloration at varying ratios and probabilities, while certain points are also randomly dis-carded. Additionally, we apply masking operations to en-tire patches to simulate variations in point cloud complete-ness. Inspired by DINOv2 [31] and Sonata [50], we adopt a feature distillation framework based on a teacher-student network architecture, where the teacher’s weights are up-dated via an exponential moving average (EMA) of the stu-dent’s weights. The teacher receives raw data, while the student receives augmented data. The student is trained to align with the teacher through a cluster-based loss [4, 37], ensuring uniform feature consistency across diverse aug-mentations of the same point cloud. This encourages in-variance to common domain perturbations, providing stable features for domain-specific experts. Furthermore, we ini-tialize the STAR architecture with the weights of the student network, duplicating its FFN for all experts in both Re and Do branches, while keeping Re branch frozen. Given point-level tokens f ∈ RN ×D , where N denotes the number of tokens and D denotes the feature dimension, the output of Re branch is: f Re = ERe (f ), where ERe denotes the expert in the Re branch. 
+
+3.3. Domain-Spatial-Guided Routing 
+
+To achieve topology-aware expert selection, we design DSR. Given f and its corresponding domain embedding d,we first reshape f into a 3D sparse tensor to capture its lo-cal topological structure and positional correlations in the spatial dimensions, and then apply a 3D spatial convolution operation for feature extraction. Through a set of learnable convolutional kernels and normalization, the model effec-tively extracts feature representations f ′ with spatial local-ity awareness. Subsequently, we map the current scene to the corresponding domain embedding d based on its dataset affiliation, and a lightweight MLP then transforms d into a continuous vector ed ∈ RD for channel alignment, which encodes source-domain structural priors. We add ed to the spatially convolved feature f ′ via broadcasting to gener-ate the domain-aware routing input: z = f ′ + ed, where 
+
+z ∈ RN ×D . This fusion makes routing depend on both local spatial context and source-domain structural informa-tion, thereby enhancing the domain adaptability of expert assignment. The resulting z is then fed into a gating net-work G, composed of a MLP with nonlinear activation func-tions. G outputs routing logits: g = G(z) ∈ RN ×K , where 
+
+K is the number of experts. 
+
+3.4. Entropy-Controlled Dynamic Allocation 
+
+To achieve robust and adaptive expert allocation, we pro-pose EDA. First, we apply the softmax function to the gat-ing outputs along the last dimension to obtain a probability distribution p = SoftMax (g) ∈ RN ×K , and calculate the Shannon entropy for each token: 
+
+H = −
+
+> K
+
+X
+
+> j=1
+
+p[: , j ] ⊙ log p[: , j ], (1) where ⊙ denotes element-wise multiplication and H ∈ RN
+
+reflects the model’s decision-making uncertainty for that to-ken. Next, we linearly map the entropy values to the number of experts k to dynamically determine the number of acti-vated experts: 
+
+k =
+
+
+
+kmin + HHmax 
+
+· (kmax − kmin )
+
+
+
+, (2) where k ∈ RN represents the number of selected experts, 
+
+Hmax = log K represents the theoretical maximum en-tropy, with kmin = 1 and kmax = K, and ⌈·⌉ denotes the ceiling function. Tokens with higher entropy (uncer-tainty) activate more experts to enhance representation ca-pacity, whereas low-entropy tokens activate fewer experts to improve computational efficiency. We sort the experts in descending order of their probabilities p, and activate the top-k experts with the highest probabilities. Each expert’s weight assignment is given by: 
+
+w[i, j ] = 
+
+(
+
+p[i, j ], j ∈ Eact 
+
+> i
+
+0, otherwise, (3) where Eact  
+
+> i
+
+denotes the activated expert indices for the i-th token and w ∈ RN ×K .We apply load-balancing loss [10] to prevent expert im-balance: 
+
+Lbalance = K ·
+
+> K
+
+X
+
+> j=1
+
+cj · rj ,cj = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+1{j ∈ Eact i }, r j = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+p[i, j ],
+
+(4) where cj is the proportion of tokens routed to expert j, and 
+
+rj is the average probability assigned by DSR via the soft-max function. This loss promotes uniform routing, foster-ing collaborative learning across all experts. Finally, the Do branch output is computed as a weighted sum of the top-k experts selected by routing probabilities.        
+
+> fDo =
+> KX
+> j=1
+> w[: , j ]⊙Ej(f).(5)
+
+The domain-aware branch accurately captures spatial con-texts for targeted expert selection, ensuring stable, robust, and adaptive allocation across diverse domains. The output feature is computed as: f o = f Do + f Re .
+
+3.5. Training Recipe 
+
+We focus on multi-domain joint training for 3D scene understanding: a shared backbone is trained on source datasets, while dataset-specific heads or fine-tuning are used only for different label spaces or task formats. First, we obtain a pretrained model through multi-attribute self-supervised learning and use the student model’s weights to initialize the parameters of the STAR network. Subse-quently, we adopt multi-dataset joint training as in PPT [49], unifying category representations through a CLIP-head and InfoNCE loss [30]. The training loss is: 
+
+Ljoint = LInfoNCE + λLbalance . (6) After completing the joint training, the resulting model can be directly deployed for the primary tasks within the joint training framework and further fine-tuned to address diverse downstream tasks on novel datasets. Taking semantic segmentation and multimodal detection as examples, the segmentation loss is defined as the stan-dard cross-entropy loss: 
+
+Lseg = − 1
+
+M
+
+> M
+
+X
+
+> i=1
+> C
+
+X
+
+> c=1
+
+yi,c log( qi,c ), (7) where M denotes the number of samples, C is the number of classes, yi,c represents the ground-truth label, and qi,c is the predicted probability for class c of sample i.For the multi-modal detection task, we follow Spa-tialLM [29] and leverage the autoregressive property of the Qwen2.5 language model [ ? ] to treat coordinate prediction as a sequence generation task. We adopt the same standard cross-entropy loss as used in Qwen [36]: 
+
+Ldet = − 1
+
+T
+
+> T
+
+X
+
+> t=1
+
+log P (wt|w<t , θ ), (8) where T is the length of the coordinate sequence, wt de-notes the t-th coordinate element in the sequence, w<t rep-resents the history of previously generated coordinates, and 
+
+θ denotes the model parameters. The overall fine-tune training objective is: 
+
+Lft = Ltask + λLbalance , (9) where Ltask denotes the task-specific loss (e.g., Lseg for seg-mentation, Ldet for detection). 
+
+## 4. Experiments 
+
+4.1. Implementation Details 
+
+We conduct self-supervised pretraining on six datasets: ScanNet [8], S3DIS [1], Structured3D [60], 3D-Front [11], ARKitScenes [2], and HM3D [57], totaling 47,273 train-ing samples. The network follows Sonata, using 5 stages with block counts of 3, 3, 3, 12, and 3 per stage. Pretrain-ing uses a batch size of 64, a learning rate of 0.0004, and 50 epochs. Following Sonata [50], patch masking employs a cosine scheduler. Density variations and color dropout Table 1. Indoor semantic segmentation. 
+
+Method Source ScanNet Val ScanNet200 Val S3DIS Area 5 mIoU mAcc allAcc mIoU mAcc allAcc mIoU mAcc allAcc PTv3 [48] CVPR 2024 77.6 85.0 92.0 35.3 46.0 83.4 73.4 78.9 91.7 PPT [49] CVPR 2024 78.6 85.9 92.3 36.0 46.2 83.8 74.3 80.1 92.0 Point-MoE [6] ICLR 2026 77.2 85.0 92.0 36.2 44.5 83.8 72.9 78.1 90.9 Point-MoE+Re [6] ICLR 2026 78.2 86.7 92.2 36.5 45.2 84.1 74.1 79.8 91.8 Sonata [50] CVPR 2025 79.4 86.1 92.5 36.8 46.5 84.4 76.0 81.6 93.0 STAR (Ours) - 80.1 87.3 93.1 37.2 47.9 84.4 77.2 82.5 93.1 Input Point Cloud Point-MoE PPT Sonata Ours Ground Truth          
+
+> wall floor cabinet bed chair sofa table door window counter desk others pictures unlabel
+
+Figure 4. Qualitative analysis. Visualization of different methods on ScanNet. Table 2. Outdoor semantic segmentation. ⋆ indicates results reproduced from the official repository. Method nuScenes Val Waymo Val mIoU mAcc allAcc mIoU mAcc allAcc PTv3 [48] 80.4 87.2 94.7 71.3 80.5 94.7 Sonata ⋆ [50] 81.2 87.7 94.8 72.1 82.6 94.8 
+
+STAR (Ours) 81.7 87.4 94.8 72.7 82.7 94.8 
+
+use different sampling ratios across patches. Further details are provided in the supplementary material. For STAR, the maximum expert number K is 8 and λ is 0.001. The en-coder architecture closely follows the pretrained network, with Re and Do branches added only to the final block of each stage. Domain embeddings are randomly initialized. All experiments are conducted on 8 NVIDIA A100 GPUs, with the AdamW optimizer employed throughout. 
+
+4.2. Experimental Results 
+
+Indoor Semantic Segmentation. Following PPT [49], we conduct joint training on three datasets: ScanNet (20 classes), S3DIS (13 classes), and Structured3D (25 classes). To achieve cross-dataset semantic alignment of categories, we incorporate a CLIP-based classification head. We di-rectly evaluate performance on ScanNet and S3DIS. Fur-thermore, we fine-tune our model on the more challeng-ing ScanNet200 benchmark, achieving strong performance across all three core metrics (mIoU, mAcc, and allAcc), as detailed in Table 1. Specifically, our method attains mIoU scores of 80.1%, 37.2%, and 77.2% respectively, represent-ing improvements of 0.5%, 0.4%, and 1.2% over Sonata. Figure 4 presents a qualitative comparison with other meth-ods. In the first scenario, given an incomplete chair, other approaches misidentify it as a sofa, whereas ours recognizes it as a chair. This demonstrates that the Re obtained through SSL significantly enhances the model’s capability to extract discriminative features from incomplete objects. In the sec-ond scenario, while other methods erroneously classify a table as a desk, our approach leverages DSR to integrate surrounding spatial context. This helps route inputs to suit-able experts through spatial context, improving recognition of ambiguous objects. These results suggest better cross-domain adaptability in complex indoor scenarios. 
+
+Outdoor Semantic Segmentation. Following the estab-lished indoor experimental setup, we conduct comprehen-sive joint training and direct cross-dataset evaluation on the nuScenes [3] and Waymo [41] benchmarks. As presented in Table 2, our model achieves mIoU scores of 81.7% and 72.7% on the nuScenes and Waymo datasets respectively, outperforming Sonata by 0.5% and 0.6%. These quantita-tive results validate STAR’s improved generalization capa-bility and robustness in challenging outdoor scenarios. 
+
+Extension to Unseen Scenes. To validate STAR’s zero-shot generalization to unseen domains, we evaluate on two Table 3. Zero-shot generalization to unseen scenes. Results on SpatialLM and Matterport3D val using different domain embed-dings for inference. Method SpatialLM Matterport3D mIoU mAcc allAcc mIoU mAcc allAcc Point-MoE [6] 36.4 42.6 68.2 41.8 – –Sonata [50] 36.0 43.6 68.6 48.1 61.0 77.6 STAR (ScanNet emb.) 35.5 41.7 67.8 49.5 62.1 78.6                     
+
+> STAR (S3DIS emb.) 32.5 39.6 69.3 47.8 60.3 77.8 STAR (Structured3D emb.) 38.7 46.5 72.0 47.7 61.3 77.6 Table 4. Multimodal object detection results on the ARK-itScenes validation set. Method F1@0.25 F1@0.5 SpatialLM [29] + Sonata [50] 58.9 49.5 SpatialLM [29] + STAR (Ours) 60.8 51.9
+
+datasets—SpatialLM and Matterport3D—using three dif-ferent domain embeddings for inference, as shown in Ta-ble 3. SpatialLM is derived from professional CAD inte-rior models, with point clouds generated by sampling vir-tual meshes. The data contains no real-world noise, and structural surfaces such as walls and floors form complete, continuous topologies. Using the Structured3D domain em-bedding yields the best performance (mIoU = 38.7), clearly outperforming Sonata (36.0) and Point-MoE (36.4). This result is consistent with the data source: Structured3D is also derived from synthetic sampling of CAD interior mod-els, allowing DSR to use similar geometric characteris-tics for expert allocation. Matterport3D [5] is a large-scale complex indoor scene dataset captured by real RGB-D sensors, featuring substantial real-world noise, occlusion gaps, and non-uniform point density. Using the ScanNet domain embedding achieves the best performance (mIoU = 49.5), surpassing Sonata (48.1) and Point-MoE (41.8). This is because ScanNet is also a real RGB-D indoor scan dataset, sharing similar sensor patterns, noise characteris-tics, and geometric distributions with Matterport3D, which helps route features toward experts adapted to real scan data. These experiments suggest that, for an unseen domain, STAR can select a source-domain embedding according to available acquisition metadata or sampling characteristics, enabling zero-shot transfer without target-domain training. 
+
+Multimodal Object Detection. Beyond segmentation, our method also extends effectively to detection tasks. In this experiment, we implement the SpatialLM [29] for object detection on the ARKitScenes dataset [2]. Evaluation em-ploys F1-score metrics under two IoU thresholds (0.25 and 0.5). We establish the baseline using officially fine-tuned SpatialLM weights with Sonata-based point cloud encoder, which serves as the initialization for STAR’s subsequent                                           
+
+> Table 5. Ablation study on each component.
+> Re DSR EDA ScanNet Val S3DIS Val mIoU mAcc allAcc mIoU mAcc allAcc ×××77.5 85.4 92.1 73.5 78.9 92.0
+> ✓××78.8 85.9 92.5 75.7 81.4 92.5
+> ✓✓×79.5 87.0 92.9 76.4 82.1 93.0
+> ✓✓✓80.1 87.3 93.1 77.2 82.5 93.1
+
+fine-tuning. The optimization employs a learning rate of 
+
+5 × 10 −5 over 10 epochs. As shown in Table 4, our method achieves 60.8% F1@0.25 and 51.9% F1@0.5, outperform-ing the baseline by 1.9% and 2.4%. These results validate the cross-task effectiveness of our framework and demon-strate its potential for extension to diverse vision tasks. 
+
+4.3. Ablation Studies 
+
+Component Ablation. As shown in Table 5, we validate STAR components on ScanNet and S3DIS. Adding Re im-proves mIoU by 1.3% and 2.2% over the framework without STAR components, showing the benefit of shared pretrained representations. Adding DSR with two experts brings an-other 0.7% gain on both datasets, confirming the value of spatial context in routing. A DSR decomposition in the supplementary material shows that the spatial-convolution-only variant outperforms the domain-embedding-only vari-ant (79.4% vs. 79.1% mIoU on ScanNet), while combining both reaches 79.5%. This suggests that local spatial topol-ogy contributes more than domain embedding, with source-domain priors providing complementary guidance. Finally, EDA improves performance to 80.1% and 77.2% mIoU by stabilizing expert utilization and activation counts. Over-all, Re provides robust cross-domain representations, while DSR and EDA enable adaptive expert routing under com-plex distribution shifts. 
+
+Efficiency Comparison. We analyze the effi-ciency–accuracy trade-off of STAR against previous meth-ods. Table 7 shows Sonata [50] outperforms PPT [49] but at the cost of a large activated parameter increase. In con-trast, STAR further improves mIoU over Sonata (+0.7%) with moderate parameter growth. To verify that perfor-mance gains are not merely from model scaling, we imple-ment two larger variants of Sonata. The first (#4) sets stage depths to [2, 2, 6, 2] and expands channels to [64, 128, 256, 512], while the second (#5) increases all four decoder stage depths to 5. Both variants have comparable parameters to STAR and follow official training settings. Despite simi-lar capacity, they still underperform STAR, demonstrating that our improvements primarily stem from the proposed routing design and dual-branch representation rather than parameter scaling. The total per-sample latency is approxi-mately 207.9ms, where DSR accounts for 7.9ms (3.8%) and EDA accounts for 2.2ms (1.06%), showing a minor impact on inference efficiency. Overall, STAR provides a favorable Table 6. Quantitative analysis of performance under two point cloud topological variations.                                                                                                                                 
+
+> Method Original Dropout 0.9 Dropout 0.7 mask size=0.6 mask ratio=0.5 mask size=0.8 mask ratio=0.5 mask size=0.8 mask ratio=0.8 mIoU mAcc allAcc mIoU mAcc allAcc mIoU mAcc allAcc mIoU mAcc allAcc mIoU mAcc allAcc mIoU mAcc allAcc
+> Vanilla MoE 78.5 85.8 92.3 68.7 75.9 87.9 75.2 82.4 91.0 70.7 79.4 88.5 66.8 76.4 87.3 59.7 70.0 83.9
+> ∆———-9.8 -9.9 -4.4 -3.3 -3.4 -1.3 -7.8 -6.4 -3.8 -11.7 -9.4 -5.0 -18.8 -15.8 -8.4 Point-MoE 77.2 85.0 92.0 69.4 77.3 88.9 73.9 81.7 90.8 67.0 75.8 87.8 67.7 76.6 88.2 55.4 64.8 82.5
+> ∆———-7.8 -7.7 -3.1 -3.3 -3.3 -1.2 -9.5 -8.4 -3.8 -10.2 -9.2 -4.2 -21.8 -20.2 -9.5 Ours 80.1 87.3 93.1 74.1 81.5 90.7 77.7 85.1 92.1 73.9 82.5 90.4 71.9 81.4 89.8 63.2 73.4 86.0
+> ∆———-6.0 -5.8 -2.4 -2.4 -2.2 -1.0 -6.2 -4.8 -2.7 -8.2 -5.9 -3.3 -16.9 -13.9 -7.1
+
+Table 7. Efficiency comparison. ′ and ′′ denote two scaled variants of Sonata. † represents the Point-MoE reproduced using PTv3-L. “Act. Params” indicates the number of activated parame-ters. FPS is measured on one A100 GPU. 
+
+Method Act. Params FPS mIoU #1 PTv3 [48] 46.2M 11.0 77.6 #2 PPT [49] 46.3M 7.2 78.6 #3 Sonata [50] 124.8M 5.9 79.4 #4 Sonata ′ 147.6M 5.3 79.4 #5 Sonata ′′ 148.6M 4.9 79.6 #6 Point-MoE † 147.7M 5.3 77.2 #7 STAR (Ours) 147.5M 4.9 80.1 accuracy–efficiency trade-off, converting limited additional computation into consistent improvements. 
+
+Expert Activation Analysis. As discussed in Section 1 and demonstrated in Figure 2, Vanilla MoE and Point-MoE [6] perform expert assignment primarily based on in-termediate task features. Under semantic supervision, such routing may be less sensitive to local sampling topology. Therefore, when samples from the same semantic cate-gories (e.g., “bed” or “floor”) undergo local geometric fluc-tuations caused by occlusion or scanning patterns, Vanilla MoE tends to keep similar expert assignments, whereas STAR adjusts expert subsets according to spatial-topology cues. Taking the “wall” category as an example, S3DIS and Structured3D exhibit different local sampling statistics (6,237 pts/m 2 / 0.91 cm vs. 5,512 pts/m 2 / 1.20 cm in den-sity / 5-NN distance). As illustrated in Figure 5, STAR ac-tivates different expert subsets under these genuine cross-domain sampling differences, while Vanilla MoE and Point-MoE produce more similar assignments. This indicates that STAR responds to real cross-domain topological variations rather than merely to synthetic perturbation scenarios. 
+
+Robustness Analysis Against Point Cloud Topological Variations. To evaluate STAR’s robustness to point cloud topological variations, we conduct experiments on the ScanNet validation set and compare its performance with Vanilla MoE and Point-MoE [6]. We construct two rep-resentative perturbation scenarios: random dropout and re-E. 5,6   
+
+> E. 3,6 E. 0,3,7
+> E. 1,3,4
+> Structured3D S3DIS
+> Scene Vanilla MoE Ours
+> E. 3,6
+> Point MoE
+> E. 2,4 E. 2,4
+
+Figure 5. Expert activation across real cross-domain sampling dif-ferences. For the same “wall” category, S3DIS and Structured3D exhibit different local sampling statistics: 6,237 pts/m 2 / 0.91 cm vs. 5,512 pts/m 2 / 1.20 cm in density / 5-NN distance. STAR activates different expert subsets under these differences, while Vanilla MoE and Point-MoE produce more similar assignments. 
+
+gional masking. Random dropout stochastically removes a specified proportion of points to alter spatial density, whereas regional masking varies mask size and probabil-ity to simulate local structural loss caused by occlusions or sensor limitations in real-world scans. Table 6 shows STAR outperforms both baselines under standard inputs. Though topological perturbations affect STAR, it shows smaller per-formance drops and maintains consistent gains even in se-vere scenarios. This robustness primarily stems from DSR’s topology-aware routing, which captures fine-grained local geometric context and dynamically adapts expert selection to point cloud structural changes instead of relying solely on high-level task features. EDA stabilizes routing distri-butions under perturbed inputs, preventing expert collapse and ensuring balanced activation. Detailed comparisons of expert activation groups across point cloud topological vari-ations are provided in the supplementary material. 
+
+## 5. Conclusion 
+
+This paper presents STAR, a spatial-topology-aware rout-ing framework for multi-domain 3D scene understanding. STAR combines a frozen Unified Representation branch for cross-domain structural priors with a Domain-aware branch using DSR and EDA for topology-sensitive expert alloca-tion. Experiments on indoor and outdoor benchmarks show improved robustness and generalization under density and completeness variations. References 
+
+[1] Iro Armeni, Ozan Sener, Amir R Zamir, Helen Jiang, Ioannis Brilakis, Martin Fischer, and Silvio Savarese. 3d semantic parsing of large-scale indoor spaces. In CVPR , 2016. 5 [2] Gilad Baruch, Zhuoyuan Chen, Afshin Dehghan, Tal Dimry, Yuri Feigin, Peter Fu, Thomas Gebauer, Brandon Joffe, Daniel Kurz, Arik Schwartz, et al. Arkitscenes: A diverse real-world dataset for 3d indoor scene understanding using mobile rgb-d data. arXiv preprint arXiv:2111.08897 , 2021. 5, 7 [3] Holger Caesar, Varun Bankiti, Alex H Lang, Sourabh Vora, Venice Erin Liong, Qiang Xu, Anush Krishnan, Yu Pan, Gi-ancarlo Baldan, and Oscar Beijbom. nuscenes: A multi-modal dataset for autonomous driving. In CVPR , 2020. 6 [4] Mathilde Caron, Ishan Misra, Julien Mairal, Priya Goyal, Pi-otr Bojanowski, and Armand Joulin. Unsupervised learn-ing of visual features by contrasting cluster assignments. 
+
+NeurIPS , 2020. 4 [5] Angel Chang, Angela Dai, Thomas Funkhouser, Maciej Halber, Matthias Niessner, Manolis Savva, Shuran Song, Andy Zeng, and Yinda Zhang. Matterport3d: Learning from rgb-d data in indoor environments. arXiv preprint arXiv:1709.06158 , 2017. 7 [6] Xuweiyi Chen, Wentao Zhou, Aruni RoyChowdhury, and Zezhou Cheng. Point-moe: Towards cross-domain general-ization in 3d semantic segmentation via mixture-of-experts. 
+
+arXiv preprint arXiv:2505.23926 , 2025. 1, 2, 3, 6, 7, 8 [7] Ziming Chen, Yifeng Shi, and Jinrang Jia. Transiff: An instance-level feature fusion framework for vehicle-infrastructure cooperative 3d detection with transformers. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 18205–18214, 2023. 1 [8] Angela Dai, Angel X Chang, Manolis Savva, Maciej Hal-ber, Thomas Funkhouser, and Matthias Nießner. Scannet: Richly-annotated 3d reconstructions of indoor scenes. In 
+
+CVPR , 2017. 5 [9] Yongxing Dai, Xiaotong Li, Jun Liu, Zekun Tong, and Ling-Yu Duan. Generalizable person re-identification with relevance-aware mixture of experts. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 16145–16154, 2021. 3 [10] William Fedus, Barret Zoph, and Noam Shazeer. Switch transformers: Scaling to trillion parameter models with sim-ple and efficient sparsity. JMLR , 2022. 5 [11] Huan Fu, Bowen Cai, Lin Gao, Ling-Xiao Zhang, Jiaming Wang, Cao Li, Qixun Zeng, Chengyue Sun, Rongfei Jia, Bin-qiang Zhao, et al. 3d-front: 3d furnished rooms with layouts and semantics. In ICCV , 2021. 5 [12] Tong He, Wei Yin, Chunhua Shen, and Anton Van den Hen-gel. Pointinst3d: Segmenting 3d instances by points. In 
+
+ECCV , 2022. 3 [13] Jinrang Jia, Guangqi Yi, and Yifeng Shi. Ropebev: Amulti-camera roadside perception network in bird’s-eye-view. arXiv preprint arXiv:2409.11706 , 2024. 1 [14] Jinrang Jia, Zhenjia Li, Yijiang Hu, and Yifeng Shi. Panoworld: A generative spatial world model for con-sistent whole-house panorama synthesis. arXiv preprint arXiv:2605.17916 , 2026. 1 [15] Jinrang Jia, Zhenjia Li, and Yifeng Shi. You only gaussian once: Controllable 3d gaussian splatting for ultra-densely sampled scenes. arXiv preprint arXiv:2604.21400 , 2026. 1 [16] Li Jiang, Hengshuang Zhao, Shaoshuai Shi, Shu Liu, Chi-Wing Fu, and Jiaya Jia. Pointgroup: Dual-set point grouping for 3d instance segmentation. In CVPR , 2020. 3 [17] Jia Jinrang, Zhenjia Li, and Yifeng Shi. Monouni: A unified vehicle and infrastructure-side monocular 3d object detec-tion network with sufficient depth clues. Advances in Neural Information Processing Systems , 36:11703–11715, 2023. 1 [18] Bo Ju, Wei Yang, Jinrang Jia, Xiaoqing Ye, Qu Chen, Xiao Tan, Hao Sun, Yifeng Shi, and Errui Ding. Danet: Dimen-sion apart network for radar object detection. In Proceedings of the 2021 international conference on multimedia retrieval ,pages 533–539, 2021. 1 [19] Yijie Kang, Xinliang Wang, Zhenyu Wu, Yifeng Shi, and Hailong Zhu. Sat2realcity: Geometry-aware and appearance-controllable 3d urban generation from satellite imagery. arXiv preprint arXiv:2511.11470 , 2025. 1 [20] Maksim Kolodiazhnyi, Anna Vorontsova, Matvey Skripkin, Danila Rukhovich, and Anton Konushin. Unidet3d: Multi-dataset indoor 3d object detection. In Proceedings of the AAAI Conference on Artificial Intelligence , pages 4365– 4373, 2025. 3 [21] Xianghao Kong, Wentao Jiang, Jinrang Jia, Yifeng Shi, Run-sheng Xu, and Si Liu. Dusa: Decoupled unsupervised sim2real adaptation for vehicle-to-everything collaborative perception. In Proceedings of the 31st ACM International Conference on Multimedia , pages 1943–1954, 2023. 1 [22] Alex H Lang, Sourabh Vora, Holger Caesar, Lubing Zhou, Jiong Yang, and Oscar Beijbom. Pointpillars: Fast encoders for object detection from point clouds. In CVPR , pages 12697–12705, 2019. 3 [23] Bo Li, Yifei Shen, Jingkang Yang, Yezhen Wang, Jiawei Ren, Tong Che, Jun Zhang, and Ziwei Liu. Sparse mixture-of-experts are domain generalizable learners. arXiv preprint arXiv:2206.04046 , 2022. 3 [24] Hao Li, Yuhao Wang, Wenning Hao, Pingping Zhang, Dong Wang, and Huchuan Lu. Ragtrack: Language-aware rgbt tracking with retrieval-augmented generation. arXiv preprint arXiv:2603.03617 , 2026. 1 [25] Hao Li, Yuhao Wang, Xiantao Hu, Wenning Hao, Pingping Zhang, Dong Wang, and Huchuan Lu. Cadtrack: Learning contextual aggregation with deformable alignment for robust rgbt tracking. In Proceedings of the AAAI Conference on Artificial Intelligence , pages 6109–6117, 2026. 1 [26] Zhenjia Li, Jinrang Jia, and Yifeng Shi. Monolss: Learnable sample selection for monocular 3d detection. In 2024 Inter-national Conference on 3D Vision (3DV) , pages 1125–1135. IEEE, 2024. 1 [27] Zhenjia Li, Jinrang Jia, and Yifeng Shi. Pano2world: End-to-end 3d generation via unified multi-view sequences. arXiv preprint arXiv:2607.00832 , 2026. 1 [28] Haoran Lou, Chunxiao Fan, Ziyan Liu, Yuexin Wu, and Xinliang Wang. Llava-sp: Enhancing visual representa-tion with visual spatial tokens for mllms. arXiv preprint arXiv:2507.00505 , 2025. 1 [29] Yongsen Mao, Junhao Zhong, Chuan Fang, Jia Zheng, Rui Tang, Hao Zhu, Ping Tan, and Zihan Zhou. Spatiallm: Train-ing large language models for structured indoor modeling. In 
+
+NeurIPS , 2025. 5, 7 [30] Aaron van den Oord, Yazhe Li, and Oriol Vinyals. Repre-sentation learning with contrastive predictive coding. arXiv preprint arXiv:1807.03748 , 2018. 5 [31] Maxime Oquab, Timoth´ ee Darcet, Theo Moutakanni, Huy V. Vo, Marc Szafraniec, Vasil Khalidov, Pierre Fernandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, Rus-sell Howes, Po-Yao Huang, Hu Xu, Vasu Sharma, Shang-Wen Li, Wojciech Galuba, Mike Rabbat, Mido Assran, Nico-las Ballas, Gabriel Synnaeve, Ishan Misra, Herve Jegou, Julien Mairal, Patrick Labatut, Armand Joulin, and Piotr Bo-janowski. Dinov2: Learning robust visual features without supervision, 2023. 4 [32] Yatian Pang, Wenxiao Wang, Francis EH Tay, Wei Liu, Yonghong Tian, and Li Yuan. Masked autoencoders for point cloud self-supervised learning. In ECCV , 2022. 2, 3 [33] Charles R Qi, Hao Su, Kaichun Mo, and Leonidas J Guibas. Pointnet: Deep learning on point sets for 3d classification and segmentation. In CVPR , 2017. 3 [34] Charles Ruizhongtai Qi, Li Yi, Hao Su, and Leonidas J Guibas. Pointnet++: Deep hierarchical feature learning on point sets in a metric space. NeurIPS , 2017. 3 [35] Guocheng Qian, Yuchen Li, Houwen Peng, Jinjie Mai, Hasan Hammoud, Mohamed Elhoseiny, and Bernard Ghanem. Pointnext: Revisiting pointnet++ with improved training and scaling strategies. NeurIPS , 2022. 3 [36] Qwen, :, An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan Li, Dayiheng Liu, Fei Huang, Haoran Wei, Huan Lin, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Yang, Jiaxi Yang, Jingren Zhou, Jun-yang Lin, Kai Dang, Keming Lu, Keqin Bao, Kexin Yang, Le Yu, Mei Li, Mingfeng Xue, Pei Zhang, Qin Zhu, Rui Men, Runji Lin, Tianhao Li, Tianyi Tang, Tingyu Xia, Xingzhang Ren, Xuancheng Ren, Yang Fan, Yang Su, Yichang Zhang, Yu Wan, Yuqiong Liu, Zeyu Cui, Zhenru Zhang, and Zihan Qiu. Qwen2.5 technical report, 2025. 5 [37] Alexandre Sablayrolles, Matthijs Douze, Cordelia Schmid, and Herv´ e J´ egou. Spreading vectors for similarity search. 
+
+arXiv preprint arXiv:1806.03198 , 2018. 4 [38] Shaoshuai Shi, Chaoxu Guo, Li Jiang, Zhe Wang, Jianping Shi, Xiaogang Wang, and Hongsheng Li. Pv-rcnn: Point-voxel feature set abstraction for 3d object detection. In 
+
+CVPR , 2020. 3 [39] Yifeng Shi, Feng Lv, Xinliang Wang, Chunlong Xia, Shaojie Li, Shujie Yang, Teng Xi, and Gang Zhang. Open-transmind: A new baseline and benchmark for 1st foundation model challenge of intelligent transportation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 6328–6335, 2023. 1 [40] Louis Soum-Fontez, Jean-Emmanuel Deschaud, and Franc ¸ois Goulette. Mdt3d: Multi-dataset training for lidar 3d object detection generalization. In 2023 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pages 5765–5772. IEEE, 2023. 3 [41] Pei Sun, Henrik Kretzschmar, Xerxes Dotiwalla, Aurelien Chouard, Vijaysai Patnaik, Paul Tsui, James Guo, Yin Zhou, Yuning Chai, Benjamin Caine, et al. Scalability in perception for autonomous driving: Waymo open dataset. In CVPR ,2020. 6 [42] Antti Tarvainen and Harri Valpola. Mean teachers are better role models: Weight-averaged consistency targets improve semi-supervised deep learning results. NeurIPS , 2017. 3 [43] Hugues Thomas, Charles R Qi, Jean-Emmanuel Deschaud, Beatriz Marcotegui, Franc ¸ois Goulette, and Leonidas J Guibas. Kpconv: Flexible and deformable convolution for point clouds. In ICCV , 2019. 3 [44] Shuo Wang, Chunlong Xia, Feng Lv, and Yifeng Shi. Rt-detrv3: Real-time end-to-end object detection with hierarchi-cal dense positive supervision. In WACV , pages 1628–1636, 2025. 1 [45] Xinliang Wang, Yifeng Shi, and Zhenyu Wu. Artifactworld: Scaling 3d gaussian splatting artifact restoration via video generation models. arXiv preprint arXiv:2604.12251 , 2026. 1[46] Zhenyu Wang, Yali Li, Hengshuang Zhao, and Shengjin Wang. One for all: Multi-domain joint training for point cloud based 3d object detection. Advances in Neural Infor-mation Processing Systems , 37:56859–56877, 2024. 1, 2, 3 [47] Xiaoyang Wu, Yixing Lao, Li Jiang, Xihui Liu, and Heng-shuang Zhao. Point transformer v2: Grouped vector atten-tion and partition-based pooling. NeurIPS , 2022. 3 [48] Xiaoyang Wu, Li Jiang, Peng-Shuai Wang, Zhijian Liu, Xi-hui Liu, Yu Qiao, Wanli Ouyang, Tong He, and Hengshuang Zhao. Point transformer v3: Simpler faster stronger. In 
+
+CVPR , 2024. 3, 6, 8 [49] Xiaoyang Wu, Zhuotao Tian, Xin Wen, Bohao Peng, Xihui Liu, Kaicheng Yu, and Hengshuang Zhao. Towards large-scale 3d representation learning with multi-dataset point prompt training. In CVPR , 2024. 1, 2, 3, 5, 6, 7, 8 [50] Xiaoyang Wu, Daniel DeTone, Duncan Frost, Tianwei Shen, Chris Xie, Nan Yang, Jakob Engel, Richard New-combe, Hengshuang Zhao, and Julian Straub. Sonata: Self-supervised learning of reliable point representations. In 
+
+CVPR , 2025. 1, 2, 3, 4, 5, 6, 7, 8 [51] Yao Wu, Mingwei Xing, Yachao Zhang, Fangyong Wang, Xiaopei Zhang, and Yanyun Qu. Beyondsparse: Facilitating mamba to enhance cross-domain 3d semantic segmentation in adverse weather. In Proceedings of the AAAI Conference on Artificial Intelligence , 2026. 3 [52] Chunlong Xia, Xinliang Wang, Feng Lv, Xin Hao, and Yifeng Shi. Vit-comer: Vision transformer with convolu-tional multi-scale feature interaction for dense predictions. In CVPR , 2024. 1 [53] Saining Xie, Jiatao Gu, Demi Guo, Charles R Qi, Leonidas Guibas, and Or Litany. Pointcontrast: Unsupervised pre-training for 3d point cloud understanding. In ECCV , 2020. 2, 3 [54] Mingwei Xing, Xinliang Wang, and Yifeng Shi. Adapt-splat: Adapting vision foundation models for feed-forward 3d gaussian splatting. arXiv preprint arXiv:2605.10239 ,2026. 1 [55] Fangbin Xu, Dongyue Chen, Tong Jia, Shizhuo Deng, and Hao Wang. Cbdmoe: Consistent-but-diverse mixture of ex-perts for domain generalization. IEEE Transactions on Mul-timedia , 26:9814–9824, 2024. 3 [56] Xiang Xu, Lingdong Kong, Hui Shuai, Liang Pan, Ziwei Liu, and Qingshan Liu. Limoe: Mixture of lidar representation learners from automotive scenes. In IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 27368– 27379, 2025. 2, 3 [57] Karmesh Yadav, Ram Ramrakhya, Santhosh Kumar Ramakr-ishnan, Theo Gervet, John Turner, Aaron Gokaslan, Noah Maestre, Angel Xuan Chang, Dhruv Batra, Manolis Savva, et al. Habitat-matterport 3d semantics dataset. In CVPR ,2023. 5 [58] Yue Zhang, Yingzhao Jian, Hehe Fan, Yi Yang, and Roger Zimmermann. Uni3d-moe: Scalable multimodal 3d scene understanding via mixture of experts. arXiv preprint arXiv:2505.21079 , 2025. 2, 3 [59] Yujia Zhang, Xiaoyang Wu, Yixing Lao, Chengyao Wang, Zhuotao Tian, Naiyan Wang, and Hengshuang Zhao. Con-certo: Joint 2d-3d self-supervised learning emerges spatial representations. In NeurIPS , 2025. 3 [60] Jia Zheng, Junfei Zhang, Jing Li, Rui Tang, Shenghua Gao, and Zihan Zhou. Structured3d: A large photo-realistic dataset for structured 3d modeling. In ECCV , 2020. 5 [61] Tao Zhong, Zhixiang Chi, Li Gu, Yang Wang, Yuanhao Yu, and Jin Tang. Meta-dmoe: Adapting to domain shift by meta-distillation from mixture-of-experts. Advances in Neural In-formation Processing Systems , 35:22243–22257, 2022. 3 [62] Junsheng Zhou, Jinsheng Wang, Baorui Ma, Yu-Shen Liu, Tiejun Huang, and Xinlong Wang. Uni3d: Exploring unified 3d representation at scale. arXiv preprint arXiv:2310.06773 ,2023. 3 [63] Yin Zhou and Oncel Tuzel. Voxelnet: End-to-end learning for point cloud based 3d object detection. In CVPR , 2018. 3
