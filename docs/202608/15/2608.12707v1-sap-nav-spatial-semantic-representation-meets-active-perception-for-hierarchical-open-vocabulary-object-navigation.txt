@@ -1,0 +1,1244 @@
+SAP-Nav: Spatial Semantic Representation Meets Active Perception
+for Hierarchical Open-Vocabulary Object Navigation
+Xuetong Pei1, 2, Jian Liu2, Vidura Munasinghe2, Bo Miao3, U-Xuan Tan2, Wenrui Ding1, Na Zhao2
+1Beihang University
+2Singapore University of Technology and Design
+3AIML, Adelaide University
+Instruction: 
+Find the black glass-top coffee table
+in the living room with white decorative fireplace
+“instance”
+“object”
+“room”
+“region”
+Start Position
+Queryable Spatial Semantic Representation
+Traditional: 
+Build Offline ❌
+Ours:
+Actively build Online ✅
+Room Snapshots 
+with Active Perception
+Living room 1
+Pre-built 3D scan
+with Offline Preprocessing
+Kitchen
+Living room 2
+1
+2
+4
+5
+Active Viewpoint Verification
+Traditional: 
+Passive Observation
+Ours:
+Active Perception
+Ambiguous View ❌
+Informative View ✅
+Dining room
+3
+2
+1
+3
+4
+Living room 2
+Kitchen
+Dining room
+Living room 1
+Figure 1: SAP-Nav introduces active perception into hierarchical OVON, where goals span scene-, room-, region-, and instance-
+level specifications. Unlike passive methods relying on observations encountered during navigation, SAP-Nav actively seeks
+informative viewpoints to build a queryable spatial semantic representation online and identify the intended target.
+Abstract
+Hierarchical open-vocabulary object navigation (OVON) re-
+quires agents to follow free-form instructions that may specify
+targets through scene-, room-, region-, and instance-level cues
+in unseen environments. Although recent work LangMap has
+formalized this setting, reliably solving it under partial ob-
+servations remains challenging: spatial grounding requires
+persistent environment-level evidence, whereas target verifi-
+cation requires clear and discriminative candidate views. We
+present SAP-Nav, a fully online, zero-shot framework that
+addresses both requirements through active perception. SAP-
+Nav incrementally constructs a Queryable Spatial-Semantic
+Representation from actively acquired room views, enabling
+spatial semantic queries from any explored location. It further
+employs Active Viewpoint Verification to assess whether the
+current observation provides sufficient evidence and, when
+necessary, reposition the agent to a more informative view-
+point before verifying candidates against category and attribute
+constraints. Although designed for hierarchical OVON, SAP-
+Nav supports both hierarchical and standard category-level
+OVON without task-specific training or precomputed scene
+maps. Experiments on LangMap and HM3D-OVON show that
+SAP-Nav achieves the overall best performance, including a
+12.2% improvement in SR over training-based methods on
+region-level navigation. Real-world robot experiments further
+demonstrate its practical feasibility. Code will be made publicly
+available upon acceptance. Project Page.
+Introduction
+Open-vocabulary object navigation (OVON) requires em-
+bodied agents to navigate to language-specified targets in
+previously unseen environments using only onboard observa-
+tions. Standard OVON benchmarks (Yokoyama et al. 2024b)
+and methods (Yokoyama et al. 2024a; Zhang et al. 2025b)
+primarily formulate goals at the object-category level, where
+reaching any instance of the specified category constitutes
+success. Although this formulation enables standardized eval-
+uation, it does not fully reflect how people naturally express
+navigation goals. For example, “bring me the red bottle in my
+bedroom” specifies an object category together with room-
+level context and instance-level attributes. LangMap (Miao
+arXiv:2608.12707v1  [cs.RO]  13 Aug 2026
+
+
+et al. 2026) formalizes this broader setting by extending
+OVON evaluation to scene-level category goals and room-,
+region-, and instance-level constraints, as illustrated by the
+instruction example in Fig. 1. We refer to this setting as
+hierarchical OVON, which spans broad category search to
+context-rich target disambiguation.
+Reliably grounding goals across these levels requires com-
+plementary visual evidence under partial observations. Room
+context and specific room instances are best inferred from
+holistic observations that reveal the surrounding spatial lay-
+out and semantics, whereas instance-level constraints require
+clear, discriminative views of candidate objects. Passive ex-
+ploration does not guarantee either type of evidence. Methods
+that rely on complete 3D scans (Werby et al. 2024; Zhang
+et al. 2026) assume information unavailable in fully online de-
+ployment, while methods that passively accumulate incidental
+onboard observations (Yin et al. 2024; Zhong et al. 2026)
+may obtain incomplete or viewpoint-biased scene coverage.
+Similarly, a valid candidate may initially appear distant, oc-
+cluded, or from an uninformative perspective, making direct
+verification unreliable. Hierarchical OVON therefore requires
+agents not only to retain structured spatial-semantic evidence,
+but also to actively acquire observations that are informative
+for both grounding and verification.
+To address these challenges, we propose SAP-Nav, a fully
+online, zero-shot framework that applies active perception
+at two complementary stages. As illustrated in Fig. 1, SAP-
+Nav comprises a Queryable Spatial-Semantic Representation
+(QSSR) and Active Viewpoint Verification (AVV). QSSR is
+incrementally constructed during navigation through online
+room segmentation and actively acquired holistic room ob-
+servations. These observations provide persistent evidence
+for assigning room-level semantics and disambiguating mul-
+tiple rooms of the same type, e.g., the two living rooms
+shown in Fig. 1. The resulting representation supports spatial-
+semantic queries at any explored location. AVV complements
+this environment-level representation with candidate-level
+evidence acquisition. Rather than immediately verifying a
+detected candidate from the current observation, AVV first as-
+sesses view sufficiency and, when necessary, moves the agent
+to a more informative and feasible viewpoint before verifying
+the candidate against the category and attribute constraints in
+the instruction. Together, QSSR and AVV enable SAP-Nav
+to address hierarchical OVON without task-specific training
+or precomputed scene maps, while remaining applicable to
+standard category-level OVON. Our main contributions are:
+• We present SAP-Nav, a fully online, zero-shot framework
+designed for hierarchical OVON and applicable to standard
+category-level OVON.
+• We introduce QSSR, which incrementally combines online
+room segmentation with actively acquired holistic room
+observations to assign room-level semantics, disambiguate
+rooms of the same type, and support persistent spatial-
+semantic queries at any explored location.
+• We develop AVV, a closed-loop module that actively
+guides the agent to informative viewpoints when current
+observations are insufficient to verify candidates, enabling
+reliable identification of the intended target.
+• We show through extensive experiments that SAP-Nav
+achieves the best overall performance across hierarchical
+and standard OVON settings, and validate its practical
+feasibility in real-world robot deployments.
+Related Work
+Open-Vocabulary Object Navigation.
+OVON extends
+closed-set object navigation (Ramakrishnan et al. 2021;
+Chang et al. 2017) to goals drawn from an open vocabu-
+lary (Yokoyama et al. 2024b), typically requiring the agent
+to find any matching instance of a category. LangMap (Miao
+et al. 2026) broadens this setting to scene-, room-, region-,
+and instance-level instructions, better reflecting how users
+specify targets in practice. Existing methods can be catego-
+rized by their reliance on task-specific navigation training.
+Training-based approaches learn implicit scene and instruc-
+tion representations and train navigation capabilities from
+large-scale navigation data (Hong et al. 2021; Mousavian
+et al. 2019; Ramrakhya et al. 2023; Wijmans, Essa, and Batra
+2022; Ye et al. 2021; Zeng et al. 2024; Zhang et al. 2025a).
+Training-free methods instead build on off-the-shelf VLMs
+for zero-shot navigation. Early training-free methods focus
+on scene-level goals (Yokoyama et al. 2024a; Yu, Kasaei, and
+Cao 2023), while recent approaches accept richer instructions
+but still infer spatial constraints and instance attributes from
+passively acquired observations (Long et al. 2024; Yang et al.
+2025). These limitations motivate a fully online, zero-shot
+method that explicitly tackles multi-granularity instructions.
+Semantic Scene Representations for Navigation.
+Seman-
+tic scene representations organize observations into spatial
+and semantic abstractions that support spatial reasoning and
+navigation. Existing methods construct these representations
+either offline from complete scenes or online from onboard
+observations. Offline methods (Werby et al. 2024; Zhang
+et al. 2026) build hierarchical representations from complete
+3D scans, providing rich global context but assuming prior
+access to the environment. Online approaches primarily em-
+phasize room geometry (Hughes, Chang, and Carlone 2022),
+or encode room semantics implicitly through object-level
+features (Zhong et al. 2026) at the room level. They therefore
+lack an explicit representation that associates room instances
+with semantic types during online exploration. Constructing
+such a representation is challenging because room semantics
+is a holistic property whose evidence accumulates across mul-
+tiple views. This motivates us to construct a spatial semantic
+representation online which encodes explicit room semantics.
+Active Perception for Embodied tasks.
+Active perception
+refers to deliberately controlling sensing behavior, deciding
+what, how, when, and where to perceive, based on the cur-
+rent state of interpretation (Bajcsy, Aloimonos, and Tsotsos
+2018) and has recently gained renewed attention in related
+fields (Liu et al. 2025; Wang et al. 2023; Qin et al. 2025; Liu
+et al. 2026). Object navigation is naturally suited to such de-
+liberate viewpoint control, as each action of the agent changes
+the pose of the onboard camera, and thereby determines the
+available visual evidence. Existing methods, however, typi-
+cally select actions to make progress toward the goal, with
+
+
+Queryable Spatial Semantic Representation (QSSR)
+Sufficiency 
+Evaluation
+Target 
+Verification
+Viewpoint 
+Selection
+Active Viewpoint Verification (AVV)
+Room Snapshots with Active Perception
+No
+Yes
+3. Sub-room 
+Semantic Refinement
+Dining room
+2. Active Room Perception
+Bedroom
+Bathroom
+Hall, Dining room, 
+Kitchen, Living room
+Closet
+Image
+Depth
+Odometry
+“Find the wooden
+ dining table
+in the dining room.”
+Instruction:
+Input
+❌
+l Visibility
+l Perspective
+l Category
+l Attributes
+1. Online Room Segmentation
+Re-evaluate
+Is it the exact 
+target I should find?
+That looks like a dining table.
+ Is it in the dining room?
+Navigation Flow
+Spatial Semantic Query
+Fine-grained Verification
+Goal Approach
+Yes
+Yes
+Navigate & Observe Update QSSR
+Frontier Map
+Value Map
+Resume exploration
+Add to the blacklist
+No
+No
+Figure 2: The overview of our SAP-Nav. Given egocentric RGB-D observations, odometry, and an instruction at any granularity,
+SAP-Nav operates through two active-perception modules. QSSR converts actively acquired online observations into a queryable
+spatial semantic representation, from room segmentation to sub-room semantics. AVV closes the verification loop by assessing
+viewpoint sufficiency, actively repositioning to informative views, and verifying candidates against the goal category and
+attributes; rejected candidates are blacklisted and exploration continues.
+visual observations acquired only as a byproduct of the re-
+sulting trajectory (Padilla-Cerdio et al. 2026; Zemskova et al.
+2026), leaving observation quality rarely treated as an explicit
+objective of action selection. This motivates us to control
+viewpoints actively for perception in hierarchical OVON.
+Method
+Problem Formulation.
+We consider an agent navigating an
+unknown environment, which receives a natural-language goal
+G at one of multiple granularities, from an object category
+to targets constrained by spatial context and discriminative
+attributes. At each timestep t, it observes an egocentric RGB
+image It, depth Dt, estimates its pose Pt from odometry, and
+executes an action At. Using only egocentric observations,
+the agent must navigate to a target that satisfies G, and the task
+is considered successful when it stops within a predefined
+distance of that target.
+Method Overview.
+As illustrated in Fig. 2, SAP-Nav ad-
+dresses hierarchical OVON through two stages that actively
+acquire visual evidence for spatial semantic understanding and
+target verification. Given the task inputs, SAP-Nav searches
+for the target using vision-language-guided frontier explo-
+ration (Yokoyama et al. 2024a). During exploration, the
+agent constructs Queryable Spatial-Semantic Representation
+(QSSR) online as a hybrid representation of a spatial semantic
+BEV map and actively acquired holistic room snapshots. For
+each detected candidate, the agent queries QSSR to determine
+whether the candidate satisfies the room- and region-level
+constraints in G. Only spatially consistent candidates trigger
+Active Viewpoint Verification (AVV), which actively im-
+proves the viewpoint when necessary and verifies the target
+against the category and attributes. Candidates rejected by
+AVV are blacklisted and exploration resumes, whereas the
+accepted one is approached.
+Queryable Spatial Semantic Representation
+QSSR is designed to support querying the room type at
+any explored space and using holistic room snapshots to
+distinguish among regions (i.e., multiple room instances of
+the same type). It is a hybrid representation comprising a
+spatial semantic BEV map where each grid cell stores room
+type semantics, and a visual record that associates actively
+acquired room snapshots with corresponding room instances.
+It is built progressively through online room segmentation,
+active room perception, and sub-room semantic refinement,
+denoted as S1, S2 and S3 respectively.
+Online Room Segmentation.
+QSSR first establishes a
+structure of room instances over the online obstacle map by
+partitioning the explored free space into rooms. Doors provide
+natural boundaries for room segmentation, but viewpoints
+
+
+encountered during object navigation often yield sparse and
+biased door observations. We therefore adapt the online
+room segmentation method (Bao et al. 2025) to goal-driven
+exploration by accumulating door projections over a temporal
+window of m frames. Each door boundary indicates entry into
+a new room and provides the inward direction for capturing
+a holistic room snapshot. The resulting partition maps every
+explored BEV location to a room instance Rk, providing the
+structural basis for subsequent stages.
+Active Room Perception
+Based on the geometric structure
+provided by S1, the stage S2 associates each room instance
+Rk with a set of semantic types Ck and a visual record Vk,
+denoted as Rk →(Ck, Vk). Since observations encountered
+during navigation may cover only a limited part of a room,
+Vk is constructed from holistic room snapshots acquired at
+key exploration events, and Ck is inferred from Vk. S2 deter-
+mines when to observe and how to orient the camera without
+introducing additional translational movement. Specifically,
+snapshots are acquired under three conditions:
+(1) Initialization. The agent reuses the initial panorama
+captured at the start of each episode as v0 ∈V0 for the
+starting room R0. (2) First entry. When the agent first enters
+a new room Rk, it faces the room interior along the inward
+normal of the entry door dk and rotates in place to capture
+Nv frames, which are stitched into a room snapshot v0
+k ∈Vk.
+(3) Expansion update. We capture a new stitched view to
+update the representation of a previously classified room Rk
+whenever its area grows substantially relative to the area at
+the last classification. The n-th new stitched view vkn ∈Vk is
+aimed at the centroid of the newly explored portion of Rk, so
+that the updated snapshot reflects the full extent of the room
+rather than only the area seen at first entry.
+Each room snapshot vkn is then fed into the VLM to predict
+a semantic type ckn, and the predictions from all snapshots
+of Rk are accumulated in Ck:
+cn
+k = VLMcls(vn
+k ),
+Ck =
+[
+vn
+k ∈Vk
+{cn
+k}.
+(1)
+Together, Ck and Vk form the room level semantic record of
+Rk. Ck provides the semantic prior for sub-room refinement,
+while Vk retains holistic visual evidence for distinguishing
+among different regions.
+Sub-Room Semantic Refinement
+The stage S2 assigns
+room type semantics to each segmented room, but this can
+be too coarse in open areas or under-segmented spaces where
+multiple functional areas are merged into one. We therefore
+refine QSSR with a sub-room semantic probability field Φ
+over the BEV map to distribute ck ∈Ck to sub-room areas
+within Rk. For each image patch p, we use a pretrained scene
+encoder ϕ (Zhou et al. 2017) to produce a room type logit
+vector ϕt(p). Since the label space of the scene encoder
+contains out-of-domain categories for indoor navigation, we
+impose a static prior that restricts predictions to an indoor
+room-type vocabulary T , yielding ˜ϕt(p) = ϕt(p)
+
+T ∈R|T |.
+Then we back-project ˜ϕt(p) to its corresponding BEV grid,
+denoted as u, turning per observation of room probabilities
+into per grid room type. For each cell u, evidence from patches
+observed across timesteps and viewpoints is accumulated as
+Φt(u) =
+t
+X
+i=1
+˜ϕi(u),
+(2)
+which is updated throughout exploration and provides a
+normalized room type distribution at each u, thereby distin-
+guishing functional areas in open or undersegmented spaces.
+Spatial Semantic Query
+When a candidate object, denoted
+as o, is detected, the agent queries QSSR with BEV cells
+covered by its projected segmentation footprint, denoted as
+U(o), to check whether o satisfies the spatial constraints in G.
+QSSR first determines the room type ˆc(o) of o as:
+ˆc(o) =
+
+
+
+
+
+c,
+Ck = {c},
+argmax
+c∈Ck
+1
+|U(o)|
+X
+u∈U(o)
+Φt(u)c,
+|Ck| > 1.
+(3)
+If G refers to a region, the agent further uses Vk as visual
+evidence for VQA to determine whether Rk matches the
+region description in G.
+Active Viewpoint Verification
+After localizing the room or region specified by the instruction,
+the agent may encounter a spatially consistent candidate that
+is visible in the current observation, while the viewpoint
+provides insufficient evidence for reliable verification. We
+therefore introduce AVV, comprising viewpoint sufficiency
+evaluation, viewpoint selection, and target verification.
+Sufficiency Evaluation
+Given the current observation It,
+we assess whether the candidate can be reliably verified along
+two criteria: (1) visibility, assessing whether the candidate
+is clearly visible; and (2) perspective, assessing whether it
+is viewed from an angle that reveals sufficient identifying
+details (Jiang, Yuan, and Zhao 2026). We prompt the VLM
+with both the candidate crop and the full egocentric image
+It, which provide local appearance and surrounding context,
+respectively. Each criterion is scored from 1 to 5, and their sum
+defines the sufficiency score s ∈{2, . . . , 10}. If s < τ, the
+current view is considered insufficient, and the agent performs
+viewpoint selection to acquire a more informative observation;
+otherwise, it proceeds directly to target verification.
+Viewpoint Selection
+When the current observation is in-
+sufficient for reliable verification, we use viewpoint selec-
+tion to identify a more informative viewpoint, combin-
+ing geometric sampling, constraint filtering, and visibil-
+ity scoring. We first sample viewpoints V at uniformly
+spaced angles along concentric rings centered at c with
+radii ri ∈{0.8, 1.2, 1.6, 2.0, 2.4} m following the equation:
+vi,j = c + ri (cos θj, sin θj) ,
+θj = 2πj
+Nθ
+,
+(4)
+where j ∈{0, . . . , Nθ −1}, Nθ = 24 and c is the coor-
+dinatewise median of the segmentation footprint U(o) of
+the target on the obstacle map. However, these geometric
+samples may not correspond to feasible robot locations and
+visibility, we then filter them by two criteria: (1) Navigable
+
+
+Method
+VLM
+Single-Goal
+Scene
+Room
+Region
+Instance
+SR ↑
+SPL ↑
+SR
+SPL
+SR
+SPL
+SR
+SPL
+SR
+SPL
+Training-based methods
+PSL [ECCV’24] (Sun et al. 2024)
+–
+6.6
+1.8
+6.0
+1.4
+6.6
+1.9
+7.3
+2.1
+6.4
+1.9
+SenseAct-M [CVPR’24] (Khanna et al. 2024) –
+8.7
+4.6
+10.2
+5.6
+8.3
+4.4
+8.5
+4.3
+7.7
+4.0
+MTU3D [ICCV’25] (Zhu et al. 2025)
+–
+29.7
+15.4
+33.1
+16.7
+31.4
+15.9
+32.7
+16.5
+23.8 13.9
+Uni-NaVid [RSS’25] (Zhang et al. 2025b)
+–
+30.3
+15.3
+33.8
+16.2
+33.2
+16.5
+30.1
+15.5
+26.2 13.8
+PlaNaVid [arXiv’26] (Miao et al. 2026)
+Qwen2.5-VL-7B
+31.4
+15.2
+34.4
+16.5
+35.6
+16.7
+31.6
+15.5
+26.2 13.1
+Training-free methods
+VLFM† [ICRA’24] (Yokoyama et al. 2024a)
+BLIP-2
+12.8
+7.5
+16.9
+9.7
+15.3
+8.9
+11.6
+6.7
+9.9
+6.1
+3D-Mem [CVPR’25] (Yang et al. 2025)
+Qwen2.5-VL-3B
+15.3
+2.8
+20.7
+3.7
+20.3
+4.0
+13.4
+2.3
+10.2
+1.8
+Qwen2.5-VL-7B
+21.2
+8.7
+21.3
+8.4
+18.8
+8.1
+21.7
+8.8
+22.7
+9.2
+Ours
+Qwen2.5-VL-7B
+29.4
+11.2
+28.8
+9.4
+30.1
+10.7
+33.6
+12.1
+25.1 11.7
+Qwen3.5-9B
+36.6
+18.8
+41.4
+22.4
+41.9
+21.2
+40.8
+20.3
+26.5 13.6
+Qwen3-VL-235B-A22B-thinking
+39.6
+19.9
+43.7
+22.5
+47.7
+23.7
+43.8
+21.4
+26.8 14.0
+Table 1: Evaluation on LangMap using concise descriptions. Single-Goal reports the average performance over all single-goal
+episodes. SAP-Nav achieves top-tier performance at all four granularity levels without task-specific training. VLFM† is re-run
+with its official implementation. To adapt VLFM to hierarchical OVON, BLIP-2 is prompted with granularity-specific goal
+information for frontier value estimation. The versions of GroundingDINO and SAM are kept consistent with those used by
+SAP-Nav.
+and explored: located in navigable space within the explored
+region; (2) Adaptive minimum distance: to prevent low targets
+from falling outside the vertical field of view, the Euclidean
+distance from the viewpoint v to c should satisfy:
+∥v −c∥2 ≥hcam −htop
+tan
+  θv
+2
+
+(5)
+where hcam is the camera height, htop is the estimated top
+height of the candidate object, and θv denotes the vertical
+field of view of the camera. Furthermore, we evaluate each
+v ∈V based on its visibility to the target. To achieve this, we
+maintain an online 2.5D height map, where each explored
+BEV cell records the maximum observed obstacle height. For
+each valid v ∈V and footprint cell f ∈U(o), we cast a ray
+from the camera center above v to the target point height at f,
+which is deemed visible only if all intermediate cells of the
+ray lie below the resulting ray profile, denoted as vis(v, f).
+The best viewpoint is determined as follows:
+v∗= arg max
+v∈V
+1
+|U(o)|
+X
+f∈U(o)
+vis(v, f).
+(6)
+Upon reaching v∗, the agent evaluates s again. If s remains
+below τ after three repositioning attempts, suggesting that
+the insufficiency may not primarily result from viewpoint
+quality, the agent will perform target verification using the
+observation with the highest s collected so far.
+Target Verification.
+If the sufficiency score reaches the
+threshold (s ≥τ), the VLM is shown the highlighted can-
+didate region in its surrounding context and asked whether
+it matches the target category. Furthermore, if G contains
+attribute constraints, we first use an LLM to parse G into a
+structured set of attribute descriptions (Jang and Kim 2026).
+For each category consistent candidate, the VLM then verifies
+whether its visual attributes match the parsed constraints and
+accepts the candidate only when all required attributes are
+satisfied. Rejected candidates are added to a blacklist to avoid
+repeated VLM queries when they are detected again, after
+which the agent resumes exploration.
+Experiments
+Experimental Setup
+Datasets.
+We evaluate on two OVON benchmarks built
+on realistic HM3D scans (Ramakrishnan et al. 2021) in the
+Habitat simulator (Savva et al. 2019). LangMap (Miao et al.
+2026) is a large-scale, multi-granularity benchmark spanning
+414 object categories across all HM3D-Sem (Yadav et al.
+2023) validation scenes. We adopt its single-goal protocol
+with around 15K tasks at four linguistic granularity levels:
+scene-level targets any instance of a category; room-level
+constrains the target to a room type; region-level further
+restricts it to a specific room instance; and instance-level
+identifies a unique instance by its discriminative attributes.
+HM3D-OVON (Yokoyama et al. 2024b) is a popular scene-
+level object navigation benchmark with 379 open-vocabulary
+categories, where we evaluate on its Val Unseen split, which
+contains over 3K episodes across 49 object categories.
+Metrics.
+Following (AI Habitat Team 2023), we report
+two standard metrics: (1) Success Rate (SR), which mea-
+sures the fraction of episodes that meet the success cri-
+teria, SR =
+1
+N
+PN
+i=1 Si; and (2) Success weighted by
+Path Length (SPL), which further rewards path efficiency,
+SPL =
+1
+N
+PN
+i=1 Si
+li
+max(pi,li). Following both benchmarks,
+an episode succeeds if the agent reaches any dataset-annotated
+target viewpoint within 1 m at a maximum of 500 steps.
+
+
+Method
+SR ↑SPL ↑
+Training-based methods
+BC [IROS’24] (Yokoyama et al. 2024b)
+5.4
+1.9
+DAgger [IROS’24] (Yokoyama et al. 2024b)
+10.2
+4.7
+DAgRL [IROS’24] (Yokoyama et al. 2024b)
+18.3
+7.9
+RL [IROS’24] (Yokoyama et al. 2024b)
+18.6
+7.5
+DAgRL+OD [IROS’24] (Yokoyama et al. 2024b)
+37.1
+19.8
+Uni-NaVid [RSS’25] (Zhang et al. 2025b)
+39.5
+19.8
+MTU3D [ICCV’25] (Zhu et al. 2025)
+40.8
+12.1
+Dynam3D [NeurIPS’25] (Wang, Lee, and Lee 2025)
+42.7
+22.4
+OVSegDT [CVPR’26] (Zemskova et al. 2026)
+44.7
+20.6
+NavFoM [ICLR’26] (Zhang et al. 2025a)
+45.2
+31.9
+Training-free methods
+Modular GOAT [CVPR’24] (Khanna et al. 2024)
+24.9
+17.2
+VLFM [ICRA’24] (Yokoyama et al. 2024a)
+35.2
+19.6
+TANGO [CVPR’25] (Ziliotto et al. 2025) (
+GPT-4o)
+35.5
+19.5
+OpenFrontier [arXiv’26] (Padilla-Cerdio et al. 2026) (Gemini-2.5-Flash) 39.0
+20.1
+MetaNav [arXiv’26] (Li et al. 2026) (
+GPT-4o)
+46.1
+29.8
+Ours (
+GPT-4o)
+49.7
+23.1
+Table 2: Evaluation on the HM3D-OVON val unseen split.
+Although designed for multi-granularity instructions, SAP-
+Nav achieves the top-ranked SR among all compared methods
+on standard scene-level OVON without navigation training.
+Implementation Details.
+The action space A includes
+MOVE_FORWARD (0.25 m), TURN_LEFT/TURN_RIGHT
+(30◦) and STOP. For VLM-based reasoning, we use (1) open-
+source VLMs, Qwen2.5-VL-7B-Instruct (Bai et al. 2025b),
+Qwen3.5-9B enabled thinking mode (Qwen Team 2026),
+Qwen3-VL-235B-A22B-thinking (Bai et al. 2025a); and (2)
+the closed-source VLM GPT-4o (OpenAI 2024).
+Benchmark Results
+Hierarchical OVON task on LangMap.
+Table 1 reports
+the outstanding performance of SAP-Nav in tackling hierarchi-
+cal OVON. SAP-Nav with Qwen3-VL-235B-A22B-thinking
+achieves the SOTA performance at every granularity level
+without task-specific navigation training. With Qwen3.5-9B,
+SAP-Nav already exceeds the strongest training-based base-
+line, PlaNaVid. Notably, even with the same Qwen2.5-VL-7B
+backbone, SAP-Nav also surpasses PlaNaVid on the Region
+level. Compared with training-free methods, SAP-Nav sub-
+stantially outperforms the adapted VLFM baseline. Under
+the same Qwen2.5-VL-7B backbone as 3D-Mem, SAP-Nav
+improves performance across all granularity levels, with the
+largest gains on room- and region-levels.
+OVON task on HM3D-OVON.
+We further evaluate SAP-
+Nav on the widely used HM3D-OVON benchmark to examine
+its generalization to standard scene-level OVON. As shown
+in Table 2, SAP-Nav achieves the highest SR among all
+compared methods. This indicates that SAP-Nav, although
+designed for multi-granularity instructions, transfers well to
+conventional object-goal navigation. In terms of SPL, SAP-
+Nav is lower than NavFoM and MetaNav. We attribute this
+to the AVV module, which deliberately repositions the agent
+to verify candidate targets when the current observation is
+Component
+Room
+Region
+S1
+S2
+S3
+SR ↑
+SPL ↑
+SR ↑
+SPL ↑
+26.9
+14.3
+32.3
+17.0
+✓
+39.4
+20.2
+37.2
+16.6
+✓
+✓
+45.8
+23.2
+42.3
+19.8
+✓
+✓
+✓
+47.7
+23.7
+43.8
+21.4
+Table 3: Ablation study of QSSR across Room and Region
+levels on LangMap.
+insufficient; the additional movements lengthen the traversed
+path but substantially improve reliability. We consider this
+a reasonable trade-off, as successfully reaching the correct
+target is typically more critical than path efficiency in real-
+world deployment.
+Real-world Deployment
+We validate SAP-Nav on a Deep Robotics Jueying Lite3
+quadruped equipped with an RGB-D camera and a LiDAR
+sensor. Onboard sensing and navigation processes commu-
+nicate with a remote RTX A5000 workstation over WiFi.
+SAP-Nav runs on the workstation for online inference, and
+SLAM Toolbox provides localization while Nav2 handles
+point-to-point navigation with dynamic obstacle avoidance.
+We conduct real-robot experiments across representative in-
+door environments, including offices, meeting rooms, living
+rooms, and kitchens, using diverse instructions spanning mul-
+tiple semantic granularities and navigation goals. Fig. 3 shows
+qualitative examples of SAP-Nav in real indoor environments.
+The upper row shows QSSR rejecting spatially inconsistent
+candidates through online room semantics, while the lower
+row shows AVV improving the viewpoint before target verifi-
+cation. These examples illustrate the ability of SAP-Nav to
+support hierarchical OVON on a physical robot.
+Ablation Study
+Effect of Queryable Spatial Semantic Representation
+As
+shown in Table 3, we ablate QSSR to isolate the roles of
+holistic room semantics and sub-room semantic refinement.
+S1 is not evaluated alone, as it serves as the structural basis
+for S2 and only provides geometric segmentation without
+semantics. Removing QSSR entirely causes the most severe
+degradation, since the agent cannot handle room- or region-
+level constraints in the instruction without maintaining spatial
+semantic awareness of the explored environment. Using only
+S3, the agent relies on scene predictions accumulated from
+passive observations. The lower performance indicates that
+individual views provide limited context and can inject noisy
+room-type evidence into Φ(u). The S1 + S2 variant removes
+S3 and thus lacks sub-room refinement, which hurts per-
+formance in open areas or under-segmented rooms where
+geometric room boundaries do not match functional areas.
+Effect of Active Viewpoint Verification
+Table 4 shows that
+AVV improves performance through sufficiency evaluation
+(SE), viewpoint selection (VS), and target verification (TV).
+Removing AVV causes a clear performance drop, indicating
+that passive observations are insufficient for reliable stopping.
+
+
+Reject the Wrong Room
+Room Semantics
+Ego
+Pillow found in the kitchen.
+Room Segmentation
+Room Semantics
+Ego
+Open door detected. Find another room.
+Target Grounding Success
+Room Semantics
+Ego
+Pillow in the living room is localized.
+Find 
+the pillow 
+in the 
+living room.
+Room-level
+Find the 
+potted plant 
+with slender 
+leaves.
+Instance-level
+Ambiguous Observation
+Frontier Map
+Ego
+Candidate under insufficient view.
+Insufficient View
+Select Informative Viewpoint
+Frontier Map
+Ego
+Sample and evaluate viewpoint candidates.
+Reliable Verification
+Frontier Map
+Ego
+Target verified under informative view.
+Informative View
+Instruction
+Instruction
+Occluded by chairs
+Figure 3: Real-world deployment. SAP-Nav can execute hierarchical OVON instructions in indoor scenes.
+Component
+LangMap
+HM3D-OVON
+SE
+VS
+TV
+Single-Goal
+Scene
+Room
+Region
+Instance
+Overall
+SR ↑
+SPL ↑
+SR
+SPL
+SR
+SPL
+SR
+SPL
+SR
+SPL
+SR
+SPL
+24.1
+12.2
+12.8
+7.2
+38.3
+20.7
+40.0
+18.9
+3.5
+1.7
+24.5
+16.2
+✓
+✓
+29.8
+15.7
+17.6
+10.9
+39.8
+20.7
+40.5
+20.4
+17.7
+9.6
+31.1
+17.5
+✓
+36.0
+19.2
+33.1
+19.9
+44.0
+22.7
+42.5
+22.0
+25.0
+13.4
+46.8
+26.2
+✓
+✓
+39.2
+17.6
+43.5
+20.3
+46.8
+21.4
+44.0
+17.6
+26.3
+13.1
+49.4
+22.0
+✓
+✓
+✓
+39.6
+19.9
+43.7
+22.5
+47.7
+23.7
+43.8
+21.4
+26.8
+14.0
+49.7
+23.1
+Table 4: Ablation study on the three components of AVV across all granularities of LangMap and HM3D-OVON benchmarks.
+SE and VS improve performance by acquiring more informa-
+tive observations, while TV brings larger gains by explicitly
+checking the candidate against the instruction. Comparing
+TV with VS+TV shows that viewpoint quality is important
+for verification, although the extra repositioning caused by
+VS can reduce the path efficiency, as reflected by the lower
+SPL. SE mitigates this loss by judging whether the current
+observation is already sufficient, so that VS is triggered only
+when needed.
+Conclusion
+We introduced SAP-Nav, a fully online, zero-shot navigation
+framework for hierarchical OVON. Our key design insight is
+that spatial semantic understanding and target verification in
+this task both require distinct visual evidence that passive ob-
+servation cannot guarantee. To address this challenge, QSSR
+constructs a queryable spatial semantic representation by ex-
+tracting explicit room type semantics from actively acquired
+holistic room snapshots, while AVV assesses the current
+visual evidence and seeks a more informative viewpoint when
+necessary before verifying the target category and attributes.
+Extensive experiments across two benchmarks and real-world
+robotic deployments demonstrated that SAP-Nav effectively
+handled multi-granularity instructions and demonstrated its
+strong practical feasibility in unseen environments.
+Limitations and Future Work. While active perception im-
+proves reliability in hierarchical OVON, SAP-Nav can be fur-
+ther improved in two directions. First, although the designed
+sufficiency evaluation avoids unnecessary repositioning, AVV
+selects viewpoints based on geometric visibility, without con-
+sidering their semantic utility or motion cost. Future work
+could jointly optimize semantic informativeness, verification
+reliability, and navigation efficiency. Second, QSSR is not
+retained across successive tasks. Integrating it with persistent
+memory could enable acquired spatial semantic knowledge
+to be reused for more efficient lifelong navigation.
+
+
+References
+AI Habitat Team. 2023. Habitat Challenge 2023. https:
+//aihabitat.org/challenge/2023/. Accessed: 2026-06-21.
+Bai, S.; Cai, Y.; Chen, R.; Chen, K.; Chen, X.; Cheng, Z.;
+Deng, L.; Ding, W.; Gao, C.; Ge, C.; Ge, W.; Guo, Z.; Huang,
+Q.; Huang, J.; Huang, F.; Hui, B.; Jiang, S.; Li, Z.; Li, M.; Li,
+M.; Li, K.; Lin, Z.; Lin, J.; Liu, X.; Liu, J.; Liu, C.; Liu, Y.;
+Liu, D.; Liu, S.; Lu, D.; Luo, R.; Lv, C.; Men, R.; Meng, L.;
+Ren, X.; Ren, X.; Song, S.; Sun, Y.; Tang, J.; Tu, J.; Wan, J.;
+Wang, P.; Wang, P.; Wang, Q.; Wang, Y.; Xie, T.; Xu, Y.; Xu,
+H.; Xu, J.; Yang, Z.; Yang, M.; Yang, J.; Yang, A.; Yu, B.;
+Zhang, F.; Zhang, H.; Zhang, X.; Zheng, B.; Zhong, H.; Zhou,
+J.; Zhou, F.; Zhou, J.; Zhu, Y.; and Zhu, K. 2025a. Qwen3-VL
+Technical Report. arXiv preprint arXiv:2511.21631.
+Bai, S.; Chen, K.; Liu, X.; Wang, J.; Ge, W.; Song, S.; Dang,
+K.; Wang, P.; Wang, S.; Tang, J.; Zhong, H.; Zhu, Y.; Yang,
+M.; Li, Z.; Wan, J.; Wang, P.; Ding, W.; Fu, Z.; Xu, Y.; Ye,
+J.; Zhang, X.; Xie, T.; Cheng, Z.; Zhang, H.; Yang, Z.; Xu,
+H.; and Lin, J. 2025b. Qwen2.5-VL Technical Report. arXiv
+preprint arXiv:2502.13923.
+Bajcsy, R.; Aloimonos, Y.; and Tsotsos, J. K. 2018. Revisiting
+active perception. Autonomous Robots, 42(2): 177–196.
+Bao, C.; Hu, J.; Zheng, Q.; and Lam, T. L. 2025. Topology-
+based visual active room segmentation. In 2025 IEEE In-
+ternational Conference on Robotics and Automation (ICRA),
+2831–2837. IEEE.
+Chang, A.; Dai, A.; Funkhouser, T.; Halber, M.; Niessner, M.;
+Savva, M.; Song, S.; Zeng, A.; and Zhang, Y. 2017. Matter-
+port3D: Learning from RGB-D Data in Indoor Environments.
+International Conference on 3D Vision (3DV).
+Hong, Y.; Wu, Q.; Qi, Y.; Rodriguez-Opazo, C.; and Gould, S.
+2021. VLN BERT: A recurrent vision-and-language BERT
+for navigation. In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition, 1643–1653.
+Hughes, N.; Chang, Y.; and Carlone, L. 2022. Hydra: A real-
+time spatial perception system for 3D scene graph construction
+and optimization. arXiv preprint arXiv:2201.13360.
+Jang, W. S.; and Kim, U.-H. 2026. Context-Nav: Context-
+Driven Exploration and Viewpoint-Aware 3D Spatial Reason-
+ing for Instance Navigation. In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition,
+9626–9636.
+Jiang, S.; Yuan, Z.; and Zhao, N. 2026. TAVEN: Task-driven
+Adaptive Viewpoint Exploration for Training-Free 3D Spatial
+Reasoning and Understanding. In Proceedings of the 2026
+International Conference on Multimedia Retrieval, 911–920.
+Khanna, M.; Ramrakhya, R.; Chhablani, G.; Yenamandra, S.;
+Gervet, T.; Chang, M.; Kira, Z.; Chaplot, D. S.; Batra, D.; and
+Mottaghi, R. 2024. GOAT-Bench: A benchmark for multi-
+modal lifelong navigation. In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition,
+16373–16383.
+Li, X.; Lyu, F.; Wu, H.; Liu, M.; Liu, J.-N.; and Liu, G. 2026.
+Stop Wandering: Efficient Vision-Language Navigation via
+Metacognitive Reasoning. arXiv preprint arXiv:2604.02318.
+Liu, S.; Huang, C.; Huang, H.; and Wu, J. 2025. Active
+Scene Recognition for Domestic Robots: Observing, Moving,
+and Recognizing. IEEE Transactions on Systems, Man, and
+Cybernetics: Systems, 55(12): 9591–9603.
+Liu, Z.; Gu, Y.; Wang, Y.; Xue, X.; and Fu, Y. 2026. Ac-
+tiveVLA: Injecting Active Perception into Vision-Language-
+Action Models for Precise 3D Robotic Manipulation. arXiv
+preprint arXiv:2601.08325.
+Long, Y.; Cai, W.; Wang, H.; Zhan, G.; and Dong, H. 2024.
+InstructNav: Zero-shot System for Generic Instruction Navi-
+gation in Unexplored Environment. In 8th Annual Conference
+on Robot Learning.
+Miao, B.; Liu, W.; Luo, J.; Shinnick, L.; Liu, J.; Hamilton-
+Smith, T.; Yang, Y.; Wu, Z.; Videnovic, V.; Dayoub,
+F.; et al. 2026.
+LangMap: A Hierarchical Benchmark
+for Open-Vocabulary Goal Navigation.
+arXiv preprint
+arXiv:2602.02220.
+Mousavian, A.; Toshev, A.; Fišer, M.; Košecká, J.; Wahid, A.;
+and Davidson, J. 2019. Visual representations for semantic
+target driven navigation. In 2019 International Conference
+on Robotics and Automation (ICRA), 8846–8852. IEEE.
+OpenAI. 2024.
+GPT-4o System Card.
+arXiv preprint
+arXiv:2410.21276.
+Padilla-Cerdio, E.; Sun, B.; Pollefeys, M.; and Blum, H. 2026.
+OpenFrontier: General Navigation with Visual-Language
+Grounded Frontiers. arXiv preprint arXiv:2603.05377.
+Qin, L.; Wang, M.; Li, P.; Zhou, W.; and Li, H. 2025. Active
+Perception Meets Rule-Guided RL: A Two-Phase Approach
+for Precise Object Navigation in Complex Environments. In
+Proceedings of the IEEE/CVF International Conference on
+Computer Vision, 7603–7612.
+Qwen Team. 2026. Qwen3.5. https://qwen.ai/blog?id=qwen3.
+5. Alibaba Group.
+Ramakrishnan, S. K.; Gokaslan, A.; Wijmans, E.; Maksymets,
+O.; Clegg, A.; Turner, J.; Undersander, E.; Galuba, W.; West-
+bury, A.; Chang, A. X.; et al. 2021. Habitat-matterport
+3D dataset (HM3D): 1000 large-scale 3D environments for
+embodied AI. arXiv preprint arXiv:2109.08238.
+Ramrakhya, R.; Batra, D.; Wijmans, E.; and Das, A. 2023.
+PIRLNav: Pretraining with imitation and RL finetuning for
+ObjectNav. In Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition, 17896–17906.
+Savva, M.; Kadian, A.; Maksymets, O.; Zhao, Y.; Wijmans,
+E.; Jain, B.; Straub, J.; Liu, J.; Koltun, V.; Malik, J.; et al.
+2019. Habitat: A platform for embodied AI research. In
+Proceedings of the IEEE/CVF International Conference on
+Computer Vision, 9339–9347.
+Sun, X.; Liu, L.; Zhi, H.; Qiu, R.; and Liang, J. 2024. Priori-
+tized semantic learning for zero-shot instance navigation.
+In European Conference on Computer Vision, 161–178.
+Springer.
+Wang, H.; Wang, W.; Liang, W.; Hoi, S. C.; Shen, J.; and Gool,
+L. V. 2023. Active perception for visual-language navigation.
+International Journal of Computer Vision, 131(3): 607–625.
+Wang, Z.; Lee, S.; and Lee, G. H. 2025. Dynam3D: Dynamic
+layered 3D tokens empower VLM for vision-and-language
+
+
+navigation.
+Advances in Neural Information Processing
+Systems, 38: 153522–153544.
+Werby, A.; Huang, C.; Büchner, M.; Valada, A.; and Burgard,
+W. 2024. Hierarchical open-vocabulary 3D scene graphs for
+language-grounded robot navigation. In First Workshop on
+Vision-Language Models for Navigation and Manipulation at
+ICRA 2024.
+Wijmans, E.; Essa, I.; and Batra, D. 2022. VER: Scaling on-
+policy RL leads to the emergence of navigation in embodied
+rearrangement. Advances in Neural Information Processing
+Systems, 35: 7727–7740.
+Yadav, K.; Ramrakhya, R.; Ramakrishnan, S. K.; Gervet, T.;
+Turner, J.; Gokaslan, A.; Maestre, N.; Chang, A. X.; Batra,
+D.; Savva, M.; et al. 2023. Habitat-Matterport 3D semantics
+dataset. In Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition, 4927–4936.
+Yang, Y.; Yang, H.; Zhou, J.; Chen, P.; Zhang, H.; Du, Y.;
+and Gan, C. 2025. 3D-Mem: 3D scene memory for embodied
+exploration and reasoning. In Proceedings of the Computer
+Vision and Pattern Recognition Conference, 17294–17303.
+Ye, J.; Batra, D.; Das, A.; and Wijmans, E. 2021. Auxil-
+iary tasks and exploration enable objectgoal navigation. In
+Proceedings of the IEEE/CVF International Conference on
+Computer Vision, 16117–16126.
+Yin, H.; Xu, X.; Wu, Z.; Zhou, J.; and Lu, J. 2024. SG-Nav:
+Online 3D scene graph prompting for LLM-based zero-shot
+object navigation. Advances in Neural Information Processing
+Systems, 37: 5285–5307.
+Yokoyama, N.; Ha, S.; Batra, D.; Wang, J.; and Bucher, B.
+2024a. VLFM: Vision-language frontier maps for zero-shot
+semantic navigation. In 2024 IEEE International Conference
+on Robotics and Automation (ICRA), 42–48. IEEE.
+Yokoyama, N.; Ramrakhya, R.; Das, A.; Batra, D.; and Ha,
+S. 2024b. HM3D-OVON: A dataset and benchmark for
+open-vocabulary object goal navigation. In 2024 IEEE/RSJ
+International Conference on Intelligent Robots and Systems
+(IROS), 5543–5550. IEEE.
+Yu, B.; Kasaei, H.; and Cao, M. 2023. Frontier Semantic
+Exploration for Visual Target Navigation. In 2023 IEEE
+International Conference on Robotics and Automation (ICRA),
+4099–4105. IEEE.
+Zemskova, T.; Staroverov, A.; Yudin, D.; and Panov, A. 2026.
+OVSegDT: Segmenting Transformer for Open-Vocabulary
+Object Goal Navigation. In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition,
+8120–8129.
+Zeng, K.-H.; Zhang, Z.; Ehsani, K.; Hendrix, R.; Salvador,
+J.; Herrasti, A.; Girshick, R.; Kembhavi, A.; and Weihs, L.
+2024. PoliFormer: Scaling On-Policy RL with Transformers
+Results in Masterful Navigators. In 8th Annual Conference
+on Robot Learning.
+Zhang, J.; Li, A.; Qi, Y.; Li, M.; Liu, J.; Wang, S.; Liu, H.;
+Zhou, G.; Wu, Y.; Li, X.; et al. 2025a. Embodied navigation
+foundation model. arXiv preprint arXiv:2509.12129.
+Zhang, J.; Li, Z.; Wang, S.; Shi, X.; Wei, Z.; and Wu, Q.
+2026.
+SpatialNav: Leveraging Spatial Scene Graphs for
+Zero-Shot Vision-and-Language Navigation. arXiv preprint
+arXiv:2601.06806.
+Zhang, J.; Wang, K.; Wang, S.; Li, M.; Liu, H.; Wei, S.;
+Wang, Z.; Zhang, Z.; and Wang, H. 2025b. Uni-NaVid: A
+Video-based Vision-Language-Action Model for Unifying
+Embodied Navigation Tasks. Robotics: Science and Systems.
+Zhong, Z.; Lu, J.; Liu, X.; Yu, R.; Zheng, X.; Liu, Z.; Wang,
+H.; and Li, H. 2026. Spatial-Aware and Viewpoint-Robust
+Vision-Language Navigation. IEEE Transactions on Circuits
+and Systems for Video Technology.
+Zhou, B.; Lapedriza, A.; Khosla, A.; Oliva, A.; and Torralba,
+A. 2017. Places: A 10 million image database for scene
+recognition.
+IEEE transactions on pattern analysis and
+machine intelligence, 40(6): 1452–1464.
+Zhu, Z.; Wang, X.; Li, Y.; Zhang, Z.; Ma, X.; Chen, Y.; Jia, B.;
+Liang, W.; Yu, Q.; Deng, Z.; Huang, S.; and Li, Q. 2025. Move
+to Understand a 3D Scene: Bridging Visual Grounding and
+Exploration for Efficient and Versatile Embodied Navigation.
+International Conference on Computer Vision (ICCV).
+Ziliotto, F.; Campari, T.; Serafini, L.; and Ballan, L. 2025.
+TANGO: training-free embodied AI agents for open-world
+tasks. In Proceedings of the Computer Vision and Pattern
+Recognition Conference, 24603–24613.

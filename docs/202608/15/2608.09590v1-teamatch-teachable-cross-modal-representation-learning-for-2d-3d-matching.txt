@@ -1,0 +1,1524 @@
+TeaMatch: Teachable Cross-Modal Representation Learning for
+2D–3D Matching
+Chongjian Wang
+Shandong Women’s University
+Jinan, China
+Shandong University of Science and Technology
+Qingdao, China
+202311080223@sdust.edu.cn
+Junjie Gao∗
+Shandong Women’s University
+Jinan, China
+junjie.gao@sdwu.edu.cn
+Abstract
+Learning reliable correspondences between images and point clouds
+is fundamental for 2D–3D matching. Despite recent progress in
+detection-free methods, existing approaches primarily optimize
+matching within a single model, and often struggle to maintain re-
+liable correspondences under challenging conditions such as noisy
+inputs, low overlap, and ambiguous structures. In this work, we pro-
+pose TeaMatch, a novel framework that introduces teachability as a
+criterion for cross-modal representation learning. We define teach-
+ability as the ability of a representation to be effectively recovered
+by weak learners under degraded inputs, reflecting its structural
+consistency and robustness. To this end, we construct a set of task-
+specific weak students that simulate common failure modes, and
+train them to imitate the teacher on a training split while evaluating
+their recoverability on a disjoint meta split. The teacher is then
+optimized to improve the students’ ability to recover reliable corre-
+spondences, guided by correspondence-level and geometry-aware
+constraints. Our framework can be seamlessly integrated into exist-
+ing coarse-to-fine matching pipelines without additional inference
+cost.Extensive experiments demonstrate that TeaMatch improves
+matching robustness and achieves state-of-the-art performance on
+challenging 2D–3D matching benchmarks.
+CCS Concepts
+• Computing methodologies →Matching.
+Keywords
+2D–3D Matching, Cross-Modal Representation Learning, Represen-
+tation Robustness, Teacher–Student Learning, Visual Localization
+ACM Reference Format:
+Chongjian Wang and Junjie Gao. 2026. TeaMatch: Teachable Cross-Modal
+Representation Learning for 2D–3D Matching. In Proceedings of the 34th
+ACM International Conference on Multimedia (MM ’26), November 10–14,
+2026, Rio de Janeiro, Brazil. ACM, New York, NY, USA, 10 pages. https:
+//doi.org/10.1145/3767308.3835891
+∗Corresponding author.
+This work is licensed under a Creative Commons Attribution-NonCommercial-
+NoDerivatives 4.0 International License.
+MM ’26, Rio de Janeiro, Brazil
+© 2026 Copyright held by the owner/author(s).
+ACM ISBN 979-8-4007-2213-4/2026/11
+https://doi.org/10.1145/3767308.3835891
+GT Key Point
+Query Point
+(a) Diff2I2P
+(b) Ours
+Figure 1: Qualitative comparison of correspondence local-
+ization. We select a query point and visualize the matching
+confidence maps of Diff2I2P and our method. While the base-
+line assigns high confidence to a broad ambiguous region,
+TeaMatch localizes the true correspondence with a sharp
+peak.
+1
+Introduction
+Establishing reliable correspondences between images and point
+clouds is fundamental to visual localization [48, 61], robot navi-
+gation [23, 37], augmented reality [3], simultaneous localization
+and mapping [11], and 3D reconstruction [22, 29]. Given an image
+and a point cloud capturing the same scene, 2D–3D matching aims
+to identify geometrically consistent pixel–point correspondences,
+from which the relative pose can be estimated using a robust solver
+such as PnP-RANSAC [14, 28]. As in other registration problems,
+correspondence quality is therefore critical to successful down-
+stream localization.
+Traditional 2D–3D matching pipelines [13, 38, 52] typically fol-
+low a detect-then-match strategy. They independently detect salient
+keypoints in the image and point cloud, extract modality-specific de-
+scriptors, and establish cross-modal correspondences. However, the
+intrinsic gap between 2D appearance and 3D geometry makes re-
+peatable keypoints difficult to define consistently across modalities,
+while descriptors learned from texture-rich images and sparsely
+arXiv:2608.09590v1  [cs.CV]  10 Aug 2026
+
+
+MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil
+Chongjian Wang and Junjie Gao
+sampled point clouds often remain poorly aligned. Consequently,
+these methods tend to produce low inlier ratios and limited robust-
+ness under viewpoint changes, noise, and partial overlap.
+Recently, detection-free methods [31, 32, 36, 40, 60] have emerged
+as a strong alternative, directly inferring correspondences from
+dense or semi-dense cross-modal representations without explicit
+keypoint detection. Many further adopt coarse-to-fine strategies [32,
+36], progressively refining region-level alignments into pixel–point
+correspondences. Although these frameworks significantly improve
+robustness, they are typically trained within a single-model par-
+adigm that optimizes a high-capacity matcher without explicitly
+enforcing robust and recoverable representations. Under challeng-
+ing conditions such as noise, low overlap, and repetitive structures,
+models may therefore rely on fragile pair-level representations
+that are sensitive to corruption and distribution shifts, degrading
+correspondence quality and downstream pose estimation. This sug-
+gests that matching accuracy alone is insufficient to characterize
+representation quality: beyond being discriminative, cross-modal
+representations should preserve stable geometric structure under
+constrained conditions. As illustrated in Fig. 1, existing methods
+often produce diffuse responses over ambiguous regions, whereas
+reliable representations should yield sharp and well-localized cor-
+respondences.
+To address this limitation, we propose TeaMatch, a novel teachability-
+driven framework for cross-modal representation learning in 2D–
+3D matching. Our key idea is to evaluate representation quality
+not only through the performance of a strong matcher, but also by
+whether the learned image–point representations remain recover-
+able under degraded inputs and constrained learners. Intuitively, if
+a representation captures stable geometric correspondence struc-
+ture between 2D appearance and 3D geometry, even a deliberately
+weak learner should recover reliable correspondence preferences
+from it.
+TeaMatch introduces task-specific weak students that simulate
+common failure modes and interact with the teacher during training.
+The students imitate the teacher on one subset of local regions and
+are evaluated on disjoint unseen regions, encouraging the teacher
+to produce representations that generalize beyond local redundancy.
+The teacher is then optimized to improve student recoverability,
+making the learned representations both discriminative and robust
+to perturbations and distribution shifts. We further incorporate
+correspondence-level and geometry-aware constraints to align re-
+coverability with downstream localization, promoting reliable inlier
+selection and pose estimation.
+A key advantage of TeaMatch is that it is a training-only frame-
+work. All weak learners and teachability-related objectives are re-
+moved at inference time. TeaMatch can therefore be integrated into
+existing detection-free coarse-to-fine pipelines without modifying
+the inference procedure or introducing additional computational
+cost. Extensive experiments on challenging 2D–3D matching bench-
+marks demonstrate that TeaMatch significantly improves matching
+robustness and achieves state-of-the-art performance.
+Our contributions are summarized as follows:
+• We revisit 2D–3D matching from the perspective of cross-
+modal representation learning and introduce teachability
+as a criterion for assessing whether pair-level image–point
+representations are robust, recoverable, and useful for down-
+stream localization.
+• We propose TeaMatch, a training-only framework that im-
+proves representation quality through degraded weak learn-
+ers, a patch-disjoint teach/meta split, and correspondence-
+and geometry-aware recoverability supervision.
+• Extensive experiments show that TeaMatch consistently im-
+proves strong detection-free baselines, yielding more robust
+correspondences and better pose estimation without chang-
+ing the inference pipeline or adding test-time cost.
+2
+Related Work
+2.1
+Image and Point Cloud Registration
+Image registration has been extensively studied in computer vision.
+Classical methods follow a detect-then-match paradigm, where
+keypoints are described using hand-crafted [34, 44] or learned fea-
+tures [9, 12, 35, 47], matched by descriptor similarity, and used to
+recover the transformation through PnP or bundle adjustment [51].
+Because keypoint detection often degrades under viewpoint, illumi-
+nation, and texture changes, recent methods [27, 33, 41, 42, 49, 62]
+adopt detector-free formulations that infer correspondences directly
+from dense features. Coarse-to-fine strategies [49] further improve
+efficiency and localization accuracy by progressively refining global
+matches into local correspondences.
+Point cloud registration has similarly evolved from hand-crafted
+descriptors [10, 18, 45, 46], which are sensitive to noise, density vari-
+ation, and partial overlap, to learned representations [2, 8, 17, 56]
+with larger receptive fields. Detector-free pipelines [7, 50], hier-
+archical matching [57], and context-aware interaction [5, 15, 39,
+55, 58] further improve correspondence estimation. Robust estima-
+tors [4, 6, 25, 54] also extend RANSAC-style methods [14, 30] by
+explicitly modeling correspondence consistency.
+2.2
+Cross-Modal 2D–3D Matching
+Image–point cloud matching is more challenging than single-modality
+matching because of the gap between 2D appearance and 3D ge-
+ometry. Early methods [13, 38, 52] independently detect keypoints
+in each modality and match them using cross-modal descriptors.
+However, repeatable keypoints are difficult to define across het-
+erogeneous domains, often yielding low inlier ratios and unstable
+performance.
+Recent methods [31, 32, 36, 40, 60] instead use detection-free
+pipelines based on direct cross-modal feature interaction. Many
+adopt coarse-to-fine strategies [32, 36], first identifying globally
+consistent regions and then refining them into accurate pixel–point
+correspondences. Diffusion-based approaches [53] provide an al-
+ternative formulation for extracting cross-modal correspondences,
+but often incur substantial computational overhead.
+Most existing methods improve matching through stronger ar-
+chitectures, feature interaction, or refinement, while optimizing
+cross-modal representations only implicitly through a high-capacity
+matcher. Consequently, models may depend heavily on global con-
+text and complex interactions, while the underlying pair-level repre-
+sentations remain fragile under noise, low overlap, and ambiguous
+
+
+TeaMatch: Teachable Cross-Modal Representation Learning for 2D–3D Matching
+MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil
+structures. Matching accuracy alone therefore cannot fully char-
+acterize representation quality, motivating explicit supervision of
+representation robustness and recoverability.
+2.3
+Probing and Knowledge Distillation
+Our work is related to probe-based representation analysis and
+teacher–student learning. Lightweight probes examine what infor-
+mation is encoded in learned representations [1, 20], while knowl-
+edge distillation trains a student to mimic a stronger teacher for
+compression or improved generalization [21, 43, 59]. Both assess
+representation quality through how effectively another learner can
+utilize it.
+TeaMatch instead uses weak learners as training-time regulariz-
+ers rather than analysis tools or deployable models. Low-capacity
+and structurally degraded learners probe the recoverability of teacher-
+produced pair representations, ensuring that student performance
+reflects intrinsic representation quality rather than model capacity.
+A patch-disjoint teach/meta split prevents trivial memorization and
+promotes generalization across local regions. Unlike standard distil-
+lation centered on feature or prediction imitation, TeaMatch aligns
+recoverability with downstream geometric objectives, improving
+robustness and geometric consistency without affecting inference.
+3
+Method
+3.1
+Overview
+Given a query image 𝐼∈R𝐻×𝑊×3, a scene point cloud 𝑃= {𝑥𝑖}𝑁
+𝑖=1
+with 𝑥𝑖∈R3, and camera intrinsics 𝐾, the goal of correspondence-
+based 2D–3D localization is to estimate the camera pose𝑇= [𝑅|𝑡] ∈
+𝑆𝐸(3), where 𝑅∈𝑆𝑂(3) and 𝑡∈R3. A standard pipeline first
+extracts a set of 2D–3D correspondences
+C = {(𝑥𝑘,𝑢𝑘)}𝑀
+𝑘=1,
+where 𝑥𝑘is a 3D point and 𝑢𝑘is a 2D image location. The pose is
+then estimated by minimizing the 2D projection error
+min
+𝑅,𝑡
+∑︁
+(𝑥𝑘,𝑢𝑘)∈C
+∥𝜋(𝐾(𝑅𝑥𝑘+ 𝑡)) −𝑢𝑘∥2
+2 ,
+(1)
+where 𝜋(·) denotes the projection from 3D space to the image
+plane. This problem can be effectively solved by PnP-RANSAC [14?
+]. However, the estimated pose can still be inaccurate when the
+recovered cross-modal correspondences are unreliable.
+We build TeaMatch on top of a standard detection-free coarse-
+to-fine matcher and treat teachability as a training criterion for
+pair-level multimodal representations. Beyond accurate matching
+scores, TeaMatch requires that the learned image–point representa-
+tions remain recoverable under constrained cross-modal reasoning.
+As shown in Fig. 2, the teacher produces coarse patch correspon-
+dences and fine-level candidate matches, which are converted into
+pair-level representations. During training, we apply structured
+degradation, fit weak probes on a teach split, and evaluate them on
+a disjoint meta split to derive teachability losses at the correspon-
+dence, inlierness, and pose levels. During inference, all auxiliary
+components are removed, and the pipeline reduces to the original
+matcher without additional cost.
+3.2
+Teacher and Pair Representation
+We adopt a standard detection-free coarse-to-fine 2D–3D matcher
+as the teacher. The image encoder 𝐸𝐼extracts multi-scale visual
+features from the query image, while the point-cloud encoder 𝐸𝑃
+extracts hierarchical geometric features from the scene point cloud.
+In the coarse stage, cross-modal interaction produces a similarity
+matrix
+𝑆𝑐∈R𝑀×𝑁,
+(2)
+where each entry measures the affinity between an image patch
+and a point-cloud patch. Based on 𝑆𝑐, we extract a set of coarse
+patch correspondences
+ˆC = {(𝑎𝑘,𝑏𝑘)}𝐾
+𝑘=1.
+(3)
+In the fine stage, local matching is performed within each se-
+lected coarse pair, yielding a set of candidate correspondences
+M = {(𝑢𝑗,𝑥𝑗,𝑠𝑗,𝑔𝑗)}𝐿
+𝑗=1,
+(4)
+where 𝑢𝑗is the 2D image location, 𝑥𝑗is the matched 3D point,
+𝑠𝑗∈R is the teacher-predicted matching logit, and 𝑔𝑗∈{1, . . . , | ˆC|}
+denotes the index of the coarse patch pair from which this candidate
+originates.
+Rather than directly regularizing the final score 𝑠𝑗, TeaMatch
+operates on the pair-level multimodal representation associated with
+each candidate correspondence. Specifically, for each candidate
+match, we construct
+𝑧𝑗= 𝜙(𝑓𝐼
+𝑗, 𝑓𝑃
+𝑗,𝑐𝐼
+𝑗,𝑐𝑃
+𝑗, ˆ𝑢𝑗, ˆ𝑥𝑗) ∈R𝑑,
+(5)
+where 𝑓𝐼
+𝑗and 𝑓𝑃
+𝑗are the local image and point features, 𝑐𝐼
+𝑗and
+𝑐𝑃
+𝑗are the corresponding coarse contextual features, and ˆ𝑢𝑗and
+ˆ𝑥𝑗are normalized spatial coordinates. Here 𝜙(·) denotes feature
+concatenation followed by a linear projection.
+The teacher is optimized with the standard task loss
+Ltask = L𝑐+ 𝜆𝑓L𝑓+ 𝜆𝑝L𝑇
+pose,
+(6)
+where L𝑐and L𝑓denote the coarse- and fine-level matching losses,
+L𝑇
+pose denotes the teacher pose loss, and 𝜆𝑓and 𝜆𝑝are hyperparam-
+eters that balance the contributions of different loss terms.
+3.3
+Teachability via Weak Probes
+TeaMatch tests whether the teacher-produced pair representations
+remain recoverable under constrained cross-modal reasoning. To
+avoid conflating representation quality with additional model capac-
+ity, we introduce a family of weak probes rather than an auxiliary
+student network. Each probe operates only on 𝑧𝑗, has deliberately
+limited capacity, is adapted in closed form, and is removed after
+training.
+3.3.1
+Degradation. To simulate realistic failure modes in detection-
+free 2D–3D matching, we define a family of degradation operators
+{𝐷𝑚}𝑚∈S that weaken 𝑧𝑗in different ways:
+˜𝑧(𝑚)
+𝑗
+= 𝐷𝑚(𝑧𝑗) = 𝑀𝑚𝑧𝑗+ 𝜂(𝑚)
+𝑗
+,
+(7)
+where 𝑀𝑚∈R𝑑×𝑑is a mode-specific degradation matrix and 𝜂(𝑚)
+𝑗
+is optional perturbation noise.
+In practice, we use four representative modes:
+• Image weakening: dropping or masking channels associ-
+ated with 𝑓𝐼
+𝑗;
+
+
+MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil
+Chongjian Wang and Junjie Gao
+Query image I
+Point Cloud P
+Camera Intrinsics 
+K
+Image 
+Encoder 
+Point 
+Encoder 
+Coarse Patch 
+Matching
+Patch Correspondences
+Pixel-Point Correspondences
+Dense Pixel-Point 
+Matching
+PnP-RANSAC
+Solver
+�= (��
+ , ��
+ , ��
+ , ��
+ )
+Candidate 2D-3D Matches
+� 
+�
+Multimodal Pair Representations
+�= {��}
+��= �(��
+�, ��
+�, ��
+�, ��
+�, ��, ��)
+Structured Degradation {��
+ }
+ 
+Image
+Weakening
+Geometry
+ Weakening 
+Context    
+Removal
+Low-rank
+Bottleneck
+Patch-Disjoint Teach/Meta Split
+ℒ����
+ 
+   
+   ℒ����ℎ
+ 
+   
+Teach Split
+Meta Split
+ℐ�����
+ 
+ℐ����
+ 
+Closed-form Adaptation
+Weak Probes
+Probe Prediction
+Retained for Inference
+Ground-truth 
+geometry
+Ground-truth
+���
+ 
+ℒ����
+ 
+   
+ℒ�����
+ 
+ = ℒ����
+ 
++ ��ℒ����ℎ
+ 
+   
+�����ℎ
+ (�)
+�����ℎ
+ (�)
+�����
+ (�)
+�����
+ (�)
+ℒ������
+ 
+ 
+ℒ����
+ 
+ 
+（via DPnP）
+�����
+ 
+��
+ 
+��
+ 
+��
+ 
+��
+ 
+2D3D-MATR    backbone
+Figure 2: Overview of TeaMatch. A detection-free coarse-to-fine teacher first produces candidate 2D–3D correspondences
+and their pair-level multimodal representations. During training, TeaMatch degrades these representations, fits a family
+of low-capacity weak probes on a teach split, and evaluates them on a patch-disjoint meta split. The resulting teachability
+signal is imposed at the correspondence, inlierness, and pose levels to regularize the teacher. During inference, all probes and
+teachability branches are removed, and the pipeline reduces exactly to the original teacher matcher followed by a standard
+pose solver.
+• Geometry weakening: perturbing channels associated with
+𝑓𝑃
+𝑗and/or ˆ𝑥𝑗;
+• Context removal: suppressing channels associated with 𝑐𝐼
+𝑗
+and 𝑐𝑃
+𝑗;
+• Low-rank bottleneck: projecting 𝑧𝑗to a low-dimensional
+subspace with 𝑑𝑏≪𝑑.
+3.3.2
+Probe Feature. Given a degraded representation, the corre-
+sponding probe feature is defined as
+ℎ(𝑚)
+𝑗
+= 𝐵𝑚( ˜𝑧(𝑚)
+𝑗
+) =𝑊𝐵
+𝑚˜𝑧(𝑚)
+𝑗
+,
+(8)
+where 𝑊𝐵
+𝑚∈R𝑑ℎ×𝑑is a lightweight mode-specific linear map and
+𝑑ℎ≪𝑑, thereby keeping the probe low-capacity.
+3.3.3
+Teach/Meta Split. A naive probe may achieve overly opti-
+mistic performance by exploiting redundancy within the same local
+region. To avoid this, TeaMatch partitions candidate correspon-
+dences according to their coarse patch-pair indices {𝑔𝑗} rather than
+at the individual-match level.
+For each training sample, we randomly split the index set of
+coarse patch pairs {1, . . . , | ˆC|} into a teach subset Gteach and a meta
+subset Gmeta with ratio 𝜌: (1 −𝜌). The candidate matches are then
+assigned accordingly:
+Mteach =
+
+(𝑢𝑗,𝑥𝑗,𝑠𝑗,𝑔𝑗) | 𝑔𝑗∈Gteach
+	
+,
+(9)
+Mmeta =
+
+(𝑢𝑗,𝑥𝑗,𝑠𝑗,𝑔𝑗) | 𝑔𝑗∈Gmeta
+	
+.
+(10)
+This patch-disjoint split forces the probe to generalize across differ-
+ent local regions instead of reusing region-specific statistics.
+3.3.4
+Targets. The weak probes are trained to recover the teacher’s
+soft preference over candidate correspondences. We define the
+scalar soft target of each candidate as
+𝑦𝑗= 𝜎(𝑠𝑗/𝜏),
+(11)
+where 𝜎(·) is the sigmoid function and 𝜏is the temperature. The
+teach and meta targets are formed by stacking the corresponding
+scalar targets from Mteach and Mmeta, yielding 𝑌teach ∈R𝑛𝑡and
+𝑌meta ∈R𝑛𝑚.
+3.3.5
+Closed-Form Fit. Given probe features on the teach split,
+𝐻(𝑚)
+teach ∈R𝑛𝑡×𝑑ℎ, and the corresponding soft targets 𝑌teach ∈R𝑛𝑡,
+we fit a ridge-regression probe by solving
+𝑊∗
+𝑚= arg min
+𝑊∈R𝑑ℎ
+𝐻(𝑚)
+teach𝑊−𝑌teach
+
+2
+2 + 𝜆𝑟∥𝑊∥2
+2.
+(12)
+Its closed-form solution is
+𝑊∗
+𝑚=
+
+(𝐻(𝑚)
+teach)⊤𝐻(𝑚)
+teach + 𝜆𝑟𝐼
+−1
+(𝐻(𝑚)
+teach)⊤𝑌teach.
+(13)
+The adapted probe is then evaluated on the meta split:
+𝑃(𝑚)
+meta = 𝐻(𝑚)
+meta𝑊∗
+𝑚,
+(14)
+where 𝐻(𝑚)
+meta ∈R𝑛𝑚×𝑑ℎ.
+We fit one probe per degradation mode for each training sam-
+ple, and recompute the closed-form solution in every mini-batch.
+During backpropagation, gradients are stopped through 𝑊∗
+𝑚and
+propagated only through the teacher-produced representations and
+the lightweight feature map 𝐵𝑚(·).
+
+
+TeaMatch: Teachable Cross-Modal Representation Learning for 2D–3D Matching
+MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil
+3.4
+Teachability Losses
+The probe predictions on the meta split are converted into three
+teachability losses. Together, they measure whether the recoverable
+part of the representation is consistent with teacher preference,
+aligned with valid geometry, and useful for downstream localiza-
+tion.
+3.4.1
+Correspondence. At the correspondence level, the probe is
+required to recover the teacher’s soft preference on unseen local
+regions:
+L(𝑚)
+corr = 1
+𝑛𝑚
+𝑃(𝑚)
+meta −𝑌meta
+
+2
+2 .
+(15)
+3.4.2
+Inlierness. Recovering teacher preference alone is insuffi-
+cient, since a probe may match score patterns that are only weakly
+aligned with downstream geometry. Let Imeta denote the index set
+of candidate matches in the meta split, and let 𝑟𝑗denote the geo-
+metric residual of the 𝑗-th candidate under the ground-truth pose
+𝑇gt. For each candidate in the meta split, we define the soft inlier
+target
+𝑞𝑗= exp(−𝑟2
+𝑗/𝛿2),
+(16)
+where 𝛿is a scale parameter. Using the probe confidence
+𝑝(𝑚)
+𝑗
+= 𝜎(𝑃(𝑚)
+meta,𝑗),
+(17)
+we compute the soft inlier ratio
+SoftIR(𝑚) =
+Í
+𝑗∈Imeta 𝑝(𝑚)
+𝑗
+𝑞𝑗
+Í
+𝑗∈Imeta 𝑝(𝑚)
+𝑗
++ 𝜖
+,
+(18)
+and define
+L(𝑚)
+inlier = 1 −SoftIR(𝑚).
+(19)
+3.4.3
+Pose. Ultimately, pose recovery is the final objective of 2D–
+3D localization. We therefore further align teachability with the
+downstream task by defining a pose loss on probe-induced corre-
+spondences. Specifically, we use the meta-split correspondences
+together with their probe confidences to estimate a pose
+ˆ𝑇(𝑚) = DPnP {(𝑥𝑗,𝑢𝑗, 𝑝(𝑚)
+𝑗
+)}𝑗∈Imeta
+,
+(20)
+where DPnP(·) denotes a differentiable weighted PnP solver. The
+resulting pose is supervised against the ground-truth pose:
+L(𝑚)
+pose = ℓpose( ˆ𝑇(𝑚),𝑇gt).
+(21)
+If a differentiable solver is unavailable, we adopt a stop-gradient
+pose proxy, where the PnP solution is treated as a fixed numeric
+target and gradients are propagated only through the probe-induced
+weights prior to pose estimation.
+3.4.4
+Overall Loss. We define the overall teachability objective by
+averaging over all degradation modes:
+Lteach = 1
+|S|
+∑︁
+𝑚∈S
+
+𝛽1L(𝑚)
+corr + 𝛽2L(𝑚)
+inlier + 𝛽3L(𝑚)
+pose
+
+,
+(22)
+where 𝛽1, 𝛽2, and 𝛽3 are balancing weights for the three teachability
+losses. The final training objective is
+L = Ltask + 𝜆𝑡Lteach,
+(23)
+where 𝜆𝑡controls the contribution of the teachability objective.
+3.5
+Training and Inference
+TeaMatch is a pure training-time framework that operates on teacher-
+generated pair representations and introduces weak probes as aux-
+iliary constraints to regularize multimodal representation qual-
+ity, without modifying the original matching objective. During
+inference, all degradation operators, weak probes, and teachability
+branches are removed, and the pipeline reduces exactly to the orig-
+inal teacher matcher followed by a standard PnP-RANSAC[14? ]
+solver, incurring no additional inference overhead. Consequently,
+the performance gains of TeaMatch stem entirely from improved
+training-time representation learning.
+4
+Experiments
+4.1
+Implementation Details
+Network architecture. TeaMatch is built upon a detection-free
+coarse-to-fine 2D–3D matching pipeline. We adopt the same back-
+bone configuration as strong prior methods such as 2D3D-MATR[32]
+and Diff2I2P[36], using a 4-stage ResNet-FPN[19] as the image en-
+coder and a 4-stage KPConv-FPN[50] as the point cloud encoder.
+The input image resolution is 480 × 640, with the coarsest feature
+map downsampled to 60 × 80. The point cloud is voxelized with an
+initial voxel size of 2.5 cm, which is doubled at each stage. TeaMatch
+introduces teachability regularization only during training, while
+keeping the teacher architecture unchanged at inference time.
+Datasets. We evaluate TeaMatch on two widely used benchmarks:
+7-Scenes [16] and RGB-D Scenes V2 [26]. For 7-Scenes, we follow
+prior work to construct image–point-cloud pairs with at least 50%
+overlap and use the official train/validation/test split to evaluate
+generalization to unseen viewpoints. For RGB-D Scenes V2, we
+construct pairs with at least 30% overlap and split them into train-
+ing, validation, and testing sets across different scenes to evaluate
+cross-scene generalization. Our data preparation follows previous
+methods[32] for fair comparison.
+Metrics. We adopt standard evaluation metrics for 2D–3D match-
+ing, including Inlier Ratio (IR), Feature Matching Recall (FMR), Reg-
+istration Recall (RR), and Patch Inlier Ratio (PIR). IR measures the
+percentage of correct correspondences within a 3D distance thresh-
+old of 5 cm. FMR measures the proportion of image–point-cloud
+pairs whose inlier ratio exceeds a threshold of 10%. RR measures the
+percentage of pairs whose pose error is below 10 cm. PIR evaluates
+the correctness of coarse patch correspondences.
+Baselines. We compare TeaMatch with representative 2D–3D
+matching methods, including FCGF-2D3D [7], Predator-2D3D [24],
+P2-Net [52], 2D3D-MATR [32], and Diff2I2P [36]. We follow the
+standard backbone settings and evaluation protocols used in prior
+work whenever applicable. Since TeaMatch is applied as a training-
+time regularization on top of the same teacher architecture, any
+performance gain is attributable to improved representation learn-
+ing rather than additional inference modules.
+4.2
+Evaluations on 7-Scenes
+Quantitative results. We evaluate TeaMatch on the 7-Scenes[16]
+dataset and report the results in Tab. 1. For IR, TeaMatch consis-
+tently outperforms previous methods, achieving the best mean IR of
+
+
+MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil
+Chongjian Wang and Junjie Gao
+IR:31.9%
+IR:67.3%
+IR:38.7%
+IR:74.3%
+(a) Input Image & Point Cloud
+(b) Diff2I2P
+(c) Ours
+IR:16.4%
+IR:59.4%
+IR:27.3%
+IR:63.6%
+Figure 3: Qualitative results on the 7-Scenes dataset. The red lines indicate erroneous correspondences (3D distance greater
+than 5 cm), while the green lines represent correct correspondences.
+Table 1: Registration results of TeaMatch and baselines on
+7-Scenes. The best result for each metric is shown in bold.
+Model
+Chess
+Fire
+Heads
+Office
+Pump
+Kitchen
+Stairs
+Mean
+Inlier Ratio ↑
+FCGF[7]
+34.2
+32.8
+14.8
+26.0
+23.3
+22.5
+6.0
+22.8
+P2Net[52]
+55.2
+46.7
+13.0
+36.2
+32.0
+32.8
+5.8
+31.7
+Predator[24]
+34.7
+33.8
+16.6
+25.9
+23.1
+22.2
+7.5
+23.4
+MATR[32]
+72.1
+66.0
+31.3
+60.7
+50.2
+52.5
+18.1
+50.1
+Diff2I2P[36]
+74.1
+68.8
+39.2
+65.6
+52.1
+54.2
+18.1
+53.2
+TeaMatch
+76.3
+70.8
+42.2
+66.7
+52.4
+55.1
+18.4
+54.6
+Feature Matching Recall ↑
+FCGF[7]
+99.7
+98.2
+69.9
+97.1
+83.0
+87.7
+16.2
+78.8
+P2Net[52]
+100.0
+99.3
+58.9
+99.1
+87.2
+92.2
+16.2
+79.0
+Predator[24]
+91.3
+95.1
+76.7
+88.6
+79.2
+80.6
+31.1
+77.5
+MATR[32]
+100.0
+99.6
+98.6
+100.0
+92.4
+95.9
+58.1
+92.1
+Diff2I2P[36]
+100.0
+100.0
+100.0
+100.0
+93.4
+96.2
+55.4
+92.2
+TeaMatch
+100.0
+99.8
+100.0
+100.0
+94.1
+96.7
+59.2
+92.9
+Registration Recall ↑
+FCGF[7]
+89.5
+79.7
+19.2
+85.9
+69.4
+79.0
+6.8
+61.4
+P2Net[52]
+96.9
+86.5
+20.5
+91.7
+75.3
+85.2
+4.1
+65.7
+Predator[24]
+69.6
+60.7
+17.8
+62.9
+56.2
+62.6
+9.5
+48.5
+MATR[32]
+96.9
+90.7
+52.1
+95.5
+80.9
+86.1
+28.4
+75.8
+Diff2I2P[36]
+99.0
+95.6
+74.0
+98.9
+86.8
+90.2
+36.5
+83.0
+TeaMatch
+98.3
+96.1
+79.9
+98.9
+87.3
+92.2
+43.6
+85.2
+54.6%, indicating more accurate and reliable pixel–point correspon-
+dences. This improvement further leads to stronger FMR, where
+TeaMatch achieves the highest mean FMR of 92.9% and reaches
+near-perfect matching performance on multiple scenes. Regarding
+the most critical metric RR, TeaMatch demonstrates clear and con-
+sistent improvements, achieving an average RR of 85.2%, surpassing
+2D3D-MATR[32] by 9.4% and Diff2I2P[36] by 2.2%. The gains are
+particularly notable on challenging scenes such as Heads and Stairs,
+where TeaMatch shows stronger robustness under local ambiguity
+and repetitive structures. These results demonstrate that improving
+representation teachability during training leads to more reliable
+correspondences and better downstream pose estimation.
+Qualitative results. Fig. 3 visualizes the correspondences pro-
+duced by Diff2I2P and TeaMatch on challenging scenes from the
+7-Scenes dataset. Column (a) shows the input image and point cloud
+pairs, while columns (b) and (c) present the results from Diff2I2P and
+TeaMatch, respectively. The first two rows correspond to the Heads
+scene, which exhibits strong geometric ambiguity and limited tex-
+ture cues. In these cases, Diff2I2P produces cluttered matches with
+many outliers, yielding low inlier ratios around 31%–39%, whereas
+TeaMatch generates cleaner and more localized correspondences
+with significantly higher inlier ratios of 67%–74%. The last two
+rows show the Stairs scene, which is particularly challenging due
+to repetitive structures and weak geometric distinctiveness. Here,
+the baseline suffers from severe mismatches (IR as low as 16%–27%),
+
+
+TeaMatch: Teachable Cross-Modal Representation Learning for 2D–3D Matching
+MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil
+while TeaMatch effectively suppresses outliers and improves spa-
+tial consistency, achieving much higher inlier ratios of 59%–64%.
+These results demonstrate that TeaMatch produces more reliable
+correspondences under challenging conditions by learning more
+robust and geometrically consistent representations.
+4.3
+Evaluations on RGB-D Scenes V2
+Quantitative results. We further evaluate TeaMatch on RGB-D
+Scenes V2[26], which emphasizes generalization to unseen scenes.
+The results are reported in Tab. 2. TeaMatch achieves the best per-
+formance across all metrics, reaching 63.1% in RR and 78.3% in
+FMR. Compared with Diff2I2P[36], our method brings consistent
+improvements across all metrics, with a gain of about 2.6% in RR.
+The improvement over 2D3D-MATR[32] is more pronounced, espe-
+cially in PIR and RR. These results indicate that TeaMatch improves
+both coarse and fine correspondence estimation, leading to more
+stable matching and more robust pose estimation under cross-scene
+distribution shifts.
+Table 2: Registration results of TeaMatch and baselines on
+RGB-D Scenes V2. The best result for each metric is shown
+in bold.
+Method
+PIR (%)↑
+IR (%)↑
+FMR (%)↑
+RR (%)↑
+FCGF[7]
+20.1
+10.3
+29.2
+32.5
+P2-Net[52]
+30.4
+14.5
+63.7
+41.7
+Predator[24]
+32.6
+15.8
+68.1
+33.6
+MATR[32]
+57.6
+36.3
+76.0
+56.9
+Diff2I2P[36]
+60.8
+36.9
+77.1
+60.5
+TeaMatch
+61.3
+37.6
+78.3
+63.1
+4.4
+Ablation Studies
+We conduct extensive ablation studies to validate the contribution
+of each component in TeaMatch. Unless otherwise specified, all
+experiments are performed on 7-Scenes, and we report IR, FMR,
+and RR for evaluation.
+Overall effect of TeaMatch. We evaluate the overall impact of
+TeaMatch by comparing the teacher baseline with and without
+our framework. As shown in Tab. 3, TeaMatch consistently im-
+proves all evaluation metrics, with IR increasing from 50.1% to
+54.6% and RR from 75.8% to 85.2%. This clear improvement ver-
+ifies that TeaMatch provides a strong overall performance gain.
+Importantly, since all teachability-related components are removed
+during inference, these gains are achieved purely through improved
+training-time representation learning without introducing addi-
+tional computational overhead.
+Table 3: Overall effect of TeaMatch on 7-Scenes. TeaMatch
+consistently improves all evaluation metrics over the teacher
+baseline without modifying the inference pipeline.
+Model
+PIR ↑
+IR ↑
+FMR ↑
+RR ↑
+Teacher baseline
+83.4
+50.1
+92.1
+75.8
+TeaMatch (ours)
+86.9
+54.6
+92.9
+85.2
+Effect of teachability losses. We further analyze the contribution
+of each teachability loss. As shown in Tab. 4, using only the cor-
+respondence loss L𝑐𝑜𝑟𝑟already improves IR from 50.1% to 51.3%,
+indicating that enforcing recoverability stabilizes pair-level repre-
+sentations. Adding the inlierness loss L𝑖𝑛𝑙𝑖𝑒𝑟further improves IR
+and FMR by encouraging geometry-aware discrimination of corre-
+spondences. Incorporating the pose loss L𝑝𝑜𝑠𝑒brings a larger gain
+in RR (from 79.6% to 83.0%), as it directly aligns the training ob-
+jective with downstream pose estimation. The full model achieves
+the best performance, demonstrating that the three losses provide
+complementary supervision.
+Table 4: Ablation study of teachability losses on 7-Scenes.
+L𝑐𝑜𝑟𝑟, L𝑖𝑛𝑙𝑖𝑒𝑟, and L𝑝𝑜𝑠𝑒denote the correspondence, inlierness,
+and pose losses, respectively.
+Type
+L𝑐𝑜𝑟𝑟
+L𝑖𝑛𝑙𝑖𝑒𝑟
+L𝑝𝑜𝑠𝑒
+PIR ↑
+IR ↑
+FMR ↑
+RR ↑
+(a) baseline
+83.4
+50.1
+92.1
+75.8
+(b) + corr
+✓
+84.9
+51.3
+92.3
+79.6
+(c) + corr + inlier
+✓
+✓
+85.8
+53.6
+92.6
+82.1
+(d) + corr + pose
+✓
+✓
+85.5
+52.7
+92.5
+83.0
+(e) full model
+✓
+✓
+✓
+86.9
+54.6
+92.9
+85.2
+Effect of teach/meta split. We compare the proposed patch-
+disjoint teach/meta split with two alternatives: no split and ran-
+dom match-level split. As shown in Tab. 5, the patch-disjoint split
+achieves the best performance, reaching 54.6% IR and 85.2% RR. In
+contrast, using no split or random splitting leads to inferior results.
+This is because, without proper partitioning, the probe can ex-
+ploit local redundancy within the same region, resulting in overly
+optimistic supervision. The patch-disjoint split instead enforces
+generalization across different coarse regions, providing a more
+effective recoverability constraint.
+Table 5: Ablation study of teach/meta split strategies. The
+patch-disjoint split yields the best performance.
+Split strategy
+PIR ↑
+IR ↑
+FMR ↑
+RR ↑
+No split
+84.7
+53.0
+92.3
+79.6
+Random split
+85.8
+53.9
+92.6
+82.4
+Patch-disjoint (ours)
+86.9
+54.6
+92.9
+85.2
+Effect of degradation modes. We analyze the impact of differ-
+ent degradation strategies, including image weakening, geometry
+weakening, context removal, and low-rank bottleneck projection.
+As shown in Tab. 6, all individual degradation modes improve per-
+formance over the baseline, while combining them yields the best
+results. In particular, the full model achieves the highest IR (54.6%)
+and RR (85.2%), outperforming all single-mode variants. This in-
+dicates that diverse degradation patterns are complementary and
+jointly encourage more robust cross-modal representation learning.
+Robustness under local point cloud degradation. We further
+evaluate robustness under controlled local point cloud degradation
+by randomly removing local structures with increasing occlusion
+ratio. As shown in Fig. 4 and Tab. 7, the performance of all methods
+
+
+MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil
+Chongjian Wang and Junjie Gao
+IR:90.7%
+IR:91.4%
+IR:81.7%
+IR:86.2%
+IR:46.9%
+IR:76.5%
+IR:24.1%
+IR:72.3%
+occlusion ratio=0
+(a) Input Image & Point Cloud
+(b) Diff2I2P
+(c) Ours
+occlusion ratio=0.2
+occlusion ratio=0.4
+occlusion ratio=0.6
+Figure 4: Robustness under local point cloud degradation. From left to right, the occlusion ratio increases from 0 to 0.6, indicating
+progressively more severe local dropout in the point cloud. (a) Input image and degraded point cloud. (b) Correspondences
+produced by Diff2I2P. (c) Correspondences produced by TeaMatch. Green and red lines denote correct and incorrect matches,
+respectively, and the inlier ratio (IR) is reported for each case. TeaMatch consistently achieves higher IR and remains robust
+under severe structural degradation.
+Table 6: Ablation study of degradation modes. Combining
+multiple degradation strategies achieves the best perfor-
+mance.
+Degradation mode
+PIR ↑
+IR ↑
+FMR ↑
+RR ↑
+None
+83.7
+51.9
+92.2
+76.4
+Image
+85.1
+53.2
+92.5
+80.4
+Geometry
+84.9
+53.7
+92.4
+81.0
+Context
+85.3
+52.8
+92.3
+79.8
+Low-rank
+85.7
+53.5
+92.6
+82.1
+All (ours)
+86.9
+54.6
+92.9
+85.2
+degrades as the occlusion ratio increases. However, TeaMatch con-
+sistently maintains higher inlier ratios and more reliable correspon-
+dences than Diff2I2P[36] across all degradation levels. In particular,
+under severe degradation (occlusion ratio = 0.6), Diff2I2P[36] drops
+to 23.5% IR, while TeaMatch still achieves 44.2%, preserving a sub-
+stantially larger portion of correct matches. This consistent gap
+demonstrates that TeaMatch degrades more gracefully and remains
+robust under strong structural corruption.
+Table 7: Inlier ratio under different occlusion ratios. Tea-
+Match degrades more gracefully than baseline methods.
+Method
+0
+0.2
+0.4
+0.6
+Diff2I2P[36]
+53.2
+48.2
+31.5
+23.5
+TeaMatch (ours)
+54.6
+53.3
+47.7
+44.2
+Efficiency analysis. We analyze the efficiency of TeaMatch in
+terms of inference time, model size, and memory consumption.
+As shown in Tab. 8, TeaMatch achieves improved registration per-
+formance while maintaining the same level of efficiency as the
+teacher baseline. Notably, compared with diffusion-based methods
+such as FreeReg, which require expensive inference (9.634 s and
+14.2 GB VRAM), TeaMatch introduces no additional computational
+overhead at test time. This is because all teachability-related compo-
+nents are used only during training and removed during inference,
+resulting in an efficient and practical pipeline.
+Table 8: Comparison of performance and efficiency. Tea-
+Match achieves improved accuracy while maintaining ef-
+ficient inference.
+Method
+RR (%)↑
+Time (s)↓
+Size (MB)↓
+VRAM (GB)↓
+2D3D-MATR[32]
+75.8
+0.072
+118.62
+3.1
+Diff2I2P[36]
+83.0
+0.074
+118.75
+3.1
+FreeReg[53]
+71.2
+9.634
+-
+14.2
+TeaMatch (ours)
+85.2
+0.075
+118.71
+3.1
+5
+Conclusion
+We presented TeaMatch, a teachability-driven training framework
+for 2D–3D matching that regularizes whether pair-level represen-
+tations remain recoverable under degraded inputs and constrained
+reasoning. Without modifying the inference pipeline, TeaMatch
+consistently improves strong baselines on 7-Scenes and RGB-D
+Scenes V2, with notable gains under challenging conditions such
+as repetitive structures and severe local degradation. These results
+demonstrate that enforcing representation recoverability is an ef-
+fective way to learn more robust cross-modal representations.
+
+
+TeaMatch: Teachable Cross-Modal Representation Learning for 2D–3D Matching
+MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil
+Acknowledgments
+This work was supported by the National Natural Science Founda-
+tion of China (62373164), the Natural Science Foundation of Shan-
+dong Province (ZR2025QC2246Z), the Taishan Scholar Foundation
+of Shandong Province (tsqn202507271), the Central Government
+Guides Local Program (YDZX2024075), and the Taishan Experts
+Program (tscy20241154).
+References
+[1] Guillaume Alain and Yoshua Bengio. 2016. Understanding intermediate lay-
+ers using linear classifier probes. ArXiv abs/1610.01644 (2016).
+https://api.
+semanticscholar.org/CorpusID:9794990
+[2] Sheng Ao, Qingyong Hu, Bo Yang, A. Markham, and Yulan Guo. 2020. SpinNet:
+Learning a General Surface Descriptor for 3D Point Cloud Registration. 2021
+IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) (2020),
+11748–11757. https://api.semanticscholar.org/CorpusID:227151932
+[3] Ronald T. Azuma. 1997. A Survey of Augmented Reality. Presence: Teleopera-
+tors & Virtual Environments 6 (1997), 355–385. https://api.semanticscholar.org/
+CorpusID:469744
+[4] Xuyang Bai, Zixin Luo, Lei Zhou, Hongkai Chen, Lei Li, Zeyu Hu, Hongbo Fu,
+and Chiew-Lan Tai. 2021. PointDSC: Robust Point Cloud Registration using
+Deep Spatial Consistency. 2021 IEEE/CVF Conference on Computer Vision and
+Pattern Recognition (CVPR) (2021), 15854–15864. https://api.semanticscholar.org/
+CorpusID:232168842
+[5] Hong Chen, Pei Yan, Sihe Xiang, and Yihua Tan. 2024. Dynamic Cues-Assisted
+Transformer for Robust Point Cloud Registration. 2024 IEEE/CVF Conference
+on Computer Vision and Pattern Recognition (CVPR) (2024), 21698–21707. https:
+//api.semanticscholar.org/CorpusID:272722265
+[6] Zhi Chen, Kun Sun, Fan Yang, and Wenbing Tao. 2022. SC2-PCR: A Second Order
+Spatial Compatibility for Efficient and Robust Point Cloud Registration. 2022
+IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) (2022),
+13211–13221. https://api.semanticscholar.org/CorpusID:252571579
+[7] Christopher Bongsoo Choy, Jaesik Park, and Vladlen Koltun. 2019. Fully Convo-
+lutional Geometric Features. 2019 IEEE/CVF International Conference on Computer
+Vision (ICCV) (2019), 8957–8965.
+https://api.semanticscholar.org/CorpusID:
+201686687
+[8] Haowen Deng, Tolga Birdal, and Slobodan Ilic. 2018.
+PPFNet: Global Con-
+text Aware Local Features for Robust 3D Point Matching. 2018 IEEE/CVF Con-
+ference on Computer Vision and Pattern Recognition (2018), 195–205.
+https:
+//api.semanticscholar.org/CorpusID:3703761
+[9] Daniel DeTone, Tomasz Malisiewicz, and Andrew Rabinovich. 2017. SuperPoint:
+Self-Supervised Interest Point Detection and Description. 2018 IEEE/CVF Con-
+ference on Computer Vision and Pattern Recognition Workshops (CVPRW) (2017),
+337–33712. https://api.semanticscholar.org/CorpusID:4918026
+[10] Zhen Dong, Zhen Dong, Bisheng Yang, Yuan Liu, Fuxun Liang, Bi jun Li, and
+Yufu Zang. 2017. A novel binary shape context for 3D local surface description.
+Isprs Journal of Photogrammetry and Remote Sensing 130 (2017), 431–452. https:
+//api.semanticscholar.org/CorpusID:125337993
+[11] Hugh F. Durrant-Whyte and Tim Bailey. 2006. Simultaneous localization and
+mapping: part I. IEEE Robotics & Automation Magazine 13 (2006), 99–110. https:
+//api.semanticscholar.org/CorpusID:8061430
+[12] Mihai Dusmanu, Ignacio Rocco, Tomás Pajdla, Marc Pollefeys, Josef Sivic, Akihiko
+Torii, and Torsten Sattler. 2019. D2-Net: A Trainable CNN for Joint Description
+and Detection of Local Features. 2019 IEEE/CVF Conference on Computer Vision
+and Pattern Recognition (CVPR) (2019), 8084–8093. https://api.semanticscholar.
+org/CorpusID:204241691
+[13] Mengdan Feng, Sixing Hu, Marcelo H. Ang, and Gim Hee Lee. 2019. 2D3D-
+Matchnet: Learning To Match Keypoints Across 2D Image And 3D Point Cloud.
+2019 International Conference on Robotics and Automation (ICRA) (2019), 4790–
+4796. https://api.semanticscholar.org/CorpusID:128341753
+[14] Martin A. Fischler and Robert C. Bolles. 1981. Random sample consensus: a
+paradigm for model fitting with applications to image analysis and automated
+cartography. Commun. ACM 24 (1981), 381–395. https://api.semanticscholar.
+org/CorpusID:972888
+[15] Junjie Gao, Qiujie Dong, Ruian Wang, Shuangmin Chen, Shiqing Xin, Changhe
+Tu, and Wenping Wang. 2023. OAAFormer: Robust and Efficient Point Cloud
+Registration Through Overlapping-Aware Attention in Transformer. Journal of
+Computer Science and Technology 39 (2023), 755 – 770. https://api.semanticscholar.
+org/CorpusID:264146030
+[16] Ben Glocker, Shahram Izadi, Jamie Shotton, and Antonio Criminisi. 2013. Real-
+time RGB-D camera relocalization. 2013 IEEE International Symposium on Mixed
+and Augmented Reality (ISMAR) (2013), 173–179. https://api.semanticscholar.
+org/CorpusID:45781849
+[17] Zan Gojcic, Caifa Zhou, Jan Dirk Wegner, and Andreas Wieser. 2018. The Perfect
+Match: 3D Point Cloud Matching With Smoothed Densities. 2019 IEEE/CVF
+Conference on Computer Vision and Pattern Recognition (CVPR) (2018), 5540–5549.
+https://api.semanticscholar.org/CorpusID:53670229
+[18] Yulan Guo, Ferdous Sohel, Bennamoun, Jianwei Wan, and Min Lu. 2013. RoPS:
+A local feature descriptor for 3D rigid objects based on rotational projection
+statistics. 2013 1st International Conference on Communications, Signal Processing,
+and their Applications (ICCSPA) (2013), 1–6.
+https://api.semanticscholar.org/
+CorpusID:14670920
+[19] Kaiming He, X. Zhang, Shaoqing Ren, and Jian Sun. 2015. Deep Residual Learning
+for Image Recognition. 2016 IEEE Conference on Computer Vision and Pattern
+Recognition (CVPR) (2015), 770–778. https://api.semanticscholar.org/CorpusID:
+206594692
+[20] John Hewitt and Percy Liang. 2019. Designing and Interpreting Probes with
+Control Tasks. ArXiv abs/1909.03368 (2019). https://api.semanticscholar.org/
+CorpusID:202538609
+[21] Geoffrey E. Hinton, Oriol Vinyals, and Jeffrey Dean. 2015.
+Distilling the
+Knowledge in a Neural Network. ArXiv abs/1503.02531 (2015).
+https://api.
+semanticscholar.org/CorpusID:7200347
+[22] Yicong Hong, Kai Zhang, Jiuxiang Gu, Sai Bi, Yang Zhou, Difan Liu, Feng
+Liu, Kalyan Sunkavalli, Trung Bui, and Hao Tan. 2023. LRM: Large Recon-
+struction Model for Single Image to 3D. ArXiv abs/2311.04400 (2023).
+https:
+//api.semanticscholar.org/CorpusID:265050698
+[23] Chen Huang, Oier Mees, Andy Zeng, and Wolfram Burgard. 2022. Visual Lan-
+guage Maps for Robot Navigation. 2023 IEEE International Conference on Robotics
+and Automation (ICRA) (2022), 10608–10615. https://api.semanticscholar.org/
+CorpusID:252846548
+[24] Shengyu Huang, Zan Gojcic, Mikhail (Misha) Usvyatsov, Andreas Wieser, and
+Konrad Schindler. 2020. PREDATOR: Registration of 3D Point Clouds with Low
+Overlap. 2021 IEEE/CVF Conference on Computer Vision and Pattern Recognition
+(CVPR) (2020), 4265–4274. https://api.semanticscholar.org/CorpusID:227209593
+[25] Haobo Jiang, Zheng Dang, Zhen Wei, Jin Xie, Jian Yang, and Mathieu Salzmann.
+2023. Robust Outlier Rejection for 3D Registration with Variational Bayes. 2023
+IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) (2023),
+1148–1157. https://api.semanticscholar.org/CorpusID:257921545
+[26] Kevin Lai, Liefeng Bo, and Dieter Fox. 2014. Unsupervised feature learning for
+3D scene labeling. 2014 IEEE International Conference on Robotics and Automation
+(ICRA) (2014), 3050–3057. https://api.semanticscholar.org/CorpusID:15015476
+[27] Jae Yong Lee, Joseph DeGol, Victor Fragoso, and Sudipta N. Sinha. 2021.
+PatchMatch-Based Neighborhood Consensus for Semantic Correspondence. 2021
+IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) (2021),
+13148–13158. https://api.semanticscholar.org/CorpusID:235719539
+[28] Vincent Lepetit, Francesc Moreno-Noguer, and Pascal Fua. 2009. EPnP: An
+Accurate 𝑂(𝑛) Solution to the PnP Problem. International Journal of Computer
+Vision 81, 2 (2009), 155–166. doi:10.1007/s11263-008-0152-6
+[29] Vincent Leroy, Yohann Cabon, and Jérôme Revaud. 2024. Grounding Image
+Matching in 3D with MASt3R. In European Conference on Computer Vision. https:
+//api.semanticscholar.org/CorpusID:270521424
+[30] Jiayuan Li, Qingwu Hu, and Mingyao Ai. 2020. GESAC: Robust graph enhanced
+sample consensus for point cloud registration. ISPRS Journal of Photogrammetry
+and Remote Sensing (2020). https://api.semanticscholar.org/CorpusID:225238083
+[31] Jiaxin Li and Gim Hee Lee. 2021. DeepI2P: Image-to-Point Cloud Registration
+via Deep Classification. 2021 IEEE/CVF Conference on Computer Vision and Pat-
+tern Recognition (CVPR) (2021), 15955–15964. https://api.semanticscholar.org/
+CorpusID:233181563
+[32] Minhao Li, Zheng Qin, Zhirui Gao, Renjiao Yi, Chenyang Zhu, Yulan Guo, and
+Kaiyang Xu. 2023. 2D3D-MATR: 2D-3D Matching Transformer for Detection-
+free Registration between Images and Point Clouds.
+2023 IEEE/CVF Inter-
+national Conference on Computer Vision (ICCV) (2023), 14082–14092.
+https:
+//api.semanticscholar.org/CorpusID:260775414
+[33] Shuda Li, Kai Han, Theo W. Costain, Henry Howard-Jenkins, and Victor Adrian
+Prisacariu. 2020. Correspondence Networks With Adaptive Neighbourhood
+Consensus. 2020 IEEE/CVF Conference on Computer Vision and Pattern Recog-
+nition (CVPR) (2020), 10193–10202. https://api.semanticscholar.org/CorpusID:
+214667589
+[34] David G. Lowe. 1999. Object recognition from local scale-invariant features.
+Proceedings of the Seventh IEEE International Conference on Computer Vision 2
+(1999), 1150–1157 vol.2. https://api.semanticscholar.org/CorpusID:5258236
+[35] Zixin Luo, Lei Zhou, Xuyang Bai, Hongkai Chen, Jiahui Zhang, Yao Yao, Shiwei Li,
+Tian Fang, and Long Quan. 2020. ASLFeat: Learning Local Features of Accurate
+Shape and Localization. 2020 IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR) (2020), 6588–6597. https://api.semanticscholar.org/CorpusID:
+214611716
+[36] Juncheng Mu, Chengwei Ren, Weixiang Zhang, Liang Pan, Xiao-Ping Zhang,
+and Yue Gao. 2025. Diff2I2P: Differentiable Image-to-Point Cloud Registration
+with Diffusion Prior. In Proceedings of the IEEE/CVF International Conference on
+Computer Vision. 25777–25787.
+[37] B. K. Patle, Ganesh Babu L., Anish Pandey, Dayal Ramakrushna Parhi, and Anne
+Jagadeesh. 2019. A review: On path planning strategies for navigation of mobile
+
+
+MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil
+Chongjian Wang and Junjie Gao
+robot. Defence Technology (2019).
+https://api.semanticscholar.org/CorpusID:
+149886594
+[38] Quang-Hieu Pham, Mikaela Angelina Uy, Binh-Son Hua, Duc Thanh Nguyen,
+Gemma Roig, and Sai-Kit Yeung. 2019. LCD: Learned Cross-Domain Descriptors
+for 2D-3D Matching. In AAAI Conference on Artificial Intelligence. https://api.
+semanticscholar.org/CorpusID:208202088
+[39] Zheng Qin, Hao Yu, Changjian Wang, Yulan Guo, Yuxing Peng, Slobodan Ilic,
+Dewen Hu, and Kai Xu. 2023. GeoTransformer: Fast and Robust Point Cloud
+Registration With Geometric Transformer. IEEE Transactions on Pattern Analysis
+and Machine Intelligence 45 (2023), 9806–9821. https://api.semanticscholar.org/
+CorpusID:257646283
+[40] Siyu Ren, Yiming Zeng, Junhui Hou, and Xiaodong Chen. 2022. CorrI2P: Deep
+Image-to-Point Cloud Registration via Dense Correspondence. IEEE Transactions
+on Circuits and Systems for Video Technology 33 (2022), 1198–1208. https://api.
+semanticscholar.org/CorpusID:250451486
+[41] Ignacio Rocco, Relja Arandjelovi’c, and Josef Sivic. 2020. Efficient Neighbourhood
+Consensus Networks via Submanifold Sparse Convolutions. In European Confer-
+ence on Computer Vision. https://api.semanticscholar.org/CorpusID:216056155
+[42] Ignacio Rocco, Mircea Cimpoi, Relja Arandjelović, Akihiko Torii, Tomás Pajdla,
+and Josef Sivic. 2018. Neighbourhood Consensus Networks. In Neural Information
+Processing Systems. https://api.semanticscholar.org/CorpusID:53084192
+[43] Adriana Romero, Nicolas Ballas, Samira Ebrahimi Kahou, Antoine Chassang,
+Carlo Gatta, and Yoshua Bengio. 2014. FitNets: Hints for Thin Deep Nets. CoRR
+abs/1412.6550 (2014). https://api.semanticscholar.org/CorpusID:2723173
+[44] Ethan Rublee, Vincent Rabaud, Kurt Konolige, and Gary R. Bradski. 2011. ORB: An
+efficient alternative to SIFT or SURF. 2011 International Conference on Computer
+Vision (2011), 2564–2571. https://api.semanticscholar.org/CorpusID:206769866
+[45] Radu Bogdan Rusu, Nico Blodow, and Michael Beetz. 2009. Fast Point Feature
+Histograms (FPFH) for 3D registration. 2009 IEEE International Conference on
+Robotics and Automation (2009), 3212–3217.
+https://api.semanticscholar.org/
+CorpusID:15022990
+[46] Samuele Salti, Federico Tombari, and Luigi di Stefano. 2014. SHOT: Unique
+signatures of histograms for surface and texture description. Comput. Vis. Image
+Underst. 125 (2014), 251–264. https://api.semanticscholar.org/CorpusID:17799553
+[47] Paul-Edouard Sarlin, Daniel DeTone, Tomasz Malisiewicz, and Andrew Rabi-
+novich. 2019. SuperGlue: Learning Feature Matching With Graph Neural Net-
+works. 2020 IEEE/CVF Conference on Computer Vision and Pattern Recognition
+(CVPR) (2019), 4937–4946. https://api.semanticscholar.org/CorpusID:208291327
+[48] Ramprasaath R. Selvaraju, Abhishek Das, Ramakrishna Vedantam, Michael
+Cogswell, Devi Parikh, and Dhruv Batra. 2016. Grad-CAM: Visual Explanations
+from Deep Networks via Gradient-Based Localization. International Journal of
+Computer Vision 128 (2016), 336 – 359. https://api.semanticscholar.org/CorpusID:
+15019293
+[49] Jiaming Sun, Zehong Shen, Yuang Wang, Hujun Bao, and Xiaowei Zhou. 2021.
+LoFTR: Detector-Free Local Feature Matching with Transformers. 2021 IEEE/CVF
+Conference on Computer Vision and Pattern Recognition (CVPR) (2021), 8918–8927.
+https://api.semanticscholar.org/CorpusID:232478646
+[50] Hugues Thomas, C. Qi, Jean-Emmanuel Deschaud, Beatriz Marcotegui, François
+Goulette, and Leonidas J. Guibas. 2019. KPConv: Flexible and Deformable Con-
+volution for Point Clouds. 2019 IEEE/CVF International Conference on Computer
+Vision (ICCV) (2019), 6410–6419.
+https://api.semanticscholar.org/CorpusID:
+121328056
+[51] Bill Triggs, Philip F. McLauchlan, Richard I. Hartley, and Andrew W. Fitzgibbon.
+1999. Bundle Adjustment - A Modern Synthesis. In Workshop on Vision Algorithms.
+https://api.semanticscholar.org/CorpusID:1354186
+[52] Bing Wang, Changhao Chen, Zhaopeng Cui, Jie Qin, Chris Xiaoxuan Lu, Zhewen
+Yu, Peijun Zhao, Zhenchao Dong, Fan Zhu, Niki Trigoni, and A. Markham. 2021.
+P2-Net: Joint Description and Detection of Local Features for Pixel and Point
+Matching. 2021 IEEE/CVF International Conference on Computer Vision (ICCV)
+(2021), 15984–15993. https://api.semanticscholar.org/CorpusID:232092853
+[53] Haiping Wang, Yuan Liu, Bing Wang, Yujing Sun, Zhen Dong, Wenping Wang,
+and Bisheng Yang. 2023. FreeReg: Image-to-Point Cloud Registration Leveraging
+Pretrained Diffusion Models and Monocular Depth Estimators. arXiv preprint
+arXiv:2310.03420 (2023).
+[54] Xuejun Xing, Zhengda Lu, Yiqun Wang, and Jun Xiao. 2024. Efficient Single
+Correspondence Voting for Point Cloud Registration. IEEE Transactions on Im-
+age Processing 33 (2024), 2116–2130. https://api.semanticscholar.org/CorpusID:
+268373790
+[55] Runzhao Yao, Shaoyi Du, Wenting Cui, Canhui Tang, and Chengwu Yang. 2024.
+PARE-Net: Position-Aware Rotation-Equivariant Networks for Robust Point
+Cloud Registration. In European Conference on Computer Vision.
+https://api.
+semanticscholar.org/CorpusID:271212761
+[56] Zi Jian Yew and Gim Hee Lee. 2018. 3DFeat-Net: Weakly Supervised Local 3D
+Features for Point Cloud Registration. ArXiv abs/1807.09413 (2018).
+https:
+//api.semanticscholar.org/CorpusID:50770050
+[57] Hao Yu, Fu Li, Mahdi Saleh, Benjamin Busam, and Slobodan Ilic. 2021. CoFiNet:
+Reliable Coarse-to-fine Correspondences for Robust Point Cloud Registration. In
+Neural Information Processing Systems. https://api.semanticscholar.org/CorpusID:
+239998094
+[58] Hao Yu, Zheng Qin, Jiafan Hou, Mahdi Saleh, Dongsheng Li, Benjamin Busam, and
+Slobodan Ilic. 2023. Rotation-Invariant Transformer for Point Cloud Matching.
+2023 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)
+(2023), 5384–5393. https://api.semanticscholar.org/CorpusID:257532279
+[59] Sergey Zagoruyko and Nikos Komodakis. 2016. Paying More Attention to Atten-
+tion: Improving the Performance of Convolutional Neural Networks via Attention
+Transfer. ArXiv abs/1612.03928 (2016). https://api.semanticscholar.org/CorpusID:
+829159
+[60] Junsheng Zhou, Baorui Ma, Wenyuan Zhang, Yi Fang, Yu-Shen Liu, and Zhizhong
+Han. 2023.
+Differentiable Registration of Images and LiDAR Point Clouds
+with VoxelPoint-to-Pixel Matching.
+ArXiv abs/2312.04060 (2023).
+https:
+//api.semanticscholar.org/CorpusID:266051996
+[61] Qunjie Zhou, Maxim Maximov, Or Litany, and Laura Leal-Taix’e. 2024. The NeR-
+Fect Match: Exploring NeRF Features for Visual Localization. In European Con-
+ference on Computer Vision. https://api.semanticscholar.org/CorpusID:268384911
+[62] Qunjie Zhou, Torsten Sattler, and Laura Leal-Taixé. 2020. Patch2Pix: Epipolar-
+Guided Pixel-Level Correspondences.
+2021 IEEE/CVF Conference on Com-
+puter Vision and Pattern Recognition (CVPR) (2020), 4667–4676.
+https://api.
+semanticscholar.org/CorpusID:227254594

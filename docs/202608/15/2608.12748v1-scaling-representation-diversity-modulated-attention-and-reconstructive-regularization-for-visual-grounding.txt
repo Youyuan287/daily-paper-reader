@@ -1,0 +1,2170 @@
+Scaling Representation Diversity: Modulated Attention and Reconstructive
+Regularization for Visual Grounding
+Junyi Hu1Tian Bai2Fengyi Wu2 Yian Huang2 Wei Wen3
+Zaoli Li3 Junli Lin4 Xingchen Li5 Zhenming Peng2 Yi Zhang1∗
+1Department of Automation, Tsinghua University
+2School of Information and Communication Engineering, University of Electronic Science and Technology of China
+3Chinalco Digital Intelligence (Chengdu) Technology Co., Ltd.
+4Linsulabs
+5PetroChina Southwest Oil and Gas Field Company, CNPC
+Abstract
+Referring Expression Comprehension (REC) is commonly
+studied under dataset-specific fine-tuning, resulting in spe-
+cialist models with limited cross-dataset generalization. In
+this work, we revisit REC from the perspective of unified
+open-vocabulary grounding and identify representation de-
+generation as a key obstacle to scaling a single generalist
+model. To preserve representation diversity, we propose a
+holistic data-model co-design framework. Architecturally, we
+introduce the Modulated Attention-Contrastive Head (mACH)
+for efficient token-level vision-language alignment and a text-
+conditioned JEPA auxiliary stream that provides complemen-
+tary gradient support to preserve alignment-active representa-
+tions without inference overhead. On the data side, we intro-
+duce Objects365-Caption, enriching Objects365 with
+context-aware referring expressions for large-scale language
+supervision. We further provide a theoretical analysis show-
+ing that complementary gradient subspaces preserve align-
+ment capacity and thereby scale representation diversity. Ex-
+tensive experiments demonstrate that our single-checkpoint
+framework achieves highly competitive performance on stan-
+dard REC benchmarks while exhibiting strong generalization
+across heterogeneous grounding datasets without benchmark-
+specific adaptation.
+Code — https://github.com/inlmouse/MACH
+Datasets — https://huggingface.co/datasets/
+EndlessnessSoul/Objects365_captions
+1
+Introduction
+Referring Expression Comprehension (REC) aims to local-
+ize an object in an image according to an open-ended natural
+language query (Yu et al. 2016). Existing REC methods can
+be broadly categorized into three computational paradigms.
+Text-conditioned spatial regression methods repeatedly fuse
+language and visual features inside the backbone, leading
+to query-dependent computation (Yu et al. 2018; Deng et al.
+2021; Kamath et al. 2021). Region-word dot alignment meth-
+ods instead project visual regions and text embeddings into
+a shared space, enabling efficient parallel grounding through
+matrix similarity (Li et al. 2022; Liu et al. 2024; Wang et al.
+2022). Finally, autoregressive multimodal LLMs formulate
+∗Corresponding author.
+Contrastive
+span{t(k)},
+Nc
+blind:
+e
+2 t
+mACH
+0,
+N
+Nc
+blind
+mACH+JEPA
+supp =
+C,
+2cJ > 0
+Figure 1: Conceptual illustration of representation diver-
+sity. Different training objectives provide supervision over
+different subsets of the shared visual representation. Con-
+ventional contrastive learning mainly optimizes a limited set
+of alignment directions, while the proposed mACH expands
+supervision to finer token-level interactions. The auxiliary
+JEPA objective further supplies complementary learning sig-
+nals beyond language supervision, encouraging diverse and
+robust visual representations. Together, the dual-stream ob-
+jective preserves a richer set of discriminative directions for
+unified open-vocabulary grounding.
+grounding as language generation, offering remarkable rea-
+soning ability at the cost of substantially higher inference
+latency (Chen et al. 2023).
+Among these paradigms, region-word dot alignment of-
+fers an attractive balance between text-conditioned spatial
+regression and autoregressive MLLMs, making it well suited
+for resource-constrained devices and as a proposal gen-
+erator for LLM-based pipelines. We therefore adopt this
+paradigm as our base architecture. However, scaling it to
+unified multi-dataset training exposes two fundamental bot-
+tlenecks: a model-level representation degeneration where
+contrastive objectives induce low-rank polysemantic bottle-
+necks (Chaudhuri et al. 2025), and a data-level linguistic
+deficit arising from discrete category annotations.
+In this work, we use representation diversity as the num-
+ber of independent alignment-active directions preserved
+in the learned visual representation. As conceptually illus-
+trated in Fig. 1, different training objectives preserve differ-
+ent subsets of the shared visual representation. Increasing
+representation diversity therefore requires complementary
+supervision that progressively expands the alignment-active
+arXiv:2608.12748v1  [cs.CV]  13 Aug 2026
+
+
+subspace. To resolve these dual bottlenecks, we propose a
+holistic data-model co-design framework. Architecturally,
+we integrate the Modulated Attention-Contrastive Head
+(mACH) with an inference-free Joint Embedding Predic-
+tive Architecture (JEPA) auxiliary stream (LeCun et al.
+2022), which complements language-conditioned gradients
+with visual predictive supervision to preserve representa-
+tion diversity. On the data front, we construct Objects365-
+Caption (O365-Caption), enriching discrete object la-
+bels with context-aware descriptions to provide the linguistic
+diversity required for robust open-vocabulary grounding.
+Our goal is to learn a unified grounding model that general-
+izes across heterogeneous referring expression distributions,
+rather than optimizing for individual benchmarks. To this
+end, our contributions are threefold:
+• We propose a data-model co-design comprising the
+Modulated Attention-Contrastive Head (mACH) and an
+inference-free JEPA auxiliary objective. We further show
+theoretically that the two objectives activate complemen-
+tary gradient subspaces, preserving alignment capacity
+and scaling representation diversity.
+• We introduce O365-Caption, enriching discrete detec-
+tion labels with dense natural language descriptions to
+enhance linguistic-geometric grounding.
+• Extensive experiments demonstrate that our unified
+model achieves competitive performance across standard
+REC benchmarks using a single static checkpoint, show-
+ing superior robustness in out-of-distribution evaluations.
+2
+Related Work
+Visual Grounding Paradigms: Visual grounding has
+evolved from benchmark-specific specialists using cross-
+attention regression (Yu et al. 2018; Deng et al. 2021; Xiao
+et al. 2024) to unified open-vocabulary architectures. Modern
+generative MLLMs (Chen et al. 2023; You et al. 2024) offer
+strong open-domain reasoning via coordinate token genera-
+tion, yet their high decoding latency hampers real-time edge
+deployment. Alternatively, discriminative region-word dot
+alignment models (Kamath et al. 2021; Li et al. 2022; Liu
+et al. 2024) achieve superior efficiency by decoupling visual
+proposal extraction from parallel text matching. However,
+these frameworks often rely on dataset-specific fine-tuning
+or purely discriminative objectives, limiting single-weight
+unified generalization.
+Representation Degeneration & Predictive Regulariza-
+tion: Discriminative and contrastive learning objectives tend
+to compress feature variance into low-rank, anisotropic sub-
+spaces, leading to representation collapse (Papyan, Han, and
+Donoho 2020; Jing et al. 2021; Liang et al. 2022). Un-
+der large-scale multimodal supervision, this degeneration
+severely impairs out-of-distribution generalization (Chaud-
+huri et al. 2025). Although JEPA and its variants (LeCun
+et al. 2022; Assran et al. 2023; Bardes et al. 2023) pro-
+vide non-contrastive latent prediction that preserves semantic
+variance, their application is largely restricted to foundation
+model pre-training (Chen et al. 2025a; Huang et al. 2026).
+Utilizing JEPA as an auxiliary regularizer to expand gradient
+span and prevent degeneration in unified grounding remains
+unexplored.
+Grounding Corpora & Data-Model Co-Design: Existing
+grounding benchmarks inherently trade off scale, annota-
+tion reliability, and linguistic richness (Krishna et al. 2017;
+Peng et al. 2024; Rasheed et al. 2024). Large-scale detection
+datasets like Objects365 (Shao et al. 2019) provide vast spa-
+tial supervision but suffer from discrete category labels. To
+resolve this data-level deficit, we curate O365-Caption,
+converting Objects365 category labels into dense, context-
+aware descriptions. This supplies the linguistic diversity re-
+quired for robust open-vocabulary alignment within a scal-
+able and accessible pipeline.
+3
+Methodology
+The overall architecture of our framework is illustrated in
+Fig. 2. Given an input image and a set of referring ex-
+pressions, the vision backbone extracts multi-scale visual
+features, while the language encoder produces the corre-
+sponding textual embeddings. Unlike conventional ground-
+ing frameworks that optimize only discriminative alignment,
+our method jointly supervises the same visual features with
+two complementary objectives during training: (1) a discrim-
+inative Modulated Attention-Contrastive Head (mACH)
+for open-vocabulary grounding, and (2) a reconstructive
+JEPA auxiliary stream that regularizes the shared visual
+representation. Since the JEPA branch is removed after train-
+ing, it introduces no additional inference cost.
+3.1
+Modulated Attention-Contrastive Head
+(mACH)
+To efficiently align visual features with multiple referring
+expressions concurrently, we adopt a lightweight, broadcast-
+based cross-attention head, termed mACH. The proposed
+mACH is not intended as a fundamentally new attention op-
+erator. Instead, it serves as an efficient implementation of
+standard cross-attention that reformulates query-text inter-
+action into a broadcasted computation topology for unified
+open-vocabulary grounding. This design allows a single vi-
+sual forward pass across the backbone and neck to simulta-
+neously interact with an arbitrary number of linguistic can-
+didates, drastically accelerating multi-query inference while
+remaining fully compatible with conventional legacy detec-
+tor architectures.
+Let X ∈RB×M×C denote the flattened visual feature map
+extracted from one feature level of the detector, where B is
+the image batch size, M is the number of spatial locations,
+and C is the feature dimension. Let W ∈RBnc×L×C denote
+the text embedding sequence, where L is the token length and
+Bnc = B×Nc corresponds to the expanded batch containing
+Nc referring expressions for each image.
+To avoid redundant visual computation, the visual features
+are broadcast along the batch dimension,
+Q = Broadcast(X) ∈RBnc×M×C,
+(1)
+such that each visual feature map is paired with every re-
+ferring expression. Meanwhile, the textual embeddings are
+linearly projected to generate the corresponding keys and
+values K, V = Linear(W).
+
+
+ConvNeXt
+&
+FPN
+Qwen3-VL-
+Embdedding
+Text Prompt List
+‘goggles’
+“backpack”
+[451,479,586,510]
+JEPA Auxiliary 
+Stream
+Modulated 
+Attention 
+Contrastive Head
+(mACH)
+JEPA
+Loss
+Bbox & IoU
+Loss
+BCE
+Loss
+C
+L
+C
+P
+W
+C
+H
+…
+‘man jacket‘
+[B,C,H,W]
+[B,Ppos,L,4]
+[B,P,L,C]
+Teacher
+MLP
+Student
+MLP
+R
+…
+(H W)
+…
+(H W)
+…
+(H W)
+FFN
+MHSA
+FFN
+FFN
+FFN
+…
+(H W)
+Repeat
+…
+S
+Smooth L1 + Cosine Sim
++
+…
+Generate 
+Spatial Mask
+EMA
+[B,HW,C]
+[B,HW,C/4]
+Predictor
+Stop Grad
+JEPA  Loss
+[B,P,L,C/4]
+FFN
+FFN
+S
+MHSA
+FFN
+[B,P,L,C]
+[B,C,H,W]
+R
+Conv2d
+E
+R
+[B,P,H,W]
+Modulated Attention 
+Contrastive Head
+[B,H*W,C]
+[B,P,H*W,C]
+[B,P,H*W,C]
+[B,P,H*W,1]
+Positive Referring 
+Expression
+Negative Referring 
+Expression
+Concatenation
+C
++
+Element Sum
+Expand
+E
+R
+Reshape + Transpose
+Split
+S
+‘goggles’
+‘skirt‘
+Positive Prompt Bbox Label
+replace
+Figure 2: Overview of the proposed framework (illustrated using a CNN-based detector). The visual backbone extracts visual
+features, while the language encoder produces text embeddings from referring expressions. The proposed Modulated Attention-
+Contrastive Head (mACH) performs token-level cross-attention to generate grounding predictions supervised by classification
+and localization losses. In parallel, a text-conditioned JEPA auxiliary branch reconstructs masked visual features under language
+guidance using an EMA teacher-student framework. Both branches operate on the same visual representations during training,
+allowing reconstructive regularization to complement discriminative grounding without introducing additional inference cost.
+Cross-modal interaction is then established through scaled
+dot-product attention,
+O = Softmax
+
+QK⊤/
+√
+C
+
+V,
+(2)
+where O ∈RBnc×M×C denotes the aligned visual represen-
+tation. In practice, mACH is implemented using the standard
+multi-head attention formulation together with the variable-
+length implementation of FlashAttention-2 (Dao 2024) to
+efficiently eliminate computation on padded text tokens.
+Finally, the aligned features are projected to grounding log-
+its through a lightweight prediction layer. The final grounding
+score is computed as
+S = ψ(O) · exp(τ) + b,
+(3)
+where ψ(·) denotes a lightweight grounding head that
+maps the language-conditioned feature O ∈RBnc×M×C
+to grounding logits ψ(O) ∈RBnc×M. τ is a learnable logit
+scale, and b is a learnable bias. The resulting score map is
+optimized using the standard binary cross-entropy objective,
+LmACH = LBCE(S, Y ),
+(4)
+where Y denotes the ground-truth grounding map. Although
+the above description is based on our CNN implementation
+for clarity, the proposed mACH head is architecture-agnostic
+and can be readily integrated into transformer-based ground-
+ing frameworks with only minor modifications. The detailed
+implementation is presented in Supp. Mat. A Fig. 1.
+3.2
+JEPA Auxiliary Stream
+Although mACH provides strong discriminative supervision,
+optimizing only the grounding objective may gradually re-
+duce feature diversity under large-scale heterogeneous lan-
+guage supervision. To alleviate this issue, we introduce a
+JEPA auxiliary branch that regularizes the same visual fea-
+tures during training through latent feature prediction. Since
+the branch is discarded after training, it incurs no inference
+overhead.
+Given the visual feature map X, we construct an asym-
+metric online-target architecture consisting of a student pro-
+jection head Pθ and an EMA teacher PEMA. Both projection
+heads share the same architecture composed of lightweight
+1×1 convolutions, GroupNorm, and GELU activations. The
+teacher parameters are updated using exponential moving
+average,
+P(t+1)
+EMA = λemaP(t)
+EMA + (1 −λema)P(t)
+θ .
+(5)
+The student and teacher generate latent representations
+Zstu, Zteach ∈RB×C×M,
+(6)
+respectively. During training, spatial regions corresponding
+to the ground-truth bounding boxes are randomly masked.
+The masked student features are replaced with a learnable
+mask token, forming Zmasked
+stu
+.
+Unlike conventional I-JEPA, our predictor additionally re-
+ceives the language embedding as contextual guidance, en-
+couraging the masked visual regions to recover semantics
+relevant to the referring expression,
+ˆZΩ= Fϕ
+ Zmasked
+stu
+, W
+
+m ,
+m ∈Ω,
+(7)
+where Ωdenotes the masked spatial locations.
+
+
+“Cleaning Products”
+[451, 479, 586, 510]
+Cleaning Products
+Category 
+Determination 
+Prompt
+(1) Precise 
+Category Label
+“Bath Towel”
+[451, 479, 586, 510]
+(2) Object Caption Label
+“The white bath towel 
+which hangs loosely 
+over the metal railing 
+to the woman's left”
+“一条松松地搭在女子左
+侧金属栏杆上的白色浴巾”
+(3) Other Language 
+Object Caption Label
+Original Label
+Caption 
+Generation 
+Prompt
+Original Image
+(a) Data generation pipeline of O365-Caption
+(b) Linguistic and Statistical landscape of O365-Caption
+Input
+Output
+Figure 3: (a) The detailed three-stage data generation pipeline of O365-Caption and (b) Comprehensive linguistic and statistical
+landscape of O365-Caption compared with prominent baselines. Zoom in for best view.
+The reconstruction objective is defined on normalized la-
+tent features,
+LJEPA = 1
+|Ω|
+X
+m∈Ω
+ 1 −⟨¯ˆzm, ¯ztarget,m⟩
+
++ β
+|Ω|
+X
+m∈Ω
+SmoothL1(¯ˆzm, ¯ztarget,m),
+(8)
+where ¯z denotes ℓ2-normalized latent features.
+Finally, the overall training objective combines discrimi-
+native grounding supervision and latent reconstructive regu-
+larization,
+LTotal = LmACH + αLJEPA,
+(9)
+where α controls the weight of the auxiliary objective. By
+jointly optimizing both losses on the same visual representa-
+tion, the JEPA branch complements discriminative align-
+ment with reconstructive supervision, encouraging richer
+feature diversity and improving the robustness of unified
+open-vocabulary grounding.
+3.3
+O365-Caption
+To fully unlock the capacity of our alignment pipeline
+and anchor robust open-vocabulary scaling, we intro-
+duce O365-Caption. Existing unified multi-dataset train-
+ing is frequently bottlenecked by a structural linguistic
+trade-off: massive detection corpora like Objects365 (Shao
+et al. 2019) are restricted to rigid, discrete tags, whereas
+most REC datasets offer rich expressions but lack scale.
+O365-Caption bridges this gap by systematically up-
+grading discrete category labels into dense, context-aware
+grounding expressions, injecting essential linguistic compo-
+sitionality into unified pre-training.
+As illustrated in Fig. 3(a), the dataset is constructed via an
+automated, three-stage generative pipeline. First, Coarse-
+to-Fine Disambiguation utilizes a lightweight MLLM
+(Qwen3-VL-2B) to refine generalized tags into precise
+Table 1: Comprehensive statistics and linguistic diver-
+sity comparisons of open-vocabulary visual ground-
+ing
+and
+detection
+corpora.
+We
+compare
+our
+cu-
+rated O365-Caption against dominant detection, phrase
+grounding, and referring expression comprehension (REC)
+benchmarks. Ptxt denotes the unique phrase size, UCR rep-
+resents the Unique Caption Ratio ( # Unique Captions
+# Total Captions × 100%),
+reflecting the text-level compositionality and freedom from
+repetitive collapsed patterns.
+Dataset
+# Images # Annos Avg. Len. Ptxt UCR (%)
+Object Detection Corpora (Discrete Categories)
+COCO
+118K
+860K
+1.0
+80
+∼0.0
+Objects365
+638K
+9.6M
+1.0
+365
+∼0.0
+Phrase Grounding & Mixed Corpora (VLM Pre-training)
+Flickr30K
+31K
+638K
+2.4
+94K
+14.7
+MixedGrounding
+614K
+3.7M
+1.8
+386K
+10.5
+Referring Expression Comprehension (REC Training Set)
+RefCOCO
+20K
+121K
+3.5
+68K
+56.0
+RefCOCO+
+20K
+120K
+3.5
+77K
+95.9
+RefCOCOg
+26K
+80K
+8.3
+77K
+64.3
+O365-Caption
+638K
+9.6M
+4.2
+597K
+6.2
+taxonomies, safeguarded by a spatial coverage threshold
+(γ < 0.05%) to prevent small-object hallucinations. Sec-
+ond, Context-Aware Captioning employs a powerful 32B
+MLLM to synthesize descriptive expressions that fuse the
+refined category with fine-grained visual attributes and spa-
+tial dynamics. Finally, Cross-Lingual Extension leverages
+machine translation to support multilingual evaluation be-
+yond English-centric paradigms (Nogueira, Bernardino, and
+Martins 2025). Despite the massive generation scale, ran-
+dom manual verification demonstrates an error rate strictly
+below 0.1%. Exhaustive prompt templates, bounding-box
+guardrails, and filtering heuristics are deferred to the Supp.
+
+
+Mat. C.
+This curation replaces legacy labels with 9.6M open-
+vocabulary descriptions across 638K images. As analyzed
+in Table 1 and Fig. 3(b), O365-Caption exhibits supe-
+rior statistical properties compared to dominant baselines. It
+maintains a healthy long-tail vocabulary distribution (Zipf’s
+law) and an optimal syntactic density peaking at four words.
+Crucially, the dataset dismantles the “noun monopoly” preva-
+lent in standard corpora by elevating the proportion of adjec-
+tives to 22%. This dense population of visual modifiers sup-
+plies the critical high-entropy variations required to prevent
+representation collapse during large-scale unified grounding.
+4
+Theoretical Analysis: Representation
+Diversity
+We characterize representation diversity by which feature
+directions receive sustained alignment supervision (Fig. 1).
+Let xm ∈RC be the shared visual token at spatial location m
+(after the final fusion layer) and k a unit text (key) direction.
+Since the attention logit am = x⊤
+mk is linear in xm, the
+discriminative signal carried by k is the spatial variance of
+the logits, defining the directional alignment capacity
+cap(k) := Varm(x⊤
+mk) = k⊤ΞXk,
+(10)
+with ΞX the covariance of {xm}; directions with cap(k) = 0
+form the alignment-blind subspace. Appendix B shows that
+under weight decay only gradient-sustained directions retain
+non-zero capacity, so the diversity of an objective is governed
+by the subspace its gradients span.
+With Nc expressions per image, N total text tokens, and
+feature dimension C, the three objectives span gradient sub-
+spaces of dimension
+Nc
+|{z}
+Contrastive
+< N −Nc
+| {z }
+mACH
+<
+C
+|{z}
+mACH+JEPA
+,
+(11)
+as upper bounds (requiring Nc < N/2 and N −Nc <
+C; both hold in our data): contrastive learning supervises
+only the pooled-expression subspace; mACH expands to the
+centered token subspace (softmax invariance removes one
+common-mode direction per expression); and the auxiliary
+JEPA objective provides gradient support in almost every di-
+rection. Thus, only the dual-stream objective is almost surely
+free of alignment-blind directions and preserves represen-
+tation diversity throughout the feature space. Formal state-
+ments and proofs are in Supp. Mat. B.
+5
+Experiments
+5.1
+Datasets and Evaluation Metrics
+We evaluate our method on three widely used referring
+expression comprehension benchmarks: RefCOCO/+/g. To
+ensure a rigorous and fair comparison, all evaluated mod-
+els are strictly benchmarked on a cleaned version of these
+datasets (Chen et al. 2025b), which rectifies original anno-
+tation noise and spatial ambiguities. Following the standard
+evaluation protocol, a prediction is regarded as correct if its
+Intersection over Union (IoU) with the ground-truth bound-
+ing box exceeds 0.5, and Top-1 accuracy (%) is reported as
+the evaluation metric.
+5.2
+Implementation Details
+We implement both CNN-based and DETR-based vari-
+ants within a unified PyTorch framework. Unless other-
+wise specified, a DINOv3 ConvNeXt-Tiny (Siméoni et al.
+2025) is adopted as the visual backbone. The CNN vari-
+ant employs an FPN neck with the proposed mACH head,
+while the DETR variant(detailed in Supp. Mat. A) follows
+the RT-DETR architecture with text embeddings injected
+into the AIFI module for early vision-language interac-
+tion. To support multilingual grounding, we use the frozen
+Qwen3-VL-Embedding-2B (Li et al. 2026) as the lan-
+guage encoder. All models are trained using AdamW with
+standard data augmentation. Detailed architectural configu-
+rations, optimization settings, and hyperparameters are pro-
+vided in Supp. Mat. E.
+5.3
+Main Results
+We evaluate our framework on RefCOCO, RefCOCO+, and
+RefCOCOg under both zero-shot (unified generalist) and
+benchmark-specific fine-tuning protocols (Tab. 2).
+Unified Generalist Evaluation. Without target fine-tuning,
+our compact 75M model demonstrates strong zero-shot
+generalization across all three benchmarks. On RefCOCO,
+it achieves 85.3/89.0/82.5 (val/testA/testB), outperforming
+the 172M GDINO-T by +11.3/+14.1/+23.2% and match-
+ing heavy MLLMs (e.g., 13B LISA++-L2 and 7B GSVA)
+using only 0.6% of LISA’s parameters and a lower res-
+olution (6402 vs. 10242). This strong capability extends
+to attribute-rich RefCOCO+ (71.8/78.2/62.7) and long-
+expression RefCOCOg (76.3/75.8), consistently outperform-
+ing lightweight OVD baselines (e.g., YOLOE, ExpAlign,
+GLIP-T) by substantial margins. We attribute this advan-
+tage to our O365-Caption pre-training and JEPA regular-
+ization, which preserve fine-grained spatial-linguistic corre-
+spondence rather than disrupting it with aggressive geometric
+augmentations common in standard OVD recipes.
+Benchmark-Specific Fine-Tuning. When fine-tuned on tar-
+get datasets, our framework achieves state-of-the-art per-
+formance across all three benchmarks. On RefCOCO,
+our model reaches 91.7/93.0/90.2, consistently outperform-
+ing fine-tuned GDINO-T (89.2/91.9/86.0) and PropVG
+(89.0/91.6/85.7).
+On
+RefCOCO+,
+it
+achieves
+76.9%
+accuracy on testB. Furthermore, on RefCOCOg, our
+model achieves 85.1/86.0 (val/test), outperforming PropVG
+(83.5/84.4) despite using significantly fewer parameters
+(75M vs. 490M) and a lower input resolution (6402 vs.
+800×1333). These gains confirm that our unified pre-training
+serves as a robust initialization for downstream REC.
+Qualitative visualizations in Fig. 4 further validate the
+superior localization capability of our unified framework.
+5.4
+Ablation Studies
+We perform ablation studies under the zero-shot generalist
+setting using ConvNeXt-Tiny as the default backbone unless
+otherwise specified. Tab. 3 systematically deconstructs the
+contributions of our head design, pre-training data, auxiliary
+loss weighting, and architectural choices.
+
+
+Table 2: Performance on standard referring expression comprehension (REC) benchmarks. Results are reported as Top-1
+accuracy (%) on RefCOCO/+/g. Training datasets are abbreviated as follows: O365: Objects365; OG: Objects365 + GoldG;
+GoldG-f: GoldG after annotation refinement (deferred to the Supp. Mat. D); O365-C: our proposed Objects365-Caption; RefC:
+training set of RefCOCO, RefCOCO+, and RefCOCOg (Yu et al. 2016). gRefC: training set of gRefCOCO(Wang et al. 2025).
+* indicates estimated from the corresponding paper.
+Method
+Pre-Train Data
+Input Size
+#Params FT
+RefCOCO
+RefCOCO+
+RefCOCOg
+val
+testA testB
+val
+testA testB
+val
+test
+GLIP-T (Li et al. 2022)
+OG
+800×1333
+232M
+N
+50.0
+54.7
+43.1
+49.0
+53.4
+43.4
+65.6
+66.0
+GDINO-T (Liu et al. 2024)
+OG, RefC
+800×1333
+172M
+N
+74.0
+74.9
+59.3
+66.8
+69.9
+56.1
+71.1
+72.1
+PBREC-MT (Zhao et al. 2024)
+RefC, ReferItGame
+640x640
+205M*
+N
+71.4
+73.2
+70.1
+63.8
+67.1
+56.6
+62.9
+62.6
+ExpAlign (Hu et al. 2026)
+OG, RefC
+640x640
+60M
+N
+51.6
+59.3
+47.7
+48.9
+47.5
+45.5
+65.6
+64.0
+LISA++-L2 (Yang et al. 2023)
+N/A
+1024×1024
+13B
+N
+85.9
+88.8
+81.7
+74.5
+80.6
+68.3
+80.1
+81.3
+GSVA (Xia et al. 2024)
+N/A
+1024×1024
+7B
+N
+86.3
+89.2
+83.8
+72.8
+78.8
+68.0
+81.6
+81.8
+Ours
+GoldG-f, O365-C
+640x640
+75M
+N
+85.3
+89.0
+82.5
+71.8
+78.2
+62.7
+76.3
+75.8
+MTKREC(Mi et al. 2024)
+novel categories RefC
+640x640
+200M*
+Y
+81.1
+86.8
+73.9
+75.0
+80.8
+65.5
+74.6
+74.7
+HieA2G(Wang et al. 2025)
+RefC, Flickr30K, gRefC
+640x640
+350M*
+Y
+87.8
+90.3
+84.0
+80.7
+85.6
+72.9
+83.7
+83.8
+GDINO-T
+OG, RefC
+800×1333
+172M
+Y
+89.2
+91.9
+86.0
+81.1
+87.4
+74.7
+84.2
+84.9
+PropVG (Dai et al. 2025)
+N/A
+800×1333
+490M
+Y
+89.0
+91.6
+85.7
+83.7
+88.0
+76.6
+83.5
+84.4
+Ours
+GoldG-f, RefC, O365-C
+640x640
+75M
+Y
+91.7
+93.0
+90.2
+83.5
+87.5
+76.9
+85.1
+86.0
+(a) person wearing watch. blue
+sneakers.
+(b) the person sitting. white bath
+towel hanging.
+(c) person lying down. red ball be-
+ing held.
+(d) person in mirror. person stand-
+ing in front of the mirror. chair.
+Figure 4: Qualitative grounding results. Text queries and corresponding predicted bounding boxes are rendered in matching
+colors, demonstrating robust multi-target localization under complex natural language descriptions. Zoom in for best view.
+Head Components (Tab. 3a). Replacing the basic con-
+trastive head with mACH boosts RefCOCO val accuracy by
++5.3% (78.6% vs. 83.9%), validating the necessity of dense
+token-level cross-modal interaction. Integrating the auxil-
+iary JEPA stream further lifts performance across all splits
+(reaching 85.3% on RefCOCO val and 82.5% on testB),
+demonstrating that auxiliary representation learning provides
+effective regularization for grounding.
+Linguistic Supervision (Tab. 3b). Converting Objects365
+tags into context-rich referring expressions yields a substan-
+tial +8.3% improvement on RefCOCO val (77.0% vs. 85.3%)
+using identical images and bounding boxes, confirming that
+textual richness is vital for unified pre-training. Further an-
+notation cleaning (GoldG-f) provides additional gains on
+challenging test splits (e.g., +0.9% on RefCOCO testA).
+Auxiliary JEPA Weight (Tab. 3c). Setting the loss weight
+to α = 0.1 achieves an optimal balance between discrimina-
+tive grounding and generative reconstruction, whereas higher
+weights (α = 0.2) slightly diminish performance due to over-
+regularization.
+Architecture & Convergence (Tab. 3d). While our CNN-
+based default converges rapidly within 30 epochs (85.3%
+on RefCOCO val), training an RT-DETR architecture
+for 90 epochs reaches the global peak performance of
+86.8/90.0/83.5 on RefCOCO, demonstrating strong archi-
+tectural flexibility and scaling potential for our pipeline.
+Scalability Across Backbone Sizes. We evaluate framework
+scalability across ConvNeXt Tiny, Small, and Base variants
+in Tab. 4. Performance improves steadily as visual capacity
+and head feature dimension C expand. Notably, while scal-
+ing backbone depth from Tiny to Small (C = 768) yields
+moderate gains, widening the cross-modal interaction chan-
+nel to C = 1024 in ConvNeXt-Base produces a significant
+jump, boosting RefCOCO+ testA by +2.9% and RefCOCOg
+test by +1.4% over Tiny. This confirms expanding the head
+capacity C effectively eliminates representation bottlenecks,
+allowing our mACH and JEPA modules to scale seamlessly
+with larger feature spaces without saturation.
+
+
+Table 3: Ablation studies on core framework components.
+Evaluated under the unified setting across RefCOCO/+/g.
+Bold indicates the default configuration.
+Configuration
+RefCOCO
+RefCOCO+
+RefCOCOg
+val testA testB val testA testB val
+test
+(a) Head Components (Fixed Data: GoldG-f, O365-C)
+Contrastive
+78.6 80.3 73.8 61.0 66.4 53.2 72.7
+72.3
+mACH
+83.9 87.5 79.3 68.5 77.0 59.4 74.8
+75.0
+mACH + JEPA
+85.3 89.0 82.5 71.8 78.2 62.7 76.3
+75.8
+(b) Pre-train Data (Fixed Head Architecture: full pipeline)
+GoldG, O365
+77.0 69.3 71.7 62.7 69.2 56.0 66.6
+65.7
+GoldG, O365-C
+85.3 88.1 82.1 71.7 77.9 61.4 76.2
+75.7
+GoldG-f, O365-C 85.3 89.0 82.5 71.8 78.2 62.7 76.3
+75.8
+(c) Effect of Auxiliary Jepa Weight α
+α = 0.0
+83.9 87.5 79.3 68.5 77.0 59.4 74.8
+75.0
+α = 0.05
+84.8 88.5 81.4 70.8 77.9 61.5 75.9
+75.5
+α = 0.1
+85.3 89.0 82.5 71.8 78.2 62.7 76.3
+75.8
+α = 0.2
+84.7 88.3 81.1 70.5 77.6 61.9 75.4
+75.2
+(d) Architectural Components
+CNN(30 ep)
+85.3 89.0 82.5 71.8 78.2 62.7 76.3
+75.8
+RT-DETR(30 ep) 84.0 87.8 80.2 69.9 77.5 62.7 75.4
+75.2
+RT-DETR(90 ep) 86.8 90.0 83.5 74.5 82.4 64.1 78.6
+77.9
+Table 4: Scalability across visual backbone sizes. Zero-
+shot performance evaluated across ConvNeXt scales.
+Backbone Scale
+RefCOCO
+RefCOCO+
+RefCOCOg
+val testA testB val testA testB val
+test
+Tiny (C =768)
+85.3 89.0 82.5 71.8 78.2 62.7 76.3
+75.8
+Small (C =768) 86.1 89.1 82.6 72.4 79.3 63.3 76.8
+76.1
+Base (C =1024) 86.3 89.8 83.8 73.7 81.1 64.4 76.8
+77.2
+Inference Efficiency. We evaluate framework latency and
+peak GPU memory across varying numbers of text queries
+(N) in Tab. 5. Measurements are conducted on a single
+NVIDIA RTX 4090 at batch size 1.
+5.5
+Spectral Evidence
+To examine how different objectives shape the learned rep-
+resentation, we collect the shared visual token features after
+the final fusion layer from all RefCOCOg images and esti-
+mate their empirical feature covariance ΞX =
+1
+M
+PM
+i=1(xi−
+¯x)(xi −¯x)⊤, where M is the total number of visual tokens.
+According to our theory, the eigenspectrum of ΞX measures
+the distribution of directional alignment capacity: discrimi-
+native objectives preserve capacity only inside the language-
+conditioned subspace, whereas the additional JEPA objective
+maintains capacity in the remaining directions.
+Figure 5 confirms this prediction. Contrastive learning and
+mACH exhibit an identical spectral cliff around j ≈200,
+after which the eigenvalues fall below the numerical preci-
+sion of float32 accumulation (≲10−6λ1), indicating feature
+variation is confined to a language-conditioned subspace.
+In contrast, mACH+JEPA preserves a non-vanishing spec-
+Table 5: Inference efficiency comparison. Results are re-
+ported as triplets corresponding to N = 1/5/10, where N
+denotes the number of text queries (average 5 tokens/query)
+evaluated per image.
+Method
+Latency (ms) ↓
+Peak Mem. (GB) ↓
+Contrastive
+21/23/24
+1.06/1.08/1.10
+mACH
+26/26/27
+1.13/1.26/1.35
+Figure
+5:
+Alignment-capacity
+spectrum.
+Normalized
+eigenspectra of the empirical feature covariance ΞX com-
+puted from shared visual token features after the final fusion
+layer on RefCOCOg-val. Contrastive learning and mACH
+exhibit a shared spectral cliff around j ≈200, whereas
+mACH+JEPA retains a non-vanishing spectral tail across all
+768 dimensions, consistent with the predicted spectral floor
+(eigenvalues below ∼10−6 are at the numerical floor; cliff
+positions, not depths, are interpretable). Reported effective
+ranks summarize the spectrum and indicate progressively
+richer representation diversity.
+tral tail (∼10−5), consistent with the positive spectral floor
+predicted by our theory, and maintains measurable variance
+throughout the entire ambient space (C = 768).
+To summarize the spectrum with a single statistic, we re-
+port the effective rank: erank(ΞX) = exp(−P
+j pj log pj),
+pj =
+λj
+P
+k λk which measures how many feature directions
+carry comparable variance (Garrido et al. 2023). The ef-
+fective rank increases monotonically from 36 (Contrastive)
+to 44 (mACH) and 83 (mACH+JEPA), consistent with the
+predicted dimension ladder Nc < N −Nc < C, and indi-
+cating progressively richer representation diversity under the
+dual-stream objective.
+6
+Conclusion
+We revisited referring expression comprehension from the
+perspective of unified open-vocabulary grounding and pre-
+sented a holistic data-model co-design that jointly im-
+proves linguistic supervision and visual representation learn-
+ing. Specifically, our framework combines a lightweight
+broadcast-based grounding head with an inference-free JEPA
+auxiliary objective to preserve representation diversity, while
+O365-Caption enriches grounding supervision through
+diverse natural language descriptions. Extensive experiments
+demonstrate strong cross-dataset generalization and compet-
+
+
+itive performance using a static checkpoint. Beyond the pro-
+posed framework, our theoretical and empirical results sug-
+gest preserving representation diversity is an important de-
+sign principle for scaling unified vision-language grounding
+models beyond benchmark-specific specialization.
+References
+Assran, M.; Duval, Q.; Misra, I.; Bojanowski, P.; Vincent, P.;
+Rabbat, M.; LeCun, Y.; and Ballas, N. 2023. Self-supervised
+learning from images with a joint-embedding predictive ar-
+chitecture. In Proceedings of the IEEE/CVF conference on
+computer vision and pattern recognition, 15619–15629.
+Bai, S.; Cai, Y.; Chen, R.; Chen, K.; Chen, X.; Cheng, Z.;
+Deng, L.; Ding, W.; Gao, C.; Ge, C.; et al. 2025. Qwen3-vl
+technical report. arXiv preprint arXiv:2511.21631.
+Bardes, A.; Garrido, Q.; Ponce, J.; Chen, X.; Rabbat, M.;
+LeCun, Y.; Assran, M.; and Ballas, N. 2023. V-jepa: Latent
+video prediction for visual representation learning.
+Chaudhuri, A.; Dutta, A.; Bui, T.; and Georgescu, S. 2025.
+A Closer Look at Multimodal Representation Collapse. In
+International Conference on Machine Learning, 7555–7577.
+PMLR.
+Chen, D.; Shukor, M.; Moutakanni, T.; Chung, W.; Yu, J.;
+Kasarla, T.; Bang, Y.; Bolourchi, A.; LeCun, Y.; and Fung,
+P. 2025a. Vl-jepa: Joint embedding predictive architecture
+for vision-language. arXiv preprint arXiv:2512.10942.
+Chen, J.; Wei, F.; Zhao, J.; Song, S.; Wu, B.; Peng, Z.; Chan,
+S.-H. G.; and Zhang, H. 2025b. Revisiting referring expres-
+sion comprehension evaluation in the era of large multimodal
+models. In Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition, 513–524.
+Chen, K.; Zhang, Z.; Zeng, W.; Zhang, R.; Zhu, F.; and Zhao,
+R. 2023. Shikra: Unleashing Multimodal LLM’s Referential
+Dialogue Magic. arXiv preprint arXiv:2306.15195.
+Dai, M.; Cheng, W.; Zhuang, J.; Liu, J.-j.; Zhao, H.; Feng,
+Z.; and Yang, W. 2025. Propvg: End-to-end proposal-driven
+visual grounding with multi-granularity discrimination. In
+Proceedings of the IEEE/CVF International Conference on
+Computer Vision, 7058–7068.
+Dao, T. 2024. FlashAttention-2: Faster Attention with Better
+Parallelism and Work Partitioning. In International Confer-
+ence on Learning Representations (ICLR).
+Deng, J.; Yang, Z.; Chen, T.; Zhou, W.; and Li, H. 2021.
+Transvg: End-to-end visual grounding with transformers. In
+Proceedings of the IEEE/CVF international conference on
+computer vision, 1769–1779.
+Garrido, Q.; Balestriero, R.; Najman, L.; and Lecun, Y. 2023.
+Rankme: Assessing the downstream performance of pre-
+trained self-supervised representations by their rank. In In-
+ternational conference on machine learning, 10929–10974.
+PMLR.
+Heaps, H. S. 1978. Information retrieval: Computational
+and theoretical aspects. Academic Press, Inc.
+Hu, J.; Bai, T.; Wu, F.; Li, W.; Peng, Z.; and Zhang,
+Y. 2026. ExpAlign: Expectation-Guided Vision-Language
+Alignment for Open-Vocabulary Grounding. arXiv preprint
+arXiv:2601.22666.
+Huang, C.; Li, X.; Thilak, V.; Littwin, E.; and Susskind,
+J. 2026.
+Text-Conditional JEPA for Learning Seman-
+tically Rich Visual Representations.
+arXiv preprint
+arXiv:2605.03245.
+Jing, L.; Vincent, P.; LeCun, Y.; and Tian, Y. 2021. Under-
+standing dimensional collapse in contrastive self-supervised
+learning. arXiv preprint arXiv:2110.09348.
+Kamath, A.; Singh, M.; LeCun, Y.; Synnaeve, G.; Misra,
+I.; and Carion, N. 2021.
+Mdetr-modulated detection for
+end-to-end multi-modal understanding. In Proceedings of
+the IEEE/CVF international conference on computer vision,
+1780–1790.
+Krishna, R.; Zhu, Y.; Groth, O.; Johnson, J.; Hata, K.;
+Kravitz, J.; Chen, S.; Kalantidis, Y.; Li, L.-J.; Shamma, D. A.;
+et al. 2017. Visual genome: Connecting language and vision
+using crowdsourced dense image annotations. International
+journal of computer vision, 123(1): 32–73.
+LeCun, Y.; et al. 2022. A path towards autonomous machine
+intelligence version 0.9. 2, 2022-06-27. Open Review, 62(1):
+1–62.
+Li, L. H.; Zhang, P.; Zhang, H.; Yang, J.; Li, C.; Zhong, Y.;
+Wang, L.; Yuan, L.; Zhang, L.; Hwang, J.-N.; et al. 2022.
+Grounded language-image pre-training. In Proceedings of
+the IEEE/CVF conference on computer vision and pattern
+recognition, 10965–10975.
+Li, M.; Zhang, Y.; Long, D.; Chen, K.; Song, S.; Bai, S.;
+Yang, Z.; Xie, P.; Yang, A.; Liu, D.; et al. 2026. Qwen3-
+VL-Embedding and Qwen3-VL-Reranker: A Unified Frame-
+work for State-of-the-Art Multimodal Retrieval and Ranking.
+arXiv preprint arXiv:2601.04720.
+Liang, V. W.; Zhang, Y.; Kwon, Y.; Yeung, S.; and Zou,
+J. Y. 2022. Mind the gap: Understanding the modality gap in
+multi-modal contrastive representation learning. Advances in
+Neural Information Processing Systems, 35: 17612–17625.
+Liu, S.; Zeng, Z.; Ren, T.; Li, F.; Zhang, H.; Yang, J.; Jiang,
+Q.; Li, C.; Yang, J.; Su, H.; et al. 2024. Grounding dino:
+Marrying dino with grounded pre-training for open-set object
+detection. In European conference on computer vision, 38–
+55. Springer.
+Loper, E.; and Bird, S. 2002. Nltk: The natural language
+toolkit. In Proceedings of the ACL-02 Workshop on Effec-
+tive tools and methodologies for teaching natural language
+processing and computational linguistics, 63–70.
+Mi, W.; Wang, J.; Zhuang, F.; An, Z.; and Guo, W.
+2024. Open-category referring expression comprehension
+via multi-modal knowledge transfer. Neurocomputing, 598:
+128063.
+Nogueira, F.; Bernardino, A.; and Martins, B. 2025. Com-
+prehension of Multilingual Expressions Referring to Target
+Objects in Visual Inputs. arXiv preprint arXiv:2511.11427.
+Papyan, V.; Han, X.; and Donoho, D. L. 2020. Prevalence of
+neural collapse during the terminal phase of deep learning
+training. Proceedings of the National Academy of Sciences,
+117(40): 24652–24663.
+Peng, Z.; Wang, W.; Dong, L.; Hao, Y.; Huang, S.; Ma,
+S.; Ye, Q.; and Wei, F. 2024. Grounding multimodal large
+
+
+language models to the world. In International Conference
+on Learning Representations, volume 2024, 51575–51598.
+Rasheed, H.; Maaz, M.; Shaji, S.; Shaker, A.; Khan, S.;
+Cholakkal, H.; Anwer, R. M.; Xing, E.; Yang, M.-H.; and
+Khan, F. S. 2024. Glamm: Pixel grounding large multimodal
+model.
+In Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition, 13009–13018.
+Shao, S.; Li, Z.; Zhang, T.; Peng, C.; Yu, G.; Zhang, X.; Li,
+J.; and Sun, J. 2019. Objects365: A large-scale, high-quality
+dataset for object detection. In Proceedings of the IEEE/CVF
+international conference on computer vision, 8430–8439.
+Siméoni, O.; Vo, H. V.; Seitzer, M.; Baldassarre, F.; Oquab,
+M.; Jose, C.; Khalidov, V.; Szafraniec, M.; Yi, S.; Ra-
+mamonjisoa, M.; et al. 2025.
+Dinov3.
+arXiv preprint
+arXiv:2508.10104.
+Wang, J.; Lan, C.; Liu, C.; Ouyang, Y.; Qin, T.; Lu, W.; Chen,
+Y.; Zeng, W.; and Yu, P. S. 2022. Generalizing to unseen
+domains: A survey on domain generalization. IEEE transac-
+tions on knowledge and data engineering, 35(8): 8052–8072.
+Wang, Y.; Ding, H.; He, S.; Jiang, X.; Wei, B.; and Liu, J.
+2025. Hierarchical alignment-enhanced adaptive grounding
+network for generalized referring expression comprehension.
+In Proceedings of the AAAI Conference on Artificial Intelli-
+gence, volume 39, 8042–8050.
+Xia, Z.; Han, D.; Han, Y.; Pan, X.; Song, S.; and Huang,
+G. 2024. Gsva: Generalized segmentation via multimodal
+large language models. In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition,
+3858–3869.
+Xiao, L.; Yang, X.; Peng, F.; Wang, Y.; and Xu, C. 2024.
+Hivg: Hierarchical multimodal fine-grained modulation for
+visual grounding. In Proceedings of the 32nd ACM Interna-
+tional Conference on Multimedia, 5460–5469.
+Yang, S.; Qu, T.; Lai, X.; Tian, Z.; Peng, B.; Liu, S.; and
+Jia, J. 2023. Lisa++: An improved baseline for reasoning
+segmentation with large language model.
+arXiv preprint
+arXiv:2312.17240.
+You, H.; Zhang, H.; Gan, Z.; Du, X.; Zhang, B.; Wang, Z.;
+Cao, L.; Chang, S.-F.; and Yang, Y. 2024.
+Ferret: Refer
+and ground anything anywhere at any granularity. In Inter-
+national Conference on Learning Representations, volume
+2024, 57153–57180.
+Yu, L.; Lin, Z.; Shen, X.; Yang, J.; Lu, X.; Bansal, M.; and
+Berg, T. L. 2018. Mattnet: Modular attention network for
+referring expression comprehension. In Proceedings of the
+IEEE conference on computer vision and pattern recognition,
+1307–1315.
+Yu, L.; Poirson, P.; Yang, S.; Berg, A. C.; and Berg, T. L.
+2016. Modeling context in referring expressions. In Euro-
+pean conference on computer vision, 69–85. Springer.
+Zhao, P.; Zheng, S.; Zhao, W.; Xu, D.; Li, P.; Cai, Y.; and
+Huang, Q. 2024.
+Rethinking two-stage referring expres-
+sion comprehension: A novel grounding and segmentation
+method modulated by point. In Proceedings of the AAAI
+Conference on Artificial Intelligence, volume 38, 7487–7495.
+Zheng, M.; Li, Z.; Chen, T.; Song, M.; and Wang, D. 2025.
+HY-MT1.5 Technical Report. arXiv:2512.24092.
+Zipf, G. K. 2016. Human behavior and the principle of least
+effort: An introduction to human ecology. Ravenio books.
+
+
+Appendix A: Generalization to Transformer-based Grounding Frameworks
+Although the main paper presents the CNN-based implementation for clarity, the proposed Modulated Attention-Contrastive
+Head (mACH) is architecture-agnostic and can be seamlessly integrated into transformer-based grounding detectors.
+Figure A1: Transformer-based implementation of the proposed mACH framework. Early multimodal interaction is introduced
+through the AIFI module, while the conventional grounding head is replaced by mACH. The deformable transformer decoder
+and box regression branch remain identical to the original detector.
+Figure A1 illustrates our transformer-based implementation using a deformable DETR-style framework. Two lightweight
+modifications are introduced while preserving the original detection pipeline. First, to enable early vision-language interaction,
+the finest-scale visual features are concatenated with the language embeddings and jointly processed by the AIFI module.
+Second, the conventional grounding head is replaced by the proposed mACH head, while the deformable transformer decoder
+and the bounding-box regression branch remain unchanged.
+Figure A2 further compares our grounding framework with Grounding DINO. Unlike Grounding DINO, which injects
+language cross-attention into every decoder layer, our design keeps the deformable decoder purely visual and performs cross-
+modal interaction only in the lightweight mACH head after object decoding. This decouples object decoding from language
+grounding, preserves the standard box-level Hungarian assignment during training, and avoids the token-aware matching strategy
+adopted by Grounding DINO, resulting in a substantially simpler training pipeline.
+As demonstrated by the experimental results in the main paper, this design consistently improves both CNN-based and
+transformer-based grounding architectures, indicating that mACH serves as a generic grounding head independent of the
+underlying visual backbone.
+Appendix B: Directional Alignment Capacity
+This appendix formalizes the argument of the Theoretical Analysis section: each architecture determines which gradient
+directions are reachable on the shared features, and the reachable dimensions of the three objectives form the ladder Nc <
+N −Nc < C. We define a directional measure of localization signal (Definition 1), show that it persists only on gradient-
+sustained directions (Lemma 2), compute the reachable subspace of each objective (Lemmas 3–7), and compare the three
+paradigms (Theorem 8, Corollaries 9 and 10).
+6.1
+Setup
+Notation. Each image is represented by visual tokens X = [x1, . . . , xM] ∈RC×M (the shared trunk output; the query projection
+is absorbed into X), paired with Nc referring expressions, the i-th given by token embeddings T (i) = [t(i)
+1 , . . . , t(i)
+Li] ∈Rd×Li;
+write N := PNc
+i=1 Li. Positive expressions are fixed per image; negatives are resampled every iteration. Let ΞX := E[(xm −
+¯x)(xm −¯x)⊤] be the centered token covariance, and for any objective L acting on X, define its gradient field and gradient
+second moment
+G(L) := ∇XL,
+Γ(L) := E
+
+G(L) G(L)⊤
+.
+(A1)
+The head broadcasts X along the text axis; backpropagation through a broadcast is branch summation, so all Nc text branches
+accumulate their gradients on the same X:
+G(Lm) = 1
+Nc
+Nc
+X
+i=1
+G(i).
+(A2)
+
+
+Figure A2: Comparison between Grounding DINO and the proposed transformer-based grounding framework. Grounding
+DINO performs language cross-attention inside every decoder layer, whereas our approach keeps the decoder purely visual and
+delegates cross-modal interaction to the lightweight mACH prediction head. Consequently, the proposed design preserves the
+standard box-level Hungarian assignment and simplifies the overall training pipeline.
+mACH forward map. Keys k(i)
+l
+= WKt(i)
+l , logits a(i)
+m,l = x⊤
+mk(i)
+l /
+√
+C, attention A(i)
+m,l = softmaxl(a(i)
+m,l), and scores
+S(i)
+m =
+Li
+X
+l=1
+A(i)
+m,l c(i)
+l
++ b,
+c(i)
+l
+:= eτw⊤
+ψ WV t(i)
+l
+∈R.
+(A3)
+The logit scale eτ and bias b shift and rescale scores uniformly and play no directional role. The grounding objective is
+Lm = LBCE(S).
+JEPA stream. A student Pθ : RC →RC is paired with an EMA teacher updated as
+PEMA ←λ PEMA + (1 −λ) Pθ,
+λ ∈(0, 1).
+(A4)
+For zm = Pθ(xm) and a stochastically resampled mask Ω,
+zmsk
+m
+=
+µ + ϵ,
+m ∈Ω,
+zm,
+m /∈Ω,
+ϵ ∼N(0, σ2I)
+=⇒
+∂zmsk
+m
+∂xm
+= 0, m ∈Ω.
+(A5)
+With T ′ = Wproj[T (1), . . . , T (Nc)] ∈RC×N, a joint self-attention predictor (parameters ϕ) operates on [(Zmsk)⊤; (T ′)⊤] with
+block affinity
+A =
+
+Avv
+Avt
+Atv
+Att
+
+,
+ˆzpred,o =
+X
+j /∈Ω
+Avv, o,j W (v)
+V zj +
+N
+X
+l=1
+Avt, o,l W (t)
+V t′
+l,
+o ∈Ω,
+(A6)
+where constant contributions of masked-token values are absorbed into the predictor bias. With ¯u := u/∥u∥and ztgt,o =
+PEMA(xo),
+LJ = 1
+|Ω|
+X
+o∈Ω
+h 1 −⟨¯ˆzpred,o, ¯ztgt,o⟩
+
++ β SmoothL1
+ ¯ˆzpred,o, ¯ztgt,o
+i
+,
+Ltot = Lm + α LJ.
+(A7)
+Roles of the four blocks. The loss supervises only masked visual predictions. Gradient therefore flows back to X through
+Avv, which routes the driving signal from masked positions to unmasked visual tokens. The Avt path lets text context modulate
+the predictions – and couples the affinities to T through the softmax normalization – but the results below do not rely on it. The
+text-side outputs, governed by Atv and Att, receive no supervision and carry no gradient.
+Grounding requires the score map to vary across positions: a flat score map carries no localization signal. Since the attention
+logits are linear in the visual tokens, am = x⊤
+mk, their spatial discriminability is exactly Varm(am); the following definition is
+therefore a property of the attention mechanism itself rather than an ad hoc construct.
+Definition 1 (Directional Alignment Capacity). For a unit direction k ∈RC,
+cap(k) := Varm
+ x⊤
+mk
+
+= k⊤ΞX k.
+(A8)
+cap(k) is the spatial variance of the attention logits available to any token whose key points along k; cap(k) = 0 implies
+position-independent attention and hence a flat score map. We call {k : cap(k) = 0} the alignment-blind subspace and its
+complement the alignment-active subspace.
+
+
+6.2
+Gradient-Sustained Capacity
+Alignment capacity is not a static property of the representation: under weight decay, feature variance contracts unless contin-
+uously replenished by the optimization signal. We model this as ˙X = −GB −λX, where λ > 0 is the decay rate and B ⪰0
+an arbitrary backbone-induced preconditioner (exact for a terminal linear map X = WH with decayed W, where B = H⊤H;
+and for degree-1 homogeneous feature maps with full decay, where B = JJ⊤). Only one property is used below: the excitation
+term vanishes on directions orthogonal to all gradient columns.
+Lemma 2 (Gradient sustains directional variance). If k⊤G(L) = 0 almost surely along the trajectory, then
+k⊤Ξ(t)
+X k ≤e−2λt k⊤Ξ(0)
+X k,
+(A9)
+i.e. cap(k) →0: directional variance persists only where the gradient signal sustains it.
+Proof. For em := (k⊤xm)2, ˙em = −2(k⊤xm) k⊤[GB]m −2λem. Since [GB]m = P
+j gjBjm and k⊤gj = 0 a.s. for every
+column j, the first term vanishes for any B ⪰0, giving ˙em = −2λem; the token mean decays at the same rate, yielding the
+claim for the centered variance.
+6.3
+Gradient Subspaces of the Three Objectives
+Lemma 3 (Pooled contrastive head). For S(i)
+m = (t(i))⊤xm with pooled text vector t(i) ∈RC, writing the BCE residual
+δ(i)
+m := ∂LBCE/∂S(i)
+m ,
+Gcontrast = 1
+Nc
+Nc
+X
+i=1
+t(i)(δ(i))⊤,
+Col(Gcontrast) ⊆span{t(i)}Nc
+i=1,
+dim ≤Nc.
+(A10)
+Proof. Since ∇xmS(i)
+m = t(i), the branch gradient at token m is g(i)
+m = δ(i)
+m t(i); stacking the M columns, G(i) = t(i) δ(i)⊤
+with δ(i) := (δ(i)
+1 , . . . , δ(i)
+M )⊤. Assembling via (A2),
+Gcontrast = 1
+Nc
+Nc
+X
+i=1
+t(i) δ(i)⊤=⇒Col(Gcontrast) ⊆
+Nc
+X
+i=1
+span
+
+t(i)	
+= span
+
+t(i)	Nc
+i=1,
+dim ≤Nc.
+(A11)
+Lemma 4 (mACH head). With the centered key subspace
+V0
+T :=
+Nc
+X
+i=1
+
+WKT (i)β : 1⊤β = 0
+	
+,
+Col(GmACH) ⊆V0
+T ,
+rank(GmACH) ≤min
+ C, N −Nc
+
+,
+(A12)
+per iteration. Over training, the visited union of these subspaces remains within the image of the frozen text-embedding manifold,
+whose effective dimension is measurable offline.
+Proof. S(i)
+m depends on xm only through the logits a(i)
+m,l. The softmax Jacobian ∂A(i)
+m,l/∂a(i)
+m,j = A(i)
+m,l(δlj −A(i)
+m,j) gives
+∇xmS(i)
+m =
+1
+√
+C
+X
+l,j
+c(i)
+l A(i)
+m,l
+ δlj −A(i)
+m,j
+
+k(i)
+j
+=
+1
+√
+C
+X
+j
+β(i)
+m,jk(i)
+j ,
+β(i)
+m,j := A(i)
+m,j
+
+c(i)
+j
+−
+X
+l
+A(i)
+m,lc(i)
+l
+
+.
+(A13)
+Since P
+j A(i)
+m,j = 1,
+X
+j
+β(i)
+m,j =
+X
+j
+A(i)
+m,jc(i)
+j
+−
+ X
+j
+A(i)
+m,j
+ X
+l
+A(i)
+m,lc(i)
+l
+
+= 0.
+(A14)
+In matrix form, with β(i)
+m := (β(i)
+m,1, . . . , β(i)
+m,Li)⊤and k(i)
+j
+= WKt(i)
+j ,
+∇xmS(i)
+m =
+1
+√
+C
+WKT (i)β(i)
+m ,
+1⊤β(i)
+m = 0.
+(A15)
+The branch gradient g(i)
+m = δ(i)
+m ∇xmS(i)
+m differs only by the scalar BCE residual, so every column of G(i) lies in {WKT (i)β :
+1⊤β = 0}, a subspace of dimension at most Li −1. Assembling via (A2),
+Col(GmACH) ⊆
+Nc
+X
+i=1
+Col(G(i)) ⊆
+Nc
+X
+i=1
+
+WKT (i)β : 1⊤β = 0
+	
+=: V0
+T ,
+dim V0
+T ≤
+Nc
+X
+i=1
+(Li −1) = N −Nc.
+(A16)
+
+
+Lemma 5 (Text-free driving signal). The JEPA field is driven by text-free targets: the loss gradients ho := ∇ˆzpred,oLJ point
+toward EMA targets PEMA(xo), functions of X alone (A4)–(A7). Hence Col(GJ) is not algebraically confined to V0
+T , in contrast
+to Lemmas 3 and 4.
+Proof. Let po := ˆzpred,o and ℓ(p, z) denote the per-token loss in (A7), and let J¯z := ∂¯z/∂z = (I −¯z¯z⊤)/∥z∥be the
+sphere-projection Jacobian. The driving signal is
+ho = ∇poLJ =
+1
+|Ω| J⊤
+¯po
+h
+−¯ztgt,o + β J¯ztgt,o ϕβ
+ ¯po −¯ztgt,o
+i
+,
+(A17)
+where ϕβ is the SmoothL1 derivative applied componentwise. Since ztgt,o = PEMA(xo), every term in ho is a function of
+(X, θ) alone. Chain rule through (A6) then gives the field on unmasked tokens:
+GJ
+
+Ωc = (W (v)
+V )⊤X
+o∈Ω
+ho (Avv, o,·)⊤
+|
+{z
+}
+value path
++
+X
+o∈Ω
+∂Ao,·
+∂Z
+⊤ ho (p(val)
+o
+)⊤
+|
+{z
+}
+affinity path
+,
+(A18)
+with p(val)
+o
+the value vectors aggregated in (A6). Both terms, and hence G(x)
+J
+= J⊤
+θ GJ, are functions of (X, Ω, ϵ, θ, ϕ). In
+contrast to Lemmas 3 and 4, no term is a structured linear combination of text vectors: Col(GJ) is not algebraically confined to
+V0
+T .
+Write Gm := G(Lm) and GJ := G(LJ), so that the joint field of Ltot is
+G = Gm + αGJ.
+(A19)
+Centering the JEPA field over the mask noise defines the fluctuation and its second moment,
+ξJ := GJ −EΩ,ϵ
+
+GJ
+ X, T
+
+,
+ΓJ := E
+
+ξJξ⊤
+J
+
+⪰0.
+(A20)
+The conditional mean is absorbed by the deterministic discriminative component; ΓJ measures the part of the JEPA signal that
+varies under mask resampling and therefore cannot cancel against Gm.
+Assumption 6 (Nondegenerate JEPA fluctuation). The mask-noise fluctuation ξJ is not almost surely confined to any hyperplane:
+for every unit u, E[(u⊤ξJ)2] > 0.
+Lemma 7 (Full-support spectral floor). Under Assumption 6, ΓJ ⪰cJI with cJ := λmin(ΓJ) > 0, and the joint field of Ltot
+satisfies
+k⊤E
+
+GG⊤
+k ≥α2 k⊤ΓJk ≥α2cJ
+for every unit k.
+(A21)
+Proof. By definition ΓJ ⪰0, and u⊤ΓJu = E[(u⊤ξJ)2] > 0 for every unit u by Assumption 6; hence ΓJ ≻0 and cJ > 0. For
+the joint field, conditional on (X, T) the vector k⊤(Gm + α EΩ,ϵGJ) is constant and EΩ,ϵ[ξJ | X, T] = 0, so
+k⊤E
+
+GG⊤
+k = EX,T
+h k⊤ Gm + α EΩ,ϵGJ
+2
+|
+{z
+}
+≥0
++α2 k⊤CovΩ,ϵ
+ GJ
+ X, T
+
+k
+i
+≥α2k⊤ΓJk ≥α2cJ.
+(A22)
+The cross term vanishes since EΩ,ϵ[ξJ | X, T] = 0.
+6.4
+Comparison
+Theorem 8 (Capacity comparison). At steady state, the reachable gradient subspaces of the three objectives are span{t(i)},
+V0
+T , and RC, with dimension budgets
+dim ≤Nc
+(contrastive);
+dim ≤N −Nc
+(mACH);
+dim = C a.s.
+(dual-stream).
+(A23)
+Whenever Nc < N/2 and N −Nc < C (both hold in our data), the budgets are strictly increasing, forming the ladder
+Nc < N −Nc < C. Consequently, only the dual-stream objective is almost surely free of alignment-blind directions—the only
+paradigm that preserves alignment capacity in every direction.
+Proof. For the two discriminative heads, Lemmas 3 and 4 confine the gradient fields to the stated subspaces; every direction
+in the complements then satisfies the premise of Lemma 2 and decays to zero capacity. For the dual-stream objective, write
+Γ := E[GG⊤] ⪰0 and note that for any unit k,
+k ∈null(Γ) ⇐⇒k⊤Γk = E
+k⊤G
+2 = 0 ⇐⇒k⊤G = 0 a.s.,
+(A24)
+so the premise of Lemma 2 holds exactly on null(Γ). Lemma 7 gives
+Γ ⪰α2cJI ≻0 ⇐⇒Col(Γ) = RC,
+null(Γ) = {0}.
+(A25)
+Hence the reachable gradient subspace has dimension C, and no direction satisfies the decay premise at any iteration; under the
+sustained-excitation mechanism of Section 6.2, every direction retains positive capacity.
+
+
+Corollary 9 (Representation diversity). Since ΞX ⪰0,
+cap(k) = 0 ⇐⇒k⊤ΞXk = 0 ⇐⇒k ∈null(ΞX),
+rank(ΞX) = dim(alignment-active subspace).
+(A26)
+At steady state, the feature rank therefore obeys the ladder of Theorem 8: rank(ΞX) ≤Nc under contrastive training, ≤N −Nc
+under mACH, and = C under the dual-stream objective (Assumption 6).
+Corollary 10 (Novel expressions). If an out-of-distribution expression produces a key direction k⊥outside the reachable
+subspace visited during training, then at steady state
+capcontrast(k⊥) = capmACH(k⊥) = 0,
+captot(k⊥) > 0
+(Assumption 6),
+(A27)
+the first two by Lemma 2, the last by Theorem 8: such expressions are alignment-blind for both discriminative-only heads and
+retain positive capacity under the dual-stream objective.
+Appendix C: Curation Pipeline, Prompt Specifications, and Empirical Properties of O365-Caption
+In this section, we present the comprehensive engineering specifications, algorithmic boundaries, structural system prompts,
+and deep empirical properties that characterize the curation of the O365-Caption dataset. To facilitate full reproducibility
+and provide an exhaustive disclosure of our data-side contributions, our exposition is organized into three complementary
+subsections: (1) The Three-Stage Generative Pipeline, detailing the algorithmic taxonomy mapping and automated geometric
+guardrails; (2) Prompt Specifications, providing the exact, unedited English and Chinese systemic prompt templates used to
+instruct our Multimodal Large Language Models (MLLMs); and (3) Linguistic and Statistical Properties, delivering a global
+quantitative deconstruction of our dataset’s vocabulary density, syntax length, and part-of-speech distributions against standard
+visual grounding baselines.
+Through this multi-dimensional documentation, we demonstrate how O365-Caption systematically upgrades the rigid,
+discrete single-word category tags of legacy detection assets into high-density, context-aware, and open-vocabulary referring
+expressions suitable for industrial-scale generalist pre-training.
+Figure A3: The detailed three-stage data generation pipeline of O365-Caption.(An enlarged detailed view of Fig. 3(a)
+from the main text.) The framework sequentially executes coarse-to-fine semantic disambiguation via Qwen3-VL-2B, dense
+context-aware object-level captioning via Qwen3-VL-32B, and cross-lingual translation via the Tencent HY-MT-1.5-7B engine.
+6.5
+The Pipeline of Constructing Objects365-Caption
+Crucially, a definitive advantage of this three-stage pipeline is its dataset-agnostic versatility; the underlying framework is
+completely decoupled from Objects365-specific topologies. It can be seamlessly deployed across virtually any legacy object
+detection asset (such as COCO, OpenImages, or LVIS) to systematically upgrade rigid, closed-set categorical annotations into
+
+
+rich, open-vocabulary grounding tokens without requiring expensive manual re-labeling. The transformation workflow is strictly
+compartmentalized into three sequential stages, accompanied by automated geometric guardrails.
+Stage 1: Coarse-to-Fine Semantic Disambiguation The original vocabulary of Objects365 frequently relies on highly coarse
+or generalized container tags (e.g., “Cleaning Products” or “Other Shoes”) to optimize manual labeling throughput. Directly
+optimizing open-vocabulary heads on such fuzzy semantic anchors introduces substantial cross-modal gradient contradictions.
+To resolve this, we leverage a lightweight yet efficient Qwen3-VL-2B model (Bai et al. 2025) to perform visual semantic
+disambiguation.
+Conditioned on the original image, target bounding box coordinates [xmin, ymin, xmax, ymax], and a specialized Category
+Determination Prompt, the model dynamically inspects the localized region to identify the precise subordinate taxonomy. For
+instance, as visualized in Fig. A3, the coarse tag “Cleaning Products” is accurately mapping onto the granular classification
+“Bath Towel”.
+Critically, Multimodal Large Language Models (MLLMs) inherently suffer from performance degradation and low classifica-
+tion accuracy when processing severely downscaled visual patches. To safeguard our pipeline against small-object hallucinations,
+we instantiate a rigid spatial filtering threshold based on the relative bounding box coverage:
+γ = Areabbox
+Areaimage
+= (xmax −xmin) × (ymax −ymin)
+Himage × Wimage
+(A28)
+For any target instance where γ < 0.05%, the semantic refinement stage is bypassed, and the pipeline safely falls back to the
+original coarse label. This defensive engineering constraint protects data cleanliness but structurally explains the conservative
+unique caption ratio (UCR) observed in the small-object slices of the final corpus.
+Stage 2: Context-Aware Caption Generation Once the precise taxonomy is anchored, the instance is forwarded to a powerful
+Qwen3-VL-32B model tasked with dense language synthesis. This stage introduces a dedicated Caption Generation Prompt that
+instructs the model to construct a rich, continuous referring expression by combining three essential dimensions: (1) the purified
+fine-grained category name from Stage 1, (2) localized visual attributes such as color, material, and state, and (3) relative spatial
+dynamics with surrounding objects.
+The model outputs highly descriptive, context-aware phrases, successfully upgrading a simple noun phrase into an open-
+vocabulary grounding target (e.g., transforming “Bath Towel” into “The white bath towel which hangs loosely over the metal
+railing to the woman’s left”). This extensive linguistic compositionality injects the exact high-entropy variations required to
+prevent the task head’s gradient field from collapsing into low-rank sub-manifolds.
+Stage 3: Cross-Lingual Extension via Translation To scale the capacity of our generalist grounding architecture across
+global linguistic boundaries, the generated English captions undergo an automated multi-lingual expansion. We employ the
+advanced Tencent HY-MT-1.5-7B translation engine (Zheng et al. 2025) to convert the synchronized object-level descriptions
+into target languages, such as Chinese, while preserving exact syntactic mapping and spatial indices. This step transforms the
+corpus into a parallelized cross-lingual visual grounding benchmark, ensuring the mACH alignment weights remain robust
+under diverse multi-lingual prompt distributions without requiring test-time structural adaptation.
+Post-Processing Quality Control Following the three-stage generation, a non-parametric quality filter is executed to strip
+away textual noise. We discard any generated descriptions that contain dangling pronouns or fail to exceed a baseline length
+of three tokens. Through this data-model co-design pipeline, O365-Caption establishes a robust, highly compositional, and
+structurally clean data asset comprising 10.0M precise spatial-textual alignment targets.
+
+
+6.6
+Prompt Specifications
+Stage 1: Category Determination Prompt
+Role
+You are a fine-grained visual classifier and semantic disambiguation assistant, specialized in identifying the exact sub-category of
+an object within a designated bounding box.
+Inputs
+• Image: The full image.
+• Bounding Box: [x1, y1, x2, y2]
+• Coarse Category Label: The initial broad category name from Objects365 (e.g., "Cleaning Products", "Other Shoes",
+"Vehicle").
+Core Task
+Examine the region defined by the bounding box. Perform semantic disambiguation and fine-grained refinement on the provided
+Coarse Category Label based on the visual context. Determine the precise, specific name of the target object (e.g., refine "Cleaning
+Products" to "Bath Towel", "Other Shoes" to "Boots", or "Vehicle" to "SUV").
+Output Rules (Strictly Enforced)
+1. Return ONLY the refined, fine-grained category name (a single noun or short noun phrase).
+2. Do NOT include any quantifiers, articles ("a", "an", "the"), descriptive adjectives, punctuation, or conversational explanations.
+3. If the object is too small, blurry, or heavily obscured to be further specified, return the original [Coarse Category Label] exactly.
+Examples
+• Input: Box=[451, 479, 586, 510], Coarse Category=Cleaning Products
+Output: Bath Towel
+• Input: Box=[100, 200, 150, 250], Coarse Category=Other Shoes
+Output: Boots
+• Input: Box=[50, 50, 70, 70], Coarse Category=Bird (Too small to specify the species)
+Output: Bird
+
+
+Stage 2: Caption Generation Prompt
+Role
+You are a precise visual grounding description assistant, specialized in generating standardized, open-vocabulary phrases for
+specific target objects within a designated bounding box.
+Inputs
+• Image: The full image.
+• Bounding Box: [x1, y1, x2, y2]
+• Refined Target Category: The precise category name purified from Stage 1 (e.g., "SUV", "Bath Towel", "Tree").
+Core Task
+1. Attribute and Context Extraction: Observe the target within the bounding box, capturing its salient visual attributes (color,
+material, state) and its spatial relationships relative to the surrounding environment.
+2. Instance Counting: Examine the bounding box region carefully to determine the density or distribution of the specified target
+category.
+Output Rules (Strictly Enforced)
+1. Format Specification:
+• Output ONLY a single, continuous descriptive noun phrase in the format: "[Quantifier] + [Descriptive Attributes/Context]
++ [Refined Target Category]".
+• Do NOT include any punctuation (periods, quotation marks), line breaks, or conversational explanations.
+• Correct: a red SUV, several roadside green trees
+• Incorrect: A red umbrella. (Contains a period), There are three umbrellas in this box (Contains explanation)
+2. Quantifier Constraints:
+• If Count = 1: Must use a standard singular quantifier (e.g., "a", "an", "the", or "one").
+• If Count > 1: Never use exact numbers. You must use indefinite or vague plural quantifiers (e.g., "multiple", "several", "a
+row of", "a group of").
+3. Spatial Context and Partial Cropping:
+• If the box contains only a subset of a group of identical items (e.g., framing only the 2 leftmost cars in a long row): The
+description must incorporate relative positioning, e.g., "the leftmost white sedans".
+• If the box encompasses the entirety of the visible group: Describe only the attributes and vague quantity, e.g., "several white
+sedans".
+4. Uncertainty Fallback:
+• If details or counts are severely obscured, fallback to the vague plural quantifier "multiple" and retain the base [Refined
+Target Category] name exactly.
+Examples
+• Input: Box=[100,100,300,300], Refined Target=SUV, 1 red SUV inside
+Output: a red SUV
+• Input: Box=[200,200,800,400], Refined Target=Tree, a row of 5 trees inside
+Output: several roadside green trees
+• Input: Box=[0,0,200,200], Refined Target=Apple, a countless pile of red apples inside
+Output: multiple red apples
+6.7
+Detailed Linguistic and Statistical Properties of O365-Caption
+To provide a transparent, macro-level evaluation of the proposed O365-Caption dataset, we conduct a comprehensive
+statistical and linguistic analysis across four core dimensions: vocabulary scaling behaviors, sentence length distributions, lexical
+growth patterns, and part-of-speech (POS) compositions. We benchmark our corpus against three prominent grounding and
+phrase alignment datasets: MixGrounding, flickr30k, and RefCOCOg. The aggregated empirical results are visualized
+in Fig. A4.
+By analyzing the four-quadrant distribution in Fig. A4, we derive the following critical observations regarding the composi-
+tionality and scaling capacity of O365-Caption:
+
+
+100
+101
+102
+103
+104
+Word Rank (Log Scale)
+100
+101
+102
+103
+104
+105
+106
+107
+Frequency (Log Scale)
+(a) Zipf Distribution of Caption Vocabulary
+Objects365-Caption (Ours)
+MixGrounding
+flickr30k
+RefCOCOg
+5
+10
+15
+20
+25
+Caption Length (Number of Words)
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+Probability Density
+(b) Caption Length Distribution
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Number of Sampled Grounding Captions
+1e7
+0
+5000
+10000
+15000
+20000
+25000
+30000
+Unique Vocabulary Size
+(c) Vocabulary Growth Curve (Heaps' Law)
+Noun
+Verb
+Adjective
+Preposition
+Adverb
+Others
+Linguistic Categories
+0
+10
+20
+30
+40
+50
+Percentage Proportion (%)
+(d) Part-of-Speech (POS) Compositional Comparison
+Objects365-Caption (Ours)
+MixGrounding
+flickr30k
+RefCOCOg
+Figure A4: Comprehensive linguistic and statistical landscape of O365-Caption compared with prominent baselines.(An
+enlarged detailed view of Fig. 3(b) from the main text.) (a) Zipf’s law distribution tracking absolute word frequencies against
+vocabulary ranks. (b) Probability density estimation of caption length (word count per expression). (c) Unique vocabulary
+growth curves as a function of sampled grounding captions (Heaps’ Law). (d) Relative percentage composition of granular
+part-of-speech (POS) tags calculated via the NLTK parser(Loper and Bird 2002). Zoom in for best view.
+• Zipfian Vocabulary Distribution (Fig. A4a): In the log-log frequency-rank plane, all examined corpora conform to standard
+power-law scaling(Zipf 2016). Crucially, our O365-Caption (blue curve) dominates the vertical frequency spectrum,
+exceeding comparative baselines by 1 to 2 orders of magnitude with an absolute peak frequency approaching 107. Moreover,
+its tail extends continuously toward the high-rank open-vocabulary domain without sharp truncation, proving that our dataset
+effectively injects massive scaling volume while maintaining a structurally healthy long-tail vocabulary distribution.
+• Density Alignment of Caption Lengths (Fig. A4b): The probability density estimation unveils sharp topological discrepan-
+cies in expression length. While MixGrounding collapses into a sparse noun-phrase peak (1 ∼2 words) and RefCOCOg
+exhibits an over-dispersed, redundant long-tail stretching beyond 15 words, O365-Caption exhibits an idealized, tightly
+bound bell-shaped distribution peaking precisely at 4 words. This structure ensures high linguistic density and syntactic
+conciseness, filtering out irrelevant narrative noise while supplying optimal token-level cross-modal information for standard
+grounding detection heads.
+• Sub-linear Vocabulary Growth (Fig. A4c): Evaluating through the lens of Heaps’ Law (V = K · N β)(Heaps 1978), our
+dataset provides an unprecedented horizontal data span, scale-stretching to over 1.0 × 107 training descriptions. Although
+the unique vocabulary size displays a natural sub-linear asymptotic behavior as it approaches a saturation bound of over
+22, 500 unique tokens, the growth trajectory retains a steady, upward-sloping derivative. This persistent elasticity serves as
+a critical data-side safeguard, guaranteeing that the model continually encounters novel syntactic patterns during large-scale
+pre-training, thereby fundamentally mitigating representation collapse.
+• Deconstruction of Noun Monopoly via POS Matrix (Fig. A4d): The part-of-speech composition reveals the deeper
+grammatical diversity of our corpus. Traditional automated visual-grounding pairs suffer heavily from a noun monopoly,
+where rigid object categories dominate the text distribution (e.g., MixGrounding exhibits over 50% noun density). In
+contrast, O365-Caption successfully dilutes the noun ratio to a balanced 32%, while significantly lifting the proportion
+of Adjectives (22%) and maintaining structural distributions of Verbs and Prepositions. This high density of modifiers and
+spatial markers empirically verifies that our dataset is richly populated with fine-grained visual attributes and target-context
+relational descriptors, unlocking robust open-vocabulary grounding capability.
+6.8
+Qualitative Examples of O365-Caption
+Figure A5 presents representative annotations from O365-Caption. Unlike conventional grounding datasets that typically
+associate each object with a short noun phrase, O365-Caption substantially enriches the linguistic diversity while preserving
+
+
+(a) Examples containing scene text, multilingual expressions, and OCR-related grounding targets.
+(b) Examples illustrating long-form descriptions, attribute composition, and multi-object reasoning.
+Figure A5: Representative annotation examples from O365-Caption. Compared with conventional grounding datasets, our
+annotations contain richer compositional descriptions, long-form referring expressions, multi-object reasoning, and naturally
+preserved scene text (including multilingual and non-ASCII content), while retaining the original Objects365 bounding-box
+annotations.
+the original Objects365 bounding-box annotations.
+Specifically, the generated expressions exhibit several desirable properties:
+• Rich semantic descriptions. Objects are described using complete natural language expressions instead of isolated category
+names, providing substantially stronger compositional supervision.
+• Long-form referring expressions. Many annotations include appearance, attributes, actions, and surrounding context,
+producing significantly longer descriptions than existing REC datasets.
+• Multi-object reasoning. Expressions frequently describe groups of objects (e.g., “Several football players wearing yellow
+jerseys...”) rather than a single isolated instance, encouraging relational understanding.
+• Scene text and multilingual content. O365-Caption naturally preserves textual content appearing in images, including
+signage, trademarks, and non-English words (e.g., “Camping de la Cité”), which introduces numerous non-ASCII tokens
+(e.g. “5¢”) rarely covered by previous grounding datasets.
+These examples illustrate the substantially richer linguistic supervision provided by O365-Caption, complementing the
+quantitative vocabulary statistics presented in Section Methodology.
+Appendix D: Annotation Refinement for Existing Grounding Datasets
+Although the primary objective of our annotation pipeline is to construct the proposed O365-Caption dataset, the pipeline
+itself is general and can also be applied to improve existing automatically constructed grounding corpora. To investigate this
+
+
+Table A1: Representative low-information grounding expressions occurring more than 100 times in MixedGrounding (GoldG).
+Category
+Examples
+Pronouns
+he, she, his, him, they
+Attributes
+blue, white, red, gray, silver
+Incomplete phrases
+back, side, section, end, view
+Generic references
+object, item, someone, lot
+Malformed fragments
+wh, aprt, are t
+capability, we analyze the widely used MixedGrounding (GoldG) dataset, which serves as the pre-training corpus for several
+open-vocabulary grounding models.
+Unlike human-written referring expressions, MixedGrounding is assembled by automatically merging heterogeneous vision-
+language datasets. Consequently, we observe that a considerable portion of its annotations are semantically incomplete or
+linguistically ambiguous. Typical examples include isolated pronouns (e.g., “he”, “she”, “his”, “they”), standalone attributes
+(e.g., “blue”, “white”, “red”), truncated noun phrases (e.g., “back”, “side”, “section”), generic object references (e.g., “object”,
+“item”, “someone”), and malformed text fragments (e.g., “wh”, “aprt”, “are t”). Although these expressions may correspond
+to valid image regions, they generally fail to uniquely identify an object and therefore provide weak supervision for referring
+expression grounding.
+To quantify this phenomenon, Table A1 summarizes representative noisy grounding expressions that appear more than 100
+times in MixedGrounding. The high frequency of these low-information annotations indicates that the problem is systematic
+rather than occasional.
+Our annotation pipeline automatically detects such low-quality expressions and reconstructs them into complete, context-
+aware referring descriptions while preserving the original bounding-box annotations. Specifically, the repaired captions enrich
+the original annotations with explicit object semantics, visual attributes, and contextual cues, substantially increasing their
+linguistic informativeness without modifying the associated localization labels.
+These observations suggest that our annotation pipeline is not limited to constructing O365-Caption. More generally, it
+serves as a scalable annotation refinement framework that can systematically improve the linguistic quality of existing grounding
+datasets while maintaining their original spatial supervision.
+Appendix E: Implementation and Hyperparameter Details
+To ensure complete empirical transparency and guarantee absolute reproducibility, we provide the exhaustive configuration
+profiling, optimization strategies, and hardware deployment metrics utilized across our entire pipeline. The training execution
+is managed via a centralized hyperparameter protocol and parallelized across a high-capacity distributed clusters. The precise
+operational layout across both CNN-based and DETR-based variants is structured in Tab. A2.
+Table A2: Comprehensive hyperparameter and training configuration layout. This unified profile governs both the default
+generalist training protocol and benchmark-specific downstream adaptation variants across different architectural backbones.
+Configuration Layer
+Hyperparameter Item
+Default Operational Value
+Hardware / Library Anchor
+(a) Infrastructure & Base
+Model Identifier
+CNN / DETR
+PyTorch Pipeline Framework
+Visual Input Resolution
+640 × 640 pixels
+Downstream Edge-friendly Deployment
+Total Pre-training Volume
+30 epochs
+Training Iteration Boundary
+Base Learning Rate (η)
+2.0 × 10−3 (CNN) / 1.0 × 10−4 (DETR)
+Linear Scaling Topology Rule
+Weight Decay Metric
+0.025 (CNN) / 1.0 × 10−4 (DETR)
+L2 Regularization Boundary
+Learning Rate Schedule
+Cosine Annealing (CNN) / Step Decay (DETR)
+Optimization Convergence Path
+Warmup Optimization Duration
+3 epochs / 1 epoch
+Linear Learning Rate Step Ascent
+Mixed-Precision Setting
+Floating-Point 16 (AMP)
+torch.cuda.amp Acceleration
+(b) Hardware, System & Cache
+Pre-training Hardware Profile
+8× NVIDIA RTX PRO 6000 (96GB PCIe) GPUs
+Distributed Cluster Topology
+Data Cache Architecture
+Serialization Pickle
+Persistent Meta-storage Disk Cache
+Per-GPU Batch Capacity
+16 samples
+Micro-batch Dimension Boundary
+Dataloader Throughput
+4 workers per GPU
+Multi-threaded Asynchronous Prefetching
+(c) Model & Representation
+Visual Backbone Scale
+[Tiny-Small-Base]
+DINOv3 Self-Supervised Initialization
+Primary Language Encoder
+Frozen Qwen3-VL-Embedding-2B
+Pristine Multilingual Latent Space Anchor
+Hidden Latent Task Dimension
+[768-768-1024] channels
+Multi-modal Cross-Attention Gating Map
+InfoNCE Categorical Batch Constraints
+Nclass = 20 blocks
+Contrastive Alignment Gating Vector
+(d) Deployment & Inference Efficiency
+Evaluation Inference Hardware
+Single NVIDIA V100 (32GB) GPU
+Standardized Evaluation Node
+Latency (Fixed Text / Cached Embeddings)
+33.2 ms / image
+Multi-query Category Decoupling Pass
+Latency (Dynamic Text / On-the-fly)
+140.5 ms / image
+Real-time End-to-end REC Tracking
+Peak Training VRAM Footprint
+∼90.3 GB per GPU
+Memory-capped Scalable Clustering
+Peak Inference VRAM Footprint
+∼1.4 GB
+Low-resource Edge Node Constraint
+
+
+Optimization and Convergence Controls.
+All hyperparameters are frozen deterministically across the cross-dataset eval-
+uation matrix to validate generalist transfer stability. The optimization trajectory utilizes the AdamW optimizer paired with
+variant-specific decay behaviors, under standard numerical coefficients (β1 = 0.9, β2 = 0.95, ϵ = 10−8). Specifically, the
+CNN-based variant is optimized with an initial learning rate of 2.0 × 10−3 and weight decay of 0.025 regulated by a co-
+sine annealing scheduler with a 3-epoch linear warmup. Concurrently, the DETR-based variant adopts an initial learning rate
+of 1.0 × 10−4 and weight decay of 1.0 × 10−4, governed by a step decay schedule activated at 80% and 90% of the total
+milestone, utilizing a 1-epoch warmup duration to handle Transformer-based structural updates. To support the multi-modal
+text-conditioned dense representations during pre-training, the model maximizes the memory capacity of an 8-GPU NVIDIA
+RTX PRO 6000 cluster, maintaining a stable ∼90.3 GB VRAM allocation per node.
+Decoupled Latency Analysis.
+The visual encoder is initialized using the self-supervised DINOv3-ConvNeXt-Tiny
+weights pre-trained on the LVD-1689M corpus, while the language encoder routes representations from the pristine multilingual
+Qwen3-VL-Embedding-2B repository. Crucially, as profiled in Tab. A2(d), our framework exhibits distinctive operational
+advantages under varying deployment conditions when benchmarked on a standard NVIDIA V100 (32GB) evaluation GPU.
+When evaluated under the Dynamic Text setting (standard in sequential online REC tasks), the language encoder must
+be invoked on-the-fly for each text query, yielding an end-to-end processing latency of 140.5 ms per image. This empirical
+baseline highlights the massive computational bottleneck imposed by running large-scale linguistic models forward passes in
+real-time tracking loops. In sharp contrast, under the Fixed Text configuration (standard in vocabulary-fixed open-vocabulary
+detection settings), the high-capacity linguistic representations of the frozen text encoder are pre-cached. This entirely bypasses
+the LLM extraction overhead during runtime, allowing the decoupled visual stream and the broadcast-based mACH layer to
+process the image frame in only 33.2 ms (saving ∼76.3% computation time). This dramatic latency reduction combined with a
+lightweight inference VRAM footprint of only ∼3.4 GB empirically validates the framework’s architecture-agnostic suitability
+for high-throughput, edge-deployable real-time visual grounding applications.
+Appendix F: Limitations
+Our theoretical analysis characterizes the representational properties of the learned visual features rather than end-task grounding
+accuracy. Specifically, the proposed notion of directional alignment capacity explains which semantic directions remain available
+for vision-language alignment, but does not account for optimization dynamics, supervision quality, or score calibration, all of
+which also affect empirical performance.
+Furthermore, while the dual-stream objective eliminates alignment-blind directions and preserves representation diversity, it
+does not explicitly address confidence calibration under distribution shift. Consequently, out-of-distribution objects may still
+receive conservative (low-confidence) predictions despite retaining sufficient representational capacity for alignment. Addressing
+calibration and open-set confidence estimation remains an important direction for future work.

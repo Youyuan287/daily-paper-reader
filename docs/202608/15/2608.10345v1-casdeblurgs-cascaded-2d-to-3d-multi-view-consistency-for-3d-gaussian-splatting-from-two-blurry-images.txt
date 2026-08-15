@@ -1,0 +1,2038 @@
+CasDeblurGS: Cascaded 2D-to-3D Multi-View
+Consistency for 3D Gaussian Splatting from Two
+Blurry Images
+Haeyun Choi1*† , Minhyuk Jang2* , and I-Gil Kim2
+1 University of Virginia, Charlottesville, VA, USA
+phh3ps@virginia.edu
+2 KT R&D Center, Seoul, Republic of Korea
+{minhyuk.jang,i-gil.kim}@kt.com
+https://haeyun-choi.github.io/Cascaded2D3D_page/
+Abstract. Free-viewpoint 3D scene media is increasingly important for
+immersive applications, yet practical capture often suffers from severe
+view sparsity and motion blur. Although neural rendering has advanced
+sparse-view synthesis, existing blur-aware methods typically require sub-
+stantial multi-view redundancy, accurate camera poses, or costly per-
+scene optimization. We address a stringent yet practical setting: re-
+constructing a coherent 3D scene from only two motion-blurred im-
+ages with known intrinsics, without input-view poses, auxiliary sharp
+images, or per-scene test-time optimization. To this end, we propose
+CasDeblurGS, a cascaded framework that progressively recovers reli-
+able cross-view information from local 2D correspondences to global 3D
+guidance. Stage 1 constructs locally reliable guidance through occlusion-
+aware correspondence filtering, while Stage 2 aggregates the interme-
+diate restorations into a provisional pose-free 3D Gaussian representa-
+tion whose input-view re-renders provide dense global guidance for final
+restoration. The resulting views enable a more coherent 3D representa-
+tion and higher-quality novel-view synthesis. Experiments on real-world
+and synthetic Deblur-NeRF scenes show consistent gains over strong
+baselines, improving PSNR by 1.19 dB and 2.11 dB, respectively. Pro-
+gressive ablations, cross-view correspondence visualization, and camera
+reprojection analysis further demonstrate improvements in both render-
+ing quality and multi-view geometric consistency.
+Keywords: Gaussian Splatting · Deblurring · Sparse Reconstruction
+1
+Introduction
+Recent advances in neural rendering, from neural radiance fields (NeRF) [24]
+to 3D Gaussian Splatting (3DGS) [12], have substantially improved the fidelity
+and efficiency of novel-view synthesis. Together with recent feed-forward recon-
+struction methods, which directly recover 3D representations from sparse images
+* Equal contribution.
+† This work was done at KT R&D Center.
+arXiv:2608.10345v1  [cs.CV]  11 Aug 2026
+
+
+2
+H. Choi et al.
+Ours
+CoherentGS
+Difix3D+
+GAURA
+Inputs
+High-quality
+3D Gaussians
+Novel Views
+Two Blurry Inputs
+2D Guidance
+3D Guidance
+Fig. 1: (Left) Given two blurry images, CasDeblurGS progressively combines local 2D
+guidance and global 3D guidance for coherent 3D Gaussian reconstruction. (Right)
+Compared to CoherentGS [39], Difix3D+ [36], and GAURA [8], ours produces sharper
+details and more coherent novel views in the challenging two-view blurry setting.
+[2, 5, 9, 10, 38, 41], these advances are making free-viewpoint 3D media increas-
+ingly practical for applications such as XR, immersive telepresence, and digital
+content creation [1,7,11,13,44].
+Despite this progress, practical capture remains challenging. Dense multi-
+view acquisition may be infeasible because of limited capture time, sensing con-
+ditions, or platform stability, forcing reconstruction to rely on only a few ob-
+servations. When these sparse inputs are further degraded by motion blur from
+handheld imaging, platform vibration, or low-light exposure, image details and
+cross-view correspondences are simultaneously corrupted, making reliable scene
+recovery substantially more difficult.
+Recent studies have tackled this challenge by incorporating blur-aware mod-
+eling into neural rendering or jointly optimizing image restoration and scene
+representation [6, 14, 22, 26, 46, 48]. However, these approaches remain difficult
+to deploy in practice. First, they typically rely on per-scene test-time optimiza-
+tion and substantial multi-view redundancy to stabilize the joint estimation of
+blur and scene structure, often requiring 20–40 input images. Such assumptions
+are difficult to satisfy when only a few blurry views are available and rapid re-
+construction is desired. Second, they depend on reliable geometric initialization
+under blur, typically in the form of accurate camera poses or coarse scene geom-
+etry. Such initialization is already difficult to recover from blurry frames using
+standard structure-from-motion pipelines [27]. When both view redundancy and
+geometric initialization are weak, the problem becomes ill-posed, often leading
+to unstable and spurious geometry.
+These limitations become even more severe in sparse-view settings, where
+blur further weakens the already limited cross-view constraints. Consequently,
+even methods designed for sparse-view blurry reconstruction remain fragile in
+the extreme two-view regime [15,39]. Under such limited observations, the joint
+estimation of blur and scene structure becomes severely ill-conditioned, often
+yielding blurry renderings, noisy geometry, and floating artifacts.
+In this work, we consider a stringent yet practical setting: reconstructing a
+coherent 3D scene from only two motion-blurred images with known camera in-
+
+
+CasDeblurGS
+3
+trinsics, without input-view camera poses, auxiliary sharp images, or per-scene
+test-time optimization. The central difficulty is that severe blur corrupts the
+already limited cross-view evidence required for both local correspondence es-
+timation and global 3D aggregation. Directly transferring unreliable 2D corre-
+spondences can introduce misaligned structures, while aggregating inconsistent
+observations in 3D can propagate these errors into the reconstructed scene.
+Our key idea is to recover reliable cross-view information progressively, from
+local 2D correspondences to global 3D guidance. We propose CasDeblurGS, a
+cascaded 2D-to-3D multi-view consistency framework. In Stage 1, a frozen sta-
+bilizer first produces alignment-friendly observations, after which our occlusion-
+aware cross-view guidance module (OCGM) filters unreliable optical-flow corre-
+spondences through forward–backward consistency and constructs masked refer-
+ence warps for intermediate restoration. In Stage 2, these restorations are aggre-
+gated by a frozen pose-free 3DGS backbone into a provisional 3D representation
+whose input-view re-renders provide dense global guidance for final restoration.
+The final restored views are then passed through the same frozen backbone to
+construct the output 3D representation for novel-view synthesis. At inference
+time, CasDeblurGS requires only the two blurry images and their intrinsics,
+with no camera poses, depth maps, external generative priors, or scene-specific
+optimization.
+This progressive design combines complementary strengths of 2D and 3D
+guidance. Local warping selectively transfers fine cross-view evidence where cor-
+respondences are reliable, whereas the provisional 3D representation aggregates
+information from both views to provide dense scene-level feedback. Consequently,
+the cascade improves both the quality of the restored observations and their con-
+sistency for downstream 3D reconstruction.
+Experiments on synthetic and real-world Deblur-NeRF scenes demonstrate
+consistent gains over strong blur-aware and restoration-based baselines. CasDe-
+blurGS improves PSNR over the strongest competing results by 1.19 dB on real-
+world scenes and 2.11 dB on synthetic scenes. Progressive ablations, cross-view
+correspondence visualization, and camera reprojection analysis further demon-
+strate improvements in both novel-view synthesis quality and multi-view geo-
+metric consistency.
+Our contributions are summarized as follows:
+– We introduce CasDeblurGS, a pose-free feed-forward framework for 3D re-
+construction from only two motion-blurred images with known intrinsics,
+without auxiliary sharp images or per-scene test-time optimization.
+– We propose a cascaded 2D-to-3D guidance strategy that establishes locally
+reliable cross-view correspondences through OCGM and then exploits pose-
+free 3D re-rendering to provide dense global guidance for final restoration.
+– We demonstrate consistent improvements on real-world and synthetic Deblur-
+NeRF scenes, supported by progressive ablations, cross-view correspondence
+visualization, and camera reprojection analysis.
+
+
+4
+H. Choi et al.
+2
+Related Work
+2.1
+Radiance Fields from Blurry Images
+Recent advances in NeRF and 3D Gaussian Splatting (3DGS) have spurred re-
+search on modeling camera motion blur for sharp 3D scene reconstruction. A
+common strategy is to simulate the blur formation process by modeling camera
+motion during exposure as a continuous trajectory. Existing methods param-
+eterize this trajectory using SE(3) interpolation for linear motion [32, 37, 48],
+Bézier curves for complex nonlinear paths [17], or Neural ODEs for flexible
+temporal transformations [18, 19]. However, such trajectory optimization typ-
+ically requires substantial multi-view redundancy to jointly stabilize blur and
+geometry estimation. In sparse-view settings, insufficient multi-view constraints
+make this estimation unreliable; in the extreme two-view blurry regime, stan-
+dard SfM initialization becomes infeasible and cross-view correspondences are
+severely weakened, leading to unstable geometry estimation.
+Alternatively, some methods address sparse blurry inputs using 2D struc-
+tural or semantic priors, or external generative models. For instance, HQGS [20]
+leverages 2D edges and semantic cues, S2Gaussian [31] resolves feature-space
+cross-view inconsistencies during 2D super-resolution, and CoherentGS [39] aug-
+ments virtual views with deblurring networks and diffusion priors. However, these
+methods rely heavily on local 2D cues or external priors. In extreme two-view
+settings with limited geometric constraints, they struggle to ensure global 3D
+coherence, often producing structural distortions and cross-view inconsistencies
+in the final renderings.
+2.2
+Feed-forward 3D Gaussian Splatting
+While traditional 3DGS relies on per-scene optimization, recent generalizable
+feed-forward methods [45] directly predict 3D Gaussians from sparse views.
+Building on earlier generalizable NeRFs [3,33,42], 3DGS-based models now dom-
+inate this direction, using epipolar geometry, cost volumes, depth-aware match-
+ing, or hybrid volume-pixel representations for cross-view aggregation [2, 5, 29,
+35, 38, 43]. Pose-free variants further remove explicit pose dependence through
+coarse-to-fine alignment or canonical-space prediction [9,10,41]. However, these
+methods largely assume sharp inputs and remain vulnerable to severe motion
+blur.
+GAURA [8] jointly addresses feed-forward reconstruction and deblurring, but
+it assumes known camera poses, uses kernel-based synthetic blur, and remains
+unverified in the extreme two-view regime. More fundamentally, feed-forward
+aggregation depends on reliable cross-view correspondence cues, such as pho-
+tometric consistency or epipolar features, which degrade severely under strong
+blur. This problem is amplified in two-view settings, where no additional obser-
+vations are available to compensate for the lost constraints.
+
+
+CasDeblurGS
+5
+2.3
+Multi-view Image Deblurring
+Multi-view deblurring exploits geometric cues such as disparity and depth for
+restoration [25, 40, 49], but its reliance on correspondence estimation limits its
+effectiveness in extreme two-view blurry settings where high-frequency details
+are severely degraded and reliable camera poses and depth are unavailable.
+Fundamentally, improving 2D image quality alone does not guarantee 3D
+consistency for novel view synthesis [16, 17, 22, 32]. Recent diffusion-based ap-
+proaches aim at 3D-consistent restoration [21,23,36], yet remain vulnerable when
+severe blur collapses geometric matching cues. Motivated by these limitations,
+we propose a cascaded design that progresses from flow-based local 2D guid-
+ance to global 3D constraints via pose-free 3DGS re-rendering, enabling stable
+reconstruction without external generative priors at inference time.
+3
+Preliminaries
+3.1
+3D Gaussian Splatting
+3D Gaussian Splatting (3DGS) represents a scene using a set of anisotropic 3D
+Gaussians:
+  \math
+cal 
+{G } =\{g _m\ }_{ m=1 }^{M}, \qquad g_m=(\boldsymbol {\mu }_m,\mathbf {q}_m,\mathbf {s}_m,\alpha _m,\mathbf {c}_m), 
+(1)
+where µm ∈R3 denotes the Gaussian center, qm the rotation, sm the scale, αm
+the opacity, and cm the appearance parameters, e.g., spherical harmonics coef-
+ficients [12,41]. Given a target viewpoint vt, the differentiable 3DGS rasterizer
+renders an image as:
+  \ h at {I}_t= \mathrm {Render}(\mathcal {G}, v_t). \label {eq:render} 
+(2)
+This formulation supports efficient differentiable rendering and serves as the
+scene representation used throughout our pipeline.
+3.2
+Pose-free Feed-forward 3DGS
+Pose-free feed-forward 3DGS reconstructs a scene directly from sparse images
+and their camera intrinsics without requiring input-view camera extrinsics. In
+particular, NoPoSplat [41] learns a mapping:
+  \m
+a
+thcal {G}=
+h_{
+\
+eta }\big (\{(I_i,K_i)\}_{i=1}^{N}\big ), 
+(3)
+where Ii and Ki denote the i-th input image and its camera intrinsics, respec-
+tively. NoPoSplat uses the first input view to establish a canonical coordinate
+frame and directly predicts the Gaussians associated with all input views in this
+shared space. This enables direct multi-view fusion without externally supplied
+input-view camera poses. The camera intrinsics are incorporated into the input
+representation to account for camera geometry and alleviate scene-scale ambi-
+guity. The resulting Gaussian representation can then be rendered from a target
+viewpoint expressed in the same canonical frame using Eq. (2).
+
+
+6
+H. Choi et al.
+Blurry Inputs
+OCGM
+2D-Guided
+Deblurring
+Cross-view 2D Guidance
+Re-render 3D Guidance
+3D-Guided
+Deblurring
+Blurry Inputs
+3DGS
+Backbone
+Outputs
+Stage 2: Global 3D Guidance & Deblur
+Stage 1: Local 2D Guidance & Deblur
+3DGS
+Backbone
+Occlusion-aware Cross-view Guidance Module (OCGM)
+Stabilizer
+←
+←
+←
+←
+
+
+
+
+←
+←
+
+
+
+
+
+
+	
+	
+W
+W
+W
+Warping
+Consistency Check
+←
+←
+RAFT
+Fig. 2: Overview of CasDeblurGS. (Top) The cascade constructs local 2D guidance,
+then uses a frozen pose-free 3DGS backbone to provide global 3D guidance for final
+restoration. Final restorations feed the same backbone for novel-view synthesis. (Bot-
+tom) OCGM stabilizes inputs, estimates bidirectional RAFT flow, derives forward–
+backward consistency masks, and produces masked cross-view warps for Stage 1.
+In this work, we instantiate the backbone in the two-view setting (N = 2) and
+keep hη frozen throughout the pipeline. As detailed in Sec. 4, its canonical-space
+reconstruction and re-rendering capabilities are used for global 3D guidance and
+final novel-view synthesis, without scene-specific test-time optimization.
+4
+Method
+Given two motion-blurred images and their known camera intrinsics, {(Bi, Ki)}2
+i=1,
+CasDeblurGS progressively recovers reliable cross-view guidance to restore the
+input views and construct a pose-free 3D Gaussian representation for novel-view
+synthesis. No ground-truth or pre-estimated input-view camera poses are pro-
+vided to the framework. As illustrated in Fig. 2, the pipeline comprises two
+cascaded restoration stages followed by final pose-free 3D reconstruction.
+Stage 1 establishes locally reliable correspondence-based guidance and uses
+it to produce sharper intermediate restorations with improved cross-view con-
+sistency. Stage 2 aggregates these intermediate views into a provisional 3D rep-
+resentation and re-renders it at the input viewpoints, providing dense global
+guidance for final restoration. The final restored views are then processed by the
+same frozen 3DGS backbone to construct the output representation for novel-
+view synthesis.
+
+
+CasDeblurGS
+7
+The stabilizer Sϕ [4], the RAFT-based optical-flow estimator [30], and the
+pose-free 3DGS backbone hη [41] remain frozen throughout the pipeline. The 2D-
+and 3D-guided restoration networks, D2D
+θ
+and D3D
+ψ , are trained offline in a stage-
+wise manner. All modules are fixed at inference, and CasDeblurGS therefore
+requires no scene-specific test-time optimization.
+The key design of CasDeblurGS is the progressive construction of reliable
+cross-view guidance. Stage 1 suppresses unreliable local correspondences through
+occlusion-aware masking, whereas Stage 2 lifts the intermediate restorations into
+a shared 3D representation and projects the aggregated scene information back
+to the image plane. Algorithm 1 summarizes the complete inference pipeline.
+Training and implementation details are provided in Sec. 5.1 and the supple-
+mentary material.
+4.1
+Stage 1: Local 2D Guidance and Deblurring
+Stage 1 constructs locally reliable correspondence-based guidance from the two
+input views. It transfers cross-view information only where the estimated corre-
+spondence is sufficiently trustworthy. The stage consists of alignment precondi-
+tioning, occlusion-aware cross-view guidance generation, and 2D-guided restora-
+tion.
+Alignment preconditioning with a Stabilizer. Directly estimating optical
+flow between severely motion-blurred inputs is unreliable because blur suppresses
+and distorts structures shared across views. We therefore first process each input
+using a frozen pretrained stabilizer:
+  C _1 = \m
+at h cal {S}_{\phi }(B_1), \qquad C_2 = \mathcal {S}_{\phi }(B_2). 
+(4)
+The stabilized views (C1, C2) are not treated as final restorations. Instead, they
+serve as alignment-friendly observations from which more reliable cross-view
+correspondences can be estimated.
+Occlusion-aware cross-view guidance. From the stabilized views, we esti-
+mate bidirectional optical flow using a frozen RAFT model [30]:
+  F_ { 1\leftar row 2} = \mathrm {RAFT}(C_2,C_1), \; F_{2\leftarrow 1} = \mathrm {RAFT}(C_1,C_2). 
+(5)
+Here, Fb←r denotes a flow field defined on the base-view coordinates of b, used
+to map content from the reference view r into view b. Not every estimated cor-
+respondence provides reliable restoration guidance. Occlusions, motion bound-
+aries, out-of-bounds projections, and blur-induced flow errors can introduce mis-
+aligned or duplicated structures. We therefore validate each correspondence us-
+ing forward–backward consistency. For a pixel location x in the base view, its
+mapped coordinate in the reference view is
+  x ' = x + F_{b\leftarrow r}(x). 
+(6)
+
+
+8
+H. Choi et al.
+The corresponding forward–backward residual is
+  e( x ) = \lef t \| F_{b\l eftarrow r}(x) + F_{r\leftarrow b}(x') \right \|_2. 
+(7)
+To avoid over-rejecting valid correspondences under large displacements, we use
+the motion-adaptive threshold
+  T( x ) = \tau + \al p ha \left ( \ left \|F_{b\leftarrow r}(x)\right \|_2 + \left \|F_{r\leftarrow b}(x')\right \|_2 \right ), 
+(8)
+where τ provides a base tolerance for small estimation and resampling errors,
+and α adjusts the tolerance according to the motion magnitude. The validity
+mask is defined as
+  M_{b\ l eftarrow r}(x) = \mathb b {1}[\mathrm {in\text {-}bounds}(x')] \cdot \mathbb {1}[e(x) \leq T(x)]. 
+(9)
+Only correspondences satisfying both the in-bounds and forward–backward con-
+sistency conditions are retained. We then construct the masked cross-view warp
+  W_ { b\le f t
+a
+rro w r}
+ 
+= M_{b\leftarrow r} \odot \mathcal {W}\bigl (C_r,F_{b\leftarrow r}\bigr ), 
+(10)
+where W denotes backward warping. We refer to this combination of bidirec-
+tional flow estimation, forward–backward validation, and masked warping as the
+occlusion-aware cross-view guidance module (OCGM). Applying OCGM in both
+directions produces the guidance–mask pairs (W1←2, M1←2) and (W2←1, M2←1).
+2D-guided deblurring. For each view, we concatenate the original blurry
+input, the corresponding masked cross-view warp, and its validity mask:
+  \ b egi
+n
+ 
+{aligned} \tild e {S}
+_
+1
+ &= \ma
+t
+h
+cal {D}^{2 D}_{\ theta
+ 
+} \bigl ( \mathrm {concat} (B_1,W_{1\leftarrow 2},M_{1\leftarrow 2}) \bigr ), \\ \tilde {S}_2 &= \mathcal {D}^{2D}_{\theta } \bigl ( \mathrm {concat} (B_2,W_{2\leftarrow 1},M_{2\leftarrow 1}) \bigr ). \end {aligned} 
+(11)
+Using the original blurry image as the base preserves image evidence that may
+be altered by the stabilizer, while the masked warp transfers complementary
+information from the other view. The explicit validity mask additionally indi-
+cates where the cross-view guidance can be trusted. The resulting intermediate
+restorations ( ˜S1, ˜S2) provide sharper observations with improved cross-view con-
+sistency for constructing the provisional 3D representation in Stage 2.
+4.2
+Stage 2: Global 3D Guidance and Deblurring
+Stage 2 aggregates the intermediate restorations into a provisional 3D represen-
+tation and projects the resulting scene-level information back to the image plane
+for final restoration. While Stage 1 transfers locally reliable information through
+correspondence-based masked warping, Stage 2 provides dense global guidance
+induced by a shared 3D representation.
+
+
+CasDeblurGS
+9
+Provisional 3D representation and re-render guidance. We feed the in-
+termediate restorations ( ˜S1, ˜S2) and their camera intrinsics into the frozen pose-
+free 3DGS backbone:
+  \m
+a
+t hcal {G} = h_ {\e
+t
+a }\big ((\tilde {S}_1,K_1), (\tilde {S}_2,K_2)\big ). 
+(12)
+We then re-render the resulting 3D Gaussian representation at the two input
+viewpoints:
+  R _1 = \mat hrm 
+{R e nder}(\ma thcal {G},v_1), \qquad R_2 = \mathrm {Render}(\mathcal {G},v_2), 
+(13)
+where v1 denotes the first input viewpoint in the canonical camera frame estab-
+lished by the pose-free backbone, and v2 is determined by the relative camera
+geometry inferred for the second view. Both viewpoints are internal to the back-
+bone’s canonical-space formulation; no ground-truth or pre-estimated input-view
+poses are provided to CasDeblurGS. Because G is jointly constructed from both
+intermediate restorations, the re-rendered images (R1, R2) encode scene infor-
+mation aggregated across the two views and provide dense 3D guidance over the
+full image plane.
+3D-guided deblurring. For each view, we combine the original blurry input
+with its corresponding re-render guidance:
+  \ b egi
+n
+ 
+{aligned} \ha
+t
+ 
+{S} _ 1 &
+=
+ 
+\mathcal { D}^
+{
+3D}_{\psi } \bigl ( \mathrm {concat}(B_1,R_1) \bigr ), \\ \hat {S}_2 &= \mathcal {D}^{3D}_{\psi } \bigl ( \mathrm {concat}(B_2,R_2) \bigr ). \end {aligned} 
+(14)
+The original blurry input preserves view-specific image evidence, while the re-
+rendered view supplies complementary scene-level structure aggregated through
+the shared 3D representation. Unlike the spatially selective correspondence guid-
+ance used in Stage 1, the re-rendered images provide dense guidance across the
+full image plane. Stage 2 thereby produces the final restored views ( ˆS1, ˆS2) using
+information jointly derived from both intermediate restorations.
+4.3
+Final 3D Representation for NVS
+We apply the same frozen pose-free 3DGS backbone once more to the final
+restored views:
+  \ ma
+t
+h cal {G}^ { \sta r }
+ 
+= h_{\eta }\big ( (\hat {S}_1,K_1), (\hat {S}_2,K_2) \big ). 
+(15)
+The provisional representation G is constructed from the intermediate restora-
+tions solely to generate the re-render guidance used in Stage 2. In contrast, G⋆
+is constructed from the final restored views and serves as the output 3D repre-
+sentation for novel-view synthesis.
+Given G⋆, we render novel viewpoints using the differentiable 3DGS raster-
+izer. CasDeblurGS performs no per-scene or test-time optimization of G⋆. In-
+stead, the proposed cascade supplies the frozen pose-free backbone with sharper
+and more mutually consistent input observations, enabling it to construct a more
+coherent final 3D representation.
+
+
+10
+H. Choi et al.
+Algorithm 1 Inference Pipeline of CasDeblurGS
+Require: Two blurry images and intrinsics {(Bi, Ki)}2
+i=1
+Ensure: Restored images ( ˆS1, ˆS2) and 3D representation G⋆
+Note. All modules are frozen at inference.
+Stage 1: Local 2D Guidance and Deblurring
+1: C1 ←Sϕ(B1)
+\triangleright stabilization
+2: C2 ←Sϕ(B2)
+3: F1←2 ←RAFT(C2, C1)
+\triangleright optical flow
+4: F2←1 ←RAFT(C1, C2)
+5: M1←2 ←FBMask(F1←2, F2←1)
+\triangleright validity mask
+6: M2←1 ←FBMask(F2←1, F1←2)
+7: W1←2 ←M1←2 ⊙W(C2, F1←2)
+\triangleright masked warp
+8: W2←1 ←M2←1 ⊙W(C1, F2←1)
+9: ˜S1 ←D2D
+θ (concat(B1, W1←2, M1←2))
+\triangleright 2D guidance
+10: ˜S2 ←D2D
+θ (concat(B2, W2←1, M2←1))
+Stage 2: Global 3D Guidance and Deblurring
+11: G ←hη
+ ( ˜S1, K1), ( ˜S2, K2)
+
+\triangleright pose-free 3DGS backbone
+12: R1 ←Render(G, v1)
+\triangleright re-render
+13: R2 ←Render(G, v2)
+14: ˆS1 ←D3D
+ψ (concat(B1, R1))
+\triangleright 3D guidance
+15: ˆS2 ←D3D
+ψ (concat(B2, R2))
+Final 3D Representation for Novel View Synthesis
+16: G⋆←hη
+ ( ˆS1, K1), ( ˆS2, K2)
+
+17: return ( ˆS1, ˆS2, G⋆)
+5
+Experiments
+5.1
+Experimental Setup
+Datasets and two-view evaluation protocol. We train our restoration
+networks on the synthetic camera-motion-blur dataset introduced in DeepDe-
+blurRF [6] and evaluate on the camera-motion-blur subset of Deblur-NeRF [22],
+which comprises five synthetic scenes and ten real-world scenes. For a fair com-
+parison, we evaluate all methods on 85 fixed tuples across 15 scenes: 25 synthetic
+and 60 real-world. Each tuple contains two blurry inputs and one held-out target
+view for novel-view synthesis. The complete input–target mappings are provided
+in the supplementary material. All images are resized with preserved aspect ratio
+and center-cropped to 256 × 256 to match the pose-free 3DGS backbone [41].
+Compared methods. We compare CasDeblurGS with representative sparse-
+view 3DGS methods. SE-GS [47] performs per-scene optimization for few-shot
+novel-view synthesis, while GAURA [8] is a generalizable feed-forward method
+for sparse blurry inputs. CoherentGS [39] targets sparse motion blur using video
+diffusion priors and alternating per-scene optimization.
+To test whether stronger 2D restoration before reconstruction is sufficient, we
+construct two deblurring-then-reconstruction baselines. Specifically, we pair the
+
+
+CasDeblurGS
+11
+Table 1: Novel-view synthesis results on real-world and synthetic Deblur-NeRF scenes.
+DAVANet and Difix3D+ use the same frozen pose-free 3DGS backbone as ours. Best
+and second-best are highlighted in bold and underlined, respectively.
+Real-world
+Synthetic
+Method
+Pose-Free Generalizable PSNR ↑SSIM ↑LPIPS ↓PSNR ↑SSIM ↑LPIPS ↓
+SE-GS [47]
+×
+×
+15.90
+0.398
+0.443
+18.76
+0.560
+0.338
+GAURA [8]
+×
+✓
+17.67
+0.508
+0.444
+17.91
+0.524
+0.414
+CoherentGS [39]
+×
+×
+19.90
+0.660
+0.292
+21.11
+0.687
+0.259
+DAVANet [49]
+✓
+✓
+19.34
+0.573
+0.360
+19.61
+0.625
+0.292
+Difix3D+ [36]
+✓
+✓
+19.94
+0.611
+0.311
+21.30
+0.673
+0.262
+Ours
+✓
+✓
+21.13
+0.700
+0.228
+23.41
+0.796
+0.165
+same frozen pose-free 3DGS backbone used in CasDeblurGS with DAVANet [49],
+a stereo deblurring network, and Difix3D+ [36], a diffusion-based 3D enhance-
+ment method. For these controls, the “Pose-Free” and “Generalizable” refer to
+the integrated pipelines rather than to the restoration models alone. All methods
+use the same two-view protocol and input–target mappings (see Supplementary
+Material), with official implementations adapted where necessary.
+Implementation details. We use a pretrained NAFNet [4] as the frozen stabi-
+lizer Sϕ and RAFT-Large [30] as the frozen optical-flow estimator. For hη, we use
+the NoPoSplat checkpoint [41] trained on RealEstate10K with two 256 × 256 in-
+puts. Both restoration networks, D2D
+θ
+and D3D
+ψ , follow the NAFNet architecture
+with a base width of 64.
+Stage 1 takes a 7-channel concatenation of the blurry base view, masked cross-
+view warp, and validity mask, whereas Stage 2 takes a 6-channel concatenation of
+the blurry base view and its 3D re-render guidance. We train the two restoration
+networks stage-wise. The Stage 1 network is trained first, after which it is fixed
+while training the Stage 2 network.
+Each stage is optimized for 400K iterations using AdamW with an initial
+learning rate of 10−3, weight decay of 10−3, and β1 = β2 = 0.9. We use cosine
+learning-rate decay with a minimum learning rate of 10−7 and a batch size of
+32 per GPU on two NVIDIA A100 GPUs. The training objective combines an
+ℓ1 reconstruction loss and a VGG-based perceptual loss [28,34]. For OCGM, we
+set the forward–backward consistency parameters to τ = 1.0 and α = 0.01 in all
+experiments. Sensitivity analysis for these parameters, runtime comparisons, and
+additional implementation details are provided in the supplementary material.
+Evaluation metrics. We evaluate novel-view renderings against the corre-
+sponding sharp reference images using PSNR, SSIM, and LPIPS. We report
+the average over all fixed evaluation tuples separately for the synthetic and real-
+world subsets. Higher PSNR and SSIM indicate better reconstruction quality,
+whereas lower LPIPS indicates greater perceptual similarity.
+
+
+12
+H. Choi et al.
+SE-GS
+GAURA
+CoherentGS
+Difix3D+ 
+DAVANet 
+Ours
+GT
+Inputs
+Fig. 3: Qualitative novel-view synthesis comparisons on real-world and synthetic
+Deblur-NeRF scenes. The upper vehicle scene is real-world and the lower indoor scene
+synthetic. The Inputs column shows the two blurry views. For each method, the upper
+image shows the rendered target view, while the lower enlarges the red-boxed region.
+5.2
+Comparison with Prior Methods
+Quantitative results. Table 1 compares CasDeblurGS with prior methods on
+the real-world and synthetic Deblur-NeRF subsets. Our method achieves the
+best performance across all metrics on both subsets. On real-world scenes, Cas-
+DeblurGS obtains 21.13 dB PSNR, 0.700 SSIM, and 0.228 LPIPS, outperforming
+the best competing results by 1.19 dB, 0.040, and 0.064, respectively. The gains
+are larger on synthetic scenes, where our method improves PSNR by 2.11 dB,
+SSIM by 0.109, and LPIPS by 0.094.
+The gaps also reflect differences between the baselines’ native settings and
+our extreme two-view regime. SE-GS addresses few-shot reconstruction from
+sparse posed views but does not explicitly handle blur-corrupted correspon-
+dences. GAURA is trained with 8–12 source views and uses 10 views at inference,
+leaving substantially less multi-view redundancy for epipolar aggregation when
+restricted to two inputs. CoherentGS directly targets sparse motion blur but re-
+ports configurations with 3, 6, or 9 views, leaving its alternating reconstruction
+and generative expansion more weakly constrained under only two inputs.
+The consistent gains over DAVANet and Difix3D+, which use the same frozen
+NoPoSplat backbone, show that applying a strong 2D restoration model be-
+fore reconstruction is insufficient. Instead, the results demonstrate the benefit
+of progressively incorporating reliable local correspondence cues and global 3D
+guidance. Moreover, CasDeblurGS remains pose-free and generalizable without
+per-scene optimization.
+
+
+CasDeblurGS
+13
+Qualitative results. As shown in Fig. 3, SE-GS and GAURA retain substan-
+tial blur, while CoherentGS and the restoration-based baselines partially reduce
+blur but oversmooth details or introduce structural artifacts. These limitations
+are particularly visible around the vehicle grille in the real-world example and
+the table edges and legs in the synthetic example. In contrast, CasDeblurGS
+recovers sharper boundaries and structures that more closely match the ground-
+truth views. These results show that the cascade improves both sharpness and
+structural fidelity in novel-view renderings. Additional qualitative results are
+provided in the supplementary material.
+5.3
+Ablation Studies
+Table 2: Ablation on real-world scenes.
+Blurry
++Stab.
++2D
++3D
+PSNR ↑
+20.07
+20.30
+20.88
+21.13
+SSIM ↑
+0.612
+0.655
+0.684
+0.700
+Progressive contribution of the cas-
+cade. Table 2 shows consistent gains as
+the stabilizer, Stage 1 2D guidance, and
+Stage 2 3D guidance are progressively in-
+troduced. The stabilizer provides an ini-
+tial improvement by producing more alignment-friendly observations. Stage 1
+yields the largest incremental PSNR gain (+0.58 dB), confirming the benefit of
+locally reliable cross-view correspondences. Stage 2 further improves PSNR by
+0.25 dB and SSIM by 0.016, indicating that dense global guidance resolves resid-
+ual inconsistencies that cannot be addressed by 2D warping alone. Additional
+component diagnostics are provided in the supplementary material.
+Cross-view correspondence analysis. Figure 4 visualizes the progressive
+improvement in cross-view consistency. On BlurBasket, the number of matches
+increases from 69 for the blurry inputs to 77 after stabilization, 96 after Stage 1,
+and 112 after Stage 2. The limited gain from stabilization reflects its independent
+per-view processing, whereas Stage 1 establishes more reliable local correspon-
+dences through OCGM. Stage 2 further improves correspondence recovery in
+Blurry
+Stabilizer
+2D-guided Deblurring
+3D-guided Deblurring
+Inputs
+Novel View Synthesis
+SSIM: 0.629 | Matches: 69
+SSIM: 0.666 | Matches: 77
+SSIM: 0.691 | Matches: 96
+SSIM: 0.703 | Matches: 112
+Fig. 4: Progressive ablation on real-world BlurBasket scene. Green lines denote cross-
+view 2D matches between input views, and red arrows highlight the basket handle.
+
+
+14
+H. Choi et al.
+Table 3: Camera reprojection analysis on real-world scenes.
+Stage
+Valid pts ↑
+Reproj. err. ↓
+Inliers@1px ↑
+Inlier ratio ↑
+Stage 1
+95.1
+0.2215
+85.4
+0.9168
+Stage 2
+126.3
+0.2001
+113.5
+0.9343
+regions that remain challenging for 2D warping alone, such as the basket handle
+highlighted by the red arrows. These results show that the cascade progressively
+improves both local correspondence reliability and global structural consistency.
+Camera reprojection analysis. To examine whether Stage 2 improves cross-
+view geometric consistency rather than merely image sharpness, we conduct the
+reprojection analysis reported in Tab. 3. For each restored input pair, we extract
+mutual SIFT matches, triangulate them using the benchmark camera projection
+matrices, and compute symmetric reprojection errors in both views. We report
+averages across the evaluation pairs for valid triangulated points, median repro-
+jection error, one-pixel inliers, and inlier ratio. The benchmark camera poses
+are used only for this evaluation and are never provided to our pose-free recon-
+struction pipeline. Compared with Stage 1, Stage 2 produces approximately 33%
+more valid triangulated points and one-pixel inliers while reducing reprojection
+error by 9.7%. The inlier ratio increases from 0.9168 to 0.9343, indicating that
+3D re-render guidance improves the geometric consistency of the restored views.
+6
+Conclusion
+We presented CasDeblurGS, a cascaded framework for pose-free 3D Gaussian
+Splatting from two motion-blurred images with known camera intrinsics. Our
+method progressively recovers reliable cross-view information: Stage 1 constructs
+locally trustworthy 2D guidance via occlusion-aware correspondence filtering,
+while Stage 2 uses pose-free 3D re-rendering to provide dense global guidance
+for final restoration. The resulting views enable coherent 3D reconstruction with
+a frozen feed-forward 3DGS backbone without input-view poses, auxiliary sharp
+images, or per-scene test-time optimization. Experiments on real-world and syn-
+thetic Deblur-NeRF scenes demonstrate consistent gains over sparse-view recon-
+struction and restoration baselines. Progressive ablations, reprojection analysis,
+and cross-view correspondence visualization further show that the proposed cas-
+cade improves both rendering quality and multi-view geometric consistency.
+Limitations and future work. Our framework assumes known intrinsics and
+static scenes in a two-view setting. Its correspondence guidance may deteriorate
+under extreme blur, large occlusions, or limited overlap. Future work will address
+unknown intrinsics, dynamic scenes, and broader sparse-view settings.
+
+
+CasDeblurGS
+15
+Acknowledgements
+This work was supported by Institute of Information & communications Tech-
+nology Planning & Evaluation (IITP) grant funded by the Korea government
+(MSIT) (No. RS-2026-25522885, Development of a World Foundation Model for
+Training and Deployment of Physical AI Systems).
+References
+1. Bao, Y., Ding, T., Huo, J., Liu, Y., Li, Y., Li, W., Gao, Y., Luo, J.: 3d gaussian
+splatting: Survey, technologies, challenges, and opportunities. IEEE Transactions
+on Circuits and Systems for Video Technology 35(7), 6832–6852 (2025)
+2. Charatan, D., Li, S.L., Tagliasacchi, A., Sitzmann, V.: pixelsplat: 3d gaussian splats
+from image pairs for scalable generalizable 3d reconstruction. In: Proceedings of
+the IEEE/CVF conference on computer vision and pattern recognition. pp. 19457–
+19467 (2024)
+3. Chen, A., Xu, Z., Zhao, F., Zhang, X., Xiang, F., Yu, J., Su, H.: Mvsnerf: Fast
+generalizable radiance field reconstruction from multi-view stereo. In: Proceedings
+of the IEEE/CVF international conference on computer vision. pp. 14124–14133
+(2021)
+4. Chen, L., Chu, X., Zhang, X., Sun, J.: Simple baselines for image restoration. In:
+European conference on computer vision. pp. 17–33. Springer (2022)
+5. Chen, Y., Xu, H., Zheng, C., Zhuang, B., Pollefeys, M., Geiger, A., Cham, T.J.,
+Cai, J.: Mvsplat: Efficient 3d gaussian splatting from sparse multi-view images. In:
+European conference on computer vision. pp. 370–386. Springer (2024)
+6. Choi, H., Yang, H., Han, J., Cho, S.: Exploiting deblurring networks for radiance
+fields. In: Proceedings of the Computer Vision and Pattern Recognition Conference.
+pp. 6012–6021 (2025)
+7. Gao, R., Holynski, A., Henzler, P., Brussee, A., Martin-Brualla, R., Srinivasan, P.,
+Barron, J.T., Poole, B.: Cat3d: Create anything in 3d with multi-view diffusion
+models. arXiv preprint arXiv:2405.10314 (2024)
+8. Gupta, V., Girish, R.S.V., Mukund Varma, T., Tewari, A., Mitra, K.: Gaura:
+Generalizable approach for unified restoration and rendering of arbitrary views.
+In: European Conference on Computer Vision. pp. 249–266. Springer (2024)
+9. Hong, S., Jung, J., Shin, H., Han, J., Yang, J., Luo, C., Kim, S.: Pf3plat: Pose-free
+feed-forward 3d gaussian splatting. arXiv preprint arXiv:2410.22128 (2024)
+10. Jiang, L., Mao, Y., Xu, L., Lu, T., Ren, K., Jin, Y., Xu, X., Yu, M., Pang, J.,
+Zhao, F., et al.: Anysplat: Feed-forward 3d gaussian splatting from unconstrained
+views. ACM Transactions on Graphics (TOG) 44(6), 1–16 (2025)
+11. Joshi, N., Carney, J., Kuo, N., Li, H., Peng, C., Brown, M.: Unconstrained
+large-scale 3d reconstruction and rendering across altitudes. arXiv preprint
+arXiv:2505.00734 (2025)
+12. Kerbl, B., Kopanas, G., Leimkühler, T., Drettakis, G.: 3d gaussian splatting for
+real-time radiance field rendering. ACM Transactions on Graphics 42(4), 1–14
+(2023)
+13. Khan, M., Fazlali, H., Sharma, D., Cao, T., Bai, D., Ren, Y., Liu, B.: Autosplat:
+Constrained gaussian splatting for autonomous driving scene reconstruction. In:
+2025 IEEE International Conference on Robotics and Automation (ICRA). pp.
+8315–8321. IEEE (2025)
+
+
+16
+H. Choi et al.
+14. Lee, B., Lee, H., Sun, X., Ali, U., Park, E.: Deblurring 3d gaussian splatting. In:
+European Conference on Computer Vision. pp. 127–143. Springer (2024)
+15. Lee, D., Kim, D., Lee, J., Lee, M., Lee, S., Lee, S.: Sparse-derf: Deblurred neu-
+ral radiance fields from sparse view. IEEE Transactions on Pattern Analysis and
+Machine Intelligence (2025)
+16. Lee, D., Lee, M., Shin, C., Lee, S.: Dp-nerf: Deblurred neural radiance field with
+physical scene priors. In: Proceedings of the IEEE/CVF Conference on Computer
+Vision and Pattern Recognition. pp. 12386–12396 (2023)
+17. Lee, D., Oh, J., Rim, J., Cho, S., Lee, K.M.: Exblurf: Efficient radiance fields for
+extreme motion blurred images. In: Proceedings of the IEEE/CVF International
+Conference on Computer Vision. pp. 17639–17648 (2023)
+18. Lee, J., Kim, D., Lee, D., Cho, S., Lee, M., Lee, S.: Crim-gs: Continuous
+rigid motion-aware gaussian splatting from motion-blurred images. arXiv preprint
+arXiv:2407.03923 (2024)
+19. Lee, J., Kim, D., Lee, D., Cho, S., Lee, M., Lee, W., Kim, T., Wee, D., Lee, S.:
+Comogaussian: Continuous motion-aware gaussian splatting from motion-blurred
+images. In: Proceedings of the IEEE/CVF International Conference on Computer
+Vision. pp. 26415–26424 (2025)
+20. Lin, X., Luo, S., Shan, X., Zhou, X., Ren, C., Qi, L., Yang, M.H., Vasconcelos,
+N.: Hqgs: High-quality novel view synthesis with gaussian splatting in degraded
+scenes. In: The Thirteenth International Conference on Learning Representations
+(2025)
+21. Luo, Y., Zhou, S., Lan, Y., Pan, X., Loy, C.C.: 3denhancer: Consistent multi-view
+diffusion for 3d enhancement. In: Proceedings of the Computer Vision and Pattern
+Recognition Conference. pp. 16430–16440 (2025)
+22. Ma, L., Li, X., Liao, J., Zhang, Q., Wang, X., Wang, J., Sander, P.V.: Deblur-
+nerf: Neural radiance fields from blurry images. In: Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition. pp. 12861–12870 (2022)
+23. Mao, Y., Wang, B., Kulkarni, N., Park, J.J.: Sir-diff: Sparse image sets restora-
+tion with multi-view diffusion model. In: Proceedings of the Computer Vision and
+Pattern Recognition Conference. pp. 21620–21630 (2025)
+24. Mildenhall, B., Srinivasan, P., Tancik, M., Barron, J., Ramamoorthi, R., Ng, R.:
+Nerf: Representing scenes as neural radiance fields for view synthesis. In: European
+conference on computer vision (2020)
+25. Pan, L., Dai, Y., Liu, M., Porikli, F.: Simultaneous stereo video deblurring and
+scene flow estimation. In: Proceedings of the IEEE conference on computer vision
+and pattern recognition. pp. 4382–4391 (2017)
+26. Peng, C., Tang, Y., Zhou, Y., Wang, N., Liu, X., Li, D., Chellappa, R.: Bags:
+Blur agnostic gaussian splatting through multi-scale kernel modeling. In: European
+Conference on Computer Vision. pp. 293–310. Springer (2024)
+27. Schonberger, J.L., Frahm, J.M.: Structure-from-motion revisited. In: Proceedings
+of the IEEE conference on computer vision and pattern recognition. pp. 4104–4113
+(2016)
+28. Simonyan, K., Zisserman, A.: Very deep convolutional networks for large-scale
+image recognition. arXiv preprint arXiv:1409.1556 (2014)
+29. Tang, S., Ye, W., Ye, P., Lin, W., Zhou, Y., Chen, T., Ouyang, W.: Hisplat: Hier-
+archical 3d gaussian splatting for generalizable sparse-view reconstruction. arXiv
+preprint arXiv:2410.06245 (2024)
+30. Teed, Z., Deng, J.: Raft: Recurrent all-pairs field transforms for optical flow. In:
+European conference on computer vision. pp. 402–419. Springer (2020)
+
+
+CasDeblurGS
+17
+31. Wan, Y., Shao, M., Cheng, Y., Zuo, W.: S2gaussian: Sparse-view super-resolution
+3d gaussian splatting. In: Proceedings of the Computer Vision and Pattern Recog-
+nition Conference. pp. 711–721 (2025)
+32. Wang, P., Zhao, L., Ma, R., Liu, P.: Bad-nerf: Bundle adjusted deblur neural
+radiance fields. In: Proceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition. pp. 4170–4179 (2023)
+33. Wang, Q., Wang, Z., Genova, K., Srinivasan, P.P., Zhou, H., Barron, J.T., Martin-
+Brualla, R., Snavely, N., Funkhouser, T.: Ibrnet: Learning multi-view image-based
+rendering. In: Proceedings of the IEEE/CVF conference on computer vision and
+pattern recognition. pp. 4690–4699 (2021)
+34. Wang, X., Xie, L., Dong, C., Shan, Y.: Real-esrgan: Training real-world blind super-
+resolution with pure synthetic data. In: International Conference on Computer
+Vision Workshops (ICCVW) (2021)
+35. Wei, D., Li, Z., Liu, P.: Omni-scene: Omni-gaussian representation for ego-centric
+sparse-view scene reconstruction. In: Proceedings of the Computer Vision and Pat-
+tern Recognition Conference. pp. 22317–22327 (2025)
+36. Wu, J.Z., Zhang, Y., Turki, H., Ren, X., Gao, J., Shou, M.Z., Fidler, S., Gojcic, Z.,
+Ling, H.: Difix3d+: Improving 3d reconstructions with single-step diffusion models.
+In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition. pp. 26024–26035 (2025)
+37. Wu, R., Zhang, Z., Chen, M., Yan, Z., Zuo, W.: Deblur4dgs: 4d gaussian splatting
+from blurry monocular video. arXiv preprint arXiv:2412.06424 (2024)
+38. Xu, H., Peng, S., Wang, F., Blum, H., Barath, D., Geiger, A., Pollefeys, M.: Depth-
+splat: Connecting gaussian splatting and depth. In: Proceedings of the Computer
+Vision and Pattern Recognition Conference. pp. 16453–16463 (2025)
+39. Xu, Z., Feng, C., Li, Y., Zhao, J., Yang, J., Yu, W., Yuan, L., Tian, Y.: Breaking
+the vicious cycle: Coherent 3d gaussian splatting from sparse and motion-blurred
+views. arXiv preprint arXiv:2512.10369 (2025)
+40. Yan, B., Ma, C., Bare, B., Tan, W., Hoi, S.C.: Disparity-aware domain adapta-
+tion in stereo image restoration. In: Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition. pp. 13179–13187 (2020)
+41. Ye, B., Liu, S., Xu, H., Li, X., Pollefeys, M., Yang, M.H., Peng, S.: No pose, no
+problem: Surprisingly simple 3D gaussian splats from sparse unposed images. In:
+International Conference on Learning Representations (2025)
+42. Yu, A., Ye, V., Tancik, M., Kanazawa, A.: pixelnerf: Neural radiance fields from one
+or few images. In: Proceedings of the IEEE/CVF conference on computer vision
+and pattern recognition. pp. 4578–4587 (2021)
+43. Zhang, C., Xu, H., Wu, Q., Gambardella, C.C., Phung, D., Cai, J.: Pansplat: 4k
+panorama synthesis with feed-forward gaussian splatting. In: Proceedings of the
+Computer Vision and Pattern Recognition Conference. pp. 11437–11447 (2025)
+44. Zhang, D., Li, G., Li, J., Bressieux, M., Hilliges, O., Pollefeys, M., Van Gool, L.,
+Wang, X.: Egogaussian: Dynamic scene understanding from egocentric video with
+3d gaussian splatting. In: 2025 International Conference on 3D Vision (3DV). pp.
+1091–1102. IEEE (2025)
+45. Zhang, J., Li, Y., Chen, A., Xu, M., Liu, K., Wang, J., Long, X.X., Liang, H., Xu,
+Z., Su, H., et al.: Advances in feed-forward 3d reconstruction and view synthesis:
+A survey. arXiv preprint arXiv:2507.14501 (2025)
+46. Zhao, A., Yu, P., Zhu, Z., Wei, M.: Bsgs: Bi-stage 3d gaussian splatting for camera
+motion deblurring. In: Proceedings of the 33rd ACM International Conference on
+Multimedia. pp. 8351–8359 (2025)
+
+
+18
+H. Choi et al.
+47. Zhao, C., Wang, X., Zhang, T., Javed, S., Salzmann, M.: Self-ensembling gaussian
+splatting for few-shot novel view synthesis. In: Proceedings of the IEEE/CVF
+International Conference on Computer Vision. pp. 4940–4950 (2025)
+48. Zhao, L., Wang, P., Liu, P.: Bad-gaussians: Bundle adjusted deblur gaussian splat-
+ting. In: European Conference on Computer Vision. pp. 233–250. Springer (2024)
+49. Zhou, S., Zhang, J., Zuo, W., Xie, H., Pan, J., Ren, J.S.: Davanet: Stereo deblurring
+with view aggregation. In: Proceedings of the IEEE/CVF Conference on Computer
+Vision and Pattern Recognition. pp. 10996–11005 (2019)
+
+
+Supplementary Material: CasDeblurGS:
+Cascaded 2D-to-3D Multi-View Consistency for
+3D Gaussian Splatting from Two Blurry Images
+Haeyun Choi1*†
+, Minhyuk Jang2*
+, and I-Gil Kim2
+1 University of Virginia, Charlottesville, VA, USA
+phh3ps@virginia.edu
+2 KT R&D Center, Seoul, Republic of Korea
+{minhyuk.jang,i-gil.kim}@kt.com
+Supplementary Contents
+1
+Additional Implementation Details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+2
+1.1
+Training and Evaluation Data. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+2
+1.2
+Frozen Modules and OCGM Implementation . . . . . . . . . . . . . . . . . .
+2
+1.3
+Frozen 3DGS Backbone and Input-View Re-Rendering . . . . . . . . .
+3
+1.4
+Training Details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+3
+1.5
+Baseline Adaptation Details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+4
+2
+Qualitative Analysis of OCGM Thresholds . . . . . . . . . . . . . . . . . . . . . . . .
+4
+3
+Additional Component Diagnostics . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+6
+4
+Sparse Camera Reprojection Analysis . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+7
+5
+Runtime Analysis . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+8
+6
+Additional Experimental Results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+8
+7
+Supplementary Video . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+9
+* Equal contribution.
+† This work was done at KT R&D Center.
+
+
+2
+H. Choi et al.
+1
+Additional Implementation Details
+In this section, we provide additional implementation details for reproducibility,
+including dataset construction, frozen modules, stage-wise training, and baseline
+adaptation.
+1.1
+Training and Evaluation Data
+For training and validation, we use the synthetic camera-motion-blur dataset
+introduced in DeepDeblurRF [3]. The training split contains 65 scenes, each
+with 29 viewpoints. For each viewpoint, one blurry image and its corresponding
+sharp target are provided. The validation split contains 10 additional scenes
+with the same structure. Blurred images are generated by simulating 6-DoF
+camera motion during exposure: multiple intermediate views are rendered along
+a smooth camera trajectory, averaged in linear color space, and paired with the
+temporally central frame as the ground-truth sharp image.
+For evaluation, we use the camera-motion-blur subset of Deblur-NeRF [5],
+which contains five synthetic scenes and ten real-world scenes. Each scene pro-
+vides motion-blurred input images and blur-free ground-truth target views for
+evaluation. To ensure fair and reproducible comparison in the extreme two-view
+setting, we use a fixed set of per-scene evaluation instances, where each instance
+is defined by two blurry input views and one held-out target view for novel
+view synthesis. The complete index mappings are provided in Tab. 1, and all
+compared methods are evaluated using the same instance definitions. For both
+training and evaluation, all images are first resized while preserving aspect ratio
+and then center-cropped to 256×256, following PixelSplat-style preprocessing [1].
+1.2
+Frozen Modules and OCGM Implementation
+We use the width-64 NAFNet [2] pretrained on GoPro [6] as the frozen stabi-
+lizer Sϕ, and RAFT-Large [8] from Torchvision [9] for optical flow estimation
+in OCGM. For each pair of stabilized views, we estimate bidirectional optical
+flow and compute validity masks using forward–backward consistency together
+with out-of-bounds checks. A pixel is marked invalid if its mapped coordinate
+falls outside the image boundary or if the forward–backward residual exceeds
+the motion-adaptive threshold defined in the main paper. These masks suppress
+unreliable regions caused by occlusions, motion boundaries, and blur-induced
+mismatches before masked warps are constructed for Stage 1 guidance. Invalid
+regions are zeroed out in the warped reference image, and the resulting masked
+warp together with the validity mask are fed to the Stage 1 deblurring network.
+This results in more reliable Stage 1 guidance by removing unstable correspon-
+dences near occlusions and motion boundaries. The same bidirectional flow fields
+are used for both validity checking and masked warping.
+
+
+Supplementary Material for CasDeblurGS
+3
+1.3
+Frozen 3DGS Backbone and Input-View Re-Rendering
+We adopt the official NoPoSplat [13] checkpoint pretrained on RealEstate10K
+with two-view inputs at 256×256, and keep it frozen without further fine-tuning.
+During Stage 2, the intermediate restorations and their camera intrinsics are fed
+into the backbone to construct a canonical-space 3D Gaussian representation.
+We then re-render this representation to the two input viewpoints to obtain
+the global 3D guidance images R1 and R2 for final restoration. These rendered
+RGB images are used directly as Stage 2 guidance. Concretely, the first input
+view defines the canonical frame, and the second guidance image is rendered
+at the relative pose inferred by the backbone under the same canonical-space
+formulation. No ground-truth input-view poses are used. The same backbone is
+then applied to the restored views and their intrinsics to construct the output
+3D representation used for novel view synthesis evaluation.
+1.4
+Training Details
+Only the two deblurring networks, D2D
+θ
+and D3D
+ψ , are optimized during training.
+The stabilizer Sϕ, RAFT, and the pose-free 3DGS backbone hη remain frozen
+throughout, with no gradients propagated through them. Both trainable net-
+works follow a NAFNet-style encoder–decoder architecture with base width 64.
+We use an encoder block configuration [1, 1, 1, 28], a single middle block, and a
+decoder configuration [1, 1, 1, 1]. Stage 1 takes a 7-channel input formed by con-
+catenating the 3-channel blurry base view, the 3-channel masked warp, and the
+1-channel validity mask, while Stage 2 takes a 6-channel input formed by con-
+catenating the 3-channel blurry base view and the 3-channel re-render guidance.
+Both networks output a restored 3-channel RGB image.
+Training is performed in a stage-wise manner. In Stage 1, the frozen stabilizer
+and RAFT module are used to construct the masked warps and validity masks,
+and D2D
+θ
+is trained to predict the intermediate restorations ( ˜S1, ˜S2) from the
+blurry inputs and OCGM guidance. After Stage 1 training, D2D
+θ
+is frozen. In
+Stage 2, the frozen Stage 1 network first produces ( ˜S1, ˜S2), which are passed to
+the frozen pose-free 3DGS backbone to obtain the re-render guidance (R1, R2).
+Using these re-rendered images, D3D
+ψ
+is trained to predict the final restorations
+( ˆS1, ˆS2).
+For each stage, we use AdamW with learning rate 1 × 10−3, weight decay
+1 × 10−3, and (β1, β2) = (0.9, 0.9). Each stage is trained for 400k iterations with
+cosine annealing to ηmin = 1 × 10−7. We use a batch size of 32 per GPU on two
+NVIDIA A100 80GB GPUs, with four dataloader workers per GPU. The training
+objective for both stages combines an L1 reconstruction loss and a VGG19-based
+perceptual loss [7,10]:
+  \math c al {L} = \lambda _1 \mathcal {L}_{\ell _1} + \lambda _p \mathcal {L}_{\text {perc}}, 
+(1)
+where λ1 = 0.9 and λp = 0.1. No style loss is used.
+
+
+4
+H. Choi et al.
+Table 1: Per-scene evaluation index mappings for the real-world and synthetic Deblur-
+NeRF scenes. Each instance is defined as {Iblur} →Itgt, where {Iblur} denotes the two
+blurry input views and Itgt denotes the held-out target view for novel-view synthesis.
+Scene
+Inst. 1
+Inst. 2
+Inst. 3
+Inst. 4
+Inst. 5
+Inst. 6
+Inst. 7
+Real-world Scenes
+BlurBall
+{1, 2} →0
+{6, 8} →7
+{13, 15} →14
+{19, 20} →21
+–
+–
+–
+BlurBasket
+{1, 2} →0
+{10, 11} →7
+{18, 19} →14
+{22, 23} →21
+{27, 29} →28
+{38, 39} →35
+{41, 43} →42
+BlurBuick
+{1, 2} →0
+{10, 11} →7
+{15, 18} →14
+{4, 6} →21
+{27, 33} →28
+{36, 38} →35
+{39, 43} →42
+BlurCoffee
+{3, 8} →0
+{10, 11} →6
+{1, 17} →12
+{5, 19} →18
+{25, 26} →24
+–
+–
+BlurDecoration
+{1, 2} →0
+{4, 9} →6
+{3, 17} →12
+{19, 33} →18
+{16, 25} →24
+{14, 29} →30
+{31, 40} →36
+BlurGirl
+{1, 2} →0
+{6, 8} →7
+{9, 11} →14
+{12, 34} →21
+{18, 29} →28
+{30, 36} →35
+–
+BlurHeron
+{1, 11} →0
+{7, 15} →8
+{15, 27} →16
+{23, 25} →24
+{19, 33} →32
+–
+–
+BlurParterre
+{2, 9} →0
+{4, 7} →6
+{11, 13} →12
+{19, 20} →18
+{23, 27} →24
+{1, 21} →30
+–
+BlurPuppet
+{1, 2} →0
+{10, 11} →6
+{7, 8} →12
+{15, 16} →18
+{19, 21} →24
+{27, 29} →30
+{23, 37} →36
+BlurStair
+{1, 2} →0
+{7, 9} →6
+{8, 17} →12
+{21, 23} →18
+{16, 26} →24
+{22, 33} →30
+–
+Synthetic Scenes
+All Scenes
+{1, 2} →0
+{7, 9} →8
+{15, 17} →16
+{23, 25} →24
+{31, 33} →32
+–
+–
+1.5
+Baseline Adaptation Details
+All baselines are evaluated under the same fixed two-view protocol using the per-
+scene input–target index mappings listed in Tab. 1. Methods originally designed
+for different input regimes are adapted to this protocol while following their
+official implementations and recommended hyperparameter settings as closely
+as possible. For methods that require camera poses, we use the benchmark poses
+provided with Deblur-NeRF [5].
+For SE-GS [14], we optimize each scene from the same two blurry source
+views defined by the protocol. For GAURA [4], we follow the official feed-forward
+inference pipeline in the two-view setting. For CoherentGS [12], we retain its
+official alternating optimization framework while restricting the observations to
+the same two-view protocol.
+For the control baselines DAVANet [15] and Difix3D+ [11], the restored out-
+puts are passed to the same frozen pose-free 3DGS backbone [13] used in our
+method. Thus, the “Pose-Free” and “Generalizable” labels reported in the main
+paper refer to the complete pipelines formed by each restoration model together
+with the shared frozen 3DGS backbone, rather than to the restoration models
+alone.
+2
+Qualitative Analysis of OCGM Thresholds
+Following the OCGM formulation in Eqs. (8)–(10) of the main paper, we quali-
+tatively examine how the minimum tolerance τ and the motion-dependent scale
+factor α affect the validity mask Mb←r and the masked cross-view warp Wb←r
+used as Stage 1 guidance.
+For each example, Cb denotes the stabilized base view, while Cr denotes the
+stabilized reference view. The unmasked warp W(Cr, Fb←r) transfers content
+from Cr into the coordinates of Cb. OCGM retains only the regions considered
+geometrically reliable and provides the resulting masked warp, together with
+
+
+Supplementary Material for CasDeblurGS
+5
+Stabilized base
+Warped reference
+Base enlarge
+Warp enlarge
+Tau 0.5 / Coverage 86.9%
+Tau 1.0 / Coverage 94.4%
+Tau 2.0 / Coverage 98.2%
+Stabilized base
+Warped reference
+Base enlarge
+Warp enlarge
+Alpha 0 / Coverage 73.1%
+Alpha 0.01 / Coverage 80.8% Alpha 0.05 / Coverage 89.8%
+Fig. 1: Qualitative effects of the OCGM thresholds. In each row, the stabilized base
+view Cb provides the current-view context, while the unmasked warp W(Cr, Fb←r)
+transfers complementary content from the stabilized reference view Cr into the base-
+view coordinates. The first row varies τ ∈{0.5, 1.0, 2.0} with α = 0.01, whereas the
+second varies α ∈{0, 0.01, 0.05} with τ = 1.0. Black regions in the masked guidance
+indicate rejected correspondences. The reported coverage denotes the retained fraction
+and is shown only to illustrate the trade-off between rejecting miswarped content and
+preserving useful cross-view information.
+its validity mask, to the Stage 1 restoration network. The stabilizer output is
+therefore used only as an alignment-friendly observation: Stage 1 combines the
+original blurry base view with reliable complementary information from the ref-
+erence view to produce a better restoration than independent stabilization alone.
+For each threshold sweep, we keep (Cb, Cr) and their bidirectional RAFT
+flows fixed while varying one parameter at a time. Thus, the unmasked warp
+remains identical across the compared settings; only the regions retained as
+Stage 1 guidance change.
+As shown in Fig. 1, the thresholds control the trade-off between rejecting
+unreliable warps and preserving valid cross-view information. In the BlurGirl
+example, the unmasked warp incorrectly transfers the highlighted plant tip. The
+permissive setting τ = 2.0 retains this miswarped structure, whereas τ = 1.0
+rejects it while preserving most of the surrounding valid guidance. The more
+conservative τ = 0.5 also removes the error but discards additional correctly
+warped content, as reflected by its lower coverage.
+The α sweep on BlurBasket shows a similar pattern in a large-displacement
+region. The setting α = 0.01 selectively suppresses the distorted chair geometry
+while retaining much of the surrounding useful reference content. In contrast,
+α = 0 rejects additional valid chair regions, whereas α = 0.05 admits distorted
+boundaries that should be excluded. Together, these examples illustrate how
+overly conservative thresholds reduce the amount of usable guidance, while overly
+permissive thresholds propagate inaccurate reference content.
+We use the fixed default τ = 1.0 and α = 0.01 for all training and eval-
+uation scenes. These values are not selected as per-scene optima; rather, they
+provide a practical scene-independent balance between filtering unreliable warps
+and retaining sufficient guidance across diverse scenes and motion patterns. The
+
+
+6
+H. Choi et al.
+alternative settings are shown only to illustrate OCGM’s masking behavior and
+do not represent separately trained models.
+3
+Additional Component Diagnostics
+Table 2 and Fig. 2 provide complementary quantitative and qualitative diagnos-
+tics beyond the ablation in the main paper.
+Effect of alignment preconditioning. We estimate RAFT flows and construct
+OCGM guidance directly from the original blurry views while reusing the same
+Stage 1 and Stage 2 checkpoints as the full model. This inference-time diagnos-
+tic removes the stabilizer only from the flow and guidance construction path,
+without retraining either restoration network. Compared with the full cascade,
+PSNR and SSIM decrease by 0.33 dB and 0.020, respectively. These results sup-
+port the role of the stabilizer in producing alignment-friendly observations for
+reliable correspondence guidance, rather than serving as the final restoration
+module.
+Effect of global 3D guidance without Stage 1. We additionally evaluate an inference-
+time 3D-only diagnostic that bypasses the stabilizer, RAFT, OCGM, and the
+entire Stage 1 restoration process. The original blurry input pair is first passed to
+the frozen NoPoSplat backbone to produce input-view re-render guidance. The
+blurry inputs and corresponding re-renders are then processed by the existing
+Stage 2 checkpoint, and the resulting restorations are used for final reconstruc-
+tion with the frozen NoPoSplat backbone.
+This configuration obtains 20.26 dB PSNR and 0.627 SSIM, substantially
+underperforming both Stage 1 and the full cascade. The result indicates that
+global 3D re-render guidance derived directly from blurry inputs cannot replace
+the locally reliable observations established by Stage 1. Because the Stage 2
+checkpoint is reused without retraining, this experiment should be interpreted
+as an inference-time diagnostic rather than an optimized 3D-only architecture.
+Qualitative interpretation. Figure 2 further illustrates how each diagnostic con-
+figuration affects the final novel-view reconstruction. Independent stabilization
+improves each view separately but does not explicitly enforce cross-view consis-
+tency, leaving residual discrepancies that are difficult for the frozen pose-free
+3DGS backbone to aggregate coherently. Direct RAFT estimates correspon-
+dences directly from the original blurry inputs, producing less reliable OCGM
+guidance. This degrades the Stage 1 restorations and consequently the 3D guid-
+ance available to Stage 2.
+Stage 1 combines stabilization and OCGM to establish more reliable local
+correspondences and therefore yields a more coherent reconstruction. However, it
+lacks the global 3D feedback provided by Stage 2, leaving residual inconsistencies
+that cannot be resolved through local 2D warping alone. Conversely, 3D-only
+constructs global guidance directly from the blurry inputs, before locally reliable
+
+
+Supplementary Material for CasDeblurGS
+7
+Table 2: Extended component diagnostics on real-world Deblur-NeRF scenes. The
+first four rows reproduce the progressive ablation from the main paper; the last two
+are inference-time diagnostics using the trained checkpoints without retraining.
+Setting
+Configuration
+PSNR ↑
+SSIM ↑
+Progressive cascade
+Blurry inputs
+No restoration or cross-view guidance
+20.07
+0.612
+Stabilizer
+Independent per-view stabilization
+20.30
+0.655
+Stage 1
+Stabilizer and OCGM-based local 2D guidance
+20.88
+0.684
+Full cascade
+Complete CasDeblurGS pipeline
+21.13
+0.700
+Additional diagnostics
+Direct RAFT
+RAFT and OCGM applied directly to the original
+blurry views
+20.80
+0.680
+3D-only
+Stage 1 bypassed; Stage 2 uses blurry inputs and
+3D re-renders
+20.26
+0.627
+Blurry
+Stabilizer
+Direct RAFT
+3D-only
+Stage 1 
+Ours
+Inputs
+Fig. 2: Qualitative novel-view synthesis results for component diagnostics on a syn-
+thetic Deblur-NeRF scene. The Inputs column shows the two blurry views; for each
+reconstruction setting, the lower row enlarges the red-boxed region.
+observations have been established. The full cascade addresses both limitations
+by first improving local cross-view reliability and then refining the restored views
+using globally aggregated 3D guidance.
+4
+Sparse Camera Reprojection Analysis
+We further describe the sparse reprojection analysis reported in the main paper.
+We compare the intermediate restorations produced by Stage 1 with the final
+restorations produced by Stage 2 using the same fixed real-world two-view pairs.
+For each restored image pair, we extract OpenCV SIFT features with at most
+4,000 keypoints and perform brute-force matching using the ℓ2 distance. We ap-
+ply a Lowe ratio threshold of 0.75 and retain only bidirectionally mutual matches.
+The resulting correspondences are triangulated using cv2.triangulatePoints
+and the benchmark camera projection matrices.
+
+
+8
+H. Choi et al.
+A triangulated point is considered valid if its homogeneous coordinates are
+finite, its homogeneous denominator is nonzero, and it has positive depth in both
+camera frames. For each valid point, we compute the symmetric reprojection
+error as the average pixel ℓ2 error after reprojecting the point into the two input
+views.
+For each evaluation pair, we measure the number of valid triangulated points,
+the median symmetric reprojection error, the number of points with reprojection
+error below one pixel, and the corresponding inlier ratio. The values reported in
+the main paper are obtained by averaging these per-pair measurements over the
+60 real-world evaluation pairs. The reported inlier ratio is therefore the mean
+of the per-pair ratios, rather than the mean inlier count divided by the mean
+number of valid points. Benchmark camera poses are used only for this post-hoc
+evaluation and are never provided as inputs to CasDeblurGS.
+5
+Runtime Analysis
+Although CasDeblurGS employs multiple frozen modules, all inference stages
+are feed-forward and require no per-scene optimization. Table 3 reports average
+runtime, PSNR, and SSIM across both the real-world and synthetic Deblur-
+NeRF subsets. CasDeblurGS improves PSNR by 4.48 dB over GAURA, the
+fastest baseline, while running 7.5% faster than Difix3D+ and 31.8% faster than
+CoherentGS, the closest competing methods in reconstruction quality. These
+results demonstrate a favorable trade-off between reconstruction quality and
+computational cost.
+Table 3: Average runtime and reconstruction quality across both the real-world and
+synthetic Deblur-NeRF subsets. DAVANet and Difix3D+ are combined with the same
+frozen NoPoSplat backbone used in CasDeblurGS. Best and second-best results are
+highlighted in bold and underlined, respectively.
+Method
+Runtime (s) ↓
+PSNR ↑
+SSIM ↑
+SE-GS [14]
+28.48
+17.33
+0.479
+GAURA [4]
+25.24
+17.79
+0.516
+CoherentGS [12]
+96.14
+20.51
+0.674
+DAVANet [15] + NoPoSplat
+59.37
+19.48
+0.599
+Difix3D+ [11] + NoPoSplat
+70.85
+20.62
+0.642
+CasDeblurGS (Ours)
+65.52
+22.27
+0.748
+6
+Additional Experimental Results
+In this section, we provide per-scene quantitative evaluations and additional
+qualitative comparisons on Deblur-NeRF to further support the findings in the
+main paper.
+
+
+Supplementary Material for CasDeblurGS
+9
+Per-scene quantitative results. Tables 4 and 5 present per-scene quantitative
+comparisons on the synthetic and real-world Deblur-NeRF datasets, respec-
+tively. Consistent with the average gains reported in the main paper, our method
+achieves the best average performance and remains competitive across individ-
+ual scenes. These results show that the proposed cascaded 2D-to-3D guidance
+performs consistently across diverse scene structures and blur patterns.
+Additional qualitative results. Figures 3 and 4 provide additional qualitative
+comparisons that further support the quantitative results. Under the challenging
+two-view setting with severe blur, existing methods often suffer from structural
+collapse or ghosting artifacts. For example, in the BlurFactory scene, our frame-
+work reconstructs the staircase with more coherent geometry and finer texture
+details, whereas prior 3DGS-based methods struggle to preserve its topology. In
+the BlurCoffee scene, CoherentGS exhibits noticeable color artifacts, while Di-
+fix3D+ produces overly blurred results; by contrast, our method recovers clearer
+text on the notice. Overall, by combining local 2D correspondence guidance with
+global 3D re-render guidance, our approach improves multi-view consistency and
+yields higher-quality novel-view synthesis, especially in geometrically challenging
+regions.
+7
+Supplementary Video
+The supplementary video provides an animated overview of CasDeblurGS, illus-
+trating how local 2D correspondence guidance is progressively complemented by
+global 3D re-render guidance. It also presents novel-view synthesis results from
+our method on nine scenes spanning the real-world and synthetic Deblur-NeRF
+subsets, enabling temporal inspection of rendering sharpness and structural con-
+sistency beyond the still-image results in the paper.
+
+
+10
+H. Choi et al.
+Table 4: Quantitative results of novel view synthesis on synthetic scenes of the Deblur-
+NeRF dataset, reported for each individual scene. The best and second-best results are
+highlighted in bold and underlined, respectively.
+Method
+Scene
+PSNR ↑SSIM ↑LPIPS ↓
+Method
+Scene
+PSNR ↑SSIM ↑LPIPS ↓
+SE-GS
+BlurCozy2room
+20.65
+0.686
+0.209
+DAVANet
+BlurCozy2room
+21.83
+0.770
+0.185
+BlurFactory
+17.36
+0.420
+0.487
+BlurFactory
+16.27
+0.385
+0.488
+BlurPool
+22.87
+0.660
+0.265
+BlurPool
+21.53
+0.607
+0.270
+BlurTanabata
+15.72
+0.497
+0.377
+BlurTanabata
+18.93
+0.673
+0.268
+BlurWine
+17.19
+0.536
+0.353
+BlurWine
+19.50
+0.691
+0.247
+Average
+18.76
+0.560
+0.338
+Average
+19.61
+0.625
+0.292
+GAURA
+BlurCozy2room
+17.85
+0.604
+0.345
+Difix3D+
+BlurCozy2room
+23.60
+0.801
+0.138
+BlurFactory
+16.96
+0.409
+0.504
+BlurFactory
+18.12
+0.479
+0.457
+BlurPool
+23.04
+0.625
+0.331
+BlurPool
+26.33
+0.742
+0.168
+BlurTanabata
+16.08
+0.526
+0.431
+BlurTanabata
+19.10
+0.682
+0.277
+BlurWine
+15.63
+0.458
+0.459
+BlurWine
+19.35
+0.663
+0.273
+Average
+17.91
+0.524
+0.414
+Average
+21.30
+0.673
+0.262
+CoherentGS
+BlurCozy2room
+24.91
+0.828
+0.160
+Ours
+BlurCozy2room
+25.46
+0.866
+0.097
+BlurFactory
+18.55
+0.530
+0.385
+BlurFactory
+23.73
+0.818
+0.203
+BlurPool
+24.33
+0.705
+0.227
+BlurPool
+27.14
+0.775
+0.142
+BlurTanabata
+18.56
+0.674
+0.276
+BlurTanabata
+19.99
+0.748
+0.202
+BlurWine
+19.21
+0.696
+0.247
+BlurWine
+20.75
+0.771
+0.182
+Average
+21.11
+0.687
+0.259
+Average
+23.41
+0.796
+0.165
+
+
+Supplementary Material for CasDeblurGS
+11
+Table 5: Quantitative results of novel view synthesis on real-world scenes of the Deblur-
+NeRF dataset, reported for each individual scene. The best and second-best results are
+highlighted in bold and underlined, respectively.
+Method
+Scene
+PSNR ↑SSIM ↑LPIPS ↓
+Method
+Scene
+PSNR ↑SSIM ↑LPIPS ↓
+SE-GS
+BlurBall
+18.80
+0.518
+0.404
+DAVANet
+BlurBall
+20.74
+0.598
+0.342
+BlurBasket
+14.91
+0.358
+0.479
+BlurBasket
+19.54
+0.578
+0.378
+BlurBuick
+13.93
+0.376
+0.467
+BlurBuick
+18.46
+0.602
+0.340
+BlurCoffee
+18.74
+0.677
+0.351
+BlurCoffee
+23.11
+0.779
+0.280
+BlurDecoration
+14.10
+0.281
+0.495
+BlurDecoration
+16.88
+0.457
+0.411
+BlurGirl
+15.32
+0.530
+0.359
+BlurGirl
+19.35
+0.713
+0.291
+BlurHeron
+15.97
+0.334
+0.413
+BlurHeron
+18.85
+0.487
+0.390
+BlurParterre
+16.58
+0.313
+0.454
+BlurParterre
+19.30
+0.468
+0.406
+BlurPuppet
+14.18
+0.284
+0.505
+BlurPuppet
+18.76
+0.524
+0.343
+BlurStair
+16.45
+0.304
+0.499
+BlurStair
+18.42
+0.527
+0.415
+Average
+15.90
+0.398
+0.443
+Average
+19.34
+0.573
+0.360
+GAURA
+BlurBall
+20.11
+0.569
+0.433
+Difix3D+
+BlurBall
+21.35
+0.622
+0.309
+BlurBasket
+13.47
+0.406
+0.499
+BlurBasket
+19.98
+0.622
+0.326
+BlurBuick
+14.30
+0.383
+0.506
+BlurBuick
+18.45
+0.621
+0.293
+BlurCoffee
+22.53
+0.800
+0.310
+BlurCoffee
+23.74
+0.815
+0.203
+BlurDecoration
+16.21
+0.433
+0.490
+BlurDecoration
+17.69
+0.497
+0.369
+BlurGirl
+17.23
+0.632
+0.381
+BlurGirl
+19.52
+0.768
+0.227
+BlurHeron
+17.57
+0.446
+0.451
+BlurHeron
+18.47
+0.493
+0.373
+BlurParterre
+18.86
+0.451
+0.461
+BlurParterre
+19.73
+0.508
+0.366
+BlurPuppet
+17.35
+0.467
+0.454
+BlurPuppet
+19.25
+0.567
+0.299
+BlurStair
+19.10
+0.492
+0.456
+BlurStair
+21.25
+0.595
+0.346
+Average
+17.67
+0.508
+0.444
+Average
+19.94
+0.611
+0.311
+CoherentGS
+BlurBall
+21.75
+0.672
+0.303
+Ours
+BlurBall
+22.87
+0.730
+0.228
+BlurBasket
+20.04
+0.668
+0.281
+BlurBasket
+21.00
+0.703
+0.234
+BlurBuick
+16.61
+0.546
+0.357
+BlurBuick
+20.17
+0.709
+0.217
+BlurCoffee
+24.78
+0.826
+0.247
+BlurCoffee
+25.21
+0.859
+0.156
+BlurDecoration
+16.69
+0.517
+0.379
+BlurDecoration
+17.97
+0.545
+0.309
+BlurGirl
+19.04
+0.734
+0.256
+BlurGirl
+21.56
+0.843
+0.158
+BlurHeron
+18.88
+0.599
+0.321
+BlurHeron
+20.42
+0.651
+0.260
+BlurParterre
+19.72
+0.618
+0.306
+BlurParterre
+20.41
+0.586
+0.281
+BlurPuppet
+19.64
+0.666
+0.267
+BlurPuppet
+19.87
+0.633
+0.232
+BlurStair
+21.88
+0.755
+0.204
+BlurStair
+21.82
+0.736
+0.209
+Average
+19.90
+0.660
+0.292
+Average
+21.13
+0.700
+0.228
+
+
+12
+H. Choi et al.
+SE-GS
+GAURA
+CoherentGS
+Difix3D+ 
+DAVANet 
+Ours
+GT
+Inputs
+BlurCozy2room
+BlurFactory
+BlurPool
+BlurTanabata
+BlurWine
+Fig. 3: Additional qualitative results of novel view synthesis on synthetic scenes of
+the Deblur-NeRF dataset. The Inputs column shows the two blurry views; for each
+method, the lower row enlarges the red-boxed region.
+
+
+Supplementary Material for CasDeblurGS
+13
+SE-GS
+GAURA
+CoherentGS
+Difix3D+ 
+DAVANet 
+Ours
+GT
+Inputs
+BlurBall
+BlurGIrl
+BlurBuick
+BlurCoffee
+BlurParterre
+Fig. 4: Additional qualitative results of novel view synthesis on real-world scenes of
+the Deblur-NeRF dataset. The Inputs column shows the two blurry views; for each
+method, the lower row enlarges the red-boxed region.
+
+
+14
+H. Choi et al.
+References
+1. Charatan, D., Li, S.L., Tagliasacchi, A., Sitzmann, V.: pixelsplat: 3d gaussian splats
+from image pairs for scalable generalizable 3d reconstruction. In: Proceedings of
+the IEEE/CVF conference on computer vision and pattern recognition. pp. 19457–
+19467 (2024)
+2. Chen, L., Chu, X., Zhang, X., Sun, J.: Simple baselines for image restoration. In:
+European conference on computer vision. pp. 17–33. Springer (2022)
+3. Choi, H., Yang, H., Han, J., Cho, S.: Exploiting deblurring networks for radiance
+fields. In: Proceedings of the Computer Vision and Pattern Recognition Conference.
+pp. 6012–6021 (2025)
+4. Gupta, V., Girish, R.S.V., Mukund Varma, T., Tewari, A., Mitra, K.: Gaura:
+Generalizable approach for unified restoration and rendering of arbitrary views.
+In: European Conference on Computer Vision. pp. 249–266. Springer (2024)
+5. Ma, L., Li, X., Liao, J., Zhang, Q., Wang, X., Wang, J., Sander, P.V.: Deblur-
+nerf: Neural radiance fields from blurry images. In: Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition. pp. 12861–12870 (2022)
+6. Nah, S., Kim, T.H., Lee, K.M.: Deep multi-scale convolutional neural network for
+dynamic scene deblurring. In: CVPR (July 2017)
+7. Simonyan, K., Zisserman, A.: Very deep convolutional networks for large-scale
+image recognition. arXiv preprint arXiv:1409.1556 (2014)
+8. Teed, Z., Deng, J.: Raft: Recurrent all-pairs field transforms for optical flow. In:
+European conference on computer vision. pp. 402–419. Springer (2020)
+9. TorchVision maintainers and contributors: TorchVision: PyTorch’s computer vision
+library. https://github.com/pytorch/vision (2016)
+10. Wang, X., Xie, L., Dong, C., Shan, Y.: Real-esrgan: Training real-world blind super-
+resolution with pure synthetic data. In: International Conference on Computer
+Vision Workshops (ICCVW) (2021)
+11. Wu, J.Z., Zhang, Y., Turki, H., Ren, X., Gao, J., Shou, M.Z., Fidler, S., Gojcic, Z.,
+Ling, H.: Difix3d+: Improving 3d reconstructions with single-step diffusion models.
+In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition. pp. 26024–26035 (2025)
+12. Xu, Z., Feng, C., Li, Y., Zhao, J., Yang, J., Yu, W., Yuan, L., Tian, Y.: Breaking
+the vicious cycle: Coherent 3d gaussian splatting from sparse and motion-blurred
+views. arXiv preprint arXiv:2512.10369 (2025)
+13. Ye, B., Liu, S., Xu, H., Li, X., Pollefeys, M., Yang, M.H., Peng, S.: No pose, no
+problem: Surprisingly simple 3D gaussian splats from sparse unposed images. In:
+International Conference on Learning Representations (2025)
+14. Zhao, C., Wang, X., Zhang, T., Javed, S., Salzmann, M.: Self-ensembling gaussian
+splatting for few-shot novel view synthesis. In: Proceedings of the IEEE/CVF
+International Conference on Computer Vision. pp. 4940–4950 (2025)
+15. Zhou, S., Zhang, J., Zuo, W., Xie, H., Pan, J., Ren, J.S.: Davanet: Stereo deblurring
+with view aggregation. In: Proceedings of the IEEE/CVF Conference on Computer
+Vision and Pattern Recognition. pp. 10996–11005 (2019)

@@ -1,0 +1,1177 @@
+ECAD: Expanding Class-Agnostic Detection Beyond Thing-Centric Objectness
+Liang Wan1,2, Zixin Ren1, Yupeng Zhang1,2∗, Yuhan Wang1, Fangzhuo Gao1
+1College of Intelligence and Computing, Tianjin University.
+2Key Research Center for Surface Monitoring and Analysis of Relics, State Administration of Cultural Heritage.
+Abstract
+Object detection is a fundamental task in visual perception,
+providing structured region representations for recognition,
+grounding, reasoning, and interaction. However, existing de-
+tection paradigms largely inherit a thing-centric notion of
+objectness, where detectors are mainly trained to localize
+discrete and countable object instances. Consequently, many
+semantically meaningful visual elements, such as sky, road,
+grassland, water, and sports courts, are often absorbed into the
+background despite their importance for scene understanding
+and spatial reasoning. In this paper, we formulate Expanded
+Class-Agnostic Detection (ECAD), a new setting that aims
+to discover category-agnostic visual candidates beyond con-
+ventional thing-centric objects. To support this setting, we
+construct BTCO-Bench, a Beyond Thing-Centric Objectness
+benchmark with category-agnostic box annotations covering
+both real-world and cross-domain scenarios. We further pro-
+pose ECADet, a lightweight DETR-based detector built upon
+a frozen DINOv3 encoder, and introduce Geometry-Aware
+Expert Regression (GAER) and Prototype-Guided Query
+Modulation (PGQM) to improve localization and objectness
+estimation for diverse visual elements, respectively. Exten-
+sive experiments show that ECADet consistently outperforms
+representative class-agnostic and proposal-based detectors on
+BTCO-Bench, demonstrating the effectiveness of expanded
+objectness discovery. Code and benchmark will be released.
+Introduction
+Object detection is a fundamental component of visual
+perception, providing structured region representations for
+downstream recognition, reasoning, and interaction. Yet,
+what constitutes an object is often implicitly assumed.
+Mainstream datasets, such as COCO (Lin et al. 2014),
+LVIS (Gupta, Dollar, and Girshick 2019), and PASCAL
+VOC (Everingham et al. 2010), mainly annotate discrete,
+countable thing instances, while other semantically mean-
+ingful visual elements are treated as background. Although
+this thing-centric notion of objectness has driven substantial
+progress, it limits detector coverage in complex scenes.
+As shown in Fig. 1, real-world scenes contain many visual
+elements that fall outside the conventional definition of object
+instances yet carry clear semantic, functional, or interactive
+value. Roads guide navigation, walls and floors define spatial
+layouts, while sky, water, grassland, and courts provide im-
+portant scene context. Although often non-countable and less
+∗Corresponding author.
+Copyright © 2027, Association for the Advancement of Artificial
+Intelligence (www.aaai.org). All rights reserved.
+(a) Source Image
+(b) Thing-Centric Detection
+(c) Pixel-wise Segmentation
+(d) Expanded Objectness Detection
+Figure 1: Expanded Class-Agnostic Detection. Given a
+source image in (a), existing detectors in (b) are constrained
+by thing-centric objectness, while segmentation in (c) pro-
+vides dense pixel-wise labels rather than sparse detection
+candidates. In contrast, ECAD in (d) expands the object dis-
+covery space by discovering both thing objects and semanti-
+cally meaningful visual elements as category-agnostic boxes.
+clearly bounded than common objects, these elements are not
+mere background; they serve as semantic anchors for scene
+understanding, spatial reasoning, embodied navigation, and
+multimodal grounding. Expressions such as people on the
+‘grassland’, buildings under the ‘sky’, players at the center
+of the ‘court’, and boats on the ‘sea’ all rely on such an-
+chors. If the visual front end detects only conventional thing
+objects, these references cannot be effectively grounded or
+used for reasoning. Thus, the limitation of existing detectors
+lies not only in which categories they can recognize, but also
+in which visual content they can discover as objects.
+Recent advances in class-agnostic, open-vocabulary,
+and open-world detection have relaxed category con-
+straints from different perspectives. Class-agnostic detection
+(CAD) (Jaiswal et al. 2021; Maaz et al. 2022; Syuen Lim et al.
+2024; Tang et al. 2026) learns general objectness without
+category-specific classification, open-vocabulary detection
+(OVD) (Gu et al. 2021; Fu et al. 2025; Zhang et al. 2026) rec-
+arXiv:2608.06841v1  [cs.CV]  7 Aug 2026
+
+
+ognizes categories unseen during training, and open-world
+detection (OWD) (Joseph et al. 2021; Ma et al. 2025) ad-
+dresses unknown discovery and incremental learning. How-
+ever, these paradigms still inherit thing-centric supervision
+from existing datasets. They expand the category space or
+improve category generalization, but rarely reconsider the
+fundamental question of what visual content should be dis-
+covered as objects. Consequently, many semantically or func-
+tionally meaningful visual elements beyond conventional ob-
+ject instances remain outside the object discovery space.
+Motivated by these observations, we revisit the scope of
+objectness in CAD. Rather than asking which category a
+visual element belongs to, we ask which visual content
+should be discovered as category-agnostic object candi-
+dates. Conventional class-agnostic detectors mainly target
+thing instances, whereas our goal is to cover both common
+objects, such as humans, vehicles, and animals, and seman-
+tically meaningful elements often treated as background,
+including sky, sea, grassland, roads, and courts. Although
+semantic and panoptic segmentation also model such stuff-
+like regions, they perform dense pixel-wise labeling rather
+than sparse candidate discovery. Their flat output spaces are
+also less suited to representing overlapping or hierarchical
+candidates, such as a person and its parts. Importantly, our
+goal is neither to enlarge the detection vocabulary nor to
+convert segmentation labels into detection categories. The
+model still predicts category-agnostic candidate boxes with-
+out assigning class names. We therefore introduce Expanded
+Class-Agnostic Detection (ECAD), which broadens object-
+ness from thing-centric instances to a wider range of se-
+mantically meaningful visual elements while preserving the
+category-agnostic box prediction formulation.
+A dedicated benchmark is needed to evaluate this set-
+ting. Existing detection benchmarks largely inherit thing-
+centric annotations, leaving many semantically meaningful
+non-thing elements unlabeled and treated as background.
+They therefore cannot reliably assess a detector’s ability to
+discover visual content beyond conventional object instances.
+To address this gap, we construct BTCO-Bench, a category-
+agnostic benchmark for Beyond Thing-Centric Objectness,
+covering both real-world and cross-domain scenarios. Fur-
+ther details are provided in the BTCO-Bench section.
+We further propose ECADet, an Expanded Class-
+Agnostic Detector for discovering semantically meaning-
+ful visual elements beyond thing-centric objectness. Built
+on RF-DETR, ECADet freezes the large-scale pretrained
+DINOv3 encoder to preserve its transferable visual repre-
+sentations and reduce overfitting to limited training data,
+while training only a lightweight projector, Transformer
+decoder, and two objectness-oriented modules. Geometry-
+Aware Expert Regression (GAER) improves localization
+for elements with diverse shapes and boundary ambiguity,
+while Prototype-Guided Query Modulation (PGQM) in-
+jects structural foreground priors into object queries. This
+lightweight design broadens the object discovery space with-
+out retraining the visual foundation model, providing richer
+category-agnostic proposals for downstream recognition,
+grounding, segmentation, and multimodal reasoning.
+Our main contributions are summarized as follows:
+• We revisit the implicit assumption of thing-centric ob-
+jectness in existing detection paradigms and introduce
+ECAD, which extends category-agnostic object discov-
+ery from conventional thing instances to broader seman-
+tically meaningful visual elements.
+• We construct BTCO-Bench, a Beyond Thing-Centric
+Objectness benchmark with category-agnostic bounding-
+box annotations across real-world and cross-domain
+scenarios. We further propose ECADet, a lightweight
+DETR-based baseline equipped with Geometry-Aware
+Expert Regression (GAER) and Prototype-Guided
+Query Modulation (PGQM).
+• Extensive experiments show that ECADet consistently
+outperforms representative class-agnostic and proposal-
+based detectors on BTCO-Bench, demonstrating its ef-
+fectiveness in discovering visual content beyond thing-
+centric objectness.
+Related Work
+Class-agnostic detection (CAD) localizes object candidates
+without assigning category labels, improving generalization
+to unseen categories and domains. Early work decoupled
+localization from category prediction (Jaiswal et al. 2021),
+while later methods leveraged vision-language supervision
+and large-scale grounding data to improve proposal quality.
+MAVL (Maaz et al. 2022) uses box-level supervision from
+vision-language datasets, DiPEx (Syuen Lim et al. 2024) ex-
+pands textual queries to better cover the object concept space,
+and PF-RPN (Tang et al. 2026) progressively refines a learn-
+able visual embedding for prompt-free proposal generation
+across unseen domains. However, these methods still learn
+objectness from thing-centric annotations of discrete, count-
+able, and nameable entities, leaving their discovery space
+constrained by existing detection datasets. In contrast, we
+extend category-agnostic discovery from conventional thing
+instances to semantically meaningful non-thing elements.
+Open-vocabulary detection (OVD) and open-world de-
+tection (OWD) relax the category constraints of closed-set
+detection from complementary perspectives. OVD methods,
+such as ViLD (Gu et al. 2021), LLMDet (Fu et al. 2025),
+and NoOVD (Zhang et al. 2026), associate visual regions
+with open-ended textual concepts to recognize categories un-
+seen during training. OWD methods, such as OWD (Joseph
+et al. 2021) and SKDF (Ma et al. 2025), further address
+unknown object discovery and incremental category learn-
+ing during deployment. However, both paradigms largely
+inherit the object definition of standard detection datasets,
+where detection targets remain thing-centric instances. Con-
+sequently, semantically or functionally meaningful elements
+outside conventional instance annotations are still treated as
+background. In contrast, our goal is not to recognize more
+category names, but to broaden the visual content included
+in category-agnostic object discovery.
+Semantic, panoptic, and open-vocabulary segmenta-
+tion provide dense scene parsing through pixel-level pre-
+diction. Representative works include FCN (Long, Shel-
+hamer, and Darrell 2015) for semantic segmentation, the
+panoptic segmentation formulation (Kirillov et al. 2019),
+
+
+and LSeg (Li et al. 2022) and OpenSeg (Ghiasi et al.
+2022) for open-vocabulary segmentation. Benchmarks such
+as ADE20K (Zhou et al. 2017) and COCO-Stuff (Caesar, Ui-
+jlings, and Ferrari 2018) naturally cover stuff categories in-
+cluding sky, road, ground, and wall. However, these tasks dif-
+fer fundamentally from our setting. Segmentation produces
+dense pixel-level outputs, typically assigning each pixel a
+predefined or text-specified semantic label, whereas our task
+discovers a sparse set of category-agnostic candidate boxes
+with objectness scores. Thus, our work is complementary to
+segmentation: rather than determining the semantic label of
+each pixel, we identify which semantically meaningful visual
+elements should be explicitly proposed as object candidates.
+BTCO-Bench: Beyond Thing-Centric
+Objectness Benchmark
+Motivation
+Existing detection benchmarks are not designed for ECAD.
+Datasets such as COCO and LVIS largely annotate count-
+able thing instances, leaving many semantically meaning-
+ful, especially stuff-like, elements unlabeled and treated as
+background. Consequently, they cannot assess a detector’s
+ability to discover visual content beyond conventional ob-
+ject instances. Moreover, this expanded notion of objectness
+should generalize from standard natural images to artistic
+and degraded domains. Yet existing cross-domain bench-
+marks likewise lack category-agnostic box annotations for
+such elements. To address this gap, we construct BTCO-
+Bench, a Beyond Thing-Centric Objectness benchmark for
+evaluating category-agnostic discovery of both conventional
+thing instances and semantically meaningful visual elements
+beyond the thing-centric annotation space across real-world
+and cross-domain scenarios.
+Benchmark Construction
+BTCO-Bench consists of two complementary splits: BTCO-
+Real and BTCO-XDomain. BTCO-Real is built upon LVIS,
+which contains diverse real-world scenes and everyday ob-
+jects. We augment the LVIS minival split with bounding-
+box annotations for semantically meaningful elements be-
+yond its original annotation space. These include stuff-like
+regions, such as sky, roads, grassland, water, mountains, and
+courts, as well as previously unannotated object-like ele-
+ments, such as police lights, rocks, flowers, trees, windows,
+billboards, and signs. We further sample 1,000 LVIS training
+images and annotate them under the same protocol, forming
+a compact training split for expanded objectness learning.
+All regions are represented as category-agnostic boxes with
+a unified foreground label, i.e., object. BTCO-Real thus eval-
+uates the discovery of conventional thing instances together
+with previously unannotated object-like and semantically
+meaningful stuff-like elements. BTCO-XDomain evaluates
+the cross-domain generalization of expanded objectness un-
+der domain shifts. It comprises three subsets: artistic im-
+ages from MSOSB (Zhang et al. 2024), curated by remov-
+ing style-transferred and implausible AI-generated samples
+and retaining watercolor, cartoon, and oil-painting styles;
+monochrome and colored pencil drawings collected from the
+Table 1: Statistics of BTCO-Bench.
+Split
+Source
+Domain
+Images
+Boxes
+Box Size
+Small Medium Large
+BTCO-Real (Train)
+LVIS train
+Real
+1,000
+28,242
+8,827
+10,832
+8,583
+BTCO-Real (Test)
+LVIS minival
+Real
+5,000
+145,631 48,939
+53,296
+43,396
+BTCO-XDomain
+MSOSB/Web/SDGOD Cross-domain 18,639 134,143 10,105
+38,144
+85,894
+Internet; and adverse-condition images from SDGOD (Wu
+and Deng 2022), excluding style-transferred samples and
+covering Daytime foggy, Dusk rainy, and Night
+clear. Compared with BTCO-Real, this split covers seven
+conditions involving artistic abstraction, sketch-like con-
+tours, adverse weather, and illumination changes, enabling
+evaluation of expanded objectness in unseen domains.
+Five trained annotators participated in image collection,
+data cleaning, bounding-box annotation, and annotation stan-
+dardization. All annotations follow the COCO format and
+assign each region the unified foreground label object. Cate-
+gory names are not used for training or evaluation, ensuring
+strict adherence to the class-agnostic detection setting. The
+statistics of BTCO-Bench are summarized in Table 1. The ta-
+ble reports the number of images and annotated boxes in each
+split, together with their scale distributions, highlighting the
+diverse object sizes covered by the benchmark.
+Design Principles and Characteristics
+BTCO-Bench follows four key design principles. 1) It broad-
+ens objectness coverage from conventional thing instances
+to semantically meaningful non-thing elements. 2) All an-
+notations are category-agnostic, focusing evaluation on ob-
+jectness estimation and localization rather than category
+recognition. 3) The benchmark covers elements with di-
+verse scales, aspect ratios, shapes, and boundary ambiguity;
+non-thing elements are often less compact and less clearly
+bounded than regular objects, posing greater localization
+challenges. 4) BTCO-XDomain introduces substantial ap-
+pearance shifts through artistic images, pencil drawings,
+and adverse-condition scenes, enabling evaluation of object-
+ness generalization beyond standard natural-image domains.
+More details are provided in the supplementary material.
+The Proposed Method
+Problem Formulation
+We consider the Expanded Class-Agnostic Detection
+(ECAD) problem. Given an input image x, the ground-truth
+set is Y = {bi}N
+i=1, where all annotated regions share a uni-
+fied foreground label regardless of their semantic categories.
+The model predicts a set of category-agnostic candidates:
+ˆY = {(ˆsj, ˆbj)}Q
+j=1,
+(1)
+where ˆsj denotes the objectness score and ˆbj ∈[0, 1]4 is
+the normalized bounding box of the j-th candidate. Unlike
+closed-set and open-vocabulary detection, ECAD does not
+assign category labels to predicted regions. Instead, it treats
+both conventional thing instances and semantically meaning-
+ful non-thing elements as foreground candidates. The goal is
+to learn an expanded objectness function that discovers both
+conventional thing instances and semantically meaningful
+visual elements beyond the thing-centric annotation space.
+
+
+DINOv3
+Proposals 
+Selection
+…
+Parameter Training
+Parameter Freezing
+Multi-layer Iteration
+Proj.
+GAER
+…
+RegHead
+Route Proj.
+Geo. Enc.
+Box-routing 
+Prototype Bank
+Softmax
+Routed Box 
+Residual
+Expert-specific
+Box Residual
+…
+Final Boxes
+Sigmoid
+Prototype-Guided Query Modulation (PGQM)
+Decoder Layers
+Input Image
+PGQM
+…
+…
+…
+…
+…
+…
+Geometry-Aware Expert Regression (GAER)
+Overall Framework
+Regression 
+Experts
+Geo. Descriptor
+Geo. Proj.
+Expert 
+Routing 
+Weight
+Base Box Offset
+Proj.
+Confidence 
+Descriptor
+Enhanced 
+Query
+Offline Objectness 
+Prototype Bank
+…
+Response 
+Distribution
+Prototype-aware 
+Modulator
+…
+…
+Query 
+Residual
+ClsHead
+Final Logits
+Calibrator
+Prototype-based 
+Objectness Prior
+Content 
+Query
+Reference 
+Box
+Element-wise Mul. Add. & Sub.
+&
+Weighted Sum
+Figure 2: Overview of the proposed ECADet framework. A frozen DINOv3 extracts dense visual features, followed by a
+lightweight DETR decoder. Geometry-Aware Expert Regression (GAER) routes queries to specialized regression experts for
+diverse geometric patterns, while Prototype-Guided Query Modulation (PGQM) enhances query representations with offline
+objectness prototypes for more reliable objectness prediction.
+Overview of the Method
+Our framework builds on RF-DETR, as shown in Fig. 2. A
+frozen DINOv3 encoder extracts visual features, followed by
+a lightweight projector and Transformer decoder that pro-
+duce query features Ql = {ql
+i}N
+i=1 and reference boxes
+Rl = {rl
+i}N
+i=1 at each decoder layer. Although all foreground
+regions share a unified label in ECAD, they remain highly
+diverse in appearance and geometry. We therefore introduce
+two complementary modules. Geometry-Aware Expert Re-
+gression (GAER) routes queries to specialized regression
+experts based on their features and reference-box geometry,
+while Prototype-Guided Query Modulation (PGQM) modu-
+lates query representations with offline DINOv3-derived ob-
+jectness prototypes to improve objectness estimation. Both
+modules retain the original RF-DETR heads as the primary
+prediction paths and introduce lightweight residual refine-
+ments for ECAD.
+Geometry-Aware Expert Regression (GAER)
+In ECAD, all foreground regions share a unified label despite
+substantial geometric diversity in scale, aspect ratio, shape,
+and localization difficulty. A shared regression head must
+model these heterogeneous patterns with a single mapping,
+limiting region-specific box refinement. We therefore intro-
+duce Geometry-Aware Expert Regression (GAER), which
+routes each query to specialized regression experts based on
+its representation and reference-box geometry.
+Specifically, given the query features Ql = {ql
+i}N
+i=1 and
+the corresponding reference boxes Rl = {rl
+i}N
+i=1 at the l-th
+decoder layer, we retain the original regression pathway of
+RF-DETR. For the i-th query, the original regression head
+(RegHead) predicts a Base Box Offset:
+∆bl
+base,i = RegHead(ql
+i),
+(2)
+where ql
+i ∈Rd denotes the i-th query feature, d is the hidden
+dimension, and ∆bl
+base,i ∈R4 is the base box refinement
+predicted by the original regression head.
+Meanwhile, we encode the reference-box geometry for
+routing. Let ˜rl
+i = (cx, cy, w, h) denote the normalized ref-
+erence box obtained from the decoder reference state. We
+construct a 6-dimensional Geometry Descriptor:
+gl
+i = ψ(˜rl
+i) = [cx, cy, log w, log h, log(wh), log(w/h)],
+(3)
+where ψ(·) denotes the box Geometry Encoder, capturing
+center, scale, area, and aspect ratio.
+To determine which Regression Experts are suitable for
+the current query, we jointly use the query feature and its
+reference-box geometry. The query feature and Geometry
+Descriptor are projected into the same routing space and
+then fused by addition:
+tl
+i = froute(ql
+i) + fgeo(gl
+i),
+(4)
+where tl
+i ∈Rd is the routing feature. Here, froute(·) is Route
+Projecter, a two-layer MLP that maps the query feature to
+the routing space, and fgeo(·) is Geometry Projecter, a
+two-layer MLP that maps the 6-dimensional Geometry De-
+scriptor to the same space.
+We maintain a learnable Box-routing Prototype Bank
+Pbox = {pk}K
+k=1, where K is the number of Regression
+Experts and each prototype pk ∈Rd represents a latent
+localization pattern. The routing score between the i-th query
+and the k-th prototype is computed by cosine similarity:
+al
+i,k = sim(tl
+i, pk),
+(5)
+where sim(·, ·) denotes cosine similarity. The Expert Rout-
+ing Weight is obtained by a temperature-scaled softmax:
+wl
+i,k =
+exp(al
+i,k/τbox)
+PK
+j=1 exp(al
+i,j/τbox)
+,
+(6)
+where wl
+i,k is the weight assigned to the k-th Regression
+Expert, and τbox is a temperature parameter.
+Each Regression Expert predicts an Expert-specific Box
+Residual from the query feature:
+∆bl
+expert,i,k = Ek(ql
+i),
+(7)
+where Ek(·) denotes the k-th Regression Expert, compris-
+ing a lightweight adapter and linear box regressor.
+The final Routed Box Residual is obtained by weighted
+aggregation over all experts:
+∆bl
+route,i = η
+K
+X
+k=1
+wl
+i,k∆bl
+expert,i,k,
+(8)
+
+
+where ∆bl
+route,i denotes the Routed Box Residual, with
+scale controlled by η.
+Finally, the Routed Box Residual is added to the base
+regression result rather than replacing it. The final box pre-
+diction is obtained by refining the reference box with both
+the base box offset and the Routed Box Residual:
+bl
+i = σ
+
+rl
+i + ∆bl
+base,i + ∆bl
+route,i
+
+,
+(9)
+where σ(·) is the sigmoid and bl
+i is the final predicted box.
+Overall, GAER preserves the original regression head’s
+stable localization while augmenting it with query-adaptive
+expert residuals, enabling shared localization knowledge
+and selective modeling of heterogeneous geometric patterns
+across class-agnostic foreground regions.
+Prototype-Guided Query Modulation (PGQM)
+In parallel with the regression branch’s modeling of geomet-
+ric diversity, the classification branch handles the appear-
+ance and contextual diversity of class-agnostic foreground
+regions. Since ECAD reduces classification to objectness
+estimation without category supervision, a single classifier
+may struggle to capture diverse foreground modes. We there-
+fore propose Prototype-Guided Query Modulation (PGQM),
+which uses objectness prototypes as structural foreground
+priors to modulate query features before classification.
+We first construct an Offline Objectness Prototype Bank
+from the training set. A frozen DINOv3 encoder extracts
+dense features, from which foreground regions are cropped
+using ground-truth boxes and pooled into object-level em-
+beddings for clustering into objectness prototypes. Derived
+from self-supervised representations and foreground anno-
+tations, these prototypes provide diverse category-agnostic
+priors for foreground appearance.
+Given the query features Ql = {ql
+i}N
+i=1, we project each
+query feature into the prototype matching space:
+zl
+i = fproj(ql
+i),
+(10)
+where fproj(·) is a lightweight Projector. We then compute
+the cosine similarity between zl
+i and the offline objectness
+prototype bank Pobj = {pm}M
+m=1:
+sl
+i,m = sim(zl
+i, pm).
+(11)
+The prototype Response Distribution is obtained by
+temperature-scaled softmax:
+πl
+i,m =
+exp(sl
+i,m/τobj)
+PM
+n=1 exp(sl
+i,n/τobj)
+,
+(12)
+where τobj is a temperature parameter.
+Instead of using prototypes as an independent classifier,
+we derive a Confidence Descriptor from the similarity scores
+and the Response Distribution:
+cl
+i = Φ(sl
+i, πl
+i, ql
+i),
+(13)
+where sl
+i denotes the raw prototype similarity scores and
+πl
+i denotes the normalized prototype response distribution.
+The Confidence Descriptor cl
+i contains confidence-related
+statistics, including normalized entropy, top-1/top-2 response
+margin,pooledprototyperesponse,maximumprototypesim-
+ilarity, query feature norm, and the derived confidence score.
+These statistics indicate whether a query matches foreground
+prototypes confidently and compactly, or responds ambigu-
+ously to multiple prototypes.
+The Prototype-aware Modulator uses both the Response
+Distribution and the Confidence Descriptor to generate a
+Query Residual. Specifically, we first construct an entropy-
+aware Response Distribution:
+¯πl
+i = (1 −Hl
+i)πl
+i + Hl
+iu,
+(14)
+where Hl
+i is the normalized entropy of πl
+i and u the uni-
+form prototype distribution. Under uncertain responses, this
+operation downweights unreliable assignments.
+The modulator then maps ¯πl
+i with a two-layer MLP and
+maps the normalized query direction with a linear layer. Their
+sum is normalized and filtered by a confidence-aware gate:
+∆ql
+i = M(ql
+i, ¯πl
+i, cl
+i),
+(15)
+where M(·) denotes the Prototype-aware Modulator. A
+separate two-layer MLP predicts the gate using the entropy-
+aware response distribution and confidence cues in cl
+i, in-
+cluding margin, confidence score, entropy, and query norm.
+The Enhanced Query is obtained by residual modulation:
+ˆql
+i = ql
+i + λ∆ql
+i,
+(16)
+where λ is a learnable modulation scale.
+The Enhanced Query is fed into the original classifica-
+tion head (ClsHead):
+ol
+base,i = ClsHead(ˆql
+i).
+(17)
+For conservative objectness calibration, we estimate a
+Prototype-based Objectness Prior:
+ol
+prior,i = Gobj(ql
+i, ϕl
+i),
+(18)
+where Gobj(·) is a low-capacity Calibrator. It computes
+a weighted combination of query norm, maximum proto-
+type similarity, pooled prototype similarity, and prototype
+entropy, with positive learnable weights and a learnable bias.
+The final objectness logit is obtained by bounded residual
+calibration:
+ol
+i = ol
+base,i + βγl
+i tanh
+
+ol
+prior,i −ol
+base,i
+
+,
+(19)
+where γl
+i is a dynamic confidence gate predicted by a two-
+layer MLP from objectness prior, query norm, confidence,
+margin, and pooled similarity. β is a learnable calibration
+scale, and tanh(·) bounds the correction magnitude.
+Overall, PGQM retains the original classification head as
+the main prediction path, using offline DINOv3-driven ob-
+jectness prototypes only for confidence-aware query modula-
+tion and conservative logit calibration to improve objectness
+estimation.
+Training Objective and Implementation Details
+Training objective. ECADet follows RF-DETR’s set pre-
+diction objective. After Hungarian matching, it is optimized
+with classification, ℓ1 regression, and GIoU losses. GAER
+and PGQM are trained end-to-end under this objective with-
+out additional supervision.
+
+
+Table 2: Quantitative results on the BTCO-Real (Test) (%).
+Methods
+APs APm APl AP AP50 AP75 AR100 Params. (M) FPS↑
+RPN
+10.5 14.5
+7.0 10.8 26.2
+7.5
+44.2
+27.5 (27.2)
+49.5
+CAOD
+17.1 25.6 28.7 23.4 49.2
+19.7
+38.1
+41.3 (41.1)
+5.78
+MAVL
+4.4
+18.4 41.6 20.8 31.7
+22.2
+39.3
+59.0 (58.8)
+19.7
+DiPEx
+16.3 29.5 35.6 26.6 36.1
+28.6
+39.7
+172.8 (*)
+8.0
+PF-RPN
+13.5 32.0 38.0 26.4 34.9
+29.0
+48.5
+135.6 (78.3)
+9.4
+RF-DETR (DINOv2-S) 13.5 23.5 26.8 20.4 39.6
+18.8
+53.1
+135.6 (135.6) 50.7
+RF-DETR (DINOv3-L) 14.2 23.1 22.3 24.5 44.5
+20.8
+53.0
+315.1 (11.9)
+18.7
+ECADet (DINOv3-S)
+13.4 33.1 47.5 30.1 54.4
+29.1
+52.3
+32.2 (10.6)
+44.6
+ECADet (DINOv3-B)
+19.6 39.2 51.7 36.0 60.9
+36.1
+58.0
+98.2 (12.6)
+42.3
+ECADet (DINOv3-L)
+25.5 44.7 55.0 41.0 65.4
+42.7
+61.9
+316.1 (12.9)
+17.3
+Note: The ‘*’ denotes 256 trainable prompt parameters.
+Implementation details.
+We adopt RF-DETR with a
+frozen DINOv3 encoder as the baseline. GAER uses K = 6
+regression experts and a learnable routing prototype bank,
+while PGQM employs a fixed objectness prototype bank
+with M = 4 prototypes. We set τbox = τobj = 0.07 in
+Eqs. (6) and (12), and η = 1.1 in Eq. (8). All experiments
+use distributed data-parallel training on two NVIDIA RTX
+3090 GPUs. We train for 48 epochs with a batch size of 4 per
+GPU and gradient accumulation over 4 steps. AdamW is used
+with an initial learning rate and weight decay of 1 × 10−4,
+together with gradient clipping at a maximum norm of 0.1.
+Experimental
+Setup
+Settings. All methods are evaluated under the ECAD set-
+ting, ignoring category labels and treating all annotated vi-
+sual elements as foreground. They predict category-agnostic
+boxes ranked by objectness confidence without class-specific
+post-processing. ECADet builds on RF-DETR with a frozen
+DINOv3 encoder and is trained on BTCO-Real (Train) and
+evaluated on BTCO-Real (Test) and BTCO-XDomain.
+Comparison
+methods.
+We
+compare
+ECADet
+with
+RPN (Ren et al. 2016), CAOD (Jaiswal et al. 2021),
+MAVL (Maaz et al. 2022), DiPEx (Syuen Lim et al. 2024),
+PF-RPN (Tang et al. 2026), and two RF-DETR baselines
+using a trainable DINOv2 (original RF-DETR) or frozen
+DINOv3 encoder. These methods cover region proposal,
+CAD, vision-language-assisted discovery, and prompt-free
+proposal generation. RPN, CAOD, DiPEx, both RF-DETR
+baselines, and ECADet are trained on BTCO-Real (Train),
+while MAVL and PF-RPN use publicly released models
+trained on larger-scale datasets. For methods with class-
+specific predictions, category labels are discarded and confi-
+dence scores are treated as objectness scores under the unified
+class-agnostic protocol.
+Evaluation protocol and metrics.
+All methods are evalu-
+ated as single-foreground-class detectors. We report COCO-
+style AP averaged over IoU thresholds from 0.50 to 0.95 as
+the primary metric, together with AP50, AP75, APs, APm,
+and APl. We also report total parameters (trainable parame-
+ters in parentheses) and FPS, measured on a single NVIDIA
+RTX 3090 GPU with a batch size of 1, excluding data loading
+and post-processing. For proposal-generation methods, we
+additionally report ARK using the top-K predictions ranked
+Table 3: Quantitative results on the BTCO-XDomain (%).
+Methods
+APs APm APl
+AP AP50 AP75 AR100
+RPN
+5.5
+13.6
+7.3
+8.8
+20.4
+6.5
+57.5
+CAOD
+11.7 25.7 30.0 27.4 54.0
+25.0
+50.7
+MAVL
+5.9
+20.7 46.3 36.1 50.2
+39.3
+69.6
+DiPEx
+2.9
+9.0
+29.8 22.2 33.6
+22.0
+40.3
+PF-RPN
+17.1 36.7 49.8 42.9 54.1
+47.0
+82.4
+RF-DETR (DINOv2-S) 14.8 24.9 25.2 23.9 37.1
+25.3
+77.0
+RF-DETR (DINOv3-L) 24.1 30.7 24.9 26.0 37.6
+28.6
+80.4
+ECADet (DINOv3-S)
+21.5 42.4 50.6 45.8 65.3
+49.3
+79.9
+ECADet (DINOv3-B)
+28.8 49.4 53.5 50.0 68.7
+53.8
+83.4
+ECADet (DINOv3-L)
+57.5 71.4 64.6 65.1 75.6
+66.3
+91.7
+by objectness. This fixed budget prevents inflated recall from
+excessive proposals and ensures fair comparison. Unless oth-
+erwise specified, we set K = 100 and report AR100.
+Main Results
+Results on BTCO-Real (Test).
+As shown in Table 2,
+ECADet consistently outperforms all comparison methods.
+With DINOv3-L, it achieves 41.0 AP, exceeding the strongest
+competitor, DiPEx, by 14.4 points. It also attains the best
+AP50, AP75, and AR100, surpassing the corresponding best
+competing results by 16.2, 13.7, and 8.8 points, respectively.
+Consistent gains across object scales demonstrate its abil-
+ity to capture diverse expanded objectness. ECADet also
+offers favorable accuracy–efficiency trade-offs across back-
+bone sizes. The DINOv3-S variant reaches 30.1 AP at 44.6
+FPS with only 32.2M parameters, outperforming all competi-
+tors. Compared with the RF-DETR (DINOv3-L) baseline,
+ECADet improves AP from 24.5 to 41.0 while adding only
+1.0M trainable parameters and incurring modest inference
+overhead, validating the effectiveness of GAER and PGQM.
+Results on BTCO-XDomain.
+As shown in Table 3, all
+ECADet variants achieve the best AP, demonstrating strong
+cross-domain robustness and favorable scaling with back-
+bone size. Even with DINOv3-S, ECADet reaches 45.8 AP,
+outperforming PF-RPN by 2.9 points; DINOv3-L further
+raises AP to 65.1, yielding a 22.2-point gain. It also achieves
+the best AP50, AP75, and AR100, exceeding the strongest
+competing results by 21.5, 19.3, and 9.3 points, respectively.
+Consistent gains across all scales indicate effective expanded
+objectness modeling under appearance shifts. These results
+show that GAER and PGQM generalize well to sketches,
+paintings, cartoons, and adverse-condition scenes rather than
+overfitting domain-specific appearance cues.
+Component Ablation
+Table 4 reports the component ablation of GAER and PGQM
+on BTCO-Real (Test). Both modules improve the RF-DETR
+baseline but exhibit distinct effects. GAER raises AP from
+24.5 to 27.7, with larger gains in AP50 and AR100, indi-
+cating that geometry-aware expert routing mainly improves
+localization quality and proposal coverage across diverse vi-
+sual elements. PGQM achieves a slightly higher AP of 28.0,
+showing that prototype-guided query modulation enhances
+objectness representation and ranking reliability. Combin-
+ing both modules yields 41.0 AP, a 16.5-point gain over the
+baseline and a substantial improvement over either module
+
+
+Table 4: Ablation study of GAER and PGQM (%).
+Method
+APs APm APl AP AP50 AP75 AR100
+RF-DETR (DINOv3-L)
+14.2 23.1 22.3 24.5 44.5
+20.8
+53.0
++ GAER
+19.3 30.5 31.7 27.7 51.2
+26.5
+59.5
++ PGQM
+18.8 29.7 31.7 28.0 49.0
+25.8
+58.5
++ GAER + PGQM (ECADet (DINOv3-L)) 25.5 44.7 55.0 41.0 65.4
+42.7
+61.9
+Table 5: Effect of regression expert count in GAER (%).
+#Reg. Exp. APs APm APl
+AP AP50 AP75 AR100
+5
+19.5 29.7 30.6 26.0 45.3
+25.9
+59.5
+6
+19.3 30.5 31.7 27.7 51.2
+26.5
+59.5
+7
+18.3 28.1 29.3 24.5 43.7
+24.0
+58.6
+8
+20.1 30.9 30.5 23.5 43.3
+25.3
+59.9
+9
+17.7 27.1 27.8 23.5 43.2
+22.7
+57.3
+Table 6: Effect of objectness prototype count in PGQM (%).
+#Obj. Proto. APs APm APl
+AP AP50 AP75 AR100
+3
+20.1 31.5 33.1 27.6 48.0
+27.6
+59.4
+4
+18.8 29.7 31.7 28.0 49.0
+25.8
+58.5
+5
+18.7 28.4 30.7 25.2 44.9
+24.8
+58.3
+6
+17.9 27.8 28.9 24.1 43.4
+23.6
+58.0
+Table 7: Sensitivity to the routed residual scale η (%).
+η
+APs APm APl
+AP AP50 AP75 AR100
+0.1 22.7 41.4 47.4 36.0 62.0
+36.7
+59.2
+0.3 23.8 42.0 51.4 38.4 63.0
+39.8
+59.2
+0.5 25.5 44.0 52.2 39.7 64.2
+41.2
+62.0
+0.7 25.4 43.8 53.4 40.0 64.6
+41.4
+62.1
+0.9 25.5 44.6 54.7 40.8 65.3
+42.4
+61.8
+1.1 25.5 44.7 55.0 41.0 65.4
+42.7
+61.9
+1.3 24.4 41.5 49.0 37.4 61.0
+38.9
+61.6
+alone. It also reaches 65.4 AP50 and 42.7 AP75, with pro-
+nounced gains on medium and large visual elements. These
+results confirm the complementary roles and strong synergy
+of GAER and PGQM.
+Structural Hyperparameter Analysis
+We analyze the structural configurations of GAER and
+PGQM under single-module settings. The number of regres-
+sion experts is studied with RF-DETR+GAER at η = 0.5,
+while the number of offline objectness prototypes is exam-
+ined with RF-DETR+PGQM. Based on the results, we set the
+numbers of experts and prototypes to 6 and 4, respectively,
+and evaluate the sensitivity to η using the full ECADet.
+Effect of the number of regression experts.
+Table 5 in-
+vestigates the effect of the number of regression experts in
+GAER on BTCO-Real (Test). Overall AP first improves and
+then declines as the expert count increases. Using 6 experts
+achieves the best AP of 27.7, outperforming the other config-
+urations. This suggests that a moderate expert count provides
+sufficient capacity to model diverse geometric patterns while
+maintaining effective specialization. Too many experts may
+reduce the training samples assigned to each expert, leading
+to under-trained experts and less reliable routing. Therefore,
+we adopt 6 regression experts.
+Effect of the number of offline objectness prototypes.
+Table 6 investigates the number of offline objectness pro-
+Figure 3: Qualitative results of ECADet on BTCO-Bench.
+totypes in PGQM on BTCO-Real (Test). Using 4 prototypes
+achieves the best AP of 28.0 and the highest AP50 of 49.0.
+Although 3 prototypes yield slightly higher scale-specific
+APs, AP75, and AR100, the 4-prototype setting offers the best
+overall accuracy, suggesting a better balance between proto-
+type diversity and matching stability. Increasing the count
+beyond 4 consistently degrades performance, likely because
+excessive partitioning produces redundant or weakly sup-
+ported prototypes, reducing matching reliability. Therefore,
+we adopt 4 offline objectness prototypes in PGQM.
+Sensitivity to the routed residual scale η.
+Table 7 an-
+alyzes the sensitivity to η using the full ECADet with 6
+regression experts and 4 offline objectness prototypes. As η
+increases from 0.1 to 1.1, AP generally improves from 36.0 to
+41.0, indicating that an appropriate residual scale allows the
+expert-routed branch to complement the base box prediction.
+The best performance is achieved at η = 1.1, with 41.0 AP,
+65.4 AP50, and 42.7 AP75. Further increasing η to 1.3 causes
+a drop, suggesting that excessive residual refinement may
+perturb the base prediction and reduce localization stabil-
+ity. Meanwhile, the stable performance within η ∈[0.7, 1.1]
+shows limited sensitivity to moderate variations. Therefore,
+we set η = 1.1 in the final model.
+Qualitative Results
+Fig. 3 presents representative ECADet predictions on BTCO-
+Real and BTCO-XDomain, covering real, pencil sketches,
+cartoons, oil paintings, watercolors, and adverse-condition
+scenes. Across diverse domains, ECADet produces complete
+and well-aligned boxes for both conventional thing instances
+and semantically meaningful stuff-like regions, such as sky,
+water, floors, and roads, while maintaining low prediction re-
+dundancy under substantial appearance shifts. Further qual-
+itative comparisons are in the supplementary material.
+Conclusion
+In this work, we introduce Expanded Class-Agnostic De-
+tection (ECAD), extending thing-centric objectness to se-
+mantically meaningful visual elements. We construct BTCO-
+Bench for real-world and cross-domain evaluation and pro-
+pose ECADet, a lightweight detector built on a frozen
+VLM. ECADet employs GAER and PGQM to model ge-
+ometric diversity and improve objectness estimation. Exten-
+sive experiments demonstrate consistent gains over existing
+class-agnostic detection and proposal-generation methods,
+together with strong cross-domain generalization and favor-
+able efficiency. We hope this work inspires broader explo-
+ration of objectness beyond conventional instances and ad-
+vances visual perception in open and diverse environments.
+
+
+References
+Caesar, H.; Uijlings, J.; and Ferrari, V. 2018. Coco-stuff:
+Thing and stuff classes in context. In Proceedings of the
+IEEE conference on computer vision and pattern recognition,
+1209–1218.
+Everingham, M.; Van Gool, L.; Williams, C. K.; Winn, J.;
+and Zisserman, A. 2010. The pascal visual object classes
+(VOC) challenge. International journal of computer vision,
+88: 303–338.
+Fu, S.; Yang, Q.; Mo, Q.; Yan, J.; Wei, X.; Meng, J.; Xie,
+X.; and Zheng, W.-S. 2025. Llmdet: Learning strong open-
+vocabulary object detectors under the supervision of large
+language models. In Proceedings of the Computer Vision
+and Pattern Recognition Conference, 14987–14997.
+Ghiasi, G.; Gu, X.; Cui, Y.; and Lin, T.-Y. 2022. Scaling open-
+vocabulary image segmentation with image-level labels. In
+European conferenceon computervision, 540–557.Springer.
+Gu, X.; Lin, T.-Y.; Kuo, W.; and Cui, Y. 2021.
+Open-
+vocabulary object detection via vision and language knowl-
+edge distillation. arXiv preprint arXiv:2104.13921.
+Gupta, A.; Dollar, P.; and Girshick, R. 2019. Lvis: A dataset
+for large vocabulary instance segmentation. In Proceedings
+of the IEEE/CVF conference on computer vision and pattern
+recognition, 5356–5364.
+Jaiswal, A.; Wu, Y.; Natarajan, P.; and Natarajan, P. 2021.
+Class-agnostic object detection.
+In Proceedings of the
+IEEE/CVF Winter Conference on Applications of Computer
+Vision, 919–928.
+Joseph, K.; Khan, S.; Khan, F. S.; and Balasubramanian, V. N.
+2021. Towards open world object detection. In Proceedings
+of the IEEE/CVF conference on computer vision and pattern
+recognition, 5830–5840.
+Kirillov, A.; He, K.; Girshick, R.; Rother, C.; and Dollár,
+P. 2019.
+Panoptic segmentation.
+In Proceedings of the
+IEEE/CVF conference on computer vision and pattern recog-
+nition, 9404–9413.
+Li, B.; Weinberger, K. Q.; Belongie, S.; Koltun, V.; and
+Ranftl, R. 2022. Language-driven semantic segmentation.
+arXiv preprint arXiv:2201.03546.
+Lin, T.-Y.; Maire, M.; Belongie, S.; Hays, J.; Perona, P.; Ra-
+manan, D.; Dollár, P.; and Zitnick, C. L. 2014. Microsoft
+coco: Common objects in context.
+In Computer Vision–
+ECCV 2014: 13th European Conference, Zurich, Switzer-
+land, September 6-12, 2014, Proceedings, Part V 13, 740–
+755.
+Long, J.; Shelhamer, E.; and Darrell, T. 2015. Fully con-
+volutional networks for semantic segmentation. In Proceed-
+ings of the IEEE conference on computer vision and pattern
+recognition, 3431–3440.
+Ma, S.; Wang, Y.; Wei, Y.; Zhang, E.; Fan, J.; Sun, X.; and
+Chen, P. 2025. SKDF: a simple knowledge distillation frame-
+work for distilling open-vocabulary knowledge to open-world
+object detector. IEEE Transactions on Pattern Analysis and
+Machine Intelligence.
+Maaz, M.; Rasheed, H.; Khan, S.; Khan, F. S.; Anwer, R. M.;
+and Yang, M.-H. 2022. Class-agnostic object detection with
+multi-modal transformer. In European conference on com-
+puter vision, 512–531. Springer.
+Ren, S.; He, K.; Girshick, R.; and Sun, J. 2016. Faster R-
+CNN: Towards real-time object detection with region pro-
+posal networks. IEEE transactions on pattern analysis and
+machine intelligence, 39(6): 1137–1149.
+Syuen Lim, J.; Chen, Z.; Baktashmotlagh, M.; Chen, Z.; Yu,
+X.; Huang, Z.; and Luo, Y. 2024. DiPEx: Dispersing Prompt
+Expansion for Class-Agnostic Object Detection. arXiv e-
+prints, arXiv–2406.
+Tang, Q.; Liu, C.; Zhang, S.; Li, W.; Fan, Q.; and Gao,
+Y. 2026. Prompt-Free Universal Region Proposal Network.
+In Proceedings of the IEEE/CVF Conference on Computer
+Vision and Pattern Recognition, 13080–13090.
+Wu, A.; and Deng, C. 2022.
+Single-domain generalized
+object detection in urban scene via cyclic-disentangled self-
+distillation. In Proceedings of the IEEE/CVF Conference on
+computer vision and pattern recognition, 847–856.
+Zhang, Y.; Han, R.; Chen, Z.; Feng, W.; and Wan, L.
+2026. NoOVD: Novel Category Discovery and Embedding
+for Open-Vocabulary Object Detection. In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, 6304–6313.
+Zhang, Y.; Zheng, S.; Han, R.; Feng, Y.; Hou, J.; Song, L.;
+Feng, W.; and Wan, L. 2024. Rethinking the One-shot Object
+Detection: Cross-Domain Object Search.
+In Proceedings
+of the 32nd ACM International Conference on Multimedia,
+9573–9581.
+Zhou, B.; Zhao, H.; Puig, X.; Fidler, S.; Barriuso, A.; and
+Torralba, A. 2017. Scene parsing through ade20k dataset. In
+Proceedings of the IEEE conference on computer vision and
+pattern recognition, 633–641.

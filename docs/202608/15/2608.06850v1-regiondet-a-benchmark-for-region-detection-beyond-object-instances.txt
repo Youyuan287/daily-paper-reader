@@ -1,0 +1,1377 @@
+RegionDet: A Benchmark for Region Detection Beyond Object Instances
+Liang Wan1,2, Yuhan Wang1, Yupeng Zhang1,2∗, Zhen Xu1, Han Wang1, Fangjie Fu1, Sirui Zhu1
+1College of Intelligence and Computing, Tianjin University.
+2Key Research Center for Surface Monitoring and Analysis of Relics, State Administration of Cultural Heritage.
+Abstract
+Object detection is a fundamental task in computer vision and
+has achieved remarkable progress on standard benchmarks by
+localizing discrete and well-bounded object instances. How-
+ever, many visual targets in real-world scenarios are not in-
+dividual objects, but regions defined by visual states, scene
+context, object relations, and human activities, such as con-
+struction areas, damaged road regions, queues, group conver-
+sations, and vendor regions. Existing detection benchmarks
+are mainly built around object instances, providing limited
+support for systematically evaluating such region targets. To
+address this gap, we introduce Region Detection, a task that
+extends conventional object detection beyond object instances,
+and construct RegionDet, a benchmark for region target local-
+ization. RegionDet contains eight region categories, including
+Construction, Crossing, Damage, Queuing, Talking, Vendor,
+Waiting, and Walking, with COCO-style bounding-box anno-
+tations and evaluation protocols. We systematically evaluate
+representative closed-set and zero-shot/open-vocabulary de-
+tectors on RegionDet. Results show that closed-set detectors
+can partially learn region-level patterns under supervision,
+while zero-shot/open-vocabulary detectors struggle severely,
+revealing the strong object-centric bias of current vision-
+language detectors. Further analyses highlight key challenges
+in Region Detection, including weak boundary cues, strong
+context dependency, and insufficient relation-level region un-
+derstanding. The RegionDet will be released.
+Introduction
+Object detection is a fundamental task in computer vision,
+aiming to localize and recognize semantic visual targets in
+images. With the rapid development of modern detectors,
+remarkable progress has been achieved on standard bench-
+marks such as MS COCO (Lin et al. 2014) and LVIS (Gupta,
+Dollar, and Girshick 2019). However, most existing detec-
+tion paradigms are built upon an object-centric assumption,
+where targets are typically discrete and countable entities
+with relatively clear physical boundaries, such as people, ve-
+hicles, animals, and everyday objects. Although this object-
+centric setting has greatly advanced generic object detection,
+∗Corresponding author.
+Copyright © 2027, Association for the Advancement of Artificial
+Intelligence (www.aaai.org). All rights reserved.
+(b) Region Detection
+(a) Object Detection
+Figure 1: Comparison between conventional object detection
+and Region Detection. (a) Object detection focuses on dis-
+crete and well-bounded object instances. (b) Region Detec-
+tion localizes region targets whose spatial extents are defined
+by visual states, object relations, scene functions, and con-
+textual cues beyond single-object boundaries.
+it does not fully cover the broader visual localization needs
+of real-world vision systems.
+In many real-world applications, visual systems need to
+localize not only individual object instances, but also vi-
+sual regions with semantic, state, functional, or event-level
+meanings. For example, in urban streets, public spaces, and
+surveillance scenarios, targets of interest may include con-
+struction areas, damaged road regions, queues, group conver-
+sations, and vendor regions. These targets do not necessarily
+correspond to single standalone objects; instead, they are of-
+ten defined by visual states, spatial relations among multiple
+objects, local scene functions, and surrounding context, and
+usually lack stable physical boundaries. For instance, a con-
+struction area is not determined by the boundary of a worker,
+vehicle, or machine, but by workers, equipment, material
+piles, road context, and ongoing activities. Similarly, a group
+conversation is not a single person box, but is determined by
+the proximity, pose orientation, and interaction among mul-
+tiple participants. Fig. 1 illustrates the difference between
+conventional object detection and Region Detection: the for-
+mer mainly focuses on well-bounded object instances, while
+the latter localizes region targets defined by visual states,
+object relations, scene functions, and contextual cues.
+These region targets differ fundamentally from conven-
+arXiv:2608.06850v1  [cs.CV]  7 Aug 2026
+
+
+tional object instances in three aspects: (1) Weak boundary
+cues. Their spatial extents are often not directly defined by
+clear object contours, making localization difficult with stan-
+dard boundary cues; (2) Diverse forms. They may appear as
+local abnormal regions or activity areas formed by multiple
+people or objects; (3) Strong context dependency. Many re-
+gion targets rely heavily on scene context and object relations,
+and thus cannot be reliably recognized from local appearance
+alone. This raises a key question: when detection targets are
+no longer well-bounded, discrete, and countable object in-
+stances, but regions defined by visual states, scene context,
+and object interactions, can existing object detectors still
+localize and recognize them reliably?
+To answer this question, we introduce and study Region
+Detection, a task that aims to localize region targets with
+semantic, state, functional, or event-level meanings beyond
+conventional object instances. Unlike conventional object de-
+tection, which mainly focuses on discrete and countable en-
+tities, Region Detection extends detection targets to visual
+regions defined by behavioral states, group relations, scene
+functions, and local abnormalities. This setting preserves
+the basic localization-and-classification formulation of de-
+tection, while better matching the region localization needs
+in real-world applications such as traffic monitoring, urban
+management, public safety, and scene understanding.
+Based on this setting, we construct RegionDet, a bench-
+mark dataset for Region Detection. RegionDet contains eight
+region categories, including Construction, Crossing, Dam-
+age, Queuing, Talking, Vendor, Waiting, and Walking, cover-
+ing typical scenarios such as construction activities, pedes-
+trian behaviors, group interactions, vendor scenes, waiting
+states, and local damage. To ensure a unified task defini-
+tion and reproducible evaluation, we annotate RegionDet
+with MS COCO-compatible bounding boxes and category
+labels, and establish standard data splits and evaluation pro-
+tocols. This annotation format allows RegionDet to be di-
+rectly adapted to existing object detection frameworks, while
+providing a basis for systematically analyzing the capability
+boundaries of current detectors on region targets beyond con-
+ventional object instances.
+Furthermore, we systematically evaluate representa-
+tive closed-set and zero-shot/open-vocabulary detectors
+across diverse detection paradigms, including two-stage,
+one-stage, point/center-based, diffusion-based, query-based
+Transformer, and vision-language detection. Experimental
+results show that RegionDet poses new challenges to exist-
+ing detectors. Closed-set detectors can partially learn region-
+level patterns under supervised training, but their perfor-
+mance varies notably across paradigms. In contrast, zero-
+shot/open-vocabulary detectors are clearly limited, suggest-
+ing that current vision-language detection models remain
+strongly object-centric and struggle to generalize to region
+targets defined by states, relations, and context.
+Our main contributions are summarized as follows:
+• We introduce Region Detection, a detection task that ex-
+tends targets from well-bounded, discrete, and countable
+object instances to region targets defined by visual states,
+scene context, and object interactions.
+• We construct RegionDet, a benchmark dataset containing
+eight region categories: Construction, Crossing, Dam-
+age, Queuing, Talking, Vendor, Waiting, and Walking,
+with MS COCO-compatible bounding-box annotations
+and evaluation protocols.
+• We systematically evaluate representative closed-set
+and zero-shot/open-vocabulary detectors, covering major
+paradigms including two-stage, one-stage, point/center-
+based, diffusion-based, query-based Transformer, and
+vision-language detection.
+• We reveal key limitations of existing detectors on Region
+Detection, including weak boundary cues, strong context
+dependency, and insufficient relation-level region under-
+standing, and further show that current zero-shot/open-
+vocabulary detectors remain strongly object-centric.
+Related Work
+Object detection benchmarks. Large-scale benchmarks
+have played a central role in the development of object de-
+tection. Early datasets such as PASCAL VOC (Everingham
+et al. 2010) established the standard formulation of localiz-
+ing object instances with bounding boxes and category la-
+bels. MS COCO (Lin et al. 2014) further advanced detection
+research by introducing more diverse scenes, object scales,
+and instance annotations. Later benchmarks and benchmark
+suites, including Open Images (Kuznetsova et al. 2020), Ob-
+jects365 (Shao et al. 2019), LVIS (Gupta, Dollar, and Gir-
+shick 2019), ODinW (Li et al. 2022a), and MSOSB (Zhang
+et al. 2024), expanded the category vocabulary, data scale,
+long-tailed distribution, or domain coverage of object detec-
+tion. Despite these advances, existing object detection bench-
+marks are still largely object-centric. Their annotated targets
+are typically discrete, countable, and well-bounded object
+instances, such as persons, vehicles, animals, and everyday
+objects. This formulation has greatly advanced generic object
+detection, but provides limited support for studying targets
+whose spatial extents are defined by visual states, scene con-
+text, group relations, or activities. In contrast, RegionDet fo-
+cuses on region targets beyond conventional object instances,
+such as construction areas, damaged regions, queues, group
+conversations, and vendor regions. These targets are not nec-
+essarily determined by the physical contour of a single object,
+and thus require detectors to reason about contextual and re-
+lational cues beyond standard object boundaries.
+Region-level visual understanding. Beyond object de-
+tection, several vision tasks aim to understand visual regions
+at a finer or broader semantic level. Semantic segmentation
+datasets, such as PASCAL Context (Mottaghi et al. 2014),
+ADE20K (Zhou et al. 2017), and Cityscapes (Cordts et al.
+2016), assign semantic labels to pixels and have enabled
+dense scene parsing. Stuff and panoptic segmentation bench-
+marks, including COCO-Stuff (Caesar, Uijlings, and Ferrari
+2018) and COCO-Panoptic (Kirillov et al. 2019), further
+extend scene understanding from object instances to amor-
+phous regions such as road, sky, grass, and sidewalk. These
+benchmarks highlight the importance of modeling regions
+beyond object instances. However, Region Detection differs
+from segmentation-based scene understanding in both target
+
+
+definition and annotation form. Segmentation benchmarks
+typically focus on pixel-level labeling of continuous object or
+stuff categories, while RegionDet adopts bounding boxes to
+localize semantic, functional, state, or activity regions. Many
+region targets in RegionDet, such as Queuing, Talking, and
+Vendor, may involve multiple people, objects, and contex-
+tual elements, and do not necessarily correspond to a single
+continuous mask region. Therefore, RegionDet preserves the
+efficient box-level detection formulation while extending the
+target space toward context-dependent and relation-defined
+visual regions. RegionDet is also related to action and inter-
+action understanding. Datasets such as AVA (Gu et al. 2018),
+V-COCO (Gupta and Malik 2015), and HICO-DET (Chao
+et al. 2018) study human actions or human-object interac-
+tions. However, these tasks usually focus on recognizing indi-
+vidual actions, actor boxes, or human-object-relation triplets.
+In contrast, RegionDet aims to localize the spatial extent of
+an activity, functional, or interaction region, which may in-
+clude multiple participants, objects, and surrounding context.
+Thus, RegionDet provides a complementary benchmark for
+evaluating whether detection models can move from object-
+level localization to region-level visual understanding.
+Open-vocabulary and vision-language detection. Re-
+cent open-vocabulary and vision-language detectors aim
+to recognize novel categories specified by text descrip-
+tions. Representative methods, such as GLIP (Li et al.
+2022b), Grounding DINO (Liu et al. 2024), OWL-ViT (Min-
+derer et al. 2022), YOLO-World (Cheng et al. 2024),
+YOLOE (Wang et al. 2025), and LLMDet (Fu et al. 2025),
+leverage large-scale image-text pretraining or grounding data
+to align visual regions with language queries. These methods
+have shown promising generalization ability on conventional
+object detection and phrase grounding tasks. Nevertheless,
+most existing open-vocabulary detectors are still primarily
+trained and evaluated on object-like targets. Their language
+queries often correspond to nouns or noun phrases associ-
+ated with individual object instances, such as ‘person’, ‘car’,
+or ‘traffic light’. It remains unclear whether such models can
+directly generalize to region targets defined by states, ac-
+tivities, group relations, and scene context. RegionDet pro-
+vides a benchmark to evaluate this capability. Our experi-
+ments show that current zero-shot/open-vocabulary detec-
+tors struggle severely on RegionDet, suggesting that existing
+vision-language detection models remain strongly object-
+centric and are not yet sufficient for localizing region targets
+beyond object instances.
+Region Detection Task and RegionDet
+Benchmark
+Task Definition
+We define Region Detection as a detection task that aims
+to localize visual regions with semantic, state, functional, or
+event-level meanings beyond conventional object instances.
+Given an input image I, the goal is to predict a set of region
+targets:
+ˆY = {(ˆbi, ˆci, ˆsi)}N
+i=1,
+(1)
+where ˆbi = (ˆxi, ˆyi, ˆwi, ˆhi) denotes the predicted bounding
+box, ˆci ∈C is the predicted region category, ˆsi is the confi-
+Construction
+Crossing
+Damage
+Queuing
+Talking
+Vendor
+Waiting
+Walking
+Construction
+Construction
+Construction
+Crossing
+Crossing
+Crossing
+Damage
+Damage
+Damage
+Damage
+Queuing
+Queuing
+Queuing
+Talking
+Talking
+Talking
+Vendor
+Vendor
+Vendor
+Vendor
+Vendor
+Vendor
+Waiting
+Waiting
+Waiting
+Waiting
+Walking
+Walking Walking
+Walking
+Walking
+Figure 2: Representative examples of RegionDet. Region tar-
+gets may be defined by visual states, object relations, scene
+functions, and contextual cues rather than the physical con-
+tour of a single object.
+dence score, and N is the number of predicted region targets.
+The category set C consists of region categories rather than
+conventional object categories.
+For each image, the ground-truth annotations are repre-
+sented as:
+Y = {(bj, cj)}M
+j=1,
+(2)
+where bj and cj denote the bounding box and category label
+of the j-th annotated region, respectively. Similar to standard
+object detection, Region Detection adopts bounding boxes
+and category labels as the basic annotation format, making it
+compatible with existing detection frameworks and evalua-
+tion metrics. However, unlike conventional object detection,
+region targets are not necessarily defined by the physical
+contour of a single object. Instead, their spatial extents are
+often determined by visual states, object interactions, group
+relations, scene functions, and surrounding context.
+This formulation preserves the standard localization-and-
+classification paradigm of object detection, while extending
+the target space from well-bounded object instances to se-
+mantically meaningful region targets. Table 1 summarizes
+the differences between RegionDet and related benchmarks.
+Fig. 2 shows representative examples in RegionDet.
+Region Categories
+RegionDet contains eight region categories: Construction,
+Crossing, Damage, Queuing, Talking, Vendor, Waiting, and
+Walking.Thesecategoriescovercommonregion-leveltargets
+in urban streets, public spaces, and surveillance scenarios, in-
+cluding activity regions, abnormal regions, group interaction
+regions, and functional regions.
+Unlike conventional object categories such as person, car,
+or bicycle, these region categories are often defined by spatial
+
+
+Table 1: Comparison between RegionDet and related benchmarks.
+Benchmark
+Annotation
+Target Type
+Context/Relation Box-level Region Detection
+COCO/LVIS
+Box/Mask
+Object instances
+Limited
+No
+ADE20K/COCO-Stuff
+Mask
+Stuff/scene regions
+Limited
+No
+AVA/HICO-DET
+Box/Triplet
+Actions/interactions
+Yes
+Partial
+Referring Segmentation
+Mask
+Language-referred regions/objects
+Yes
+No
+RegionDet
+Box
+Region targets beyond objects
+Yes
+Yes
+Table 2: Category definitions of RegionDet.
+Category
+Definition
+Construction
+Regions where construction-related activities are taking
+place, typically involving workers, equipment, materials, and
+road context.
+Crossing
+Regions where pedestrians are crossing roads or moving
+across traffic-related spaces, usually defined by pedestrian
+behavior and road context.
+Damage
+Local abnormal or damaged regions, such as road damage,
+surface breakage, or visually degraded areas.
+Queuing
+Regions where multiple people form a queue or line,
+determined by their spatial arrangement and waiting behavior.
+Talking
+Regions where multiple people are engaged in conversation or
+social interaction, defined by their proximity, pose
+orientation, and interaction patterns.
+Vendor
+Functional regions related to street vending or trading,
+typically involving vendors, goods, customers, and the local
+trading context.
+Waiting
+Regions where people are waiting or staying in place, usually
+inferred from posture, spatial arrangement, and scene context.
+Walking
+Regions where pedestrians are walking or moving, defined by
+human motion states and the surrounding scene context.
+relations and contextual cues. For example, a Talking region
+is determined by interactions among multiple participants
+rather than the bounding box of a single person, while a
+Construction region is jointly formed by workers, equipment,
+materials, road context, and ongoing construction activities.
+Table 2 provides the detailed definition of each category.
+Data Collection and Annotation
+To construct RegionDet, we collected images from public
+web sources covering diverse real-world scenarios, including
+urban streets, public spaces, traffic scenes, and surveillance-
+like environments. Ten annotators were responsible for im-
+age collection, filtering, and initial bounding-box annotation.
+During data collection, images were selected to ensure that
+the target regions were visually recognizable and that the
+scenes covered diverse viewpoints, scales, densities, and con-
+textual layouts. Low-quality, duplicated, irrelevant, or highly
+ambiguous images were removed.
+Each target region was annotated with a bounding box and
+one of the eight predefined region categories. Since region
+targets may not correspond to the contour of a single ob-
+ject, annotators were instructed to annotate the spatial extent
+that best covers the intended semantic, functional, or ac-
+tivity region. For example, a Talking region should include
+the interacting participants that jointly form the conversation
+Table 3: Category-wise statistics of RegionDet.
+Category
+Images Regions Train Images Train Regions Test Images Test Regions
+Construction
+1999
+2031
+1000
+1016
+999
+1015
+Crossing
+401
+415
+201
+208
+200
+207
+Damage
+1999
+4739
+1000
+2437
+999
+2302
+Queuing
+409
+426
+204
+212
+205
+214
+Talking
+406
+574
+203
+257
+203
+317
+Vendor
+1995
+3301
+997
+1673
+998
+1628
+Waiting
+400
+571
+200
+320
+200
+251
+Walking
+401
+531
+200
+248
+201
+283
+Total
+8010
+12588
+4005
+6371
+4005
+6217
+rather than only one person, while a Construction region
+should cover the local construction activity area, including
+relevant workers, equipment, materials, and contextual ele-
+ments when necessary. For Damage, annotators focused on
+the visible abnormal or damaged area; for Vendor, the anno-
+tated region covered the functional trading area formed by
+the vendor, goods, customers, and nearby context.
+To improve annotation quality, five additional annotators
+conducted two rounds of verification. The first round checked
+whether category labels were correct and whether the boxes
+covered the intended region targets. The second round fur-
+ther inspected ambiguous cases, removed low-quality anno-
+tations, and refined boxes with inaccurate spatial extents. Dis-
+agreements and uncertain cases were discussed and resolved
+according to the annotation guidelines. This two-round ver-
+ification process improves the consistency and reliability of
+RegionDet annotations.
+Dataset Statistics
+RegionDet contains 8,010 images and 12,588 annotated re-
+gion targets in total. The dataset is split into a training set and
+a test set, with 4,005 images and 6,371 regions for training,
+and 4,005 images and 6,217 regions for testing. Table 3 re-
+ports the category-wise distribution and overall statistics of
+RegionDet. RegionDet covers eight region categories with
+diverse semantic properties and spatial characteristics. For
+categories with larger appearance variations and scene di-
+versity, such as Construction, Damage, and Vendor, we col-
+lected relatively more samples. Interaction- and behavior-
+related categories such as Queuing, Talking, Waiting, and
+Walking are included to evaluate relation- and state-aware
+region understanding. The training and test sets are approx-
+imately balanced within each category, enabling consistent
+evaluation across region targets.
+Evaluation Protocol
+We evaluate detectors on the RegionDet test set using stan-
+dard COCO-style detection metrics. The primary metric is
+
+
+Table 4: Results of Closed-set Detection Methods on RegionDet (%).
+Type
+Methods
+Backbone/Encoder Construction Crossing Damage Queuing Talking Vendor Waiting Walking
+AP
+AP50 AP75
+Params. (M)
+Dense
+one-stage
+ATSS
+ResNet-50
+28.5
+18.5
+6.0
+13.9
+19.2
+19.4
+9.0
+17.7
+16.5
+35.7
+13.0
+32.1
+YOLOv13-L
+YOLOv13
+31.8
+54.0
+6.61
+30.7
+33.7
+24.8
+15.6
+40.2
+29.7
+48.5
+29.8
+27.6
+YOLO26-L
+YOLO26
+33.3
+53.2
+8.2
+28.3
+33.7
+25.1
+18.0
+44.6
+30.5
+49.2
+31.4
+24.8
+Two-stage
+Faster R-CNN
+ResNet-50
+25.5
+13.1
+5.7
+16.5
+17.7
+18.2
+8.8
+20.0
+15.7
+38.1
+10.3
+41.4
+Point/center
+anchor-free
+RepPoints
+ResNet-50
+28.8
+17.6
+6.8
+15.9
+19.4
+19.9
+9.6
+17.5
+16.9
+36.7
+13.3
+36.8
+CenterNet++
+ResNet-50
+34.6
+35.8
+6.8
+22.5
+21.8
+17.8
+13.4
+26.6
+22.4
+40.8
+22.3
+40.8
+Diffusion
+based
+DiffusionDet
+ResNet-50
+29.7
+40.8
+6.1
+23.0
+21.5
+18.6
+17.4
+30.6
+23.5
+44.5
+22.3
+110.6
+DiffuDETR
+ResNet-50
+32.1
+37.5
+6.5
+23.2
+20.1
+18.6
+16.8
+27.5
+22.8
+39.9
+22.9
+59.1
+Query-based
+Transformer
+DEIMv2-L
+DINOv3-S16
+45.5
+67.7
+15.5
+31.4
+37.0
+35.0
+25.3
+38.8
+37.0
+57.1
+38.7
+32.0
+RT-DETRv4-L
+DINOv3-B16
+38.6
+62.7
+11.3
+32.2
+35.5
+29.0
+22.5
+32.8
+33.1
+52.7
+34.7
+31.0
+RF-DETR-L
+DINOv2-S16
+37.5
+60.0
+13.3
+32.8
+43.7
+34.5
+24.5
+37.8
+37.6
+56.1
+37.4
+33.6
+DINO
+ResNet-50
+29.7
+36.6
+5.7
+17.8
+15.7
+15.0
+10.7
+23.2
+19.3
+34.0
+19.1
+47.6
+Co-DETR
+ResNet-50
+35.4
+46.8
+7.8
+25.5
+25.0
+22.3
+17.3
+31.9
+26.5
+46.2
+26.2
+64.5
+MI-DETR
+ResNet-50
+33.6
+47.0
+6.9
+23.9
+22.2
+20.1
+15.2
+31.9
+25.1
+44.4
+25.0
+77.3
+mean Average Precision (AP), computed over IoU thresholds
+from 0.50 to 0.95 with a step size of 0.05 and averaged over
+all categories. We also report AP50 and AP75 to evaluate lo-
+calization performance under different overlap requirements.
+For closed-set detection, all models are trained on the
+RegionDet training set and evaluated on the test set under
+the same eight-category label space. For zero-shot/open-
+vocabulary detection, models are evaluated without using
+any RegionDet training data. We use category names as text
+queries and evaluate the predicted boxes under the same
+COCO-style protocol. The text queries are kept fixed across
+methods for fair comparison. This unified setup enables
+direct comparison between supervised detectors and zero-
+shot/open-vocabulary detectors on region targets.
+Empirical Results and Findings
+Experimental Setup
+Evaluation settings. We evaluate existing detectors on Re-
+gionDet under two settings: closed-set detection and zero-
+shot/open-vocabulary detection. In the closed-set setting,
+models are trained on the RegionDet training set and eval-
+uated on the test set with the same eight region categories,
+assessing whether existing detection architectures can learn
+region targets under full supervision. In the zero-shot/open-
+vocabulary setting, models are evaluated without using Re-
+gionDet training data. We use the RegionDet category names
+as fixed text queries across methods to examine whether
+vision-language detectors trained on large-scale image-text
+or grounding data can generalize to region targets beyond
+conventional object instances.
+Evaluation metrics. Following the evaluation protocol
+in Section Evaluation Protocol, we report AP, AP50, AP75,
+and category-wise AP for all eight region categories. Model
+parameters are reported in millions when available.
+Evaluated methods. For closed-set detection, we evaluate
+detectors from diverse paradigms, as summarized in Table 4.
+These include dense one-stage detectors (ATSS (Zhang et al.
+2020), YOLOv13-L (Lei et al. 2025), and YOLO26-L (Sap-
+kota et al. 2025)), a two-stage detector (Faster R-CNN (Ren
+et al. 2016)), point/center-based anchor-free detectors (Rep-
+Points (Yang et al. 2019) and CenterNet++ (Duan et al.
+2023)), diffusion-based detectors (DiffusionDet (Chen et al.
+2023) and DiffuDETR (Nawar, Badran, and Torki 2026)),
+and query-based Transformer detectors (DINO (Zhang
+et al. 2022), Co-DETR (Zong, Song, and Liu 2023), MI-
+DETR (Nan et al. 2025), RF-DETR-L (Robinson et al.
+2025), RT-DETRv4-L (Liao et al. 2025), and DEIMv2-
+L (Huang et al. 2025)). For zero-shot/open-vocabulary detec-
+tion, we evaluate text-conditioned vision-language detectors,
+including MMGroundingDINO (Liu et al. 2024), YOLO-
+World (Cheng et al. 2024), YOLOE (Wang et al. 2025), and
+LLMDet (Fu et al. 2025), as shown in Table 5. We group
+methods by their dominant detection paradigm, although
+some architectural designs may overlap across categories.
+Closed-set Detection Results
+Table 4 reports the results of closed-set detectors on Re-
+gionDet. Overall, existing detectors can learn region-level
+patterns under full supervision, but RegionDet remains chal-
+lenging even for recent strong detectors. Among all evaluated
+methods, RF-DETR-L achieves the best overall AP of 37.6,
+while DEIMv2-L obtains a comparable AP of 37.0 and the
+best AP50 and AP75 scores. These results suggest that query-
+based Transformer detectors with strong visual encoders are
+more effective for Region Detection.
+Performance
+varies
+notably
+across
+detection
+paradigms. Dense one-stage and two-stage detectors
+show relatively limited performance, with ATSS and Faster
+R-CNN achieving 16.5 AP and 15.7 AP, respectively.
+Point/center-based anchor-free and diffusion-based detectors
+perform better, with CenterNet++ and DiffusionDet reaching
+22.4 AP and 23.5 AP. Query-based Transformer detectors
+generally achieve stronger results. For example, Co-DETR
+improves over DINO by 7.2 AP, while RF-DETR-L and
+DEIMv2-L further improve the performance to around 37
+AP. This suggests that global query interactions, strong
+visual representations, and flexible set prediction are
+beneficial for region-level localization.
+Category-wise results reveal large difficulty differences
+among region targets. Crossing is relatively easier for strong
+detectors, with DEIMv2-L reaching 67.7 AP and RF-DETR-
+L reaching 60.0 AP, likely because crossing regions often
+contain salient pedestrian-road context and recognizable spa-
+tial layouts. In contrast, Damage is consistently the most dif-
+ficult category. Even the best-performing method achieves
+
+
+Table 5: Results of Zero-shot/Open-vocabulary Detectors on RegionDet (%).
+Methods
+Backbone/Encoder
+Construction
+Crossing
+Damage
+Queuing
+Talking
+Vendor
+Waiting
+Walking
+AP
+AP50
+AP75
+Params. (M)
+MMGroundingDino
+Swin-T
+3.4
+0.2
+1.2
+0.0
+0.3
+0.6
+0.3
+0.2
+0.8
+1.9
+0.6
+173
+Swin-B
+1.1
+0.1
+0.6
+0.0
+0.3
+0.4
+0.2
+0.2
+0.3
+1.1
+0.2
+233
+Swin-L
+1.4
+0.3
+0.1
+0.0
+0.5
+3.6
+0.3
+0.3
+0.8
+2.1
+0.6
+343
+YOLO World
+YOLOv8-S
+2.3
+0.1
+0.0
+0.0
+0.4
+0.1
+0.1
+0.0
+0.4
+1.1
+0.2
+76
+YOLOv8-M
+3.6
+0.5
+0.0
+0.1
+0.5
+0.1
+0.8
+0.1
+0.7
+1.9
+0.4
+92
+YOLOv8-L
+3.5
+0.0
+0.0
+0.0
+1.0
+0.1
+0.2
+0.0
+0.6
+1.8
+0.3
+110
+YOLOE
+YOLOv8-S
+4.2
+0.1
+0.3
+0.7
+0.2
+0.3
+0.3
+0.2
+0.7
+2.0
+0.4
+78
+YOLOv8-M
+4.6
+0.4
+0.3
+0.5
+0.2
+0.4
+0.2
+0.3
+0.9
+2.5
+0.5
+95
+YOLOv8-L
+5.1
+0.4
+0.4
+0.5
+0.3
+0.5
+0.4
+0.1
+1.0
+2.8
+0.5
+115
+YOLOv11-S
+4.0
+0.4
+0.2
+0.2
+0.3
+0.3
+0.2
+0.3
+0.7
+2.2
+0.4
+76
+YOLOv11-M
+4.9
+0.2
+0.2
+0.5
+0.1
+0.3
+0.4
+0.2
+0.8
+2.4
+0.4
+91
+YOLOv11-L
+4.5
+0.1
+0.9
+0.6
+0.1
+0.4
+0.6
+0.0
+0.9
+2.5
+0.5
+96
+LLMDet
+Swin-T
+0.7
+0.1
+0.8
+0.0
+0.4
+0.2
+0.1
+0.1
+0.3
+0.9
+0.2
+744
+Swin-B
+1.0
+0.2
+0.8
+0.0
+0.3
+0.7
+0.1
+0.1
+0.4
+1.1
+0.2
+804
+Swin-L
+0.8
+0.2
+0.4
+0.0
+0.4
+0.2
+0.1
+0.1
+0.3
+0.9
+0.2
+879
+only 15.5 AP on this category, indicating that local abnormal
+regions with weak boundaries and diverse appearances are
+difficult to localize. Relation- and state-dependent categories
+such as Queuing, Talking, and Waiting also remain challeng-
+ing, as they require reasoning about group relations, human
+states, and surrounding context rather than local object ap-
+pearance alone.
+The AP50–AP75 gap highlights the difficulty of precise
+region localization. Many methods achieve much higher
+AP50 than AP75, suggesting that detectors can find approx-
+imate region locations but struggle with precise spatial ex-
+tents. For example, DiffusionDet achieves 44.5 AP50 but
+only 22.3 AP75, while Co-DETR achieves 46.2 AP50 but
+26.2 AP75. Since overall AP averages performance over IoU
+thresholds up to 0.95, it remains much lower than AP50,
+further reflecting the difficulty of precise region localization.
+Zero-shot/Open-vocabulary Detection Results
+Table 5 reports the zero-shot/open-vocabulary results on Re-
+gionDet. In sharp contrast to the closed-set setting, all eval-
+uated vision-language detectors struggle severely on Region
+Detection. The best overall AP is only around 1.0, and AP50
+remains below 3.0 for all models. This indicates that current
+zero-shot/open-vocabulary detectors cannot directly general-
+ize to region targets defined by visual states, relations, scene
+functions, and contextual cues.
+This poor performance is consistent across detec-
+tor families and backbone scales. MMGroundingDINO,
+YOLO-World, YOLOE, and LLMDet all obtain extremely
+low AP scores, and larger backbones do not consistently
+bring clear improvements. For example, larger variants of
+MMGroundingDINO and LLMDet show no obvious advan-
+tage over their smaller counterparts. This suggests that the
+limitation is not merely caused by model capacity, but is
+closely related to the object-centric training and evaluation
+paradigm of existing vision-language detectors.
+The category-wise results further support this obser-
+vation. Some methods obtain slightly higher scores on Con-
+struction, possibly because construction scenes contain rec-
+ognizable object cues such as workers, equipment, or ma-
+terials. However, the overall performance remains very low.
+For relation-defined categories such as Queuing and Talking,
+and state- or abnormality-defined categories such as Dam-
+age, zero-shot/open-vocabulary detectors almost fail to lo-
+calize valid regions. These categories cannot be reliably de-
+tected by simply matching text queries to individual object
+instances, since their spatial extents are determined by group
+relations, visual states, and scene context.
+These results reveal a clear gap between open-
+vocabulary object detection and Region Detection. Al-
+though existing vision-language detectors have shown strong
+generalization on object-like categories, they remain strongly
+biased toward discrete and well-bounded object instances.
+RegionDet therefore provides a challenging benchmark for
+evaluating whether future open-vocabulary detectors can
+move beyond object-centric localization toward context- and
+relation-aware region understanding.
+Key Findings
+Based on the above results, we summarize three key findings.
+First, Region Detection is learnable but remains chal-
+lenging. Closed-set detectors can learn region targets under
+supervised training, showing that Region Detection is a feasi-
+ble detection task within the standard detection framework.
+However, even recent strong detectors achieve only mod-
+erate performance, indicating that region targets pose new
+challenges beyond conventional object instance detection.
+Second, region targets require context- and relation-
+aware understanding. The large category-wise perfor-
+mance gap shows that detectors handle visually salient
+regions better than weak-boundary, state-dependent, or
+relation-defined targets. Categories such as Damage, Wait-
+ing, andQueuing require models toreason about visualstates,
+spatial layouts, group relations, and surrounding context,
+rather than relying only on local object appearance.
+Third, current open-vocabulary detectors remain
+strongly object-centric. Zero-shot/open-vocabulary detec-
+tors perform poorly across all region categories, even with
+larger backbones. This suggests that existing vision-language
+detectors, although effective for object-like categories, are
+not yet sufficient for localizing region targets defined by
+states, relations, functions, and context.
+
+
+GT
+RF-DETR-L
+YOLO26-L
+CenterNet++
+DiffuDETR
+Construction
+Crossing
+Damage
+Queuing
+Talking
+Vendor
+Waiting
+Walking
+Figure 3: Qualitative comparison of representative closed-set
+detectors on RegionDet. The compared methods cover query-
+based Transformer, dense one-stage, point/center-based, and
+diffusion-based detectors. While supervised detectors can
+produce reasonable region predictions, they often show in-
+complete or imprecise localization.
+Figure 4: Qualitative results of YOLOE (v11-L) under the
+zero-shot/open-vocabulary setting on RegionDet. Although
+YOLOE (v11-L) can detect many object-like components,
+its predictions are mostly attached to individual objects or
+local parts and fail to cover the intended region-level extents.
+Qualitative Analysis
+Closed-set detectors. Fig. 3 shows qualitative comparisons
+of representative closed-set detectors on RegionDet. The
+compared methods cover query-based Transformer, dense
+one-stage, point/center-based, and diffusion-based detectors.
+Overall, the visual results are consistent with the quantita-
+tive results in Table 4. With supervised training, detectors
+can identify relevant region areas to some extent, but their
+predictions are often partial, shifted, or spatially imprecise.
+For context-dependent categories such as Construction
+and Vendor, detectors tend to focus on salient components,
+such as workers, equipment, goods, or pedestrians, but fail
+to cover the complete functional region. For weak-boundary
+categories such as Damage, predicted boxes are often unsta-
+ble or shifted from the damaged area, reflecting the difficulty
+of localizing abnormal regions with ambiguous boundaries.
+For relation- and state-defined categories such as Queuing,
+Talking, and Waiting, detectors sometimes localize individ-
+ual people or subgroups rather than the full region formed
+by group relations or human states.
+Among the visualized methods, RF-DETR-L generally
+produces more reasonable region predictions, while other
+paradigms more frequently show fragmented or partial lo-
+calization. Nevertheless, even stronger detectors still strug-
+gle to consistently predict complete region extents. These
+observations suggest that Region Detection requires not only
+recognizing salient object instances, but also reasoning about
+weak boundaries, spatial relations, human states, scene func-
+tions, and surrounding context.
+Zero-shot/open-vocabulary detectors. Fig. 4 shows
+qualitative results of YOLOE (YOLOv11-L), the best-
+performing zero-shot/open-vocabulary detector in our exper-
+iments. YOLOE can detect many object-like components,
+such as people, workers, goods, and local structures, but
+its predictions are mostly attached to individual objects or
+local parts rather than complete region targets. This is es-
+pecially evident for activity-, relation-, and context-defined
+categories such as Crossing, Waiting, Walking, Construction,
+and Vendor, where the target extent is determined by hu-
+man states, spatial layouts, scene functions, and surrounding
+context. These results suggest that current vision-language
+detectors are not simply limited by object recognition, but
+by region-level localization and contextual aggregation. This
+qualitative evidence further supports our quantitative results,
+revealing their strong object-centric bias in localizing regions
+defined by states, relations, scene functions, and context.
+Conclusion and Discussion
+In this paper, we introduce Region Detection, a detection
+task that extends conventional object detection beyond dis-
+crete and well-bounded object instances. We construct Re-
+gionDet, a benchmark dataset with eight representative re-
+gion categories, COCO-compatible bounding-box annota-
+tions, and standard evaluation protocols. RegionDet provides
+a testbed for localizing visual regions defined by states, rela-
+tions, scene functions, and contextual cues. Through system-
+atic experiments, we show that existing detectors face clear
+challenges on RegionDet. Closed-set detectors can partially
+learn region-level patterns under supervision, but still strug-
+gle with weak boundaries, context-dependent extents, and
+relation-defined targets. Zero-shot/open-vocabulary detec-
+tors perform poorly, indicating that current vision-language
+detectors remain strongly object-centric and limited in local-
+izing region targets beyond object instances.
+Future Directions. RegionDet opens promising direc-
+tions for context- and relation-aware detection, open-
+vocabulary localization of state-, activity-, and function-
+defined regions, and more flexible annotation forms for am-
+biguous region extents. We hope RegionDet encourages de-
+tection models to move beyond object-centric localization
+toward richer region-level visual understanding.
+
+
+References
+Caesar, H.; Uijlings, J.; and Ferrari, V. 2018. Coco-stuff:
+Thing and stuff classes in context. In Proceedings of the
+IEEE conference on computer vision and pattern recognition,
+1209–1218.
+Chao, Y.-W.; Liu, Y.; Liu, X.; Zeng, H.; and Deng, J. 2018.
+Learning to detect human-object interactions. In 2018 ieee
+winter conference on applications of computer vision (wacv),
+381–389. IEEE.
+Chen, S.; Sun, P.; Song, Y.; and Luo, P. 2023. Diffusion-
+det: Diffusion model for object detection. In Proceedings of
+the IEEE/CVF international conference on computer vision,
+19830–19843.
+Cheng, T.; Song, L.; Ge, Y.; Liu, W.; Wang, X.; and Shan,
+Y. 2024. Yolo-world: Real-time open-vocabulary object de-
+tection.
+In Proceedings of the IEEE/CVF conference on
+computer vision and pattern recognition, 16901–16911.
+Cordts, M.; Omran, M.; Ramos, S.; Rehfeld, T.; Enzweiler,
+M.; Benenson, R.; Franke, U.; Roth, S.; and Schiele, B. 2016.
+The cityscapes dataset for semantic urban scene understand-
+ing. In Proceedings of the IEEE conference on computer
+vision and pattern recognition, 3213–3223.
+Duan, K.; Bai, S.; Xie, L.; Qi, H.; Huang, Q.; and Tian, Q.
+2023. CenterNet++ for object detection. IEEE transactions
+on pattern analysis and machine intelligence, 46(5): 3509–
+3521.
+Everingham, M.; Van Gool, L.; Williams, C. K.; Winn, J.;
+and Zisserman, A. 2010. The pascal visual object classes
+(VOC) challenge. International journal of computer vision,
+88: 303–338.
+Fu, S.; Yang, Q.; Mo, Q.; Yan, J.; Wei, X.; Meng, J.; Xie,
+X.; and Zheng, W.-S. 2025. Llmdet: Learning strong open-
+vocabulary object detectors under the supervision of large
+language models. In Proceedings of the Computer Vision
+and Pattern Recognition Conference, 14987–14997.
+Gu, C.; Sun, C.; Ross, D. A.; Vondrick, C.; Pantofaru, C.;
+Li, Y.; Vijayanarasimhan, S.; Toderici, G.; Ricco, S.; Suk-
+thankar, R.; et al. 2018. Ava: A video dataset of spatio-
+temporally localized atomic visual actions. In Proceedings of
+the IEEE conference on computer vision and pattern recog-
+nition, 6047–6056.
+Gupta, A.; Dollar, P.; and Girshick, R. 2019. Lvis: A dataset
+for large vocabulary instance segmentation. In Proceedings
+of the IEEE/CVF conference on computer vision and pattern
+recognition, 5356–5364.
+Gupta, S.; and Malik, J. 2015. Visual semantic role labeling.
+arXiv preprint arXiv:1505.04474.
+Huang, S.; Hou, Y.; Liu, L.; Yu, X.; and Shen, X. 2025.
+Real-time object detection meets DINOv3. arXiv preprint
+arXiv:2509.20787.
+Kirillov, A.; He, K.; Girshick, R.; Rother, C.; and Dollár,
+P. 2019.
+Panoptic segmentation.
+In Proceedings of the
+IEEE/CVF conference on computer vision and pattern recog-
+nition, 9404–9413.
+Kuznetsova, A.; Rom, H.; Alldrin, N.; Uijlings, J.; Krasin,
+I.; Pont-Tuset, J.; Kamali, S.; Popov, S.; Malloci, M.;
+Kolesnikov, A.; et al. 2020. The open images dataset v4:
+Unified image classification, object detection, and visual re-
+lationship detection at scale. International journal of com-
+puter vision, 128(7): 1956–1981.
+Lei, M.; Li, S.; Wu, Y.; Hu, H.; Zhou, Y.; Zheng, X.; Ding,
+G.; Du, S.; Wu, Z.; and Gao, Y. 2025. Yolov13: Real-time
+object detection with hypergraph-enhanced adaptive visual
+perception. arXiv preprint arXiv:2506.17733.
+Li, C.; Liu, H.; Li, L.; Zhang, P.; Aneja, J.; Yang, J.; Jin,
+P.; Hu, H.; Liu, Z.; Lee, Y. J.; et al. 2022a. Elevater: A
+benchmark and toolkit for evaluating language-augmented
+visual models. Advances in Neural Information Processing
+Systems, 35: 9287–9301.
+Li, L. H.; Zhang, P.; Zhang, H.; Yang, J.; Li, C.; Zhong, Y.;
+Wang, L.; Yuan, L.; Zhang, L.; Hwang, J.-N.; et al. 2022b.
+Grounded language-image pre-training. In Proceedings of
+the IEEE/CVF conference on computer vision and pattern
+recognition, 10965–10975.
+Liao, Z.; Zhao, Y.; Shan, X.; Yan, Y.; Liu, C.; Lu, L.; Ji,
+X.; and Chen, J. 2025. RT-DETRv4: Painlessly Furthering
+Real-Time Object Detection with Vision Foundation Models.
+arXiv preprint arXiv:2510.25257.
+Lin, T.-Y.; Maire, M.; Belongie, S.; Hays, J.; Perona, P.; Ra-
+manan, D.; Dollár, P.; and Zitnick, C. L. 2014. Microsoft
+coco: Common objects in context.
+In Computer Vision–
+ECCV 2014: 13th European Conference, Zurich, Switzer-
+land, September 6-12, 2014, Proceedings, Part V 13, 740–
+755.
+Liu, S.; Zeng, Z.; Ren, T.; Li, F.; Zhang, H.; Yang, J.; Jiang,
+Q.; Li, C.; Yang, J.; Su, H.; et al. 2024. Grounding dino:
+Marrying dino with grounded pre-training for open-set object
+detection. In European conference on computer vision, 38–
+55. Springer.
+Minderer, M.; Gritsenko, A.; Stone, A.; Neumann, M.; Weis-
+senborn, D.; Dosovitskiy, A.; Mahendran, A.; Arnab, A.; De-
+hghani, M.; Shen, Z.; et al. 2022. Simple open-vocabulary
+object detection with vision transformers. arxiv 2022. arXiv
+preprint arXiv:2205.06230, 2.
+Mottaghi, R.; Chen, X.; Liu, X.; Cho, N.-G.; Lee, S.-W.;
+Fidler, S.; Urtasun, R.; and Yuille, A. 2014. The role of
+context for object detection and semantic segmentation in the
+wild. In Proceedings of the IEEE conference on computer
+vision and pattern recognition, 891–898.
+Nan, Z.; Li, X.; Dai, J.; and Xiang, T. 2025. MI-DETR:
+an object detection model with multi-time inquiries mech-
+anism. In Proceedings of the Computer Vision and Pattern
+Recognition Conference, 4703–4712.
+Nawar, Y. A.; Badran, M.; and Torki, M. 2026. DiffuDETR:
+Rethinking Detection Transformers with Denoising Diffu-
+sion Process. In The Fourteenth International Conference
+on Learning Representations.
+Ren, S.; He, K.; Girshick, R.; and Sun, J. 2016. Faster R-
+CNN: Towards real-time object detection with region pro-
+posal networks. IEEE transactions on pattern analysis and
+machine intelligence, 39(6): 1137–1149.
+Robinson, I.; Robicheaux, P.; Popov, M.; Ramanan, D.;
+and Peri, N. 2025. RF-DETR: neural architecture search
+
+
+for real-time detection transformers.
+arXiv preprint
+arXiv:2511.09554.
+Sapkota, R.; Cheppally, R. H.; Sharda, A.; and Karkee, M.
+2025. YOLO26: key architectural enhancements and perfor-
+mance benchmarking for real-time object detection. arXiv
+preprint arXiv:2509.25164.
+Shao, S.; Li, Z.; Zhang, T.; Peng, C.; Yu, G.; Zhang, X.; Li,
+J.; and Sun, J. 2019. Objects365: A large-scale, high-quality
+dataset for object detection. In Proceedings of the IEEE/CVF
+international conference on computer vision, 8430–8439.
+Wang, A.; Liu, L.; Chen, H.; Lin, Z.; Han, J.; and Ding,
+G. 2025. Yoloe: Real-time seeing anything. arXiv preprint
+arXiv:2503.07465.
+Yang, Z.; Liu, S.; Hu, H.; Wang, L.; and Lin, S. 2019. Rep-
+points: Point set representation for object detection. In Pro-
+ceedings of the IEEE/CVF international conference on com-
+puter vision, 9657–9666.
+Zhang, H.; Li, F.; Liu, S.; Zhang, L.; Su, H.; Zhu, J.; Ni, L. M.;
+and Shum, H.-Y. 2022. Dino: Detr with improved denoising
+anchor boxes for end-to-end object detection. arXiv preprint
+arXiv:2203.03605.
+Zhang, S.; Chi, C.; Yao, Y.; Lei, Z.; and Li, S. Z. 2020. Bridg-
+ing the gap between anchor-based and anchor-free detection
+via adaptive training sample selection. In Proceedings of
+the IEEE/CVF conference on computer vision and pattern
+recognition, 9759–9768.
+Zhang, Y.; Zheng, S.; Han, R.; Feng, Y.; Hou, J.; Song, L.;
+Feng, W.; and Wan, L. 2024. Rethinking the One-shot Object
+Detection: Cross-Domain Object Search.
+In Proceedings
+of the 32nd ACM International Conference on Multimedia,
+9573–9581.
+Zhou, B.; Zhao, H.; Puig, X.; Fidler, S.; Barriuso, A.; and
+Torralba, A. 2017. Scene parsing through ade20k dataset. In
+Proceedings of the IEEE conference on computer vision and
+pattern recognition, 633–641.
+Zong, Z.; Song, G.; and Liu, Y. 2023.
+Detrs with col-
+laborative hybrid assignments training. In Proceedings of
+the IEEE/CVF international conference on computer vision,
+6748–6758.

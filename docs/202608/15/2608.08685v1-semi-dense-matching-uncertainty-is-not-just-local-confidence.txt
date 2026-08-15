@@ -1,0 +1,2015 @@
+Semi-Dense Matching Uncertainty Is Not Just Local Confidence
+Khoa Hoang1,2
+Hoang-Tuan Nguyen3
+Huong Ninh1,2
+Hai Tran2
+Long Q. Tran1
+1University of Engineering and Technology, Vietnam National University, Hanoi
+2Optoelectronics Center, Viettel Aerospace Institute, Viettel Group
+3National Yang Ming Chiao Tung University, Taiwan
+Abstract
+Reliable semi-dense matching is essential for modern
+geometric vision systems.
+Designed under a coarse-to-
+fine paradigm, it achieves an optimal balance between
+performance and computational cost.
+However, existing
+methods often struggle to provide well-quantified uncer-
+tainties, where catastrophic coarse-assignment failures
+are ignored, leading to truncated error distributions and
+severely misjudged geometric estimations. In this paper,
+we propose a lightweight, post-hoc overall uncertainty
+estimation framework that introduces a two-component
+calibrated Laplace mixture model with only 9 learnable
+parameters.
+The objective is to explicitly capture both
+the sharp local refinement noise and the broader tail of
+coarse-assignment failures.
+We introduce the Coarse-
+success posterior Refit (CoRe) method,
+a geometric
+refitting module that utilizes the posterior probability of
+coarse-assignment success as soft correspondence weights.
+Extensive experiments show that our method consistently
+improves downstream geometric accuracy across various
+pretrained-only matchers and robust estimators with
+minimal computational overhead. Our code is available at
+https://github.com/khoavpt/Probabilistic
+-matching.
+1. Introduction
+Image matching is a key foundation of modern geomet-
+ric vision systems, critical for downstream applications
+such as Structure-from-Motion (SfM) [33], visual localiza-
+tion [30, 31], and Simultaneous Localization and Mapping
+(SLAM) [26, 27]. Recently, semi-dense feature matching
+methods [21, 37, 44] have demonstrated remarkable suc-
+cess by adopting a coarse-to-fine paradigm. These archi-
+tectures balance efficiency and performance by restricting
+global correspondence search to coarse features, requiring
+the fine stage to predict only local offsets within a local cor-
+respondence window. [21, 23, 37, 44].
+30
+45
+60
+LoFTR
+GIMLoFTR
+ELoFTR
+CoMatch
+EDM
+XFeat
+Across matchers
+All use RANSAC
+30
+45
+60
+RANSAC
+PROSAC
+LO-RANSAC
+GC-RANSAC
+MAGSAC++
+Across robust estimators
+All use ELoFTR
+HPatches homography AUC@3px (%)
+Base
+Ours
+Figure 1.
+Coarse-success posterior refit improves down-
+stream homography estimation. Radar plots compare HPatches
+AUC@3px before and after our refit. The left panel varies the
+matcher with RANSAC fixed, while the right varies the robust es-
+timator with ELoFTR fixed.
+However, coarse-to-fine matchers frequently struggle to
+provide well-quantified uncertainties for their predictions.
+This two-stage design fundamentally fractures the error dis-
+tribution into two distinct sources: local refinement errors
+and coarse assignment failures.
+Existing methods only
+model the former, either implicitly through the fine-stage
+heatmaps
+[21, 28, 37, 44], or, more recently, explicitly
+through predicted local uncertainty [20]. Typically, treat-
+ing uncertainty as a local patch confidence score implicitly
+assumes absolute certainty in the initial coarse assignment.
+However, in heavily occluded, textureless, or repetitive re-
+gions, coarse hypotheses frequently fail, placing the true
+correspondence entirely outside the local refinement win-
+dow. Thus, strictly local uncertainty measurement inher-
+ently ignores the risk of coarse-level catastrophic failures,
+yielding an overall truncated error distribution. For down-
+stream robust geometric estimation, this under-qualified un-
+certainty is a critical vulnerability, as an overconfident,
+severely misplaced match can bias an estimated model far
+more than a highly uncertain but correctly localized one.
+Our key observation is therefore simple: matching un-
+1
+arXiv:2608.08685v1  [cs.CV]  9 Aug 2026
+
+
+certainty is not just local confidence. We argue that a use-
+ful correspondence likelihood must model both the sharp
+local inlier mode and the broader tail of coarse assign-
+ment failures. To achieve this, in this paper, we propose
+a very lightweight, post-hoc matching uncertainty estima-
+tion method for semi-dense matchers. Rather than relying
+on just local confidence, we view their matching process un-
+der a probabilistic lens and approximate the overall match-
+ing error as a two-component Laplace mixture. A calibrated
+gate dynamically combines these two components using un-
+certainty cues already produced by the pretrained matchers.
+Our method requires no retraining of the base matcher, and
+only 9 calibration parameters are fitted, making our method
+a simple plug-and-play for existing pipelines.
+To leverage this comprehensive uncertainty model, we
+introduce CoRe (Coarse-success posterior Refit), which
+uses the posterior probability of coarse-assignment success
+as a soft correspondence weight. Instead of discarding cor-
+respondences via hard inlier thresholds after an initial ro-
+bust estimation (e.g., RANSAC [11]), CoRe performs a sin-
+gle soft-weighted refit, allowing the final geometric model
+to penalize catastrophic coarse failures while still retaining
+valid correspondences, with only modest runtime overhead.
+As shown in Fig. 1, CoRe consistently improves down-
+stream geometry across different matchers and robust es-
+timators, demonstrating the practical value of modeling the
+high-error tails caused by coarse-assignment failures that
+are often ignored.
+Our contributions are summarized as follows: (i) We
+introduce an overall matching uncertainty estimation as a
+two-component Laplace calibrated mixture model, captur-
+ing both local refinement noise and catastrophic coarse fail-
+ures. (ii) The proposed framework requires only 9 learn-
+able calibration parameters for dynamically gating uncer-
+tainty cues, serving as a plug-and-play module for off-the-
+shelf semi-dense matching. (iii) We propose CoRe (Coarse-
+success posterior Refit), which leverages the calibrated er-
+ror model for robust geometry estimation. (iv) Extensive
+experiments demonstrate the effectiveness of our proposed
+method, achieving significant performance improvement.
+2. Related Work
+Coarse-to-fine Matching and Uncertainty Modeling.
+Semi-dense matching strikes an optimal balance between
+computational efficiency and matching performance, which
+not only fully utilizes the entire image space but also
+avoids overly dense pixel-level calculations by adopting
+the coarse-to-fine manner.
+LoFTR [37] and its variants
+[6, 13, 20, 21, 23, 38, 43] apply the Transformer [41] to
+enhance local features and then refine its correspondence
+in a local window. However, their matchers derive predic-
+tion and uncertainty strictly from fine-stage windows. They
+implicitly assume absolute certainty in the initial coarse
+Robust estimator
+1. Uncertainty Extraction + Calibration
+Coarse Matching
+Fine
+Matching
+Geometry
+Estimation
+2. Coarse-success 
+Posterior Refit (CoRe)
+Essential
+matrix
+Homography
+matrix
+6-DoF
+Initial geometry
+Local
+refinement
+Global coarse search
+Coarse distribution 
+Fine distribution 
+Calibration
+Scale
+Gate
+Figure 2. Overview of the proposed framework. Left: the con-
+ventional coarse-to-fine matching and robust geometry estimation
+pipeline. Right: our framework calibrates coarse- and fine-level
+cues into a two-component error likelihood (Alg. 1), which is used
+to estimate coarse-assignment success posteriors and perform our
+posterior-weighted geometric refit (CoRe; Alg. 2).
+assignment, frequently failing to properly evaluate overall
+predictive uncertainty. While rigorous uncertainty estima-
+tion has driven significant progress in other computer vi-
+sion tasks [12, 17, 18, 25], in image matching, it has mostly
+been explored by dense architectures. For instance, PDC-
+Net [39] and its extension [40] utilize a constrained mix-
+ture model to predict dense correspondences along with cer-
+tainty estimates. DKM [9] formulates match certainty as the
+likelihood of geometric consistency, trained directly under
+3D supervision. RoMAv2 [10] predicts the Gaussian co-
+variance of 2D matching residuals via Cholesky factoriza-
+tion. Motivated by this, we propose a framework that adapts
+probabilistic mixture modeling to explicitly capture both the
+local refinement error and the catastrophic coarse failures
+for overall uncertainty estimation in semi-dense pipelines.
+Robust geometric estimation.
+Robust estimators have
+long been an essential requirement for estimating 3D
+geometry from noisy correspondences [16].
+While
+RANSAC [11] is the foundational algorithm, it relies
+heavily on a brittle, hard inlier-outlier threshold.
+Ad-
+vanced variants have systematically improved this pro-
+cess: PROSAC [7] accelerates convergence by sampling
+highly confident points first, GC-RANSAC [3] incorpo-
+rates spatial coherence among points, MAGSAC [4] and
+MAGSAC++ [5] mitigate the hard threshold issue by scor-
+ing points across a continuous sliding scale of noise levels.
+Other studies also demonstrate the effectiveness of incor-
+porating explicit scoring functions into the geometric esti-
+2
+
+
+mation pipeline [10, 34]. Building upon these principles,
+our method bridges probabilistic calibration and robust ge-
+ometry by introducing a posterior-weighted refit. We incor-
+porate the posterior probability of coarse-assignment suc-
+cess as reweighting values for the geometric refit process,
+utilizing residual information of all correspondences that is
+mostly discarded by standard RANSAC pipelines.
+Calibration and probabilistic correspondences.
+Mod-
+ern neural networks often produce poorly calibrated, over-
+confident predictions [15]. In classification, simple post-
+hoc methods such as temperature scaling can substantially
+improve calibration without retraining the model [15]. For
+continuous regression, calibration is commonly defined
+through the coverage of predictive quantiles or credible in-
+tervals [19]. However, quantile calibration is a marginal
+criterion and does not necessarily ensure that the predicted
+conditional distribution matches the true target distribution
+for individual inputs. Distribution calibration addresses this
+stronger requirement by aiming to align the predicted distri-
+bution to the empirical conditional distribution of the target
+variables [36]. Motivated by these calibration principles,
+we transform uncertainty cues extracted from the matching
+process into metrically calibrated spatial error distributions,
+without requiring network retraining.
+3. Methodology
+3.1. Problem Statement
+Following the coarse-to-fine paradigm, given an image pair
+(I, I′), correspondences are first established on a low-
+resolution feature grid and subsequently refined within a lo-
+cal window around the predicted coarse match [37]. This
+design is computationally efficient, as global correspon-
+dence search is performed only at the coarse level, while
+the refinement stage is restricted to a small local region.
+Let xi ∈R2 be a point in the first image I, and yi ∈R2
+denote its ground-truth correspondence in the second image
+I′. To keep notation light, we write all distributions with
+subscript i as conditioned on the source point xi. From
+a probabilistic perspective, the coarse stage predicts a dis-
+tribution πc
+i (yc) over candidate coarse cells yc in the sec-
+ond image I′. This distribution is typically obtained from
+similarities between low-resolution features [37, 44]. The
+coarse correspondence is then selected as
+ˆyc
+i = arg max
+yc πc
+i (yc).
+(1)
+The overall matching uncertainty combines the variance
+of the coarse prior and the conditional variance of the re-
+finement step. Typically, conditioned on an initial coarse
+hypothesis ˆyc
+i, the refinement stage estimates a local prob-
+ability distribution. However, this solely only captures the
+Algorithm 1 Post-hoc error model calibration
+Require: calibration set Dcal, frozen matcher M
+1: initialize Θ = {a, b, w, β}
+2: repeat
+3:
+for all (I, I′) ∈Dcal do
+4:
+{(xi, ˆyi,˜sf
+i ,˜sc
+i, ϕi)}i ←M(I, I′)
+5:
+ri ←ˆyi −yi
+6:
+sf
+i ←
+√
+b ⊙˜sf
+i ,
+sc
+i ←√a ⊙˜sc
+i
+7:
+αi ←σ(w⊤ϕi + β)
+8:
+end for
+9:
+update Θ to minimize −P
+i log ˆpi(ri; Θ)
+10: until convergence
+11: return Θ
+Algorithm 2 CoRe: Coarse-success posterior geometric
+Refit
+Require: image pair (I, I′), frozen matcher M, calibrated
+Θ = {a, b, w, β}, robust estimator R
+1: {(xi, ˆyi,˜sf
+i ,˜sc
+i, ϕi)}i ←M(I, I′)
+2: θ0 ←R({(xi, ˆyi)}i)
+3: for all i do
+4:
+sf
+i ←
+√
+b ⊙˜sf
+i ,
+sc
+i ←√a ⊙˜sc
+i
+5:
+αi ←σ(w⊤ϕi + β)
+6:
+r(0)
+i
+←ˆyi −Πθ0(xi)
+7:
+ωi ←
+(1−αi)Lap(r(0)
+i
+|0,sf
+i )
+(1−αi)Lap(r(0)
+i
+|0,sf
+i )+αiLap(r(0)
+i
+|0,sc
+i )
+8: end for
+9: θ⋆←arg minθ
+P
+i ωiρ(xi, ˆyi; θ)
+10: return θ⋆
+conditional distribution πf
+i (yi | ˆyc
+i), strictly characterizing
+the uncertainty in the local displacement.
+Relying exclusively on πf
+i (yi | ˆyc
+i) yields a truncated
+marginal distribution, implicitly assuming an absolute cer-
+tainty of 1.0 in the coarse assignment πc
+i (yc). If the under-
+lying coarse distribution is highly ambiguous or assigned
+incorrectly, the true correspondence may lie completely out-
+side the local support of the conditional density. This out-
+of-distribution error is fundamentally missed by purely lo-
+cal estimators [21, 23, 37, 44].
+A rigorous probabilistic
+framework must estimate the full marginal distribution over
+the entire spatial domain, capturing both coarse-level ambi-
+guity and local refinement inaccuracies.
+3.2. Correspondence Error Modeling
+Reliably modeling the error distribution of predicted corre-
+spondences is crucial for high-precision geometric estima-
+tion, and provides a foundation for future uncertainty esti-
+mation of the resulting geometric model [16].
+Matching Errors Decomposition.
+To address the limi-
+tations discussed above, we start by viewing the final cor-
+3
+
+
+ScanNet
+XFeat
+Corner err: 47.3 -> 25.6 px
+Num inliers: 448 -> 460
+ELoFTR
+Corner err: 62.3 -> 34.9 px
+Num inliers: 1192 -> 1402
+MegaDepth
+Corner err: 407.8 -> 130.0 px
+Num inliers: 60 -> 67
+Corner err: 152.8 -> 34.0 px
+Num inliers: 684 -> 792
+MTV
+Corner err: 372445508502019.8 -> 296482922247990.4 px
+Num inliers: 11 -> 11
+Corner err: 87.9 -> 63.9 px
+Num inliers: 51 -> 62
+0
+20
+40
+60
+80
+100
+120
+140
+Expected abs. error scale (px)
+Pseudo-GT
+RANSAC
+RANSAC + CoRe
+Figure 3. Qualitative homography refit. This figure shows the effect of applying CoRe to homography estimation. Rows show increas-
+ingly difficult pairs from top to bottom, and columns compare stronger matchers from left to right. Matches are colored by Expected abs.
+error scale (px), from low uncertainty in green to high uncertainty in red, with gray matches de-emphasized. CoRe is applied on all matches
+including gray outliers. Details are recorded in the top-left of each image pair.
+respondence error as being induced by the coarse-to-fine
+matching process. Let ri = ˆyi −yi denote the signed resid-
+ual of correspondence i, where ˆyi is the predicted point and
+yi is the ground-truth correspondence in the second image
+I′. The residual distribution can be expressed by marginal-
+izing over possible coarse assignments:
+pi(r) =
+X
+yc
+πc
+i (yc) pi(r | yc).
+(2)
+The overall correspondence error depends critically on
+the quality of the coarse assignment. Assuming an accu-
+rate coarse cell prediction (i.e., yc = yc,∗
+i ), the remain-
+ing error corresponds strictly to the local refinement resid-
+ual. In this scenario, the refinement module provides an
+estimate of the conditional residual distribution, denoted as
+pi(r | yc,∗
+i ) = pf
+i (r | yc,∗
+i ). In contrast, when the coarse
+prediction is incorrect, the overall error is dominated by the
+coarse-assignment failure. Given that the spatial envelope
+of the coarse error strictly dominates the spatial support of
+the refinement, we can practically approximate the residual
+distribution as pi(r | yc̸ = yc,∗
+i ) ≈pc
+i(r). By weighting
+these two mutually exclusive states following the coarse ac-
+curacy probability πc
+i (yc,∗
+i ), we formulate the residual dis-
+tribution as a two-component mixture model:
+pi(r) ≈πc
+i (yc,∗
+i ) pf
+i (r | yc,∗
+i ) +
+ 1 −πc
+i (yc,∗
+i )
+
+pc
+i(r). (3)
+This approximation enables practical integration with
+Figure 4. Tail probability assignment. The model dynamically
+assigns higher tail mass (P(|rx| > 8px)) on harder datasets and
+for weaker matchers, demonstrating adaptive calibration.
+existing coarse-to-fine matchers [21, 23, 37, 44].
+Since
+these matchers only run the fine refinement module for
+the selected coarse hypothesis, modeling every conditional
+term p(ri | yc) is not feasible. Our proposed mixture model
+still keeps the fine component for the selected coarse match
+while using a separate coarse-error component to account
+for failures outside the local refinement window.
+Error Model Calibration.
+For simplicity, we model both
+of these components using Laplace distributions. To com-
+pensate for modeling approximations, we jointly calibrate
+the scales of each component and the gating variable be-
+4
+
+
+tween them. Under this assumption, specifically for each
+match i, we define as:
+ˆpi(r) = (1 −αi) Lap(r | 0, sf
+i ) + αi Lap(r | 0, sc
+i), (4)
+Here, the calibrated fine and coarse scales, denoted as
+sf
+i , sc
+i ∈R2
++, are derived from their raw estimates via:
+sf
+i =
+√
+b ⊙˜sf
+i ,
+sc
+i = √a ⊙˜sc
+i,
+(5)
+where a, b ∈R2
++ are learnable calibration parameters.
+These calibration parameters compensate for the fact that
+heatmap variance, predicted sigma, and coarse distribution
+spread are not directly expressed as calibrated pixel-error
+scales. Here, ˜sf
+i is the raw fine scale extracted from the
+fine refinement output (e.g., the standard deviation of a local
+heatmap [21, 37]), and ˜sc
+i is the raw coarse scale extracted
+from the coarse matching distribution. Crucially, ˜sf
+i and ˜sc
+i
+were directly adopted from pre-trained semi-dense image
+matching model, without any fine-tuning.
+In addition, we define αi as the calibrated mixture weight
+of the coarse-error component. Intuitively, αi should be
+small when the coarse assignment is reliable, but increase
+when the coarse distribution is ambiguous or the match con-
+fidence is low. We therefore model it as a sigmoid over a
+linear combination of coarse-level cues:
+αi = σ
+ w⊤ϕi + β
+
+,
+(6)
+where ϕi comprises the image-size-normalized coarse scale
+and the normalized peak value of the coarse matching distri-
+bution. Both w and β are learnable calibration parameters.
+Following the principle of distribution-level calibra-
+tion [36],
+we fit the calibration parameters Θ
+=
+{a, b, w, β} by minimizing the negative log-likelihood,
+which is a strictly proper scoring rule [14].
+Lcalib = −
+X
+i
+log ˆpi(ri).
+(7)
+Only the calibration parameters are optimized, while the
+base matcher remains frozen. This keeps the method very
+lightweight and allows the same calibration procedure to be
+applied to existing coarse-to-fine matchers.
+3.3. CoRe:
+Coarse-Success Posterior Geometric
+Refit
+Standard robust estimation pipelines typically perform
+a final refinement step by re-estimating the geometric
+model using the set of identified inliers (i.e., binary hard-
+assignment) [11, 16]. This approach treats all inliers equally
+and discards all residual information of the outlier corre-
+spondences. To overcome this rigid inlier/outlier trunca-
+tion, we propose a probabilistic, uncertainty-aware weight-
+ing scheme evaluated over all matches. By exploiting our
+calibrated error model, this method turns residual informa-
+tion from all correspondences into soft reliability weights,
+enabling a more accurate geometric refit.
+To this end, we introduce CoRe, a geometric refinement
+step that uses the coarse-success posterior from our cali-
+brated error model as a soft weight for each correspondence.
+Let θ0 denote an initial geometric model estimated using a
+robust off-the-shelf estimation method. We compute the re-
+projection residual of each correspondence as follows:
+r(0)
+i
+= ˆyi −Πθ0(xi),
+(8)
+where Πθ0(xi) denotes the projection of xi induced by
+the model θ0. The fine-stage refinement is strictly condi-
+tioned on the accuracy of the coarse hypothesis. There-
+fore, a match is geometrically reliable only when the ini-
+tial coarse assignment is correct. Recalling the formulation
+in Eq. (3), we identify these reliable correspondences by
+computing the posterior probability that the initial coarse
+assignment succeeded (ˆyc
+i = yc,∗
+i ), given the residual un-
+der the initial estimate r(0)
+i . Applying Bayes’ theorem, the
+correspondence weight ωi is derived as:
+ωi = Pr(ˆyc
+i = yc,∗
+i
+| r(0)
+i )
+=
+πc
+i (yc,∗
+i ) pf
+i (r(0)
+i
+| yc,∗
+i )
+πc
+i (yc,∗
+i ) pf
+i (r(0)
+i
+| yc,∗
+i ) +
+ 1 −πc
+i (yc,∗
+i )
+
+pc
+i(r(0)
+i )
+(9)
+≈
+(1 −αi)Lf
+i
+(1 −αi)Lf
+i + αiLc
+i
+.
+(10)
+Since the true underlying residual distributions are un-
+known, we substitute them in Eq. (10) with our empiri-
+cal Laplace mixture model. We approximate the fine and
+coarse distributions with our calibrated Laplace compo-
+nents, Lf
+i = Lap(r(0)
+i |0, sf
+i ) and Lc
+i = Lap(r(0)
+i |0, sc
+i), and
+model the prior probability of a coarse failure, 1−πc
+i (yc,∗
+i ),
+using our calibrated gating variable αi. The final geometric
+model is then obtained by a weighted refit over all matches:
+θ∗= arg min
+θ
+X
+i
+ωiρ(xi, ˆyi; θ),
+(11)
+where ρ is the geometric fitting loss (e.g., squared reprojec-
+tion error). By applying these posterior weights globally,
+CoRe allows potential coarse failures to be softly down-
+weighted rather than discarded completely.
+Notably, CoRe serves as a plug-and-play module that
+preserves the original sampling, scoring, and stopping crite-
+ria of off-the-shelf robust estimators [3, 5, 7, 8, 11] without
+any modifications. Since it only needs a single uncertainty
+extraction and one final weighted refit as additional compu-
+tation, CoRe achieves these geometric improvements with
+minimal runtime overhead, as shown in Fig. 6
+5
+
+
+Table 1. Homography estimation on HPatches and MTV. Comparison of original RANSAC results and with CoRe (Base →w/ CoRe).
+Parameters are calibrated on MegaDepth and transferred zero-shot.
+Matcher
+HPatches ↑
+MTV ↑
+@1px
+@3px
+@5px
+@10px
+@10px
+@30px
+@50px
+@100px
+LoFTR [37]
+21.37 →28.80
+49.17 →58.72
+61.40 →70.19
+75.18 →81.54
+1.08 →1.83
+4.77 →6.40
+7.05 →8.65
+10.01 →11.65
+GIMLoFTR [35]
+24.82 →29.87
+50.87 →59.47
+62.23 →71.11
+76.53 →82.87
+0.44 →1.31
+3.63 →6.27
+6.43 →9.85
+11.41 →15.24
+EfficientLoFTR [44]
+29.14 →32.68
+52.59 →60.43
+64.17 →71.24
+77.30 →82.45
+1.10 →1.78
+4.67 →6.11
+7.04 →8.63
+10.43 →11.93
+CoMatch [23]
+27.47 →32.40
+52.35 →60.26
+64.00 →71.27
+77.22 →82.67
+0.96 →1.65
+4.31 →5.47
+6.54 →7.63
+9.44 →10.43
+EDM [21]
+24.39 →29.45
+50.25 →58.15
+62.07 →69.80
+76.01 →81.56
+1.32 →2.23
+5.87 →7.49
+8.82 →10.80
+13.10 →15.17
+XFeat* [28]
+0.23 →0.33
+22.30 →25.43
+40.19 →47.38
+62.18 →69.51
+0.46 →0.91
+2.39 →3.77
+3.67 →5.39
+5.83 →7.86
+Table 2. Visual localization on Aachen v1.1. Percentage of lo-
+calized queries within pose-error thresholds. CoRe improves ac-
+curacy in most settings, particularly in challenging night-time con-
+ditions.
+Matcher
+Day ↑
+Night ↑
+(0.25m, 2◦) / (0.5m, 5◦) / (5.0m, 10◦)
+LoFTR
+85.3/91.3/94.5 →86.9/92.0/95.1
+65.4/83.2/91.6 →69.1/86.9/92.1
+GIMLoFTR
+86.9/92.8/97.0 →87.9/93.4/97.1
+68.6/80.1/89.0 →67.0/81.2/90.1
+EfficientLoFTR
+85.4/91.3/94.9 →86.7/92.6/95.0
+73.3/84.3/92.7 →72.8/85.3/92.7
+CoMatch
+85.2/91.4/95.1 →85.1/91.1/95.5
+66.5/85.9/94.2 →70.2/87.4/94.2
+EDM
+87.3/93.1/96.8 →88.0/93.2/97.0
+70.2/89.5/97.9 →73.3/90.6/97.9
+XFeat*
+63.2/70.3/77.8 →67.1/74.0/79.6
+23.6/34.0/45.5 →28.8/38.2/49.7
+4. Experiments
+We evaluate the practical utility of the proposed calibrated
+model beyond simply reporting an uncertainty value. The
+experiments address two core questions.
+First, does the
+mixture model accurately fit the empirical error distribution,
+capturing both fine and coarse matching failures? Second,
+does the model provide meaningful geometric information,
+in the sense that refitting a geometric model toward cor-
+respondences with a high posterior probability of coarse-
+assignment success to improve downstream estimation?
+4.1. Implementation Details
+Unless otherwise stated, each matcher is calibrated post-hoc
+on 200 held-out MegaDepth [22] pairs at 1280×960. The
+matcher is kept frozen, and only the calibration parameters
+are optimized using Powell’s method [29]. These parame-
+ters are transferred to downstream datasets without dataset-
+specific finetuning.
+All comparisons use the same matcher outputs and the
+same robust estimation settings for the baseline and CoRe.
+CoRe does not change the sampling, scoring, or stopping
+criteria of the robust estimator [3, 5, 7, 8, 11], it only adds
+one posterior-weighted refit after the initial model is esti-
+mated. In practice, we use an axis-factorized implemen-
+tation with separate one-dimensional Laplace mixtures for
+the horizontal and vertical residuals. The final CoRe weight
+is therefore computed as the product of the two axis-wise
+coarse-success posteriors.
+4.2. Zero-Shot Evaluation on Downstream Tasks
+We evaluate the calibrated likelihood on two down-
+stream settings that require accurate geometric estima-
+tion from image matches:
+planar homography estima-
+tion with HPatches [2], MTV [24] and visual localiza-
+tion with Aachen v1.1 [32].
+We apply CoRe to the
+pipelines of several recent semi-dense matchers, includ-
+ing LoFTR [37], GIMLoFTR [35], EfficientLoFTR [44], Co-
+Match [23], EDM [21], and XFeat [28].
+Homography Estimation.
+We test homography estima-
+tion on the widely used HPatches dataset [2] and MTV [24],
+a highly challenging out-of-domain dataset pairing aerial
+thermal and RGB images.
+HPatches is evaluated at a
+1280×960 resolution, while MTV is evaluated at 960×640
+to account for its imprecise ground-truth annotations.
+We use the algebraic DLT objective for geometric fitting,
+resulting in a weighted DLT refit. We collect the mean re-
+projection error of corner points and report the AUC at 1,
+3, 5, and 10 px thresholds for HPatches, and 10, 30, 50 and
+100 px thresholds for MTV.
+As shown in Tab. 1, CoRe consistently improves homog-
+raphy estimation across all matchers and error thresholds.
+By actively utilizing residual information from all corre-
+spondences, including assumed outliers, CoRe provides a
+more optimal fit that safely down-weights coarse failures.
+This drives pronounced gains at broader thresholds while
+maintaining strong precision at 1px. Furthermore, consis-
+tent improvements on the highly ambiguous cross-modal
+MTV dataset validate the robustness of our zero-shot cal-
+ibration under severe domain shift.
+Visual Localization.
+We evaluate 6-DoF camera pose es-
+timation on the Aachen Day-Night v1.1 benchmark. Im-
+ages are resized to 1180×896 for evaluation. We use a hi-
+erarchical pipeline inspired by HLoc [30]: each query is
+matched against the top-50 NetVLAD [1] retrieved refer-
+ences to form 2D–3D correspondences, and the initial pose
+is estimated using PnP inside RANSAC [11].
+To apply CoRe, we evaluate the calibrated mixture on
+the initial reprojection residuals and perform one weighted
+nonlinear refinement minimizing squared reprojection error
+6
+
+
+−100
+−50
+0
+50
+100
+Signed x error (px)
+0.0000
+0.0005
+0.0010
+0.0015
+0.0020
+0.0025
+0.0030
+Density
+173.2k matches
+960x640 (3:2)
+−10
+0
+10
+0.10
+0.35
+0.60
+|rx| < 10 px
+−100
+−50
+0
+50
+100
+Signed x error (px)
+0.0000
+0.0005
+0.0010
+0.0015
+0.0020
+0.0025
+0.0030
+96.3k matches
+640x480 (4:3)
+−10
+0
+10
+0.10
+0.35
+0.60
+|rx| < 10 px
+0
+20
+40
+60
+80
+Predicted |e| (px)
+0
+20
+40
+60
+80
+Observed |e| bin (px)
+Perfect: y = x̂
+e < 10 px
+−100
+−50
+0
+50
+100
+Signed x error (px)
+0.0000
+0.0005
+0.0010
+0.0015
+0.0020
+0.0025
+0.0030
+54.1k matches
+480x320 (3:2)
+−10
+0
+10
+0.10
+0.35
+0.60
+|rx| < 10 px
+0
+20
+40
+60
+80
+Predicted |e| (px)
+0
+20
+40
+60
+80
+−100
+−50
+0
+50
+100
+Signed x error (px)
+0.0000
+0.0005
+0.0010
+0.0015
+0.0020
+0.0025
+0.0030
+344.4k matches
+1280x960 (4:3)
+−10
+0
+10
+0.10
+0.35
+0.60
+|rx| < 10 px
+0
+20
+40
+60
+80
+Predicted |e| (px)
+0
+20
+40
+60
+80
+Calibration split
+Test split
+Downscale ↓
+Upscale ↑
+Empirical
+Local fine uncertainty
+Full mixture
+Ideal
+Figure 5. Resolution transfer of the calibrated error model. The model is calibrated once on 200 held-out MegaDepth pairs at 960×640
+and evaluated without retuning on MegaDepth-1500 at different resolutions. Top: signed residual distribution for one representative
+coordinate axis, compared with the corresponding fine-only and mixture densities; insets show the central peak. Bottom: reliability plots
+comparing predicted E[e] with observed e, where e = 1
+2(|rx| + |ry|) is the scalar error used for calibration diagnostics; the dotted line
+indicates perfect calibration. Unlike the fine-only model, whose uncertainty is bounded by the refinement window, our mixture tracks the
+observed residual across resolutions.
+Table 3. Different Refit weighting strategies comparison on
+HPatches. Comparison of refit weighting strategies using Effi-
+cientLoFTR. CoRe’s posterior-based weighting consistently yields
+the highest AUC across thresholds.
+Refit weight
+Homography est. AUC ↑
+@1px
+@3px
+@5px
+@10px
+@30px
+Original RANSAC [11]
+29.14
+52.59
+64.17
+77.30
+89.27
+Uniform refit
+19.36
+43.85
+54.46
+66.19
+78.86
+mconf refit
+25.07
+49.04
+59.22
+70.17
+81.35
+Raw fine std
+33.65
+59.47
+70.06
+81.60
+91.08
+Binary inliers/outliers
+33.11
+56.87
+67.50
+79.55
+90.20
+CoRe
+32.89
+60.53
+71.27
+82.45
+91.32
+over all raw matches. We report the percentage of queries
+satisfying the standard Aachen pose-error thresholds.
+As shown in Tab. 2, while the performance increases are
+more modest than in the homography experiments, CoRe
+still improves localization accuracy in most settings. These
+gains are most evident in the Night track.
+4.3. Ablation Studies
+This section validates the modeling and algorithmic choices
+of our method.
+For all ablations, we use Efficient-
+LoFTR [44] as the frozen base matcher and follow the cali-
+bration protocol in Sec. 4.1.
+Refit Weighting Strategy.
+In Tab. 3, we ablate weighting
+strategies for CoRe on HPatches [2]. We compare against
+standard cues commonly used in semi-dense pipelines, such
+as coarse-stage matching confidence (“mconf refit”) and lo-
+cal fine-stage uncertainty (“Raw fine std”). Using contin-
+uous weights based on local uncertainty outperforms strict
+“Binary inliers/outliers”, confirming that soft-weighting is
+fundamentally better than relying on hard cutoffs. Over-
+all, CoRe achieves the highest homography AUC across
+broader error thresholds. The slight drop at the strict 1px
+threshold is expected: on easy scenes where coarse matches
+rarely fail, local variance is enough. However, for more
+challenging image pairs, CoRe’s ability to effectively utilize
+the continuous residual information of all correspondences,
+including assumed outliers, becomes crucial.
+Robustness to Base Estimators.
+To ensure our formu-
+lation is orthogonal to the initial robust solver, we apply
+CoRe to the outputs of LO-RANSAC [8], PROSAC [7],
+GC-RANSAC [3], and MAGSAC++ [5] (Tab. 4). CoRe
+consistently improves the AUC@3px, AUC@5px and
+AUC@10px metrics across all advanced estimators. Mir-
+roring our previous findings, the marginal drop at 1px oc-
+curs primarily because applying a global weighted refit
+across all matches introduces slight spatial smoothing that
+can perturb these near-perfect fits. However, for more chal-
+lenging pairs, the continuous uncertainty cues provided by
+CoRe are necessary to optimize the geometry, leading to
+consistent gains at higher thresholds.
+7
+
+
+Table 4. Homography estimation across robust estimators. We
+apply CoRe to various RANSAC variants using EfficientLoFTR
+matches.
+CoRe provides consistent gains across solvers, with
+small trade-offs at the strict 1px threshold.
+Estimator
+Homography AUC ↑
+1px
+3px
+5px
+10px
+RANSAC [11]
+29.14→32.68
+52.59→60.43
+64.17→71.24
+77.30→82.45
+LO-RANSAC [8]
+33.89→32.73
+58.82→60.69
+69.85→71.56
+81.30→82.77
+PROSAC [7]
+33.76→32.78
+57.82→60.46
+67.98→71.11
+79.41→82.09
+GC-RANSAC [3]
+33.99→32.85
+59.08→60.86
+69.97→71.80
+81.45→82.89
+MAGSAC++ [5]
+32.39→32.69
+60.24→61.03
+71.34→71.97
+82.46→82.86
+Table 5.
+Calibration ablation on held-out MegaDepth.
+We
+compare mean per-axis NLL and ECEerr for various error models.
+’LMM’ and ’GMM’ denote ’Laplace Mixture Model’ and ’Gaus-
+sian Mixture Model’, respectively. Our Laplace mixture with gat-
+ing gives the strongest overall likelihood and heavy-tail fit while
+retaining competitive scalar calibration.
+Error model
+NLL ↓
+ECEerr (px) ↓
+All
+< 8
+8–64
+> 64
+Fine only
+2.897
+2.808
+4.373
+11.749
+7.756
+Gaussian mixture
+1.665
+1.516
+6.092
+12.158
+4.191
+LMM, w/o calibration
+1.962
+1.874
+4.762
+7.748
+2.530
+LMM, w/o conf. gate
+1.554
+1.440
+5.724
+7.914
+1.575
+LMM, hard gate
+1.724
+1.552
+7.300
+13.100
+1.579
+Ours
+1.546
+1.437
+5.532
+7.694
+1.612
+Error Distribution Modeling.
+We evaluate our Laplace
+mixture against alternative distribution families and gating
+variants (Tab. 5) on the MegaDepth-1500 dataset. For scalar
+calibration diagnostics, we summarize the 2D residual r by
+e = 1
+2∥r∥1 = 1
+2(|rx| + |ry|). We report mean per-axis NLL
+for the axis-factorized residual likelihood and ECEerr for
+scalar metric calibration. ECEerr bins matches by predicted
+E[e] and compares it with the mean observed e in each bin.
+Our calibrated Laplace mixture achieves the best overall
+NLL and heavy-tail fit while retaining competitive scalar
+calibration.
+Removing calibration degrades both likeli-
+hood and ECEerr, showing that raw matcher cues are not
+calibrated spatial-error scales.
+Removing the confidence
+gate slightly improves ECEerr but weakens overall and tail
+likelihood, while hard gating performs substantially worse.
+As expected, the fine-only model captures only one error
+regime, motivating our mixture formulation. As further val-
+idation, Fig. 4 further shows that our model assigns greater
+tail mass to harder datasets and weaker matchers, reflecting
+their higher frequency of coarse-assignment failures.
+4.4. Robustness Analysis
+For this analysis, we follow the same calibration protocol as
+Sec. 4.1, but calibrate the model at 960×640 to test robust-
+ness against both upscale and downscale. We then evaluate
+the learned parameters without retuning on the MegaDepth-
+1500 split across multiple input resolutions: 640×480 and
+Figure 6. Runtime overhead. The total latency added by un-
+certainty extraction and CoRe. The method introduces minimal
+overhead, acting as a lightweight post-processing step.
+0
+100
+200
+300
+400
+Mean runtime per HPatches pair (ms)
+LoFTR
+GIMLoFTR
+ELoFTR
+CoMatch
+EDM
+XFeat
++14.6 ms
++11.4 ms
++32.6 ms
++34.6 ms
++11.7 ms
++12.2 ms
+Matching
+Unc. extraction
+RANSAC
+CoRe
+480×320, and upscaled 1280×960 resolutions.
+As shown in the top row of Fig. 5, our Laplace mix-
+ture closely fits the signed residual distribution of the repre-
+sentative coordinate axis across all scales, capturing both
+the sharp local inlier peak and the heavy-tailed coarse-
+assignment failures.
+The reliability diagram in the bottom row of Fig. 5 shows
+that our calibrated mixture provides a substantially better
+estimate of error than the fine-only baseline, correctly as-
+signing high uncertainty to severe mismatches. Conversely,
+the fine-only model is strictly bounded by its refinement
+window, unable to predict error greater than roughly 10px.
+It therefore outputs dangerously overconfident, low uncer-
+tainties for massive spatial outliers.
+4.5. Computational Analysis
+CoRe introduces minimal runtime overhead by leveraging
+existing intermediate outputs from the pretrained matcher
+(e.g., coarse similarity matrices and refinement heatmaps).
+This process adds very little additional cost.
+Runtimes were evaluated on an NVIDIA RTX A5000
+GPU, averaged over 100 image pairs from the HPatches
+dataset [2].
+As shown in Fig. 6, the combined duration
+of uncertainty extraction and CoRe adds only +11.7 ms
+(XFeat) to +34.6 ms (CoMatch) to the standard pipeline,
+despite being implemented in unoptimized NumPy. Fur-
+thermore, fitting the overall error model is highly efficient,
+requiring only 9 learnable calibration parameters.
+5. Conclusion
+In this work, we demonstrate that semi-dense matching un-
+certainty is not just local confidence. We present a novel
+overall uncertainty estimation method that incorporates
+both coarse-level matching failures and refinement errors.
+Extensive experiments show our approach achieves signifi-
+cant performance improvements, highlighting the practical
+value of overall uncertainty modeling as a simple yet highly
+effective step toward reliable image matching.
+8
+
+
+References
+[1] Relja Arandjelovic, Petr Gron´at, Akihiko Torii, Tom´as Pa-
+jdla, and Josef Sivic. Netvlad: CNN architecture for weakly
+supervised place recognition. In 2016 IEEE Conference on
+Computer Vision and Pattern Recognition, CVPR 2016, Las
+Vegas, NV, USA, June 27-30, 2016, pages 5297–5307. IEEE
+Computer Society, 2016. 6
+[2] Vassileios Balntas, Karel Lenc, Andrea Vedaldi, and Krys-
+tian Mikolajczyk. Hpatches: A benchmark and evaluation
+of handcrafted and learned local descriptors. In 2017 IEEE
+Conference on Computer Vision and Pattern Recognition,
+CVPR 2017, Honolulu, HI, USA, July 21-26, 2017, pages
+3852–3861. IEEE Computer Society, 2017. 6, 7, 8, 12, 13
+[3] Daniel Barath and Jiri Matas. Graph-cut RANSAC. In 2018
+IEEE Conference on Computer Vision and Pattern Recog-
+nition, CVPR 2018, Salt Lake City, UT, USA, June 18-
+22, 2018, pages 6733–6741. Computer Vision Foundation /
+IEEE Computer Society, 2018. 2, 5, 6, 7, 8
+[4] Daniel Barath, Jiri Matas, and Jana Noskova. MAGSAC:
+marginalizing sample consensus.
+In IEEE Conference on
+Computer Vision and Pattern Recognition, CVPR 2019,
+Long Beach, CA, USA, June 16-20, 2019, pages 10197–
+10205. Computer Vision Foundation / IEEE, 2019. 2
+[5] D´aniel Bar´ath, Jana Noskova, Maksym Ivashechkin, and Jiri
+Matas. Magsac++, a fast, reliable and accurate robust estima-
+tor. In 2020 IEEE/CVF Conference on Computer Vision and
+Pattern Recognition, CVPR 2020, Seattle, WA, USA, June
+13-19, 2020, pages 1301–1309. Computer Vision Founda-
+tion / IEEE, 2020. 2, 5, 6, 7, 8
+[6] Hongkai Chen, Zixin Luo, Lei Zhou, Yurun Tian, Ming-
+min Zhen, Tian Fang, David Mckinnon, Yanghai Tsin, and
+Long Quan.
+Aspanformer: Detector-free image matching
+with adaptive span transformer. In European conference on
+computer vision, pages 20–36. Springer, 2022. 2
+[7] Ondrej Chum and Jiri Matas. Matching with PROSAC - pro-
+gressive sample consensus. In 2005 IEEE Computer Soci-
+ety Conference on Computer Vision and Pattern Recognition
+(CVPR 2005), 20-26 June 2005, San Diego, CA, USA, pages
+220–226. IEEE Computer Society, 2005. 2, 5, 6, 7, 8
+[8] Ondrej Chum, Jiri Matas, and Josef Kittler. Locally opti-
+mized RANSAC. In Pattern Recognition, 25th DAGM Sym-
+posium, Magdeburg, Germany, September 10-12, 2003, Pro-
+ceedings, pages 236–243. Springer, 2003. 5, 6, 7, 8
+[9] Johan Edstedt, Ioannis Athanasiadis, M˚arten Wadenb¨ack,
+and Michael Felsberg.
+Dkm:
+Dense kernelized feature
+matching for geometry estimation.
+In Proceedings of
+the IEEE/CVF conference on computer vision and pattern
+recognition, pages 17765–17775, 2023. 2
+[10] Johan Edstedt, David Nordstr¨om, Yushan Zhang, Georg
+B¨okman, Jonathan Astermark, Viktor Larsson, Anders Hey-
+den, Fredrik Kahl, M˚arten Wadenb¨ack, and Michael Fels-
+berg. RoMa v2: Harder Better Faster Denser Feature Match-
+ing. arXiv preprint arXiv:2511.15706, 2025. 2, 3
+[11] Martin A. Fischler and Robert C. Bolles. Random sample
+consensus: A paradigm for model fitting with applications to
+image analysis and automated cartography. Commun. ACM,
+24(6):381–395, 1981. 2, 5, 6, 7, 8
+[12] Yarin Gal and Zoubin Ghahramani. Dropout as a bayesian
+approximation:
+Representing model uncertainty in deep
+learning. In international conference on machine learning,
+pages 1050–1059. PMLR, 2016. 2
+[13] Khang Truong Giang, Soohwan Song, and Sungho Jo. Top-
+icfm: Robust and interpretable topic-assisted feature match-
+ing. In Proceedings of the AAAI conference on artificial in-
+telligence, pages 2447–2455, 2023. 2
+[14] Tilmann Gneiting and Adrian E Raftery. Strictly proper scor-
+ing rules, prediction, and estimation. Journal of the Ameri-
+can Statistical Association, 102(477):359–378, 2007. 5
+[15] Chuan Guo, Geoff Pleiss, Yu Sun, and Kilian Q. Weinberger.
+On calibration of modern neural networks. In Proceedings
+of the 34th International Conference on Machine Learning -
+Volume 70, page 1321–1330. JMLR.org, 2017. 3
+[16] Richard Hartley and Andrew Zisserman. Multiple View Ge-
+ometry in Computer Vision. Cambridge University Press, 2
+edition, 2003. 2, 3, 5
+[17] Claudia Kondermann, Daniel Kondermann, Bernd J¨ahne,
+and Christoph Garbe. An adaptive confidence measure for
+optical flows based on linear subspace projections. In Joint
+Pattern Recognition Symposium, pages 132–141. Springer,
+2007. 2
+[18] Claudia Kondermann, Rudolf Mester, and Christoph Garbe.
+A statistical confidence measure for optical flows. In Eu-
+ropean Conference on Computer Vision, pages 290–301.
+Springer, 2008. 2
+[19] Volodymyr Kuleshov, Nathan Fenner, and Stefano Ermon.
+Accurate uncertainties for deep learning using calibrated re-
+gression. In Proceedings of the 35th International Confer-
+ence on Machine Learning, ICML 2018, Stockholmsm¨assan,
+Stockholm, Sweden, July 10-15, 2018, pages 2801–2809.
+PMLR, 2018. 3
+[20] Sicheng Li, Zaiwang Gu, Jie Zhang, Qing Guo, Xudong
+Jiang, and Jun Cheng.
+SURE: semi-dense uncertainty-
+refined feature matching. CoRR, abs/2603.04869, 2026. 1,
+2
+[21] Xi Li, Tong Rao, and Cihui Pan. EDM: efficient deep fea-
+ture matching. In IEEE/CVF International Conference on
+Computer Vision, ICCV 2025, Honolulu, HI, USA, October
+19-25, 2025, pages 26198–26208. IEEE, 2025. 1, 2, 3, 4, 5,
+6, 11
+[22] Zhengqi Li and Noah Snavely. Megadepth: Learning single-
+view depth prediction from internet photos.
+In Computer
+Vision and Pattern Recognition (CVPR), 2018. 6, 11, 12, 13
+[23] Zizhuo Li, Yifan Lu, Linfeng Tang, Shihua Zhang, and Ji-
+ayi Ma. Comatch: Dynamic covisibility-aware transformer
+for bilateral subpixel-level semi-dense image matching. In
+IEEE/CVF International Conference on Computer Vision,
+ICCV 2025, Honolulu, HI, USA, October 19-25, 2025, pages
+18521–18530. IEEE, 2025. 1, 2, 3, 4, 6, 11
+[24] Yuxiang Liu, Yu Liu, Shen Yan, Chen Chen, Jikun Zhong,
+Yang Peng, and Maojun Zhang.
+A multi-view thermal-
+visible image dataset for cross-spectral matching. Remote.
+Sens., 15(1):174, 2023. 6, 13
+[25] Oisin Mac Aodha, Ahmad Humayun, Marc Pollefeys, and
+Gabriel J Brostow. Learning a confidence measure for optical
+9
+
+
+flow. IEEE transactions on pattern analysis and machine
+intelligence, 35(5):1107–1120, 2012. 2
+[26] Raul Mur-Artal and Juan D Tard´os. Orb-slam2: An open-
+source slam system for monocular, stereo, and rgb-d cam-
+eras. IEEE transactions on robotics, 33(5):1255–1262, 2017.
+1
+[27] Raul Mur-Artal, Jose Maria Martinez Montiel, and Juan D
+Tardos. Orb-slam: A versatile and accurate monocular slam
+system. IEEE transactions on robotics, 31(5):1147–1163,
+2015. 1
+[28] Guilherme A. Potje, Felipe Cadar, Andr´e Ara´ujo, Renato
+Martins, and Erickson R. Nascimento. Xfeat: Accelerated
+features for lightweight image matching. In IEEE/CVF Con-
+ference on Computer Vision and Pattern Recognition, CVPR
+2024, Seattle, WA, USA, June 16-22, 2024, pages 2682–
+2691. IEEE, 2024. 1, 6, 11
+[29] Michael JD Powell. An efficient method for finding the min-
+imum of a function of several variables without calculating
+derivatives. The computer journal, 7(2):155–162, 1964. 6
+[30] Paul-Edouard Sarlin, Cesar Cadena, Roland Siegwart, and
+Marcin Dymczyk. From coarse to fine: Robust hierarchical
+localization at large scale. In Proceedings of the IEEE/CVF
+conference on computer vision and pattern recognition,
+pages 12716–12725, 2019. 1, 6
+[31] Torsten Sattler, Tobias Weyand, Bastian Leibe, and Leif
+Kobbelt. Image retrieval for image-based localization revis-
+ited. In BMVC, page 4, 2012. 1
+[32] Torsten Sattler, Will Maddern, Carl Toft, Akihiko Torii,
+Lars Hammarstrand, Erik Stenborg, Daniel Safari, Masatoshi
+Okutomi, Marc Pollefeys, Josef Sivic, Fredrik Kahl, and
+Tom´as Pajdla.
+Benchmarking 6dof outdoor visual local-
+ization in changing conditions. In 2018 IEEE Conference
+on Computer Vision and Pattern Recognition, CVPR 2018,
+Salt Lake City, UT, USA, June 18-22, 2018, pages 8601–
+8610. Computer Vision Foundation / IEEE Computer Soci-
+ety, 2018. 6
+[33] Johannes L Schonberger and Jan-Michael Frahm. Structure-
+from-motion revisited.
+In Proceedings of the IEEE con-
+ference on computer vision and pattern recognition, pages
+4104–4113, 2016. 1
+[34] Alexander Shekhovtsov. Ransac scoring functions: Analysis
+and reality check. arXiv preprint arXiv:2512.19850, 2025. 3
+[35] Xuelun Shen, Zhipeng Cai, Wei Yin, Matthias M¨uller, Zijun
+Li, Kaixuan Wang, Xiaozhi Chen, and Cheng Wang. Gim:
+Learning generalizable image matcher from internet videos.
+In The Twelfth International Conference on Learning Repre-
+sentations, 2024. 6, 11
+[36] Hao Song, Tom Diethe, Meelis Kull, and Peter A. Flach. Dis-
+tribution calibration for regression.
+In Proceedings of the
+36th International Conference on Machine Learning, ICML
+2019, 9-15 June 2019, Long Beach, California, USA, pages
+5897–5906. PMLR, 2019. 3, 5
+[37] Jiaming Sun, Zehong Shen, Yuang Wang, Hujun Bao, and
+Xiaowei Zhou. LoFTR: Detector-free local feature matching
+with transformers. CVPR, 2021. 1, 2, 3, 4, 5, 6, 11
+[38] Shitao Tang, Jiahui Zhang, Siyu Zhu, and Ping Tan.
+Quadtree attention for vision transformers. arXiv preprint
+arXiv:2201.02767, 2022. 2
+[39] Prune Truong, Martin Danelljan, Luc Van Gool, and Radu
+Timofte. Learning accurate dense correspondences and when
+to trust them. In Proceedings of the IEEE/CVF conference on
+computer vision and pattern recognition, pages 5714–5724,
+2021. 2
+[40] Prune Truong, Martin Danelljan, Radu Timofte, and Luc
+Van Gool. Pdc-net+: Enhanced probabilistic dense corre-
+spondence network. IEEE Transactions on Pattern Analysis
+and Machine Intelligence, 45(8):10247–10266, 2023. 2
+[41] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszko-
+reit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia
+Polosukhin. Attention is all you need. Advances in neural
+information processing systems, 30, 2017. 2
+[42] Pauli Virtanen, Ralf Gommers, Travis E. Oliphant, Matt
+Haberland,
+Tyler
+Reddy,
+David
+Cournapeau,
+Evgeni
+Burovski, Pearu Peterson, Warren Weckesser, Jonathan
+Bright, St´efan J. van der Walt, Matthew Brett, Joshua Wil-
+son, K. Jarrod Millman, Nikolay Mayorov, Andrew R. J.
+Nelson, Eric Jones, Robert Kern, Eric Larson, C J Carey,
+˙Ilhan Polat, Yu Feng, Eric W. Moore, Jake VanderPlas, De-
+nis Laxalde, Josef Perktold, Robert Cimrman, Ian Henrik-
+sen, E. A. Quintero, Charles R. Harris, Anne M. Archibald,
+Antˆonio H. Ribeiro, Fabian Pedregosa, Paul van Mulbregt,
+and SciPy 1.0 Contributors. SciPy 1.0: Fundamental Algo-
+rithms for Scientific Computing in Python. Nature Methods,
+17:261–272, 2020. 11, 13
+[43] Qing Wang, Jiaming Zhang, Kailun Yang, Kunyu Peng, and
+Rainer Stiefelhagen.
+Matchformer: Interleaving attention
+in transformers for feature matching.
+In Proceedings of
+the Asian conference on computer vision, pages 2746–2762,
+2022. 2
+[44] Yifan Wang, Xingyi He, Sida Peng, Dongli Tan, and Xiaowei
+Zhou. Efficient LoFTR: Semi-dense local feature matching
+with sparse-like speed. In CVPR, 2024. 1, 3, 4, 6, 7, 11
+10
+
+
+Semi-Dense Matching Uncertainty Is Not Just Local Confidence
+Supplementary Material
+This supplementary provides additional analyses, qual-
+itative results, and implementation details for our method.
+Unless otherwise stated, all additional experiments use Ef-
+ficientLoFTR [44] as the base matcher and MegaDepth [22]
+as the calibration set.
+A. Additional Implementation Details
+Axis-wise mixture implementation.
+In practice,
+we
+use an axis-factorized implementation with separate one-
+dimensional Laplace mixtures for the horizontal and verti-
+cal residuals. The resulting two-dimensional likelihood is
+ˆpi(ri) =
+Y
+d∈{x,y}
+ˆpi,d(ri,d)
+(12)
+Our parameter set Θ = {ax, ay, bx, by, ks, km, tx, ty, tm}
+defines the axis-wise likelihood:
+ˆpi,d(ri,d) = (1 −αi,d) Lap(ri,d | 0, sf
+i,d)
++αi,d Lap(ri,d | 0, sc
+i,d),
+(13)
+where
+
+
+
+
+
+
+
+
+
+
+
+sf
+i,d
+= √bd ˜sf
+i,d,
+sc
+i,d
+= √ad ˜sc
+i,d,
+αi,d
+= σ
+h
+ks
+
+¯sc
+i,d −td
+
++ km(−log mi −tm)
+i
+,
+¯sc
+i,d
+= 100
+˜sc
+i,d
+Dd ,
+Dx = W,
+Dy = H
+Here, ˜sf
+i,d and ˜sc
+i,d denote the raw fine- and coarse-level
+standard deviations, respectively, ¯sc
+i,d denotes the image-
+size-normalized coarse scale, and mi denotes the matching
+confidence.
+Uncertainty extraction.
+We extract the coarse uncer-
+tainty cues consistently across all matchers. For each se-
+lected coarse match, the coarse scale ˜sc
+i is computed as
+the standard deviation of the row-wise softmax distribution
+used to form the dual-softmax score matrix, while the cor-
+responding selected entry provides the matching confidence
+[37, 44]. For XFeat [28], whose similarity matrix is com-
+puted from unnormalized features, we additionally normal-
+ize the features and apply the softmax explicitly. This ac-
+counts for its slightly higher extraction overhead reported in
+Sec. Computational Analysis of Main Paper.
+Fine uncertainty scale ˜sf
+i
+is extracted from each
+matcher’s native refinement distribution. For LoFTR [37],
+GIM-LoFTR [35], and XFeat [28], we compute the standard
+Figure 7. Sensitivity to initial geometry across matchers. Top:
+median relative ACE reduction after CoRe across ranges of initial
+ACE e0. Bottom: fraction of pairs improved by CoRe. The marker
+area reflects the number of valid pairs in each bin.
+−40%
+−20%
+0%
+20%
+40%
+60%
+100(1 −median[e1/e0]) [%]
+no change
+(a) Relative error reduction
+positive = lower ACE after CoRe
+bins with n < 1 omitted
+valid pairs/bin  (area ∝ n)
+1
+25
+100
+300
+valid pairs/bin  (area ∝ n)
+1
+25
+100
+300
+< 0.3
+0.3–1
+1–3
+3–10
+10–30
+30–100
+100–300
+Initial average corner error e0 (px)
+0%
+25%
+50%
+75%
+100%
+P(e1 < e0)
+50% reference
+(b) Improvement frequency
+>50% = CoRe helps most pairs
+LoFTR
+GIMLoFTR
+ELoFTR
+CoMatch
+EDM
+XFeat
+deviation of the local 8×8 heatmap. For EDM [21], it is
+obtained from the axis-wise refinement distributions. Effi-
+cientLoFTR [44] and CoMatch [23] employ two-stage cor-
+relation refinement; we therefore extract and combine the
+uncertainty from both refinement stages, resulting in their
+higher extraction cost.
+Calibration optimization.
+We jointly optimize the cali-
+bration parameters by minimizing the mixture negative log-
+likelihood on the held-out calibration set. We use bounded,
+derivative-free Powell optimization [42] with a maximum
+of 120 iterations and a function-value tolerance of 10−7.
+B. Additional Analysis
+B.1. Sensitivity to Initial Geometry
+During inference, CoRe estimates the coarse-success pos-
+terior from residuals induced by the initial geometry θ0 re-
+turned by the robust estimator, rather than from the ground-
+truth matching errors available during calibration. Specifi-
+cally,
+r(0)
+i
+= ˆyi −Πθ0(xi) = ˆyi −yi
+| {z }
+ri
++ yi −Πθ0(xi)
+|
+{z
+}
+initial error
+,
+(14)
+When θ0 is accurate, r(0)
+i
+closely approximates the true
+matching error ri. As the initial estimate deteriorates, the
+additional geometry error may distort the inferred posterior.
+We therefore use the average corner error of the initial ho-
+mography e0, as an indicator of initialization quality and
+compare it with the error after CoRe e1.
+Table 6 shows that CoRe improves geometry estimation
+over a wide range of initial errors. The strongest and most
+11
+
+
+Table 6. Sensitivity to initial geometry for EfficientLoFTR on
+HPatches. Pairs are grouped by the ACE of the initial homogra-
+phy e0. We report the median reduction ∆e = e0−e1, the fraction
+of improved pairs, and the median pairwise change in geometric
+inliers after CoRe.
+Initial ACE e0 # pairs Median ∆e (px) ↑Improved rate ↑Median ∆inliers ↑
+< 1 px
+261
+−0.00
+47.9%
++5
+1-3 px
+144
++0.42
+85.4%
++78
+3-10 px
+96
++1.65
+87.5%
++88.5
+10-30 px
+18
++4.26
+94.4%
++39
+30-100 px
+6
++6.61
+66.7%
++33
+100-300 px
+3
++57.7
+100.0%
++28
+≥300 px
+12
++735.6
+58.3%
+0
+consistent gains occur for e0 between 1 and 30 px, where
+CoRe improves 85.4–94.4% of image pairs and produces
+increasingly larger median error reductions as the initial es-
+timate deteriorates. Positive median changes in the number
+of geometric inliers further indicate that the refit recovers a
+more consistent correspondence set.
+Figure 7 shows the same trend across matchers and mir-
+rors the findings in the main paper. CoRe is most beneficial
+for moderately difficult pairs, where coarse-assignment fail-
+ures remain frequent enough to affect geometry estimation.
+For easy pairs with very small initial error, most matches
+are already correct and explicitly modeling coarse uncer-
+tainty provides little additional benefit. The behaviour be-
+comes less stable for very poor initial estimates above 30
+px, where substantially fewer valid pairs are available.
+B.2. Coarse-Success Posterior Quality
+We further examine whether the inferred coarse-success
+posterior Pr(ˆyc
+i = yc,∗
+i
+| r(0)
+i ) captures the actual correct-
+ness of the predicted coarse assignment. We group matches
+by their posterior probability and compare each bin with its
+empirical coarse-assignment success rate on HPatches [2].
+Figure 8 shows that our method correctly assigns higher
+posterior values to more accurate coarse assignments. The
+predicted probabilities are not perfectly aligned with the
+empirical success frequencies, which is expected because
+the uncertainty model is calibrated on MegaDepth [22] and
+evaluated on HPatches [2]. Nevertheless, the clear mono-
+tonic trend shows that the posterior provides a meaningful
+estimate of coarse-assignment quality under cross-dataset
+transfer and supports its use as the correspondence weight
+in CoRe.
+B.3. Calibration Data Quantity
+A primary advantage of our post-hoc calibration framework
+is that it avoids the massive computational cost associated
+with retraining the base matching networks. To validate the
+efficiency and stability of our method, we investigate the
+impact of the calibration set size on the learned mixture pa-
+rameters.
+0%
+20%
+40%
+60%
+80%
+100%
+Empirical coarse-success rate
+N = 4, 564, 415
+Coarse-success posterior reliability
+Perfect calibration
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+Predicted coarse-success posterior
+5k
+20k
+100k
+1M
+5M
+#Matches
+Figure 8.
+Coarse-success posterior quality on HPatches.
+Matches are grouped by predicted posterior probability and com-
+pared with their empirical coarse-assignment success rate. Higher
+posterior values consistently correspond to more accurate coarse
+assignments.
+0
+200
+400
+600
+800
+1000
+Calibration Set Size (N)
+2.1
+2.2
+2.3
+2.4
+Negative Log-Likelihood (NLL) ↓
+(a) Impact of Calibration Set Size on Convergence
+Calibrated LMM (Ours)
+0
+200
+400
+600
+800
+1000
+Calibration Set Size (N)
+0
+50
+100
+150
+200
+250
+300
+350
+400
+Optimization Time (s) ↓
+(b) Computational Efficiency
+Calibrated LMM (Ours)
+0
+50
+2.05
+2.10
+2.15
+0
+50
+0
+10
+Figure 9. Impact of calibration data quantity on convergence
+and computational efficiency. (a) The calibration objective func-
+tion (Negative Log-Likelihood) over varying numbers of calibra-
+tion pairs. (b) Optimization time, which scales almost linearly
+with the number of samples but remains under a few seconds in
+the practical low-data regime.
+We randomly sample subsets of varying sizes, denoted
+as N ∈{2, 5, 10, 20, 50, 200, 500, 1000}, from the held-out
+split of MegaDepth [22]. For each calibration subset size,
+we independently run our calibration algorithm to estimate
+the calibration parameter Θ = {a, b, w, β} for Laplace
+mixture model. As illustrated in Fig. 9, the optimization
+process exhibits rapid initial convergence, with the NLL
+dropping sharply between 2 and 50 pairs as the algorithm
+quickly captures the core spatial error modalities. Beyond
+50 pairs, the NLL curve achieves absolute stabilization and
+complete convergence. Notably, because even a single pair
+of images typically yields approximately 2,000 residual of
+correspondence samples, our calibration algorithm is ef-
+fectively fed with an abundant set of correspondence con-
+straints even at the smallest data scale.
+12
+
+
+0
+200
+400
+600
+800
+1000
+Calibration Set Size (N)
+60.1
+60.2
+60.3
+60.4
+AUC@3px (%) ↑
+(a) Downstream Performance on HPatches
+Calibrated LMM (Ours)
+0
+200
+400
+600
+800
+1000
+Calibration Set Size (N)
+1.56
+1.58
+1.60
+1.62
+1.64
+1.66
+1.68
+Negative Log-Likelihood (NLL) ↓
+(b) Probabilistic Generalization on MegaDepth1500
+Calibrated LMM (Ours)
+0
+50
+60.3
+60.4
+60.5
+0
+50
+1.550
+1.575
+1.600
+Figure 10. Impact of calibration set size on downstream perfor-
+mance and generalization. We evaluate the HPatches AUC@3px
+(a) and mean per-axis NLL on MegaDepth1500 (b) as functions
+of the number of calibration pairs (N).
+Our calibration algo-
+rithm demonstrates exceptional sample efficiency, achieving con-
+vergence earlier with only 10 pairs.
+Original
+Source image I
+Target image I′
+N = 1, 494
+mean (sx, sy) = (13.8, 4.8) px
+Horizontal blur
+N = 261
+mean (sx, sy) = (107.0, 27.6) px
+Vertical blur
+N = 247
+mean (sx, sy) = (114.6, 39.8) px
+0
+20
+40
+60
+80
+100
+120
+140
+Expected abs. error scale (px)
+Figure 11. Uncertainty under controlled directional blur. Pre-
+dicted spatial error scales are visualized as ellipses around the
+matches. Horizontal and vertical Gaussian blur increase the es-
+timated uncertainty primarily along the corresponding blur direc-
+tion.
+Furthermore, due to Θ contains only 9 learnable param-
+eters, calibration achieves extreme efficiency for optimiz-
+ing that requiring both an exceptionally small data size and
+minimal optimization time. Using Powell’s method as im-
+plemented in SciPy, optimization on 200 image pairs takes
+67.2 seconds, with runtime scaling approximately linearly
+with calibration-set size.[42].
+Finally, we analyze the impact of calibration data quan-
+tity on final downstream performance, specifically using
+AUC@3px on HPatches [2] and the mean per-axis NLL on
+MegaDepth1500 [22], as shown in Fig. 10. Our results con-
+sistently demonstrate that the calibration algorithm reliably
+converges within a practical range of 10 to 200 image pairs.
+Notably, even when the calibration set size is increased sig-
+nificantly beyond this range, the performance metrics re-
+main highly stable. This empirical evidence confirms the
+numerical robustness of our formulation, maintaining con-
+sistent performance regardless of the calibration data size.
+C. Additional Qualitative Results
+C.1. Uncertainty Changes under Controlled Blur
+Figure 11 visualizes the absolute spatial error scales pre-
+dicted by the calibrated mixture as ellipses around the
+matches. We apply horizontal and vertical Gaussian blur
+to the target image. The predicted ellipses expand primar-
+ily along the corresponding blur direction, showing that the
+estimated uncertainty responds to directional image degra-
+dation as expected.
+C.2. More CoRe Refinement Examples
+A full page of qualitative CoRe results across four datasets
+and three representative matchers is shown in Fig. 12. CoRe
+improves homography estimation in most cases, although
+several MTV [24] examples remain challenging and are in-
+cluded as representative failure cases.
+13
+
+
+HPatches-I
+XFeat
+Corner err: 1.5 -> 1.3 px
+Num inliers: 2258 -> 2267
+LoFTR
+Corner err: 1.5 -> 0.6 px
+Num inliers: 12487 -> 12699
+ELoFTR
+Corner err: 0.8 -> 0.5 px
+Num inliers: 11902 -> 12067
+HPatches-V
+Corner err: 47.4 -> 35.9 px
+Num inliers: 386 -> 397
+Corner err: 3.2 -> 3.3 px
+Num inliers: 1514 -> 1529
+Corner err: 30.2 -> 15.2 px
+Num inliers: 1975 -> 2142
+ScanNet-1
+Corner err: 47.3 -> 25.6 px
+Num inliers: 448 -> 460
+Corner err: 34.5 -> 26.7 px
+Num inliers: 1349 -> 1370
+Corner err: 62.3 -> 34.9 px
+Num inliers: 1192 -> 1402
+ScanNet-2
+Corner err: 98.0 -> 84.0 px
+Num inliers: 824 -> 889
+Corner err: 63.0 -> 64.7 px
+Num inliers: 1415 -> 1541
+Corner err: 105.8 -> 93.9 px
+Num inliers: 1960 -> 2004
+MegaDepth-1
+Corner err: 1690.3 -> 954.4 px
+Num inliers: 178 -> 155
+Corner err: 2410.4 -> 2250.0 px
+Num inliers: 1076 -> 1059
+Corner err: 2409.7 -> 2339.0 px
+Num inliers: 1025 -> 998
+MegaDepth-2
+Corner err: 8.0 -> 3.2 px
+Num inliers: 193 -> 209
+Corner err: 1.6 -> 1.0 px
+Num inliers: 745 -> 759
+Corner err: 1.4 -> 1.0 px
+Num inliers: 827 -> 806
+MTV-1
+Corner err: 12.2 -> 14.6 px
+Num inliers: 48 -> 57
+Corner err: 20.6 -> 15.1 px
+Num inliers: 323 -> 344
+Corner err: 13.0 -> 11.9 px
+Num inliers: 553 -> 589
+MTV-2
+Corner err: 132.2 -> 136.2 px
+Num inliers: 23 -> 35
+Corner err: 169.3 -> 145.1 px
+Num inliers: 156 -> 210
+Corner err: 132.2 -> 132.9 px
+Num inliers: 477 -> 530
+0
+20
+40
+60
+80
+100
+120
+140
+Expected abs. error scale (px)
+Pseudo-GT
+RANSAC
+RANSAC + CoRe
+Figure 12. Additional qualitative CoRe refinement results. We compare the initial and CoRe-refined homographies across four datasets
+and three representative matchers. CoRe improves alignment in most examples, while some challenging MTV cases illustrate representative
+failure modes.
+14
