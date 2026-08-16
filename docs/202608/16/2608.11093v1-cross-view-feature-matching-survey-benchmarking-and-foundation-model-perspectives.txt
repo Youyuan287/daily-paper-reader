@@ -1,0 +1,921 @@
+Title: Cross-View Feature Matching: Survey, Benchmarking, and Foundation-Model Perspectives
+
+URL Source: https://arxiv.org/pdf/2608.11093v1
+
+Published Time: Wed, 12 Aug 2026 01:21:07 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+> 1
+
+# Cross-View Feature Matching: Survey, Benchmarking, and Foundation-Model Perspectives 
+
+Songlin Du, Senior Member, IEEE, Xiaoyong Lu, Zeyu Wu, Xiaobo Lu, Guobao Xiao, Senior Member, IEEE, 
+
+Bin Fan, Senior Member, IEEE, Jiayi Ma, Senior Member, IEEE, and Takeshi Ikenaga, Senior Member, IEEE 
+
+Abstract —Cross-view feature matching aims to establish reli-able correspondences across images with large viewpoint vari-ations. Over the past decade, the field has evolved from task-specific models toward increasingly unified and generalizable correspondence models, with recent progress further driven by the emergence of vision foundation models (VFMs). Despite these advances, existing studies remain highly diverse in their problem formulations, model architectures, training paradigms, and evaluation protocols, making it difficult to obtain a unified understanding of the field. In this survey, we present a unified review of cross-view feature matching. We first introduce astructured taxonomy covering feature extraction, single-type fea-ture matcher, multi-type feature matcher, VFMs based methods, training strategy and robust estimation, providing a coherent framework for analysis and comparison. We further examine recent advances, distilling key design principles and highlight-ing the shift toward unified and generalizable correspondence models. We also provide a unified experimental benchmarking of representative state-of-the-art methods under consistent proto-cols, enabling fair and comprehensive performance comparisons. In addition, we discuss open challenges and future directions, including efficiency, robustness under extreme conditions, and cross-domain generalization. This survey aims to provide acomprehensive and structured reference for understanding the evolution, current landscape, and future development of cross-view feature matching in the era of vision foundation models. 
+
+Index Terms —Cross-view feature matching, vision foundation model, visual correspondence, local feature representation, robust estimation. 
+
+I. I NTRODUCTION 
+
+# CROSS-VIEW feature matching constitutes a fundamental problem in computer vision, concerned with establishing 
+
+This work was supported in part by the National Natural Science Foundation of China under grant 62472312, in part by the Shenzhen Science and Technology Program under grant JCYJ20240813161801002, and in part by the Guangdong Basic and Applied Basic Research Foundation under grants 2025A1515011943 and 2026A1515012748. (Corresponding author: Songlin Du.) 
+
+Songlin Du, Xiaoyong Lu, Zeyu Wu and Xiaobo Lu are with the School of Automation, Southeast University, Nanjing 210096, China (e-mail: sdu@seu.edu.cn; luxiaoyong@seu.edu.cn; 220242094@seu.edu.cn; xblu@seu.edu.cn). Guobao Xiao is with the School of Computer Science and Technology, Tongji University, Shanghai 201804, China (e-mail: gbx@tongji.edu.cn). Bin Fan is with the School of Intelligence Science and Technology and the Institute of Artificial Intelligence, University of Science and Technology Beijing, Beijing 100083, China (e-mail: bin.fan@ieee.org). Jiayi Ma is with the Electronic Information School and the School of Robotics, Wuhan University, Wuhan 430072, China (e-mail: jyma2010@gmail.com). Takeshi Ikenaga is with the Graduate School of Information, Production and Systems, Waseda University, Kitakyushu 808-0135, Japan (e-mail: ike-naga@waseda.jp). 
+
+reliable correspondences between visual observations acquired from distinct viewpoints. Its core significance lies in enabling machines to bridge geometric, photometric, and perspective-induced discrepancies, thereby forming a coherent understand-ing of a shared scene despite substantial appearance variations. This capability is indispensable for constructing consistent representations of the physical world, particularly in scenarios where viewpoint changes introduce challenges such as nonlin-ear distortions, occlusions, and scale variations. The broader importance of cross-view feature matching extends to its role as an enabling mechanism for high-level visual understanding and spatial reasoning. By establishing reliable correspondences across disparate viewpoints, it supports the alignment and integration of multi-view observations, facilitating consistent scene interpretation and coherent geometric reasoning. This capability is fundamental to a range of core vision tasks, such as structure-from-motion (SfM) [1], visual localization [2], and simultaneous localization and mapping (SLAM) [3]. Conse-quently, cross-view feature matching serves as a critical build-ing block for advancing robust perception systems capable of operating reliably in diverse, large-scale, and unconstrained real-world environments. In recent years, cross-view feature matching has advanced rapidly, evolving from handcrafted pipelines to deep learning-based end-to-end frameworks with improved robustness and generalization. Since SuperGlue [4] established the first suc-cessful attention-based matching framework in 2020, cross-view feature matching has experienced an unprecedented surge of innovation. Within only a few years, the field has pro-gressed from graph-based sparse matching [4] to Transformer-driven dense correspondence estimation [5], Mamba-based correspondence framework [6], [7], efficient adaptive matching architectures [8], and, more recently, vision foundation models (VFMs) enhanced representations [9]–[12]. These advances have substantially reshaped the problem formulation, feature representation, matching strategy, and training paradigm of modern correspondence estimation. However, the rapid growth of the literature has also led to increasing fragmentation, with newly proposed methods differing significantly in their assumptions, architectures, and evaluation protocols. As a result, researchers and practitioners lack a unified view of the methodological landscape and the key factors driving recent progress. This motivates the need for a comprehensive and up-to-date survey that systematically reviews, categorizes, and an-alyzes contemporary cross-view feature matching approaches. Unlike existing surveys that mainly trace the evolution from handcrafted pipelines to deep learning-based methods [13], arXiv:2608.11093v1 [cs.LG] 11 Aug 2026 2
+
+[14], or focus on multimodal image matching and its appli-cations [15], our work specifically treats cross-view feature matching as a unified problem of geometric correspondence. Rather than organizing methods solely by algorithmic families or data modalities, we introduce a taxonomy grounded in correspondence modeling principles under cross-view settings, with particular emphasis on modern learning paradigms such as Transformer-, GNN-, Mamba-, and diffusion-based match-ers. We further integrate recent vision foundation models into the discussion and analyze their interaction with task-specific matching frameworks, revealing both opportunities and gaps in current hybrid systems. Complementing the taxonomy, we provide a unified benchmarking and empirical evaluation under consistent protocols, enabling fair comparisons and offering practical insights into the strengths and limitations of representative methods. Key open challenges are also ex-amined, including uncertainty-aware correspondence, explicit geometric reasoning, and scalable global matching. The main contributions of this survey are summarized as follow:  
+
+> •
+
+Hierarchical taxonomy. We propose a structured and hierarchical taxonomy that organizes existing methods along multiple orthogonal dimensions, including feature extraction, single-type feature matcher, multi-type feature matcher, VFMs based methods, training strategy and ro-bust estimation, enabling fine-grained comparison across diverse design choices.  
+
+> •
+
+Methodological analysis. We review recent advances in cross-view feature matching, including GNN-, Transformer-, Mamba-, and diffusion-based methods. We distill key design principles such as global context modeling, cross-image interaction, multi-scale reason-ing, and multimodal fusion. We also summarize training strategies and robust estimation techniques that integrate self-supervision and geometric consistency for improved matching and outlier handling.  
+
+> •
+
+Unified benchmarking. We establish a unified bench-marking protocol by evaluating representative methods on multiple standard datasets, e.g. , MegaDepth, ScanNet and HPatches, under consistent metrics and settings, pro-viding fair and comprehensive performance comparisons.  
+
+> •
+
+Challenges and trends. We identify key challenges in cross-view feature matching, including the trade-off between geometric precision and semantic invariance, ambiguity-aware correspondence estimation, lack of ex-plicit reasoning during inference, limited cross-domain generalization, poor modeling of dynamic scenes, weak integration with 3D foundation models, and the high cost of global matching. These issues collectively point toward the need for more robust, probabilistic, and scalable matching frameworks. The remainder of this survey is organized as follows. Sec-tion II introduces the proposed taxonomy and provides a com-prehensive review of existing methods, structured according to the taxonomy, including feature extraction, single-type feature matcher, multi-type feature matcher, VFMs based methods, training strategy, and robust estimation. Section III summarizes commonly used datasets, evaluation metrics, and benchmark Sparse Matcher  §II-B                
+
+> Semi-Dense Matcher §II-C
+> Dense Matcher §II-D
+> Multi -T ype Feature Matcher
+> Accuracy -M otivated Matcher
+> Efficiency -M otivated Matcher
+> Distribution -M otivated Matcher
+> Point-Line Feature
+> Point-Sem antic Feature
+> Point-Depth Feature
+> Sampling Consensus
+> Deterministic Method
+> Learnable Method
+> Training Strategy §II-G
+> Robust Estimation §II-H
+> Feature Extraction §II-A Handcrafted Feature
+> Learned Feature
+> Cross-view Feature Matching
+> VFMs Based Methods §II-F
+> DINO-Based Method
+> SAM-Based Method
+> Diffusion-Based Method
+> Geometry-VFM-Based Method
+> §II-E
+> Fig. 1. Taxonomy of cross-view feature matching methods.
+
+results, followed by a comparative analysis of representative approaches. Section IV discusses open problems and future research directions. Finally, Section V concludes the survey. II. T AXONOMY 
+
+We propose a structured and unified taxonomy of cross-view feature matching methods, aiming to bridge the gap between traditional handcrafted feature matching pipelines and learning-based frameworks. As illustrated in Fig. 1, the proposed taxonomy organizes existing approaches along six key dimensions: feature extraction , single-type feature matcher 
+
+(including sparse matching , semi-dense matching and dense matching ), multi-type feature matcher , VFMs based methods ,
+
+training strategy , and robust estimation . Within each dimen-sion, we further categorize methods based on their primary design motivations, such as accuracy , efficiency , generaliza-tion , or distribution awareness , thereby revealing the inherent trade-offs between modeling capacity, computational cost, and applicability across different scenarios. By providing this coherent hierarchical framework, this section not only offers a systematic overview of the methodological landscape, but also lays the groundwork for fair comparisons and in-depth performance analyses. 
+
+A. Feature Extraction 
+
+The performance of image matching is fundamentally de-termined by the quality of feature detection and description, and existing approaches can be broadly categorized into two groups: traditional handcrafted methods and learned methods .This section provides a comprehensive overview of the evo-lution of feature detectors and descriptors in image match-ing, from traditional handcrafted methods to learning-based approaches. Each method has its strengths and is suitable for different applications depending on the specific requirements of the task at hand. 3
+
+1) Feature Detectors: Feature detectors play a critical role in visual correspondence by identifying stable and repeatable keypoints that serve as anchors for matching across images. Their evolution reflects a transition from handcrafted designs based on geometric and intensity heuristics to learned models that directly optimize repeatability and discriminability in a data driven manner. This progression indicates a broader shift toward unified and trainable frameworks that increasingly balance detection accuracy, robustness to complex variations, and computational efficiency for large scale and real time applications. 
+
+Handcrafted Feature Detectors. Handcrafted feature de-tectors evolved from classical corner-based methods such as Harris [16] to scale- and rotation-invariant approaches including SIFT [17], SURF [18], and MSER [19]. Efficiency-oriented detectors such as FAST [20] and AGAST [21] enabled real-time keypoint extraction through accelerated and adaptive decision trees. Subsequent scale-space methods, including KAZE [22] and AKAZE [23], introduced nonlinear diffusion to improve edge preservation and localization while reduc-ing computational cost through efficient diffusion schemes. BRISK [24] further combined scale-space detection with efficient binary descriptors, offering a lightweight solution with scale and rotation invariance. Collectively, these methods established the foundations of robust and efficient handcrafted feature detection, balancing invariance, localization accuracy, and computational complexity. The handcrafted feature detectors have progressively evolved toward achieving a balance between efficiency, in-variance, and robustness through carefully designed geometric and intensity-based principles. These methods are typically lightweight and interpretable, making them well-suited for real-time and resource-constrained scenarios. Meanwhile, their limitations in handling complex appearance variations suggest a need for more adaptive and expressive representations. 
+
+Learned Feature Detectors. Learned feature detectors have evolved from early end-to-end detection-description frame-works such as LIFT [25] and illumination-invariant detec-tors such as TILDE [26] toward unified, data-driven rep-resentations. SuperPoint [27] and MagicPoint [27] leverage synthetic pretraining and self-supervision, while D2-Net [28], R2D2 [29], and KeyNet [30], [31] jointly optimize detection and description, emphasizing dense representation, reliability, and scale-aware repeatability. Lightweight designs such as ALIKE [32] further improve localization accuracy and effi-ciency, whereas Quad-style networks [33] exploit unsupervised saliency ranking. DISK [34] adopts reinforcement learning to directly optimize correspondence quality, while DeDoDe [35] and DaD [36] increasingly decouple detection from descriptors through SfM-based geometric supervision and descriptor-free self-supervised learning, respectively. The learned detectors have shifted from handcrafted heuristics toward unified and lightweight learning paradigms, with increasing emphasis on geometric consistency, robustness, and computational effi-ciency for large-scale matching and real-time applications. 
+
+2) Feature Descriptors: Feature descriptors constitute a fundamental component of visual correspondence, serving as the basis for establishing reliable matches across images. Their development reflects a continuous evolution from handcrafted representations designed to balance invariance, distinctiveness, and efficiency to learned embeddings that directly optimize discriminability through data driven objectives. This progres-sion highlights a paradigm shift from manual feature engineer-ing to unified learning frameworks that increasingly integrate geometric constraints, contextual information, and task specific optimization for robust and scalable matching. 
+
+Handcrafted Feature Descriptors. Handcrafted descrip-tors have evolved from distinctive, invariant histogram-based representations to compact binary encodings emphasizing computational and memory efficiency. SIFT [17] and SURF [18] established robust scale- and rotation-invariant gradient-based descriptors, while PCA-SIFT [37] and GLOH [38] further improved compactness and distinctiveness through dimensionality reduction and spatial reorganization. Binary descriptors such as BRIEF [39], BRISK [24], and FREAK [40] significantly reduce computational and storage costs, with BRISK and FREAK additionally providing improved scale and rotation robustness. LIOP [41] instead exploits local intensity-order information to enhance robustness to monotonic illumi-nation changes and image degradation. Subsequent quantized and binarized SIFT/GLOH variants further reduce memory and matching costs through descriptor compression and hashing, trading limited accuracy for substantial efficiency gains [42]. The handcrafted feature descriptors have evolved from high-dimensional, gradient-based representations toward compact and efficient encodings that balance distinctiveness, invariance, and computational cost. While earlier designs emphasize ro-bustness to geometric and photometric transformations, later developments focus on lightweight representations and fast matching, making them suitable for real-time and resource-limited applications. However, the handcrafted descriptors are increasingly challenged by complex visual variations and large-scale data scenarios. 
+
+Learned Feature Descriptors. Learned descriptors have evolved from CNN-based metric learning toward geometry-and context-aware representations, while increasingly em-phasizing compactness and efficiency. Early methods such as DeepDesc [43], L2-Net [44], HardNet [45], and Ku-mar et al. [46] established discriminative descriptors through Siamese/triplet architectures and metric-learning objectives. Subsequent approaches incorporate geometric constraints [47], ranking-based objectives [48], and contextual information [49], while HyNet [50] and SOSNet [51] further exploit im-proved similarity modeling and higher-order relational struc-ture. Recent methods increasingly target resource-efficient deployment, with ZippyPoint [52] introducing compact binary descriptors and XFeat [53] enabling lightweight sparse and semi-dense matching. The learned descriptors have progressed from patch-level metric learning toward geometry/context-aware, relation-preserving, and increasingly efficient represen-tations. Feature descriptors have progressed from handcrafted gradient- or binary-based representations to learned embed-dings optimized via metric learning and geometric constraints. Recent approaches increasingly incorporate geometric and contextual information to enhance matching performance. 4CVPR     
+
+> 2020
+> SuperGlue
+> NCTR
+> 2022
+> ICIP
+> ICIP
+> 2023
+> DNC -
+> Net
+> IMP
+> 2023
+> CVPR
+> ICCV
+> 2023
+> SAM
+> RCAR
+> 2023
+> S2H -
+> GNN
+> HTMatch
+> 2023
+> Signal
+> Process.
+> ACM MM
+> 2024
+> DiffGlue
+> AAAI
+> 2024
+> ResMatch
+> SemaGlue
+> 2025
+> AAAI
+> Sem -
+> Matcher
+> 2025 JVCI
+> CoMatcher
+> 2025
+> CVPR
+> NN
+> 2025
+> AAP -Matcher
+> SGMNet
+> 2021
+> ICCV
+> CVPR
+> 2022
+> ClusterGNN
+> KeyGNN
+> 2023
+> CVIU
+> AAAI
+> 2023
+> Para -
+> Former
+> LightGlue
+> 2023
+> ICCV
+> TMM
+> 2023
+> Amat -
+> Former
+> PR
+> 2024
+> ClusterGNN+
+> FilterGNN
+> 2024
+> Comput. Vis.
+> Media
+> MaKeGNN
+> 2024
+> TIP
+> ICRA
+> 2025
+> MambaGlue
+> KBS 2025
+> Ada -
+> Matcher
+> CVPR
+> 2024
+> OmniGlue
+> LFM -3D
+> 2024
+> 3DV
+> MapGlue
+> 2025
+> arXiv
+> Accuracy -motivated Efficiency -motivated Generalization -motivated
+> Fig. 2. Taxonomy and timeline of sparse matching methods categorized by their motivation (Section II-B).
+
+Future directions include developing compact yet expressive representations, integrating multi-view geometric consistency, and jointly optimizing descriptors within end-to-end matching frameworks. 
+
+B. Sparse Matcher 
+
+Sparse matching establishes correspondences between two sets of keypoints based on pre-extracted descriptors and spatial information. Before learning-based methods, mutual nearest neighbor (MNN) matching [17] was the dominant strategy, which relies on pairwise descriptor similarity but lacks inter-image feature interaction. Recent sparse matchers address this limitation by introducing learnable networks to exchange information between feature sets before final correspondence estimation. As shown in Fig. 2, existing learning-based sparse matchers can be categorized into three groups according to their primary motivations: accuracy , efficiency , and general-ization .
+
+1) Accuracy-Motivated Sparse Matcher: Accuracy remains the primary objective of sparse matching. SuperGlue [4] pioneers Transformer-based sparse matching by applying self-and cross-attention to model intra- and inter-image feature interactions, significantly outperforming MNN matching. Sub-sequent methods further improve matching accuracy by in-corporating additional geometric, contextual, and semantic cues. NCTR [54] introduces locality-aware attention through neighbor consensus, while DNC-Net [55] combines sparse neighborhood consensus with dense local consensus from 4D correlation maps. IMP [56] jointly optimizes correspondence estimation and camera pose prediction, enabling mutual re-finement. SAM [57] exploits scene awareness by predicting keypoint matchability and group-level matching confidence. S2H-GNN [58] and HTMatch [59] enhance feature interac-tion through graph-based aggregation and hybrid Transformer attention, respectively. DiffGlue [60] formulates matching as a diffusion process to iteratively refine the assignment ma-trix. ResMatch [61] jointly models descriptor similarity and spatial relationships using enhanced attention mechanisms. SemaGlue [62] and SemMatcher [63] incorporate semantic information to improve semantic-geometric consistency, while CoMatcher [64] extends sparse matching to multi-view sce-narios by exploiting complementary information across views. AAPMatcher [65] introduces adaptive pruning and hybrid attention to improve matching quality with reduced redundant interactions. These accuracy-oriented methods substantially improve cor-respondence quality through stronger context modeling and richer priors. However, they typically require heavy computa-tion and remain dependent on keypoint detectors, resulting in limited scalability and robustness. Balancing matching accuracy, efficiency, and detector independence remains an important future direction. 
+
+2) Efficiency-Motivated Sparse Matcher: Transformer-based sparse matchers often suffer from O(N 2) complexity due to dense attention over keypoints. Efficiency-oriented methods therefore focus on reducing redundant feature in-teractions. SGMNet [66] reduces attention complexity by performing graph matching on selected seed points. KeyGNN [67] further improves seed-based aggregation through guided attentional pooling. ClusterGNN [68] reduces computation by partitioning graphs into clusters, while ClusterGNN+ [69] extends this idea with coarse-to-fine graph construction and global tokens. ParaFormer [70] accelerates matching through parallel self- and cross-attention with shared parameters. LightGlue [8] introduces adaptive early stopping and pro-gressive pruning based on input difficulty. AMatFormer [71] uses anchor features as efficient information bottlenecks, and LightSGM [72] combines seed selection, graph pooling, and early stopping for lightweight matching. FilterGNN [73] em-ploys cascaded filtering and linear attention to reduce graph learning complexity. MaKeGNN [74] focuses computation on informative keypoints through matchability-guided sampling. MambaGlue [7] adopts Mamba-based sequence modeling for efficient global-local feature aggregation. Ada-Matcher [75] further improves efficiency through adaptive weight sharing and mask attention. Efficiency-oriented sparse methods effectively reduce com-putational cost through pruning, clustering, and adaptive com-putation. Nevertheless, most approaches still rely on approx-imations of conventional attention mechanisms, and more fundamental designs for scalable feature interaction remain desirable. 
+
+3) Generalization-Motivated Sparse Matcher: Despite strong benchmark performance, sparse matchers often suffer from domain shifts in unseen environments. Recent stud-ies have therefore explored improving generalization across domains and modalities. OmniGlue [9] enhances robustness 5CVPR     
+
+> 2021
+> Patch2Pix
+> LoFTR
+> 2021
+> CVPR
+> ECCV
+> 2022
+> Aspan -Former
+> 3DG -
+> STFM
+> 2022
+> ECCV
+> ICASSP
+> 2023
+> MSFormer
+> AAAI
+> 2023
+> TopicFM
+> CVPR
+> 2023
+> ASTR
+> TIP
+> 202 4
+> TopicFM +
+> ICME
+> 202 4
+> Fine -
+> Former
+> CVPRW
+> 202 4
+> Affine -
+> Former
+> TCSVT
+> 202 4
+> Context -
+> Matcher
+> DSAP
+> 202 4
+> TIM
+> Expert
+> Syst. Appl.
+> 202 4
+> Deep -
+> Matcher
+> Expert
+> Syst. Appl.
+> 202 4
+> FMAP
+> OA -
+> Matcher
+> 202 4
+> PR
+> Expert
+> Syst. Appl.
+> 202 4
+> Cor -
+> Matcher
+> MR -
+> Matcher
+> 202 4
+> TIM
+> TASE
+> 2025
+> FMRT
+> Expert
+> Syst. Appl.
+> 2025
+> LGFCTR
+> ICCV
+> 202 5
+> CoMatch
+> ICCV
+> 2025
+> IMD
+> EcoMatcher
+> 202 4
+> ECCV
+> ELoFTR
+> 202 4
+> CVPR
+> MAIM
+> 202 3
+> Vis. Comput.
+> CVPR
+> 2025
+> JamMa
+> EDM
+> 202 5
+> ICCV
+> CasP
+> 202 5
+> ICCV
+> VD -
+> Matcher
+> 202 5
+> TCSVT
+> Lite -
+> SAM
+> 2025
+> Remote
+> Sens.
+> PATS
+> 202 3
+> CVPR
+> Ada -
+> Matcher
+> 202 3
+> CVPR
+> CasMTR
+> 202 3
+> ICCV
+> ECCV
+> 202 4
+> RCM
+> Homo -
+> Matcher
+> 202 5
+> AAAI
+> IMA -
+> match
+> 2025
+> Vis.
+> Comput.
+> TPAMI
+> 202 5
+> RCM+
+> PRISM
+> 202 4
+> ACM MM
+> Match -Former
+> 2022
+> ACCV
+> Accuracy -motivated Efficiency -motivated Distribution -motivated
+> CVPRW
+> 2023
+> SEM
+> ProMa
+> 202 6
+> TMM
+> CVPR
+> 2021
+> Patch2Pix
+> LoFTR
+> 2021
+> CVPR
+> ECCV
+> 2022
+> Aspan -Former
+> 3DG -
+> STFM
+> 2022
+> ECCV
+> ICASSP
+> 2023
+> MSFormer
+> AAAI
+> 2023
+> TopicFM
+> CVPR
+> 2023
+> ASTR
+> TIP
+> 202 4
+> TopicFM +
+> ICME
+> 202 4
+> Fine -
+> Former
+> CVPRW
+> 202 4
+> Affine -
+> Former
+> TCSVT
+> 202 4
+> Context -
+> Matcher
+> DSAP
+> 202 4
+> TIM
+> Expert
+> Syst. Appl.
+> 202 4
+> Deep -
+> Matcher
+> Expert
+> Syst. Appl.
+> 202 4
+> FMAP
+> OA -
+> Matcher
+> 202 4
+> PR
+> Expert
+> Syst. Appl.
+> 202 4
+> Cor -
+> Matcher
+> MR -
+> Matcher
+> 202 4
+> TIM
+> TASE
+> 2025
+> FMRT
+> Expert
+> Syst. Appl.
+> 2025
+> LGFCTR
+> ICCV
+> 202 5
+> CoMatch
+> ICCV
+> 2025
+> IMD
+> EcoMatcher
+> 202 4
+> ECCV
+> ELoFTR
+> 202 4
+> CVPR
+> MAIM
+> 202 3
+> Vis. Comput.
+> CVPR
+> 2025
+> JamMa
+> EDM
+> 202 5
+> ICCV
+> CasP
+> 202 5
+> ICCV
+> VD -
+> Matcher
+> 202 5
+> TCSVT
+> Lite -
+> SAM
+> 2025
+> Remote
+> Sens.
+> PATS
+> 202 3
+> CVPR
+> Ada -
+> Matcher
+> 202 3
+> CVPR
+> CasMTR
+> 202 3
+> ICCV
+> ECCV
+> 202 4
+> RCM
+> Homo -
+> Matcher
+> 202 5
+> AAAI
+> IMA -
+> match
+> 2025
+> Vis.
+> Comput.
+> TPAMI
+> 202 5
+> RCM+
+> PRISM
+> 202 4
+> ACM MM
+> Match -Former
+> 2022
+> ACCV
+> Accuracy -motivated Efficiency -motivated Distribution -motivated
+> CVPRW
+> 2023
+> SEM
+> ProMa
+> 202 6
+> TMM
+
+Fig. 3. Taxonomy and timeline of semi-dense matching methods categorized by their motivation (Section II-C). 
+
+by constructing keypoint graphs with DINOv2 features and introducing position-guided attention to reduce dependence on spatial cues. LFM-3D [76] incorporates noisy 3D priors, including monocular depth and normalized object coordinates, to improve correspondence estimation across diverse synthetic and real-world datasets. MapGlue [77] develops a universal multimodal matching framework for remote sensing, using semantic-aware dual-graph guidance to achieve robust cross-modal alignment. Generalization-oriented sparse matchers improve robustness by leveraging semantic, geometric, and multimodal infor-mation. However, compared with accuracy- and efficiency-driven methods, this direction remains relatively underex-plored. Future research may focus on learning more domain-agnostic representations with fewer assumptions about specific environments. 
+
+C. Semi-Dense Matcher 
+
+Semi-dense methods follow a coarse-to-fine strategy, first establishing correspondences on low-resolution feature maps and then refining them at higher resolutions. Compared with sparse methods, they provide grid-based coverage and are more effective in texture-less regions. However, dense feature interaction introduces considerable computational costs, and grid-based correspondence generation may limit flexibility in aligning with salient regions. As shown in Fig. 3, semi-dense matching methods are categorized into three groups according to their primary motivations: accuracy , efficiency ,and distribution .
+
+1) Accuracy-Motivated Semi-Dense Matcher: Accuracy-oriented semi-dense methods mainly improve correspondence quality through stronger context modeling, multi-scale feature interaction, and geometric reasoning. Patch2Pix [78] intro-duces a detect-to-refine framework that progressively refines patch-level matches into pixel-level correspondences. LoFTR [5] establishes the first semi-dense Transformer matcher, performing coarse matching and fine refinement with dense feature interaction. MatchFormer [79] further develops afully Transformer-based architecture with interleaved self- and cross-attention. ASpanFormer [80] introduces adaptive span attention to dynamically adjust receptive fields according to uncertainty. Subsequent methods enhance matching through additional priors and feature representations. 3DG-STFM [81] transfers 3D correspondence knowledge from a multimodal teacher model, while MSFormer [82] and TopicFM [83] improve robustness through multi-scale modeling and seman-tic topic representation, respectively. TopicFM+ [84] further improves efficiency through pooled attention. ASTR [85], SEM [86], and AffineFormer [87] exploit geometric con-straints, depth cues, and transformation modeling to improve consistency. FineFormer [88], PRISM [89], ContextMatcher [90], and DeepMatcher [91] enhance multi-scale context ag-gregation and correspondence refinement through improved attention and matching strategies. FMAP [92], OAMatcher [93], and DSAP [94] further optimize feature interaction using graph aggregation, overlap-aware matching, and adaptive at-tention mechanisms. CorMatcher [95] leverages reliable corner features for feature propagation, while MR-Matcher [96] and FMRT [97] improve multi-scale representation and positional modeling. WinMRSI [98] extends semi-dense matching to cross-modal remote sensing scenarios, LGFCTR [99] com-bines CNN and Transformer features, and CoMatch [100] improves aggregation efficiency through covisibility-guided token condensation. IMD [101] formulates matching as a diffusion process to enhance cross-image feature interaction. Accuracy-motivated semi-dense methods achieve strong performance by exploiting dense context and rich priors. However, their dependence on dense representations and com-plex architectures leads to high computational costs. Future research may explore more flexible correspondence generation strategies beyond conventional grid-based matching. 
+
+2) Efficiency-Motivated Semi-Dense Matcher: Although Transformer-based semi-dense matchers provide strong mod-eling capability, their computational complexity limits de-ployment on high-resolution images. Efficiency-oriented meth-ods aim to reduce redundant interactions while preserving matching performance. EcoMatcher [102] introduces Context Clusters for efficient feature aggregation through implicit clustering. ELoFTR [103] reduces computation through adap-tive token selection and aggregated attention. MAIM [104] adopts a Mixer-based architecture to exchange spatial and channel information with low computational overhead. JamMa [6] leverages Mamba-based sequence modeling with efficient cross-view scanning and local aggregation. EDM [105] com-bines lightweight CNN feature extraction, correlation aggre-gation, and efficient regression for subpixel matching. CasP [106] reduces search complexity by establishing coarse cor-respondence priors before fine matching. VD-Matcher [107] improves efficiency through weight reuse and lightweight feature detection. LiteSAM [108] develops a lightweight UAV 6WACV   
+
+> 2019
+> DGCNet
+> GLUNet
+> 202 0
+> CVPR
+> NeurIPS
+> 202 0
+> GOCor
+> PDCNet
+> 202 1
+> CVPR
+> CVPR
+> 202 3
+> DKM
+> RGM
+> 202 3
+> ar Xiv
+> CVPR
+> 202 4
+> RoMa
+> ar Xiv
+> 202 5
+> PanMatch
+> BEAMER
+> 202 5
+> ICIP
+> GFNet
+> 2025
+> CVPR
+> UFM
+> 202 5
+> NeurIPS
+> arXiv
+> 202 5
+> RoMa v2
+> ICCV
+> 202 5
+> ArgMatch
+> Accuracy -motivated Efficiency -motivated
+> Fig. 4. Taxonomy and timeline of dense matching methods categorized by their motivation (Section II-D).
+
+localization matcher by integrating efficient multi-scale ex-traction, global-local fusion, and subpixel refinement. ProMa [109] systematically rebalances the accuracy-latency trade-off by addressing previously overlooked efficiency bottlenecks through progressive matchability estimation, a hybrid feature interaction module, and feature pruning during coarse match-ing. Efficiency-oriented semi-dense methods achieve a better balance between accuracy and computational cost, making them suitable for practical applications. However, simplified architectures may reduce robustness under extreme viewpoint or appearance variations. Improving robustness while main-taining efficiency remains an important direction. 
+
+3) Distribution-Motivated Semi-Dense Matcher: Beyond improving matching accuracy, recent studies emphasize the spatial distribution of correspondences, which directly affects downstream tasks such as pose estimation and reconstruction. Conventional semi-dense methods are constrained by one-to-one coarse matching and fixed grids, limiting flexibility under large scale variations. Distribution-oriented methods therefore explore adaptive and flexible correspondence as-signment. PATS [110] introduces patch-based transportation to model spatially varying scales and enable many-to-many matching. AdaMatcher [111] estimates co-visible regions and performs adaptive assignment for many-to-one or one-to-many correspondence. RCM [112] improves alignment with salient regions through keypoint-guided matching and scale-aware view switching. CasMTR [113] mitigates coarse-grid limitations using cascade refinement and non-maximum sup-pression. HomoMatcher [114] generates fine correspondences by projecting transformed grids rather than relying only on coarse patch centers. IMAmatch [115] selectively increases matching density in important regions through adaptive grid expansion. RCM+ [116] further introduces a free-form match-ing paradigm that removes dependence on fixed positional priors and supports arbitrary input structures. Distribution-motivated semi-dense methods extend conven-tional matching by improving spatial flexibility and corre-spondence coverage. However, this direction remains rela-tively underexplored. Future studies may investigate task-aware matching distributions that optimize correspondence layouts for downstream vision tasks. 
+
+D. Dense Matcher 
+
+Dense matching methods directly estimate dense correspon-dence fields between image pairs, often accompanied by con-fidence prediction to filter unreliable matches. Compared with sparse and semi-dense methods, they provide complete pixel-level correspondence but usually require higher computational and memory costs. As shown in Fig. 4, existing dense matchers are mainly categorized into two groups according to their motivations: accuracy and efficiency .
+
+1) Accuracy-Motivated Dense Matcher: Accuracy-oriented dense methods aim to improve correspondence quality through stronger feature representation, geometric modeling, and un-certainty estimation. Rocco et al. [117] introduced an end-to-end CNN-based framework that jointly learns feature extrac-tion, correspondence estimation, and geometric transformation fitting. DGC-Net [118] further incorporated matchability pre-diction to remove unreliable correspondences, while GLU-Net [119] combined global and local correlation mechanisms to handle large displacements and fine motion simultaneously. GOCor [120] improved dense correspondence estimation by learning optimization-based correlation volumes with spatial priors. PDC-Net [121] introduced probabilistic flow estimation with uncertainty prediction for robust matching. DKM [122] combined kernel regression, feature refinement, and balanced correspondence sampling for dense matching. Recent methods further improve robustness through large-scale learning and foundation representations. RGM [123] adopts hierarchical learning with uncertainty-based sparsifi-cation for robust generalization. RoMa [10] integrates DI-NOv2 features, ConvNet-based refinement, and Transformer decoding to achieve robust wide-baseline matching. Pan-Match [124] develops a unified correspondence foundation model that leverages large vision model features for zero-shot cross-domain matching. BEAMER [125] improves ro-bustness by maintaining multiple correspondence hypotheses through beam-search-based cross-attention. UFM [126] jointly learns optical flow and wide-baseline matching using a unified Transformer framework. RoMa v2 [127] further improves multi-view correspondence through enhanced warp-correlation learning, efficient refinement, and pixel-wise uncertainty mod-eling. Accuracy-motivated dense methods achieve strong perfor-mance by exploiting dense representations and large-scale training. However, their high computational and memory re-quirements restrict practical deployment. Future research may focus on more scalable dense formulations or hybrid strategies that preserve dense matching capability with lower overhead. 
+
+2) Efficiency-Motivated Dense Matcher: Dense matching remains computationally demanding due to pixel-level cor-7ECCV       
+
+> 2020
+> Toft et al.
+> ICCV
+> 2023
+> GlueStick
+> TIP
+> 2024
+> TopicFM+
+> HDPL
+> 2021
+> Ind. Robot
+> ECCV
+> 2022
+> 3DG -STFM
+> Wang et al .
+> 2023
+> ICCV
+> CVPR
+> 2024
+> OmniGlue
+> Point -Line Features Point -Semantic Features Point -Depth Features
+> SGAM
+> 2023
+> arXiv
+> ICCV
+> 2025
+> SGAD
+> LiftFeat
+> 2025
+> ICRA
+> AAAI
+> 2025
+> SemaGlue
+> RCM+
+> 2025
+> TPAMI
+> JVCI
+> 2025
+> SemMatcher
+> LFM -3D
+> 2024
+> 3DV
+> MESA
+> 2024
+> CVPR
+> AAAI
+> 2023
+> TopicFM
+> Fig. 5. Taxonomy and timeline of multi-type feature matchers (Section II-E).
+
+respondence estimation. Recent efficiency-oriented methods attempt to reduce this burden while maintaining competi-tive accuracy. GFNet [128] combines DINOv2 features with a lightweight feature pyramid network and introduces an efficient grid-flow formulation with iterative refinement for accurate and low-cost matching. ArgMatch [129] proposes an adaptive refinement framework that reduces expensive operations through content-aware offset prediction, locally consistent refinement, and adaptive gating. Compared with accuracy-driven approaches, efficiency-oriented dense matching remains relatively underexplored. Existing studies demonstrate the feasibility of reducing com-putational costs without significantly sacrificing performance. Future directions may investigate more efficient dense corre-spondence formulations and hybrid architectures that balance dense modeling capability with practical scalability. 
+
+E. Multi-Type Feature Matcher 
+
+Traditional geometric matching methods mainly rely on local appearance descriptors, which often degrade under large viewpoint variations, illumination changes, occlusion, blur, and texture deficiency. To improve geometric robustness, re-cent methods incorporate complementary feature types, such as line segments, semantic cues, and depth information, into unified matching frameworks. As shown in Fig. 5, existing multi-type feature matchers can be categorized into three groups: point-line , point-semantic , and point-depth features. 
+
+1) Point-Line Features: Point-line matching methods ex-tend point-based correspondence by incorporating structural information from line segments. HDPL [130] represents points and lines as graph nodes and fuses their visual and geometric relationships through graph convolution, improving match-ing in structured and texture-poor scenes. GlueStick [131] further unifies keypoints and line segments within a single graph neural network, enabling mutual interaction between heterogeneous geometric primitives through attention and line-specific message passing. RCM+ [116] introduces a free-form matching paradigm that removes predefined positional constraints and supports arbitrary inputs, including points, edges, and lines, through a position-agnostic encoder and parameter-free decoder. Point-line methods demonstrate the effectiveness of com-bining complementary geometric primitives. Future research may extend this idea beyond line segments toward richer structures, such as curves, junctions, and planar elements, for more comprehensive correspondence estimation. 
+
+2) Point-Semantic Features: Point-semantic methods inte-grate high-level semantic information into local feature match-ing to improve robustness under viewpoint, illumination, and domain variations. TopicFM [83] introduces a semantic-aware detector-free framework by representing images as latent topic distributions and using semantic regions to constrain feature alignment. TopicFM+ [84] further improves efficiency through pooling and merging attention for semantic-guided fine matching. SGAM [132] pioneers area-to-point matching by restricting correspondence search within semantically con-sistent regions, while MESA [133] replaces explicit semantic labels with SAM [134]-generated segments and performs robust area matching through multi-relational graph modeling. OmniGlue [9] exploits DINOv2 features to construct semantic-guided keypoint graphs, improving zero-shot generalization across unseen domains. SemaGlue [62] and SemMatcher [63] incorporate semantic information into local correspondence through semantic-geometric feature fusion and semantic re-gion constraints, respectively. SGAD [135] further develops descriptor-based area matching by jointly encoding semantic content and geometric layout, providing a lightweight plug-and-play enhancement for local feature matching. Point-semantic approaches significantly improve robustness and interpretability by introducing semantic priors from seg-mentation models and vision foundation models. Future re-search may investigate tighter integration between semantic reasoning and geometric correspondence estimation for more efficient end-to-end matching. 
+
+3) Point-Depth Features: Point-depth methods exploit monocular depth and derived 3D geometric cues to improve matching robustness under viewpoint changes and weak-texture conditions. Toft et al. [136] leverage monocular depth to rectify planar regions before feature extraction, reduc-ing viewpoint-induced distortions. 3DG-STFM [81] trans-fers depth-aware matching knowledge from RGB-D teacher models to RGB-only students through knowledge distillation. LFM-3D [76] incorporates normalized object coordinates and monocular depth into graph-based matching to improve wide-baseline correspondence. Wang et al. [137] introduce curvature consistency from depth maps as an additional geometric con-straint that can be integrated into existing matching pipelines. 8ACM MM      
+
+> 2024
+> SRMatcher
+> NeurIPS
+> 2023
+> DIFT
+> MESA
+> 2024
+> CVPR
+> CVPR
+> 2024
+> OmniGlue
+> MATCHA
+> 2025
+> CVPR
+> DINO -Based Methods SAM -Based Methods Diffusion -Based Methods Geometry -VFM -Based Methods
+> CVPR
+> 2024
+> RoMa
+> Cadar et al.
+> 2024
+> ACCV
+> RAL
+> 2025
+> DINO -VO
+> TIP
+> 2026
+> SigMa
+> DistillMatch
+> 2025
+> arXiv
+> AAAI
+> 2026
+> SGAT
+> TextFM
+> 2026
+> CVPR
+> arXiv
+> 2026
+> RIM
+> RoMa v2
+> 2026
+> ECCV
+> CVPR
+> 2026
+> MV -RoMa
+> TPAMI
+> 2025
+> DMESA
+> TIP
+> 2025
+> SAMFeat
+> SGAD
+> 2025
+> ICCV
+> SAMatcher
+> 2026
+> arXiv
+> ICCV
+> 2025
+> IMD
+> MASt3R
+> 2024
+> ECCV
+> SGPFeat
+> 2026
+> AAAI
+> Fig. 6. Timeline of VFM based image matching approaches (Section II-F).
+
+LiftFeat [138] enhances local descriptors by fusing surface normal features derived from monocular depth through alightweight geometry-aware lifting module. Point-depth methods improve matching by introducing 3D geometric priors into 2D correspondence learning. Future research may focus on more accurate monocular geometry estimation and adaptive 2D-3D feature fusion mechanisms to further enhance generalization across diverse scenes. 
+
+F. Vision Foundation Models Based Matcher 
+
+Recent vision foundation models (VFMs), trained on large-scale datasets, have demonstrated strong generalization ability and the capability to encode semantic, structural, generative, and geometric information. These properties provide new opportunities for improving image matching under challenging conditions, including large viewpoint variations, illumination changes, weak textures, and cross-modal appearance differ-ences. Instead of replacing dedicated matching networks, ex-isting approaches mainly exploit VFMs as coarse descriptors, semantic priors, teacher models, or geometry-aware feature extractors, while retaining specialized modules for accurate correspondence estimation. As shown in Fig. 6, existing methods can be categorized into four groups: DINO-based , SAM-based , diffusion-based ,and geometry-VFM -based methods, according to the primary VFM used. 
+
+1) DINO-Based Methods: The DINO family learns general-purpose visual representations through large-scale self-supervised training and exhibits strong semantic discrimina-tion and cross-domain generalization. Early studies mainly explored directly using frozen DINO features, while recent works further investigate semantic- geometric fusion, adapta-tion, distillation, and multi-view correspondence construction. OmniGlue [9] combines SuperPoint descriptors with DI-NOv2 features, using DINOv2-based semantic cues to guide keypoint information interaction and improve generalization across unseen domains. RoMa [10] adopts frozen DINOv2 features as coarse representations and integrates them with spatially accurate CNN features, establishing a widely used coarse-semantic and fine-geometric matching paradigm. Based on this idea, SRMatcher [139] introduces cross-image seman-tic fusion with DINOv2 features to enhance correspondence learning, while Cadar et al. [140] incorporate DINOv2-derived semantic reasoning into local descriptors to improve robust-ness without sacrificing localization accuracy. Beyond feature enhancement, DINO representations have also been explored for pose estimation and matching guidance. DINO-VO [141] combines DINOv2 features with lightweight CNN-based geometric features for visual odometry. SigMa [142] utilizes DINOv2-based semantic similarity to guide salient point selection, coarse matching, and confidence es-timation. SGAT [143] further uses DINOv2 to estimate point saliency and matchability, which guides graph-based feature refinement rather than directly predicting correspondences. To reduce the computational cost of foundation mod-els, DistillMatch [144] transfers modality-invariant knowledge from DINOv2 and DINOv3 into lightweight networks while preserving local discriminative information. TextFM [145] extends DINO-based matching with CLIP-based language guidance and LoRA adaptation, enabling vision-language as-sisted correspondence learning. RIM [146] exploits DINOv2 tokens for both retrieval and local matching in cross-domain UAV localization, forming a unified retrieval-and-matching framework. RoMa v2 [127] replaces DINOv2 with DINOv3 and improves matching performance through enhanced dense representations and architectural refinement. MV-RoMa [147] further extends pairwise RoMa matching to multi-view track reconstruction by enforcing cross-view consistency. The DINO-based methods demonstrate strong advantages in semantic representation and cross-domain generalization. However, their features remain relatively coarse and may confuse visually similar instances or lose fine-grained spatial details. Therefore, most approaches rely on geometric feature fusion, task-specific adaptation, or knowledge distillation to bridge the gap between semantic robustness and precise cor-respondence localization. 
+
+2) SAM-Based Methods: Unlike DINO, which provides dense visual representations, SAM [134] mainly offers category-agnostic regions, accurate boundaries, and hierarchi-cal structural priors. Therefore, SAM-based methods typically exploit segmentation information to identify coherent or poten-tially co-visible regions and use them to facilitate fine-grained correspondence estimation. MESA [133] introduces SAM-based region proposals and organizes them into a multi-relational area graph, where graph optimization is used to identify reliable matching regions before applying point-level correspondence methods. DMESA [148] improves the efficiency of MESA by replacing graph optimization and repeated region matching with dense area-correspondence estimation based on patch matching and prob-9
+
+abilistic modeling. SAMFeat [149] adopts a teacher-student framework that distills SAM’s category-agnostic semantic and boundary knowledge into a lightweight local feature network, avoiding SAM inference during testing. Recent studies further explore combining SAM regions with semantic and cross-view reasoning. SGAD [135] integrates SAM-generated hierarchical regions with DINOv2-based se-mantic features and local geometric descriptors, enabling direct region matching while reducing redundant regions. SAMatcher [150] addresses the inconsistency of independently segmented regions across views by introducing cross-view interaction to predict co-visible masks and constrain corre-spondence estimation. The SAM-based methods effectively reduce background interference and matching redundancy, particularly in high-resolution scenarios. However, regions generated from single-view segmentation may not directly correspond across view-points, and mask generation introduces additional computation costs. Consequently, recent approaches increasingly focus on learned region representations and explicit cross-view co-visibility modeling. 
+
+3) Diffusion-Based Methods: Diffusion models learn rich visual structures and multi-scale representations during image generation, and their intermediate U-Net features have been shown to contain useful information for pixel-level correspon-dence. Unlike discriminative VFMs, diffusion-based methods exploit generative representations to capture fine spatial details and instance-level structures. DIFT [151] first demonstrates that intermediate diffusion features can serve as general-purpose pixel descriptors by extracting activations from a frozen diffusion U-Net. Without task-specific training, these features support geometric, tempo-ral, and semantic correspondence, although their performance is sensitive to diffusion timesteps, layers, and feature reso-lutions. MATCHA [152] further combines multi-level diffu-sion features with DINOv2-based semantic representations to jointly model geometric, semantic, and temporal correspon-dence. IMD [101] addresses the limitation of independent feature extraction by introducing cross-image interaction into diffusion-based representations, enabling more effective dis-crimination between similar instances. The diffusion-based methods provide detailed spatial rep-resentations and strong structural priors for correspondence estimation. However, their generative pretraining objective is not explicitly optimized for geometric matching, resulting in high computational costs and unstable performance due to feature extraction configurations. 
+
+4) Geometry-VFM-Based Methods: Geometry foundation models, including DUSt3R [153] and Depth Anything [154], differ from general-purpose semantic and generative models because they are trained to predict depth, point maps, camera parameters, or other geometric quantities. They can therefore support correspondence estimation by reasoning about the underlying 3D scene rather than relying only on appearance features. MASt3R [11] builds on DUSt3R and formulates image matching as 3D point-map prediction, jointly estimating dense point maps, confidence maps, and local descriptors. Correspondences are recovered either by comparing points in a shared 3D reference frame or by reciprocal nearest-neighbor descriptor matching, providing strong robustness to large viewpoint changes. SGPFeat [155] transfers knowledge from geometry-aware foundation models to multimodal image matching through a dual-teacher distillation framework. Depth Anything V2 supplies high-level semantic and structural pri-ors, while ALIKE provides keypoint and local geometric infor-mation, and both are distilled into a task-specific multimodal feature extractor through heterogeneous feature aggregation. The geometry-VFM-based methods provide a direct con-nection between image correspondence and 3D scene under-standing and are particularly advantageous under substantial viewpoint changes. However, they are generally more compu-tationally demanding and require large-scale 3D training data. Their predictions can also become unreliable for domains that differ substantially from the training data. 
+
+G. Training Strategy 
+
+Beyond improving the matcher itself, some studies focus on developing enhanced training frameworks that utilize larger and more diverse datasets to train more robust and gener-alizable matchers. As the timeline shown in Fig. 7, PMatch [156] introduces a paired masked image modeling pretext task to jointly pretrain the encoder and decoder, and proposes a cross-frame global matching module that enhances robustness to textureless regions, further strengthened by a homography-based loss tailored for planar structures. GIM [157] proposes a self-training framework that leverages internet videos to train a single generalizable image matcher, generating and propagating pseudo-labels without relying on 3D reconstruc-tion for improved efficiency and robustness. MINIMA [158] proposes generating large-scale pseudo multimodal datasets from easily accessible RGB images using generative models, enabling unified cross-modal matching across modalities such as infrared, depth, event, normal, and artistic styles while maintaining low cost, high flexibility, and high-quality corre-spondence labels. MatchAnything [159] proposes a large-scale universal cross-modality pre-training framework that integrates multi-view geometry, video continuity, and synthetic warping into a unified dataset engine to generate diverse image pairs with reliable ground-truth correspondences for robust and gen-eralizable image matching. L2M [160] proposes a two-stage framework that lifts 2D images into 3D space by first learning a 3D-aware feature encoder through multi-view synthesis and Gaussian feature representation, and then employing novel-view rendering with large-scale synthetic data to train a robust, generalizable feature matcher. CVPR  202 3                
+
+> PMatch
+> GIM
+> ICLR 2024
+> MINIMA
+> CVPR 2025
+> ar Xiv 2025
+> MatchAnything
+> ICCV 2025
+> L2M
+> Fig. 7. Timeline of typical training strategies (Section II-G). 10 CACM
+> 1981
+> RANSAC
+> MAPSAC
+> 2002
+> IJCV
+> Polynomial -time
+> con .max .
+> CVPR 2008
+> MSAC
+> 1997
+> IVC
+> CVIU
+> 2000
+> MLESAC
+> JPRS
+> 2003
+> LO -RANSAC
+> Sampling Consensus Deterministic Robust Estimation Learnable Robust Estimation
+> CVPR
+> 2023
+> ∇-RANSAC
+> BANSAC
+> 2023
+> ICCV
+> CVPR
+> 2023
+> ∇-RANSAC
+> BANSAC
+> 2023
+> ICCV
+> CVPR
+> 2022
+> MQ -Net
+> CVPR
+> 2022
+> MQ -Net
+> Robust grad .
+> des .est .
+> JRSSSB 2020
+> NG -RANSAC
+> 2019
+> ICCV
+> CVPR 2019
+> Unsupervised
+> con .learning
+> NG -RANSAC
+> 2019
+> ICCV
+> CVPR 2019
+> Unsupervised
+> con .learning
+> CVPR 2018
+> Graph -Cut
+> RANSAC
+> Dete .bico .
+> optimization
+> CVPR 2018
+> CVPR
+> 2017
+> DSAC
+> Exact max.
+> con .
+> CVPR 2017
+> CVPR
+> 2017
+> DSAC
+> Exact max.
+> con .
+> CVPR 2017
+> BMVC
+> 2017
+> ANSAC
+> BMVC
+> 2017
+> ANSAC
+> Fig. 8. Taxonomy and timeline of robust estimation methods (Section II-H).
+
+The training frameworks discussed above play a fundamen-tal role in data-driven matching, as improvements in data generation, supervision, and pretraining can benefit a wide range of methods. Existing approaches enhance robustness and generalization by leveraging large-scale data, self-supervision, and multimodal synthesis. Future directions may explore feedback-driven data generation and more resource-efficient training paradigms. 
+
+H. Robust Estimation 
+
+Robust estimation refers to the problem of estimating model parameters from data that may contain noise, outliers, or deviations from idealized assumptions, such that the estimator remains accurate and stable even when a significant portion of the observations are corrupted [161]. In the context of visual correspondence, robust estimation refers to techniques that reliably estimate geometric models, e.g. , homographies, essential/fundamental matrices, or relative camera poses, from putative feature correspondences that are contaminated by noise and a high proportion of outliers [162]. Since fea-ture detectors and descriptors typically yield candidate cor-respondences with significant mismatches, robust estimation is essential to reject outliers before model fitting. As shown in Fig. 8, we classify existing robust estimation approaches into three categories: sampling consensus , deterministic robust estimation , and learnable robust estimation . These methods improve the accuracy and stability of downstream tasks such as panoramic stitching, visual odometry, and 3D reconstruction. 
+
+1) Sampling Consensus for Robust Estimation: Sampling consensus algorithms combine random sampling with the evaluation of consensus sets to identify inlier subsets. The canonical approach in image matching is Random Sample Consensus (RANSAC) [163], which repeatedly samples mini-mal subsets of point correspondences to hypothesize a model, 
+
+e.g. , homography or fundamental matrix, and then counts inliers that satisfy a geometric error threshold. The model with the largest inlier set is selected as the robust estimate. RANSAC’s ability to tolerate a large fraction of outliers made it a widely used method for robust homography and pose estimation in feature-based matching pipelines. Variants of RANSAC address its limitations in convergence speed and noise sensitivity [164]. For instance, MSAC [165] is an early RANSAC variant that incorporates maximum likelihood estimation for model parameters, initially applied to trifocal tensor estimation, improving accuracy over standard RANSAC at the cost of higher computational load. MLESAC [166] generalizes RANSAC by selecting solutions based on maximum likelihood rather than inlier count, and combines it with an automatic parameterization method that handles nonlinear constraints for multiview relations. MAPSAC [167] extends the MSAC and MLESAC framework by adopting a Bayesian approach to compute a robust Maximum a Poste-rior (MAP) estimate, enabling least-squares fitting of arbi-trary manifolds, including lines and planes, with improved robustness over previous maximum likelihood formulations. Locally Optimized RANSAC (LO-RANSAC) [168] improves RANSAC by incorporating a local optimization step, address-ing the empirical observation that more samples are often needed than theory predicts, and relaxing the assumption that a model computed from an all-inlier sample must be consistent with the entire inlier set. Adaptive Non-minimal Sample and Consensus (ANSAC) [169] uses ranked subsets with estimated inlier ratios to generate higher-quality hypotheses and improve convergence performance in matching tasks. Optimized prob-abilistic sampling techniques such as BANSAC [170] that employs dynamic Bayesian networks to perform weighted, adaptive sampling of data points, updating inlier probabilities iteratively and introducing a probabilistic stopping criterion to improve efficiency and robustness. The sampling consensus methods provide a robust frame-work for model estimation in the presence of outliers by iteratively sampling minimal subsets and selecting hypotheses with maximum consensus. Subsequent improvements enhance estimation accuracy, convergence speed, and statistical robust-ness through likelihood modeling, Bayesian inference, and local optimization. Despite these advances, an important open problem remains how to achieve both high computational effi-ciency and strong robustness under extreme outlier ratios and complex transformations, particularly in real-time matching scenarios. 
+
+2) Deterministic Robust Estimation: Recently, efficient de-terministic algorithms for consensus maximization have at-tracted increasing attention. Unlike random sampling methods, deterministic optimization approaches aim to find globally consistent inlier sets or model parameters without reliance on random sampling. These methods often formulate ge-ometric model fitting as an explicit optimization problem that maximizes an inlier count or minimizes a robust ob-11 
+
+jective, and solve it using deterministic search or convex relaxation techniques. Although they do not aim for global optimality, their directed search strategy often yields high-quality solutions. For example, Olsson et al. [171] proposed a polynomial-time algorithm for computing globally optimal point-set alignments in the presence of outliers by maximizing consensus, using convex programming techniques grounded in computational geometry. Le et al. [172] proposed a determin-istic and locally convergent algorithm for maximum consen-sus estimation based on a penalized linear complementarity formulation and a Frank-Wolfe optimization scheme. Cai et al. [173] introduced an efficient deterministic algorithm that improves an initial solution for consensus maximization by formulating each update as a biconvex optimization prob-lem, enabling reliable and significant consensus improvement without random sampling. Graph-Cut RANSAC [174], [175] formulates the local optimization step as an energy mini-mization problem solved via graph cuts, combining unary residuals and a binary term to enforce spatially coherent inlier labeling, and demonstrates superior accuracy, reliability, and efficiency across multiple tasks, such as homography, 6D pose, and fundamental/essential matrix estimation. Prasad 
+
+et al. [176] introduced a computationally efficient class of robust estimators based on a novel gradient descent variant for general convex risk minimization, providing provable robustness under classical ϵ-contamination and heavy-tailed settings, with theoretical guarantees and practical effectiveness demonstrated for linear regression, logistic regression, and ex-ponential family parameter estimation. While computationally more demanding than sampling-based methods, deterministic solvers yield repeatable results with theoretical bounds that can be advantageous in safety-critical vision systems. 
+
+3) Learnable Robust Estimation: Learnable robust estima-tion incorporates machine learning, particularly deep learning, into traditional robust estimation pipelines to enhance out-lier rejection and consensus evaluation. These methods train models to predict inlier probabilities or to generate features that facilitate robust matching under challenging conditions such as illumination variation and extreme viewpoint changes. DSAC [177] introduces a differentiable variant of RANSAC by replacing the traditional hard selection of hypotheses with probabilistic selection, allowing gradients to propagate through the model scoring process. MQ-Net [178] differs from prior RANSAC variants by replacing traditional consensus- or residual-based scoring with a learned Model Quality Network for direct error prediction, and by introducing a Minimal Samples Filtering Network to preemptively discard degenerate or geometrically inconsistent hypotheses, thereby improving both efficiency and accuracy. Progressive consensus learning methods [179] iteratively prune correspondence sets using learned consensus scores derived from local and global graph contexts, improving the separability of inliers and outliers before geometric estimation. Such schemes have demonstrated superior performance over classical consensus mechanisms, particularly in scenarios with strong descriptor ambiguity or high mismatch rates. Neural Guided RANSAC [180] learns a categorical sampling distribution via an approximate ex-pected gradient, while ∇-RANSAC [181] introduces a fully differentiable RANSAC formulation that employs the Gumbel reparameterization trick to learn the sampling distribution in an end-to-end manner. Probst et al. [182] introduced the first unsupervised learning framework for consensus maximization by deriving a transformation-free geometric constraint that enables learning to identify the largest inlier set, achieving robust model fitting and outperforming RANSAC on multiple 3D vision tasks. Learnable robust estimation extends classical consensus-based frameworks by integrating deep learning to guide hy-pothesis generation, sampling, and inlier evaluation in a data-driven manner. It enables end-to-end optimization by making the sampling and scoring processes differentiable. Despite these advances, a key open problem lies in achieving strong generalization across diverse scenes and geometric configura-tions, particularly under distribution shifts, while maintaining the interpretability and stability traditionally offered by model-based robust estimation methods. III. B ENCHMARKING AND ANALYSIS 
+
+A unified benchmarking of representative cross-view feature matching methods under consistent evaluation protocols is presented in this section. Through systematic comparisons across sparse, semi-dense, and dense paradigms on various tasks, including relative pose estimation, homography estima-tion, and visual localization, we reveal the performance trade-offs: dense methods achieve the highest accuracy at greater computational cost, while sparse methods remain efficient but are limited by detector quality. This benchmarking provides fair, quantitative insights into the strengths and limitations of existing approaches. 
+
+A. Datasets 
+
+YFCC100M [183] contains approximately 100 million cre-ative commons-licensed outdoor images from Flickr, along with metadata such as camera parameters, user tags, and partial geolocation. Due to its scale and real-world diversity, it has become a widely adopted benchmark for large-scale com-puter vision tasks. For image matching, OANet [184] selects 72 landmark-centric sequences reconstructed using COLMAP [185], which provides sparse 3D models and camera poses as ground-truth references. Typically, 68 sequences are used for training/validation and 4 held out for testing. 
+
+MegaDepth [186] provides SfM and Multi-View Stereo (MVS) reconstructions of 196 globally distributed landmark scenes. Using COLMAP [185] and MVS pipelines, it delivers RGB images, camera parameters, sparse 3D point clouds, and dense depth maps. MegaDepth is widely adopted as a benchmark for wide-baseline image matching and relative pose estimation due to its challenging real-world conditions, including extreme viewpoint variations, illumination changes, and repetitive structures. A standard evaluation protocol, often referred to as MegaDepth-1500 [5], samples 1,500 image pairs from two iconic scenes Sacre Coeur and St. Peter’s Square .
+
+ScanNet [187] is a large-scale indoor RGB-D dataset con-taining 1,513 scanned scenes with approximately 2.5 million views. Each view provides an RGB image, a depth map, 12 (a) Sparse Matcher (LightGlue)  (c) Dense Matcher (RoMa) (b) Semi -Dense Matcher (P ro Ma) 
+
+> Fig. 9. Visualization of typical cross-view image matching results from sparse, semi-dense, and dense matchers.
+
+and ground-truth camera poses obtained via dense 3D recon-struction. The dataset features challenging indoor conditions such as texture scarcity, repetitive structures, and occlusions, making it a standard benchmark for indoor image matching and pose estimation. A common evaluation protocol samples 1,500 image pairs from the test split, as used in multiple matching methods [4] [5]. 
+
+SUN3D [188] is a large-scale indoor RGB-D dataset com-prising 254 sequences captured across diverse indoor envi-ronments. It provides RGB images, depth maps, and ground-truth relative camera poses refined through generalized bundle adjustment [189]. The scenes exhibit challenging conditions for image matching, including sparse textures, repetitive pat-terns, and self-occlusions. Following common practice [184], 239 sequences are used for training and validation, while the remaining 15 sequences form the test set. 
+
+HPatches [190] offers 116 real-world image sequences for evaluating local feature matchers. In each sequence, a refer-ence image is paired with warped views and pixel-accurate homographies between them are provided as ground-truth. The collection is intentionally split into two complementary chal-lenges: 57 sequences capture significant viewpoint changes, while 59 emphasize illumination differences. This separation allows researchers to dissect the geometric versus photometric robustness of both classical and deep learning-based matching approaches. 
+
+Aachen Day-Night [191] comprises two versions. The v1.0 version covers the historic center of Aachen which consists 4,328 daytime images and 98 nighttime images. The v1.1 version expands the dataset to 6,697 daytime reference images and 1,015 query images (824 daytime and 191 nighttime). In both versions, ground-truth camera poses are available for query images, enabling quantitative evaluation under challeng-ing conditions such as extreme lighting variations, viewpoint differences, and seasonal effects. 
+
+InLoc [192] is a challenging indoor visual localization benchmark. The dataset comprises 9,972 high-resolution RGB-D reference images, which are precisely aligned with accurate 3D reconstructions and corresponding floorplans. In addition, it provides 329 handheld query images captured us-ing an iPhone 7 under varying lighting and viewing conditions, each annotated with ground-truth 6-DoF camera poses verified through rigorous bundle adjustment. The dataset captures real-world complexities commonly encountered in indoor environ-ments. 
+
+B. Evaluation Metrics 
+
+Relative Pose Estimation. Relative pose estimation is commonly evaluated by the angular errors of translation and rotation between the estimated and ground-truth poses. The pose error is typically defined as the maximum of the two errors, and performance is summarized by the normalized Area Under the Curve (AUC) of the recall curve. Follow-ing common practice, we report AUC@5 ◦, AUC@10 ◦, and 
+
+AUC@20 ◦.
+
+Homography Estimation. Homography estimation is typ-ically evaluated using the average corner reprojection error between the estimated and ground-truth homographies. The proportion of samples whose reprojection error falls below a given pixel threshold is used to construct the accuracy curve, from which the AUC is computed. We report AUC@3 px, 
+
+AUC@5 px, and AUC@10 px. 
+
+Visual Localization. Visual localization is evaluated by the translational and rotational errors between the predicted and 13 
+
+TABLE I RESULTS OF RELATIVE POSE ESTIMATION ON MEGA DEPTH DATASET (O UTDOOR ) AND SCAN NET (I NDOOR ) D ATASET . S PARSE METHODS AND THE MAJORITY OF SEMI -DENSE METHODS ARE EVALUATED USING A SINGLE MODEL TRAINED ON THE MEGA DEPTH DATASET . F OR DENSE METHODS ,MODELS ARE TRAINED SEPARATELY ON EACH RESPECTIVE DATASET . F OR SEVERAL SEMI -DENSE METHODS , THE SOURCE CODE IS NOT PUBLICLY AVAILABLE , MAKING IT INFEASIBLE TO DETERMINE THEIR PARAMETER COUNTS . M OREOVER , THEIR PUBLISHED SCAN NET RESULTS WERE OBTAINED USING MODELS TRAINED ON SCAN NET . W E DENOTE THESE RESULTS WITH AN UNDERLINE TO INDICATE THIS DISTINCTION . A DDITIONALLY , C AS MTR  
+
+> AND
+
+IMA MATCH ARE REPRESENTATIVE CASCADED MATCHING APPROACHES THAT BRIDGE SEMI -DENSE AND DENSE PARADIGMS . T HEY ARE ALSO EVALUATED ON SCAN NET USING MODELS TRAINED SPECIFICALLY FOR THAT DATASET , ENABLING A DIRECT COMPARISON WITH DENSE METHODS .AUC@ θ◦ DENOTES THE AREA UNDER THE CURVE AT θ◦ THRESHOLD .Category Method Params (M) MegaDepth Dataset ScanNet Dataset AUC@5 ◦ AUC@10 ◦ AUC@20 ◦ AUC@5 ◦ AUC@10 ◦ AUC@20 ◦
+
+Sparse MNN 0 31.7 46.8 60.1 7.5 18.6 32.1 ParaFormer 12.5 44.5 62.0 76.2 14.4 30.4 48.0 SAM 13.5 45.8 63.2 76.7 14.8 31.0 48.3 SuperGlue 12.0 48.7 65.8 78.9 17.4 33.4 49.0 LightGlue 11.9 49.9 67.0 80.1 18.5 35.5 51.8 MambaGlue 16.5 50.1 67.5 80.3 18.2 35.1 51.4 SemaGlue 29.2 60.5 74.2 84.1 18.9 36.2 52.2 DiffGlue 21.5 49.6 67.2 80.5 17.5 34.6 51.6 Semi-Dense DRC-Net 29.2 27.0 42.9 58.3 7.7 17.9 30.5 LoFTR 11.6 52.8 69.2 81.2 16.9 33.6 50.6 RCM 9.8 53.2 69.4 81.5 17.3 34.6 52.1 QuadTree 12.7 54.6 70.5 82.2 19.0 37.3 53.5 MatchFormer 20.3 53.3 69.7 81.8 15.8 32.0 48.0 TopicFM 10.5 54.1 70.1 81.6 17.3 35.5 50.9 AspanFormer 15.8 55.3 71.5 83.1 19.6 37.7 54.4 SEM - 58.0 72.9 83.7 18.7 36.6 52.9 EcoMatcher - 56.5 72.0 83.4 25.8 46.2 64.0 ELoFTR 16.0 56.4 72.2 83.5 19.2 37.0 53.6 JamMa 5.7 56.0 71.3 82.2 11.5 25.3 40.5 TopicFM+ 11.6 58.2 72.8 83.2 20.4 38.5 54.5 EDM 10.3 57.5 73.2 84.2 19.8 37.5 54.4 CoMatch 12.0 58.0 73.2 84.2 21.7 40.2 56.7 AffineFormer 12.8 57.3 72.8 84.0 22.0 40.9 58.0 CasP 16.3 57.1 72.7 83.9 23.0 41.6 58.7 CasMTR 14.3 59.2 74.3 84.8 27.0 47.1 64.4 IMAmatch 84.1 62.8 76.6 86.2 31.5 52.7 70.2 Dense PDC-Net+ 18.4 51.5 67.2 78.5 20.3 39.4 57.1 PMatch 42.5 61.4 75.7 85.7 29.4 50.1 67.4 DKM 72.3 60.4 74.9 85.1 29.4 50.7 68.3 RoMa 111.3 62.6 76.7 86.3 31.8 53.4 70.9 UFM 428.3 41.5 57.9 72.4 31.3 54.1 72.0 RoMa v2 425.4 62.8 77.0 86.6 33.6 56.2 73.8 
+
+ground-truth camera poses. A query is considered successfully localized when both errors fall below predefined distance and angular thresholds. The localization accuracy is then measured by the proportion of successfully localized queries under each threshold pair. 
+
+C. Relative Pose Estimation 
+
+Settings. We evaluate representative sparse, semi-dense, and dense methods on MegaDepth [186] and ScanNet [187] for two-view camera pose estimation. We report AUC at 5◦, 10 ◦,and 20 ◦. For sparse methods, SuperPoint is uniformly adopted as the keypoint detector. On MegaDepth, input images are resized such that the longer side is 1,600 pixels, with up to 2,048 keypoints retained. On ScanNet, images are kept at their original resolution of 480 × 640 pixels, with up to 1,024 keypoints. For semi-dense methods, which do not rely on explicit keypoint detector, input images are resized to 1,152 ×1,152 pixels on MegaDepth and kept at 480 × 640 
+
+pixels on ScanNet. For dense methods, the settings are retained as originally proposed in the respective papers [10], [121], [122], [126], [127], [156]. All methods estimate the relative camera pose using RANSAC, with an error threshold of 0.5 pixels for MegaDepth and 1.0 pixel for ScanNet. 
+
+Results. As reported in Table I, sparse matching meth-ods represented by SuperGlue and LightGlue achieve strong performance, with AUC@20 ◦ mostly exceeding 80%. This demonstrates that keypoint-based sparse matching remains highly effective in outdoor scenes. Notably, LightGlue achieves an optimal balance between performance and model size, establishing a highly efficient baseline. Recent variants such as SemaGlue, DiffGlue, and MambaGlue further enhance feature representation, achieving improved accuracy. However, it is worth noting that these subsequent models generally adopt a strategy of trading increased parameter count for higher precision. On the weakly textured ScanNet dataset, these methods drop sharply, with AUC@20 ◦ typically below 50%. Fundamentally, this limitation stems from their reliance on the keypoint detector. The upper bound of matching accuracy is constrained by the number, spatial distribution, and descriptor quality of the detected keypoints. Although sparse methods 14 
+
+are generally computationally efficient and suitable for real-time applications, this inherent bottleneck cannot be fully compensated by improvements in the matching module alone. In comparison, semi-dense methods exhibit stronger per-formance on both datasets. LoFTR was the first to introduce Transformers into semi-dense matching and proposed a coarse-to-fine paradigm. Thanks to the inherent advantage of denser feature correspondences, LoFTR, despite being proposed sev-eral years ago, achieves comparable performance to SOTA sparse methods. Subsequent works have primarily improved LoFTR along two directions: enhancing inference efficiency and strengthening feature representation, for example by de-signing more efficient attention mechanisms or incorporating semantic priors. Moreover, methods such as CasMTR and IMAmatch adopt a cascaded matching strategy, extending the LoFTR framework toward fully dense matching and achieving significant performance gains. Notably, IMAmatch achieves AUC scores of 62.8 / 76.6 / 86.2 on MegaDepth and 31.5 / 52.7 / 70.2 on ScanNet at thresholds of 5◦, 10 ◦, and 20 ◦,respectively, reaching a level comparable to that of dense methods. However, this performance parity comes at the cost of model scale. IMAmatch’s parameter count approaches that of fully dense matching approaches, reflecting a trade-off between accuracy and model compactness. The performance of two-view pose estimation meth-ods systematically improves with increasing matching den-sity: dense methods consistently outperform semi-dense ap-proaches, which in turn generally surpass sparse methods. State-of-the-art dense methods, such as RoMa v2, achieve the highest accuracy on both benchmarks. On ScanNet, RoMa v2 attains an AUC@20 ◦ of 73.8%, significantly exceeding all semi-dense and sparse methods. This result clearly demon-strates the advantage of end-to-end dense modeling in handling complex geometry and low-texture environments. However, these methods are often computationally expensive accompa-nied by a substantial increase in model parameters. 
+
+D. Homography Estimation 
+
+Settings. Homography estimation experiments are con-ducted on the HPatches [190], following the evaluation pro-tocols from LightGlue [8] and ELoFTR [103]. For methods that require keypoints detector, images are resized such that the shorter side is 480 pixels, and up to 1,024 keypoints are extracted per image. Semi-dense methods, which do not rely on explicit keypoint detector, are applied on images processed with the same resizing strategy. Dense methods are evaluated using the settings specified in their respective original papers [10], [121], [122], [156]. Additionally, to ensure fair com-parison and follow LoFTR [5], only the top 1,000 predicted matches from semi-dense and dense methods are retained for homography estimation. All methods use RANSAC to estimate the homography, with a threshold of 0.5 for sparse methods and 3.0 for semi-dense and dense methods. 
+
+Results. As reported in Table II, three paradigms exhibit a clear hierarchical pattern in overall performance. Sparse methods are relatively limited in global alignment capability due to constraints on keypoint quantity and distribution. Semi-      
+
+> TABLE II RESULTS OF HOMOGRAPHY ESTIMATION ON HP ATCHES DATASET . A LL METHODS ARE CATEGORIZED INTO THREE GROUPS :SPARSE ,SEMI -DENSE ,
+> AND DENSE . T HE AUC OF REPROJECTION ERROR OF CORNER POINTS AT DIFFERENT THRESHOLDS IS REPORTED .
+
+Category Method Homography est. AUC @3px @5px @10px Sparse D2Net + NN 23.2 35.9 53.6 R2D2 + NN 50.6 63.9 76.8 DISK + NN 52.3 64.9 78.9 SuperGlue 56.8 68.7 80.9 ParaFormer 53.6 67.6 81.0 SAM 55.2 68.9 81.5 LightGlue 56.2 68.3 81.0 DiffGlue 56.2 68.3 81.0 MambaGlue 58.5 70.2 81.8 SemaGlue 56.2 68.3 81.0 Semi-Dense DRC-Net 50.6 56.2 68.3 Patch2Pix 59.3 70.6 81.2 LoFTR 65.9 75.6 84.6 RCM 63.0 74.6 84.9 TopicFM 67.3 77.0 85.7 ASpanFormer 67.4 76.9 85.6 Efficient-LoFTR 66.5 76.4 85.5 JamMa 68.1 77.0 85.4 EDM 68.5 78.1 86.6 CoMatch 68.4 78.2 86.8 EcoMatcher 68.0 77.8 86.4 CasMTR 71.4 80.2 87.9 SEM 69.6 79.3 87.0 ASTR 71.7 80.3 88.0 IMAmatch 72.4 81.1 88.9 Dense PDC-Net+ 67.8 77.5 86.2 DKM 71.4 80.5 88.4 PMatch 71.9 80.7 88.5 RoMa 72.2 81.2 89.1 
+
+dense methods expand matching density, achieving notice-able gains in robustness and accuracy. Dense methods model pixel-level correspondences directly and attain the highest overall performance. This hierarchy remains consistent across different evaluation strictness levels. The performance gap among the three paradigms becomes more pronounced under stricter threshold. Overall, finer matching granularity correlates positively with better homography estimation performance. 
+
+E. Visual Localization 
+
+Settings. All experiments follow the standard visual local-ization pipeline implemented in the open-source framework HLoc [193]. A sparse 3D reconstruction is employed as the map representation. For Aachen Day-Night [191], it is built from reference images using COLMAP and their camera intrinsics and poses. For InLoc [192], the official precomputed point cloud is adopted without modification. Given a query im-age, candidate reference views are retrieved using NetVLAD [194]. Feature matching is then performed between the query and each retrieved reference. The resulting correspondences serve as input to a RANSAC-based PnP solver to estimate the camera pose. The inlier threshold in RANSAC is set to 12 pixels for Aachen Day-Night and 48 pixels for InLoc. 15                                                                                                                  
+
+> TABLE III RESULTS OF VISUAL LOCALIZATION ON AACHEN DAY -N IGHT DATASET (O UTDOOR )AND INLOC DATASET (I NDOOR ). A LL METHODS ARE CATEGORIZED INTO THREE GROUPS :SPARSE ,SEMI -DENSE ,AND DENSE .Category Method Aachen Day-Night InLoc (0.25m, 2°) / (0.5m, 5°) / (1.0m, 10°) Day Night DUC1 DUC2 Sparse SuperGlue 87.9 / 95.0 / 97.9 84.7 / 92.9 / 99.0 44.9 / 66.2 / 78.8 46.6 / 74.0 / 77.1 ParaFormer 86.7 / 92.4 / 97.2 81.6 / 90.8 / 98.0 – / – / – – / – / – SAM 89.2 / 94.2 / 97.8 84.0 / 92.6 / 98.5 – / – / – – / – / – LightGlue 88.0 / 93.8 / 97.5 84.7 / 91.8 / 99.0 44.0 / 64.1 / 75.8 42.7 / 67.9 / 73.3 SGMNet 86.5 / 93.2 / 97.2 82.7 / 91.8 / 99.0 39.9 / 56.6 / 70.2 39.7 / 59.5 / 65.6 ResMatch 86.8 / 93.7 / 97.2 81.6 / 91.8 / 98.0 42.9 / 61.6 / 73.7 38.2 / 62.6 / 69.5 DiffGlue 88.3 / 95.3 / 97.8 85.7 / 93.9 / 99.0 46.5 / 67.2 / 78.3 49.6 / 71.8 / 76.3 SemaGlue 88.6 / 95.1 / 97.8 86.7 / 91.9 / 99.0 47.5 / 68.2 / 80.3 47.3 / 73.3 / 75.6 MambaGlue 89.0 / 95.3 / 98.7 86.7 / 93.9 / 100.0 – / – / – – / – / – Semi-Dense LoFTR 88.7 / 95.6 / 99.0 78.5 / 90.6 / 99.0 47.5 / 72.2 / 84.8 54.2 / 74.8 / 85.5 RCM 89.7 / 96.0 / 98.7 72.8 / 91.6 / 99.0 – / – / – – / – / – TopicFM 90.2 / 95.9 / 98.9 77.5 / 91.1 / 99.5 52.0 / 74.7 / 87.4 53.4 / 74.8 / 83.2 ASpanFormer 89.4 / 95.6 / 99.0 77.5 / 91.6 / 99.5 51.5 / 73.7 / 86.0 55.0 / 74.0 / 81.7 PATS 89.6 / 95.8 / 99.3 73.8 / 92.1 / 99.5 55.6 / 71.2 / 81.0 58.8 / 80.9 / 85.5 ElofTR 89.6 / 96.2 / 99.0 77.0 / 91.1 / 99.5 52.0 / 74.7 / 86.9 58.0 / 80.9 / 89.3 JamMa 87.7 / 95.1 / 98.4 73.3 / 91.6 / 99.0 47.5 / 67.2 / 78.3 35.9 / 53.4 / 69.5 CoMatch 89.4 / 95.8 / 99.0 78.5 / 91.6 / 99.5 54.5 / 75.3 / 86.9 59.5 / 84.7 / 87.8 EDM 89.1 / 96.2 / 98.8 77.0 / 92.1 / 99.5 51.5 / 72.7 / 85.9 59.5 / 82.4 / 88.5 AffineFormer 89.9 / 96.2 / 98.9 79.1 / 91.1 / 99.5 56.1 / 74.7 / 86.9 55.0 / 79.4 / 87.0 CasP 89.2 / 96.1 / 98.9 78.0 / 91.6 / 99.5 52.0 / 77.3 / 86.4 55.0 / 80.2 / 84.0 CasMTR 90.4 / 96.2 / 99.3 78.5 / 91.6 / 99.5 53.5 / 76.8 / 85.4 51.9 / 70.2 / 83.2 IMAmatch 90.5 / 96.4 / 99.5 80.1 / 91.3 / 99.6 53.6 / 74.8 / 84.1 56.5 / 78.6 / 83.2 Dense DKM 88.1 / 95.3 / 98.5 72.3 / 91.1 / 97.9 50.5 / 73.7 / 84.8 53.4 / 72.5 / 74.0 RoMa 88.1 / 95.6 / 98.4 71.7 / 90.1 / 97.9 55.6 / 77.3 / 88.4 59.5 / 80.9 / 83.2
+
+Sparse matchers process images resized to 1,024 pixels on the longer side for Aachen Day-Night v1.0 and 1,600 pixels for InLoc, with 4,096 keypoints extracted by SuperPoint. Semi-dense matchers operate at 1,024 pixels on the long edge for Aachen Day-Night v1.1 and 800 pixels for InLoc. DKM uses its native resolution of 880 ×660 pixels on Aachen Day-Night v1.1, while on InLoc it follows the 800-pixel setting for semi-dense methods. RoMa consistently uses 672 ×672 pixels on both Aachen Day-Night v1.1 and InLoc. 
+
+Results. Visual localization results reported in Table III reveal that the three matching paradigms exhibit distinct strengths in different scenes. For the indoor InLoc dataset, semi-dense methods demonstrate superior performance. Their ability to model dense feature correspondences effectively han-dles weak textures and repetitive structures. At the commonly reported threshold of {1.0 m, 10 ◦}, the majority of semi-dense methods exceed 83% success rate on DUC2. Sparse methods, constrained by keypoints detector, generally fall below 80% under the same metric. Dense methods, despite generating full-image matches, do not consistently surpass semi-dense methods. For the outdoor Aachen Day-Night Dataset, recent sparse methods such as SemaGlue achieve consistent high performance in both daytime and nighttime scenes, highlight-ing the gains brought by enriching feature representations or refining attention mechanisms within the established sparse matching paradigm. Semi-dense methods maintain high accu-racy in both daytime and nighttime conditions. Although dense methods provide richer representations, they are more suscep-tible to low-light noise and exhibit a significant performance drop in nighttime conditions. Overall, in visual localization experiments, semi-dense methods deliver the best performance across indoor and outdoor environments. IV. O PEN PROBLEMS AND FUTURE TRENDS 
+
+As cross-view feature matching continues to mature as a core capability in computer vision, its role is gradually shifting from a standalone matching problem toward a foun-dational component of intelligent systems. Despite substantial progress, cross-view feature matching remains fundamentally constrained by unresolved issues in representation, estimation, and reasoning. Some major open problems are as follows. 1) Representation gap between geometric precision and semantic invariance. Features optimized for precise spatial localization tend to be sensitive to appearance variations, while semantically robust features often sac-rifice spatial discriminability. Current methods rely on a single embedding space insufficient for encoding both fine-grained geometry and high-level semantics. De-veloping hierarchically structured representations that decouple and coordinate multi-level visual cues is a promising direction. 2) Ambiguity and uncertainty in correspondence es-timation. Most existing methods model confidence or matchability to assess correspondence reliability, yet still produce largely deterministic predictions with a single best match. This is insufficient under repetitive textures, occlusions, or weak visual cues where multiple plausible matches may exist. Recent works have started to explic-itly model uncertainty, for example by predicting proba-bilistic correspondence distributions such as in RoMa 16 
+
+v2. However, a unified probabilistic formulation that supports multi-hypothesis matching and jointly captures matchability and uncertainty remains an open challenge. 3) Lack of explicit correspondence-level reasoning. Most existing matchers enforce one-to-one assignment implic-itly through dual-softmax or Sinkhorn normalization, but lack explicit correspondence-level reasoning during inference. While some methods incorporate epipolar geometry or cycle consistency as supervision signals during training, these constraints are rarely enforced at test time. Integrating such geometric and structural priors directly into the inference process would improve interpretability and reliability. 4) Limited generalization of correspondence models. 
+
+Models trained on datasets like MegaDepth often fail to generalize to unseen domains due to the lack of correspondence-specific inductive biases, such as geo-metric equivariance or appearance invariance. Design-ing architectures and training objectives that explicitly enforce these properties, including geometry-aware rep-resentations and transformation-consistent learning, is essential for real-world deployment. 5) Incomplete modeling of non-rigid and dynamic cor-respondence. Most benchmarks and methods assume static scenes with rigid transformations, which does not reflect real-world applications involving articulated motion, occlusion, or temporal dynamics. Treating cor-respondence as a continuous spatiotemporal transforma-tion problem with deformation priors and cross-frame consistency constraints remains an underexplored direc-tion. 6) Lack of foundation models pretrained for geometric correspondence. Existing vision foundation models are mainly pretrained for semantic understanding, segmen-tation, or generation, rather than cross-view correspon-dence learning. Although they provide robust semantic and structural priors, they lack explicit modeling of geometric transformations, spatial alignment, and fine-grained feature association required for image matching. However, the interaction between these models and specialized matching architectures, such as SuperGlue, LoFTR, or RoMa, remains largely unexplored. Devel-oping pretraining paradigms tailored to correspondence, for example based on relative pose estimation, cycle consistency, or epipolar constraints, and bridging task-specific matchers with general 3D foundation models, represents an important future direction. 7) Computational bottlenecks in global correspondence modeling. Global operations such as dense corre-lation volumes or full attention mechanisms intro-duce quadratic complexity, limiting scalability to high-resolution or multi-view matching. Designing scalable operators that preserve long-range dependency modeling without sacrificing global consistency or fine-grained accuracy is a pressing research need. V. C ONCLUSION 
+
+This survey has presented a comprehensive and structured review of recent advances in cross-view feature matching, a fundamental problem in computer vision that has wit-nessed rapid progress with the advent of deep learning and VFMs. We revisited the evolution from traditional handcrafted feature matching pipelines to learning-based correspondence frameworks, highlighting the paradigm shift toward data-driven, end-to-end, and increasingly generalizable solutions. To address the fragmentation of existing research, we pro-posed a structured and hierarchical taxonomy that organizes current methods from the perspectives of feature represen-tation, matching paradigms, multi-type feature integration, VFMs driven methods, and training strategies. This unified framework provides a coherent view of the design space and facilitates systematic comparison and deeper understanding of diverse approaches. Furthermore, we complemented this tax-onomy with a unified benchmarking and empirical evaluation of representative methods under consistent protocols, offering fair and comprehensive insights into their performance and generalization across different scenarios. We hope that this survey provides a clear and structured foundation for under-standing recent advances in cross-view feature matching and serves as a useful reference for future research toward more unified, efficient, and generalizable correspondence systems. REFERENCES [1] C. Kong and S. Lucey, “Deep non-rigid structure from motion with missing data,” IEEE Trans. Pattern Anal. Mach. Intell. , vol. 43, no. 12, pp. 4365–4377, 2021. [2] H. Taira, M. Okutomi, T. Sattler, M. Cimpoi, M. Pollefeys, J. Sivic, T. Pajdla, and A. Torii, “InLoc: Indoor visual localization with dense matching and view synthesis,” IEEE Trans. Pattern Anal. Mach. Intell. ,vol. 43, no. 4, pp. 1293–1307, 2021. [3] K. Joo, P. Kim, M. Hebert, I. S. Kweon, and H. J. Kim, “Linear RGB-D SLAM for structured environments,” IEEE Trans. Pattern Anal. Mach. Intell. , vol. 44, no. 11, pp. 8403–8419, 2022. [4] P. Sarlin, D. DeTone, T. Malisiewicz, and A. Rabinovich, “SuperGlue: Learning feature matching with graph neural networks,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2020, pp. 4938–4947. [5] J. Sun, Z. Shen, Y. Wang, H. Bao, and X. Zhou, “LoFTR: Detector-free local feature matching with transformers,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2021, pp. 8922–8931. [6] X. Lu and S. Du, “Jamma: Ultra-lightweight local feature matching with joint mamba,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2025, pp. 14 934–14 943. [7] K. Ryoo, H. Lim, and H. Myung, “MambaGlue: Fast and robust local feature matching with mamba,” in Proc. IEEE Int. Conf. Robot. Autom. (ICRA) , 2025, pp. 5758–5765. [8] P. Lindenberger, P.-E. Sarlin, and M. Pollefeys, “LightGlue: Local feature matching at light speed,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2023, pp. 17 627–17 638. [9] H. Jiang, A. Karpur, B. Cao, Q. Huang, and A. Araujo, “OmniGlue: Generalizable feature matching with foundation model guidance,” in                 
+
+> Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024, pp. 19 865–19 875. [10] J. Edstedt, Q. Sun, G. B¨ okman, M. Wadenb¨ ack, and M. Felsberg, “Roma: Robust dense feature matching,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2024, pp. 19 790–19 800. [11] V. Leroy, Y. Cabon, and J. Revaud, “Grounding image matching in 3D with MASt3R,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2024, pp. 71–91. [12] J. Wang, M. Chen, N. Karaev, A. Vedaldi, C. Rupprecht, and D. Novotny, “VGGT: Visual geometry grounded transformer,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2025, pp. 5294–5306. 17
+
+[13] J. Ma, X. Jiang, A. Fan, J. Jiang, and J. Yan, “Image matching from handcrafted to deep features: A survey,” Int. J. Comput. Vis. , vol. 129, no. 1, pp. 23–79, 2021. [14] Q. Huang, X. Guo, Y. Wang, H. Sun, and L. Yang, “A survey of feature matching methods,” IET Image Process. , vol. 18, no. 6, pp. 1385–1410, 2024. [15] X. Jiang, J. Ma, G. Xiao, Z. Shao, and X. Guo, “A review of multimodal image matching: Methods and applications,” Inf. Fusion , vol. 73, pp. 22–71, 2021. [16] C. Harris, M. Stephens et al. , “A combined corner and edge detector,” in Proc. Alvey Vis. Conf. (AVC) , 1988, pp. 147–151. [17] D. G. Lowe, “Distinctive image features from scale-invariant key-points,” Int. J. Comput. Vis. , vol. 60, no. 2, pp. 91–110, 2004. [18] H. Bay, T. Tuytelaars, and L. Van G., “SURF: Speeded up robust features,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2006, pp. 404– 417. [19] J. Matas, O. Chum, M. Urban, and T. Pajdla, “Robust wide-baseline stereo from maximally stable extremal regions,” Image Vis. Comput. ,vol. 22, no. 10, pp. 761–767, 2004. [20] E. Rosten and T. Drummond, “Machine learning for high-speed corner detection,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2006, pp. 430– 443. [21] E. Mair, G. D. Hager, D. Burschka, M. Suppa, and G. Hirzinger, “Adaptive and generic corner detection based on the accelerated segment test,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2010, pp. 183–196. [22] P. F. Alcantarilla, A. Bartoli, and A. J. Davison, “KAZE features,” in 
+
+Proc. Eur. Conf. Comput. Vis. (ECCV) , 2012, pp. 214–227. [23] P. F. Alcantarilla, J. Nuevo, and A. Bartoli, “Fast explicit diffusion for accelerated features in nonlinear scale spaces,” in Proc. Br. Mach. Vis. Conf. (BMVC) , 2013. [24] S. Leutenegger, M. Chli, and R. Y. Siegwart, “BRISK: Binary robust invariant scalable keypoints,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2011, pp. 2548–2555. [25] K. M. Yi, E. Trulls, V. Lepetit, and P. Fua, “LIFT: Learned invariant feature transform,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2016, pp. 467–483. [26] Y. Verdie, K. M. Yi, P. Fua, and V. Lepetit, “TILDE: A temporally invariant learned detector,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2015, pp. 5279–5288. [27] D. DeTone, T. Malisiewicz, and A. Rabinovich, “SuperPoint: Self-supervised interest point detection and description,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. Workshops (CVPRW) , 2018, pp. 224–236. [28] M. Dusmanu, I. Rocco, T. Pajdla, M. Pollefeys, J. Sivic, A. Torii, and T. Sattler, “D2-Net: A trainable CNN for joint description and detection of local features,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2019, pp. 8084–8093. [29] J. Revaud, C. De Souza, M. Humenberger, and P. Weinzaepfel, “R2D2: Reliable and repeatable detector and descriptor,” in Proc. Adv. Neural Inf. Process. Syst. (NeurIPS) , 2019, pp. 12 414–12 424. [30] A. B. Laguna, E. Riba, D. Ponsa, and K. Mikolajczyk, “Key.Net: Keypoint detection by handcrafted and learned CNN filters,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2019, pp. 5835–5843. [31] A. Barroso-Laguna and K. Mikolajczyk, “Key.Net: Keypoint detection by handcrafted and learned CNN filters revisited,” IEEE Trans. Pattern Anal. Mach. Intell. , vol. 45, no. 1, pp. 698–711, 2023. [32] X. Zhao, X. Wu, J. Miao, W. Chen, P. C. Y. Chen, and Z. Li, “ALIKE: Accurate and lightweight keypoint detection and descriptor extraction,” 
+
+IEEE Trans. Multimedia , vol. 25, pp. 3101–3112, 2023. [33] N. Savinov, A. Seki, L. Ladick´ y, T. Sattler, and M. Pollefeys, “Quad-Networks: Unsupervised learning to rank for interest point detection,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) ,2017, pp. 3929–3937. [34] M. Tyszkiewicz, P. Fua, and E. Trulls, “Disk: Learning local fea-tures with policy gradient,” in Proc. Adv. Neural Inf. Process. Syst. (NeurIPS) , vol. 33, 2020, pp. 14 254–14 265. [35] J. Edstedt, G. B¨ okman, and Z. Zhao, “Dedode v2: Analyzing and improving the dedode keypoint detector,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2024, pp. 4245–4253. [36] J. Edstedt, G. B¨ okman, M. Wadenb¨ ack, and M. Felsberg, “DaD: Distilled reinforcement learning for diverse keypoint detection,” arXiv preprint arXiv:2503.07347 , 2025. [37] Y. Ke and R. Sukthankar, “PCA-SIFT: a more distinctive representation for local image descriptors,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2004. [38] K. Mikolajczyk and C. Schmid, “A performance evaluation of local descriptors,” IEEE Trans. Pattern Anal. Mach. Intell. , vol. 27, no. 10, pp. 1615–1630, 2005. [39] M. Calonder, V. Lepetit, C. Strecha, and P. Fua, “BRIEF: Binary robust independent elementary features,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2010, pp. 778–792. [40] A. Alahi, R. Ortiz, and P. Vandergheynst, “FREAK: Fast retina key-point,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR) ,2012, pp. 510–517. [41] Z. Wang, B. Fan, and F. Wu, “Local intensity order pattern for feature description,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2011, pp. 603–610. [42] F. Bellavia and C. Colombo, “Rethinking the sGLOH descriptor,” IEEE Trans. Pattern Anal. Mach. Intell. , vol. 40, no. 4, pp. 931–944, 2018. [43] E. Simo-Serra, E. Trulls, L. Ferraz, I. Kokkinos, P. Fua, and F. Moreno-Noguer, “Discriminative learning of deep convolutional feature point descriptors,” in Proc. IEEE Int. Conf. Comput. Vis. (ICCV) , 2015, pp. 118–126. [44] Y. Tian, B. Fan, and F. Wu, “L2-Net: Deep learning of discrimina-tive patch descriptor in Euclidean space,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2017, pp. 6128–6136. [45] A. Mishchuk, D. Mishkin, F. Radenovi´ c, and J. Matas, “Working hard to know your neighbor’s margins: local descriptor learning loss,” in 
+
+Proc. Adv. Neural Inf. Process. Syst. (NeurIPS) , 2017, pp. 4829–4840. [46] B. Vijay Kumar, G. Carneiro, and I. Reid, “Learning local image descriptors with deep siamese and triplet convolutional networks by minimizing global loss functions,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2016, pp. 5385–5394. [47] Z. Luo, T. Shen, L. Zhou, S. Zhu, R. Zhang, Y. Yao, T. Fang, and L. Quan, “GeoDesc: Learning local descriptors by integrating geometry constraints,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2018, p. 170 ¨C185. [48] K. He, Y. Lu, and S. Sclaroff, “Local descriptors optimized for average precision,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2018, pp. 596–605. [49] Z. Luo, T. Shen, L. Zhou, J. Zhang, Y. Yao, S. Li, T. Fang, and L. Quan, “ContextDesc: Local descriptor augmentation with cross-modality context,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2019, pp. 2522–2531. [50] Y. Tian, A. Barroso-Laguna, T. Ng, V. Balntas, and K. Mikolajczyk, “HyNet: learning local descriptor with hybrid similarity measure and triplet loss,” in Proc. Adv. Neural Inf. Process. Syst. (NeurIPS) , 2020, pp. 7401–7412. [51] Y. Tian, X. Yu, B. Fan, F. Wu, H. Heijnen, and V. Balntas, “SOSNet: Second order similarity regularization for local descriptor learning,” in 
+
+Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2019, pp. 11 008–11 017. [52] M. Kanakis, S. Maurer, M. Spallanzani, A. Chhatkuli, and L. Van Gool, “Zippypoint: Fast interest point detection, description, and matching through mixed precision discretization,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2023, pp. 6114–6123. [53] G. Potje, F. Cadar, A. Araujo, R. Martins, and E. R. Nascimento, “Xfeat: Accelerated features for lightweight image matching,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2024, pp. 2682–2691. [54] X. Lu and S. Du, “NCTR: Neighborhood consensus transformer for feature matching,” in Proc. IEEE Int. Conf. Image Process. (ICIP) ,2022, pp. 2726–2730. [55] Q. Jiang and S. Du, “DNC-Net: Dual-neighbourhood consensus net-work for feature matching,” in Proc. IEEE Int. Conf. Image Process. (ICIP) , 2023, pp. 610–614. [56] F. Xue, I. Budvytis, and R. Cipolla, “IMP: Iterative matching and pose estimation with adaptive pooling,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2023, pp. 21 317–21 326. [57] X. Lu, Y. Yan, T. Wei, and S. Du, “Scene-aware feature matching,” in 
+
+Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2023, pp. 3704–3713. [58] T. Xie, R. Li, Z. Jiang, K. Dai, K. Wang, L. Zhao, and S. Li, “S2H-GNN: Learning soft to hard feature matching with sparsified graph neural network,” in Proc. IEEE Int. Conf. Real-Time Comput. Robot. (RCAR) , 2023, pp. 756–761. [59] Y. Cai, L. Li, D. Wang, X. Li, and X. Liu, “HTMatch: An efficient hybrid transformer based graph neural network for local feature match-ing,” Signal Process. , vol. 204, p. 108859, 2023. [60] S. Zhang and J. Ma, “DiffGlue: Diffusion-aided image feature match-ing,” in Proc. ACM Int. Conf. Multimedia (ACM MM) , 2024, pp. 8451– 8460. 18 
+
+[61] Y. Deng, K. Zhang, S. Zhang, Y. Li, and J. Ma, “ResMatch: Residual attention learning for feature matching,” in Proc. AAAI Conf. Artif. Intell. (AAAI) , 2024, pp. 1501–1509. [62] S. Zhang, Z. Zhu, Z. Li, T. Lu, and J. Ma, “Matching while perceiving: Enhance image feature matching with applicable semantic amalgama-tion,” in Proc. AAAI Conf. Artif. Intell. (AAAI) , vol. 39, no. 10, 2025, pp. 10 094–10 102. [63] Q. Jiang, X. Lu, D. Liang, and S. Du, “SemMatcher: Semantic-aware feature matching with neighborhood consensus,” J. Vis. Commun. Image Represent. , p. 104611, 2025. [64] J. Zhang, Z. Xia, M. Dong, S. Shen, L. Yue, and X. Zheng, “CoMatcher: Multi-view collaborative feature matching,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2025, pp. 21 970–21 980. [65] X. Fan, S. Liu, S. Liu, L. Zhao, and R. Li, “AAPMatcher: Adaptive attention pruning matcher for accurate local feature matching,” Neural Netw. , vol. 188, p. 107403, 2025. [66] H. Chen, Z. Luo, J. Zhang, L. Zhou, X. Bai, Z. Hu, C.-L. Tai, and L. Quan, “Learning to match features with seeded graph matching network,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2021, pp. 6301–6310. [67] X. Jiang, S. Zhang, X.-P. Zhang, and J. Ma, “Improving sparse graph attention for feature matching by informative keypoints exploration,” 
+
+Comput. Vis. Image Underst. , vol. 235, p. 103803, 2023. [68] Y. Shi, J.-X. Cai, Y. Shavit, T.-J. Mu, W. Feng, and K. Zhang, “ClusterGNN: Cluster-based coarse-to-fine graph neural network for efficient feature matching,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2022, pp. 12 507–12 516. [69] Y. Shi, J.-X. Cai, M. Fan, W. Feng, and K. Zhang, “Learning to match features with discriminative sparse graph neural network,” Pattern Recognit. , vol. 156, p. 110784, 2024. [70] X. Lu, Y. Yan, B. Kang, and S. Du, “ParaFormer: Parallel attention transformer for efficient feature matching,” in Proc. AAAI Conf. Artif. Intell. (AAAI) , 2023, pp. 1853–1860. [71] B. Jiang, S. Luo, X. Wang, C. Li, and J. Tang, “AMatFormer: Efficient feature matching via anchor matching transformer,” IEEE Trans. Multimedia , vol. 26, pp. 1504–1515, 2023. [72] S. Feng, H. Qian, W. Wang et al. , “LightSGM: Local feature matching with lightweight seeded,” J. King Saud Univ. - Comput. Inf. Sci. ,vol. 36, no. 6, p. 102095, 2024. [73] J.-X. Cai, T.-J. Mu, and Y.-K. Lai, “FilterGNN: Image feature matching with cascaded outlier filters and linear attention,” Comput. Vis. Media ,vol. 10, no. 5, pp. 873–884, 2024. [74] Z. Li and J. Ma, “Learning feature matching via matchable keypoint-assisted graph neural network,” IEEE Trans. Image Process. , 2024. [75] F. Zheng, C. Cao, Z. Zhang, T. Sun, J. Zhang, and L. Zhao, “Ada-Matcher: A deep detector-based local feature matcher with adaptive weight sharing,” Knowl.-Based Syst. , vol. 316, p. 113350, 2025. [76] A. Karpur, G. Perrotta, R. Martin-Brualla, H. Zhou, and A. Araujo, “LFM-3D: Learnable feature matching across wide baselines using 3D signals,” in Proc. Int. Conf. 3D Vis. (3DV) , 2024, pp. 11–20. [77] P. Wu, Y. Yao, W. Zhang, D. Wei, Y. Wan, Y. Li, and Y. Zhang, “MapGlue: Multimodal remote sensing image matching,” arXiv preprint arXiv:2503.16185 , 2025. [78] Q. Zhou, T. Sattler, and L. Leal-Taixe, “Patch2Pix: Epipolar-guided pixel-level correspondences,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2021, pp. 4669–4678. [79] Q. Wang, J. Zhang, K. Yang, K. Peng, and R. Stiefelhagen, “Match-Former: Interleaving attention in transformers for feature matching,” in 
+
+Proc. Asian Conf. Comput. Vis. (ACCV) , 2022, pp. 2746–2762. [80] H. Chen, Z. Luo, L. Zhou, Y. Tian, M. Zhen, T. Fang, D. Mckinnon, Y. Tsin, and L. Quan, “ASpanFormer: Detector-free image matching with adaptive span transformer,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2022, pp. 20–36. [81] R. Mao, C. Bai, Y. An, F. Zhu, and C. Lu, “3DG-STFM: 3D geometric guided student-teacher feature matching,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2022, pp. 125–142. [82] D. Li, Y. Yan, D. Liang, and S. Du, “MSFormer: Multi-scale trans-former with neighborhood consensus for feature matching,” in Proc. IEEE Int. Conf. Acoust., Speech, Signal Process. (ICASSP) , 2023, pp. 1–5. [83] K. T. Giang, S. Song, and S. Jo, “TopicFM: Robust and interpretable topic-assisted feature matching,” in Proc. AAAI Conf. Artif. Intell. (AAAI) , vol. 37, no. 2, 2023, pp. 2447–2455. [84] Giang, Khang Truong and Song, Soohwan and Jo, Sungho, “TopicFM+: Boosting accuracy and efficiency of topic-assisted feature matching,” 
+
+IEEE Trans. Image Process. , vol. 33, pp. 6016–6028, 2024. [85] J. Yu, J. Chang, J. He, T. Zhang, J. Yu, and F. Wu, “Adaptive spot-guided transformer for consistent local feature matching,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2023, pp. 21 898–21 908. [86] J. Chang, J. Yu, and T. Zhang, “Structured epipolar matcher for local feature matching,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2023, pp. 6177–6186. [87] H. Chen, Z. Luo, Y. Tian, X. Bai, Z. Wang, L. Zhou, M. Zhen, T. Fang, D. McKinnon, Y. Tsin et al. , “Affine-based deformable attention and selective fusion for semi-dense matching,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2024, pp. 4254–4263. [88] D. Li and S. Du, “Beyond global cues: Unveiling the power of fine details in image matching,” in Proc. IEEE Int. Conf. Multimedia Expo (ICME) , 2024, pp. 1–6. [89] X. Cai, Y. Wang, L. Luo, M. Wang, D. Li, J. Xu, W. Gu, and R. Ai, “PRISM: Progressive dependency maximization for scale-invariant image matching,” in Proc. ACM Int. Conf. Multimedia (ACM MM) ,2024, pp. 5250–5259. [90] D. Li and S. Du, “ContextMatcher: Detector-free feature matching with cross-modality context,” IEEE Trans. Circuits Syst. Video Technol. ,vol. 34, no. 9, pp. 7922–7934, 2024. [91] T. Xie, K. Dai, K. Wang, R. Li, and L. Zhao, “DeepMatcher: A deep transformer-based network for robust and accurate local feature matching,” Expert Syst. Appl. , vol. 237, p. 121361, 2024. [92] K. Dai, T. Xie, K. Wang, Z. Jiang, R. Li, and L. Zhao, “FMAP: Learning robust and accurate local feature matching with anchor points,” Expert Syst. Appl. , vol. 236, p. 121328, 2024. [93] Dai, Kun and Xie, Tao and Wang, Ke and Jiang, Zhiqiang and Li, Ruifeng and Zhao, Lijun, “OAMatcher: An overlapping areas-based network with label credibility for robust and accurate feature matching,” Pattern Recognit. , vol. 147, p. 110094, 2024. [94] K. Dai, K. Wang, T. Xie, T. Sun, J. Zhang, Q. Kong, Z. Jiang, R. Li, L. Zhao, and M. Omar, “DSAP: Dynamic sparse attention perception matcher for accurate local feature matching,” IEEE Trans. Instrum. Meas. , vol. 73, pp. 1–16, 2024. [95] H. Luo, T. Xie, A. Wang, K. Dai, C. Cao, and L. Zhao, “CorMatcher: A corners-guided graph neural network for local feature matching,” 
+
+Expert Syst. Appl. , vol. 258, p. 125190, 2024. [96] Z. Jiang, K. Wang, Q. Kong, K. Dai, T. Xie, Z. Qin, R. Li, P. Perner, and L. Zhao, “MR-Matcher: a multirouting transformer-based network for accurate local feature matching,” IEEE Trans. Instrum. Meas. , vol. 73, pp. 1–15, 2024. [97] L. Wang, X. Zhang, Z. Jiang, K. Dai, T. Xie, L. Yang, W. Yu, Y. Shen, B. Xu, and J. Li, “FMRT: Learning accurate feature matching with reconciliatory transformer,” IEEE Trans. Autom. Sci. Eng. , 2025. [98] Y. Di, Y. Liao, Y. Liu, H. Zhou, K. Zhu, M. Lu, Q. Duan, and J. Liu, “WinMRSI: Feature matching with window attention for multi-modal remote sensing image,” IEEE J. Sel. Top. Appl. Earth Obs. Remote Sens. , 2025. [99] W. Zhong and J. Jiang, “LGFCTR: Local and global feature convolu-tional transformer for image matching,” Expert Syst. Appl. , vol. 270, p. 126393, 2025. [100] Z. Li, Y. Lu, L. Tang, S. Zhang, and J. Ma, “CoMatch: Dynamic covisibility-aware transformer for bilateral subpixel-level semi-dense image matching,” arXiv preprint arXiv:2503.23925 , 2025. [101] Y. Liu, J. Fu, Y. Wu, K. Wu, P. Li, J. Wu, S. Zhou, and J. Xin, “Mind the gap: Aligning vision foundation models to image feature matching,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2025, pp. 20 313– 20 323. [102] P. Chen, L. Yu, Y. Wan, Y. Zhang, J. Wang, L. Zhong, J. Chen, and M. Yang, “EcoMatcher: Efficient clustering oriented matcher for detector-free image matching,” in Proc. Eur. Conf. Comput. Vis. (ECCV) . Springer, 2024, pp. 344–360. [103] Y. Wang, X. He, S. Peng, D. Tan, and X. Zhou, “Efficient LoFTR: Semi-dense local feature matching with sparse-like speed,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2024, pp. 21 666–21 675. [104] Z. Shen, B. Kong, and X. Dong, “MAIM: a mixer MLP architecture for image matching,” Vis. Comput. , vol. 40, no. 3, pp. 1327–1337, 2024. [105] X. Li, T. Rao, and C. Pan, “EDM: Efficient deep feature matching,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , October 2025, pp. 26 198–26 208. [106] P. Chen, L. Yu, Y. Wan, Y. Pei, X. Liu, Y. Yao, Y. Zhang, L. Ru, L. Zhong, J. Chen et al. , “CasP: Improving semi-dense feature match-ing pipeline leveraging cascaded correspondence priors for guidance,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2025, pp. 28 063– 28 072. 19 
+
+[107] K. Dai, Z. Zhou, Z. Jiang, Q. Sun, T. Xie, H. Gao, T. An, R. Li, and L. Zhao, “VD-Matcher: A very deep local feature matcher with weight recycling and keypoint detection,” IEEE Trans. Circuits Syst. Video Technol. , vol. 35, no. 11, pp. 11 416–11 431, 2025. [108] B. Wang, S. Wang, Y. Han, L. Xu, and D. Ye, “LiteSAM: Lightweight and robust feature matching for satellite and aerial imagery,” Remote Sens. , vol. 17, no. 19, p. 3349, 2025. [109] X. Lu, S. Du, G. Xiao, and G. Wen, “Progressive matchability guided hybrid interaction for latency-balanced local feature matching,” IEEE Trans. Multimedia , 2026. [110] J. Ni, Y. Li, Z. Huang, H. Li, H. Bao, Z. Cui, and G. Zhang, “PATS: Patch area transportation with subdivision for local feature matching,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) ,2023, pp. 17 776–17 786. [111] D. Huang, Y. Chen, Y. Liu, J. Liu, S. Xu, W. Wu, Y. Ding, F. Tang, and C. Wang, “Adaptive assignment for geometry aware local feature matching,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2023, pp. 5425–5434. [112] X. Lu and S. Du, “Raising the ceiling: conflict-free local feature matching with dynamic view switching,” in Proc. Eur. Conf. Comput. Vis. (ECCV) . Springer, 2024, pp. 256–273. [113] C. Cao and Y. Fu, “Improving transformer-based image matching by cascaded capturing spatially informative keypoints,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2023, pp. 12 129–12 139. [114] X. Wang, L. Yu, Y. Zhang, J. Lao, L. Ru, L. Zhong, J. Chen, Y. Zhang, and M. Yang, “HomoMatcher: Dense feature matching results with semi-dense efficiency by homography estimation,” arXiv preprint arXiv:2411.06700 , 2024. [115] Y. Di, Y. Liao, Y. Liu, M. Lu, Q. Duan, and J. Liu, “Semi-dense feature matching with increased matching amount,” Vis. Comput. , vol. 41, no. 13, pp. 11 407–11 426, 2025. [116] X. Lu, S. Du, Y. Yan, X. Lu, and T. Ikenaga, “Towards free-form local feature matching,” IEEE Trans. Pattern Anal. Mach. Intell. , 2025. [117] I. Rocco, R. Arandjelovic, and J. Sivic, “Convolutional neural network architecture for geometric matching,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2017, pp. 6148–6157. [118] I. Melekhov, A. Tiulpin, T. Sattler, M. Pollefeys, E. Rahtu, and J. Kannala, “DGC-Net: Dense geometric correspondence network,” in 
+
+Proc. IEEE Winter Conf. Appl. Comput. Vis. (WACV) , 2019, pp. 1034– 1042. [119] P. Truong, M. Danelljan, and R. Timofte, “GLU-Net: Global-local universal network for dense flow and correspondences,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2020, pp. 6258–6268. [120] P. Truong, M. Danelljan, L. Van Gool, and R. Timofte, “GOCor: Bringing globally optimized correspondence volumes into your neural network,” in Proc. Adv. Neural Inf. Process. Syst. (NeurIPS) , 2020, pp. 14 278–14 290. [121] Truong, Prune and Danelljan, Martin and Van Gool, Luc and Timofte, Radu, “Learning accurate dense correspondences and when to trust them,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2021, pp. 5714–5724. [122] J. Edstedt, I. Athanasiadis, M. Wadenb¨ ack, and M. Felsberg, “DKM: Dense kernelized feature matching for geometry estimation,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2023, pp. 17 765–17 775. [123] S. Zhang, X. Sun, H. Chen, B. Li, and C. Shen, “RGM: A robust gen-eralizable matching model,” arXiv preprint arXiv:2310.11755 , 2023. [124] Y. Zhang, L. Wang, K. Li, Y. Zhang, Y. Wang, L. Lin, and Y. Guo, “PanMatch: Unleashing the potential of large vision models for unified matching models,” arXiv preprint arXiv:2507.08400 , 2025. [125] M. Vilain, R. Giraud, Y. Berthoumieu, and G. Bourmaud, “Handling multiple hypotheses in coarse-to-fine dense image matching,” in Proc. IEEE Int. Conf. Image Process. (ICIP) , 2025, pp. 1265–1270. [126] Y. Zhang, N. Keetha, C. Lyu, B. Jhamb, Y. Chen, Y. Qiu, J. Karhade, S. Jha, Y. Hu, D. Ramanan et al. , “UFM: A simple path towards unified dense correspondence with flow,” arXiv preprint arXiv:2506.09278 ,2025. [127] J. Edstedt, D. Nordstr¨ om, Y. Zhang, G. B¨ okman, J. Astermark, V. Larsson, A. Heyden, F. Kahl, M. Wadenb¨ ack, and M. Felsberg, “Roma v2: Harder better faster denser feature matching,” arXiv preprint arXiv:2511.15706 , 2025. [128] K. Zhang, Y. Deng, J. Ma, and P. Favaro, “Adapting dense matching for homography estimation with grid-based acceleration,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2025, pp. 6294–6303. [129] Y. Deng, K. Zhang, L. Tang, J. Yang, and J. Ma, “ArgMatch: Adaptive refinement gathering for efficient dense matching,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2025, pp. 27 369–27 379. [130] Z. Guo, H. Lu, Q. Yu, R. Guo, J. Xiao, and H. Yu, “HDPL: a hybrid descriptor for points and lines based on graph neural networks,” Ind. Robot , vol. 48, no. 5, pp. 737–744, 2021. [131] R. Pautrat, I. Su´ arez, Y. Yu, M. Pollefeys, and V. Larsson, “GlueStick: Robust image matching by sticking points and lines together,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2023, pp. 9706–9716. [132] Y. Zhang and X. Zhao, “Searching from area to point: A hierarchical framework for semantic-geometric combined feature matching,” arXiv preprint arXiv:2305.00194 , 2023. [133] Zhang, Yesheng and Zhao, Xu, “MESA: Matching everything by segmenting anything,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2024, pp. 20 217–20 226. [134] A. Kirillov, E. Mintun, N. Ravi, H. Mao, C. Rolland, L. Gustafson, T. Xiao, S. Whitehead, A. C. Berg, W.-Y. Lo et al. , “Segment anything,” in Proc. Int. Conf. Comput. Vis. (ICCV) , 2023, pp. 4015–4026. [135] X. Liu, C. Wang, G. Shi, X. Zhang, Q. Miao, and M. Fan, “SGAD: Semantic and geometric-aware descriptor for local feature matching,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2025, pp. 27 095– 27 104. [136] C. Toft, D. Turmukhambetov, T. Sattler, F. Kahl, and G. J. Brostow, “Single-image depth prediction makes feature matching easier,” in 
+
+Proc. Eur. Conf. Comput. Vis. (ECCV) . Springer, 2020, pp. 473–492. [137] S. Wang, J. Kannala, M. Pollefeys, and D. Barath, “Guiding local feature matching with surface curvature,” in Proc. Int. Conf. Comput. Vis. (ICCV) , 2023, pp. 17 981–17 991. [138] Y. Liu, W. Lai, Z. Zhao, Y. Xiong, J. Zhu, J. Cheng, and Y. Xu, “LiftFeat: 3D geometry-aware local feature matching,” in Proc. IEEE Int. Conf. Robot. Autom. (ICRA) , 2025, pp. 11 714–11 720. [139] Y. Liu, Q. Huang, S. Hui, J. Fu, S. Zhou, K. Wu, P. Li, and J. Wang, “Semantic-aware representation learning for homography estimation,” in Proc. ACM Int. Conf. Multimedia (ACM MM) , 2024, pp. 2506–2514. [140] F. Cadar, G. Potje, R. Martins, C. Demonceaux, and E. R. Nascimento, “Leveraging semantic cues from foundation vision models for enhanced local feature correspondence,” in Proc. Asian Conf. Comput. Vis. (ACCV) , 2025, pp. 54–70. [141] M. B. Azhari and D. H. Shim, “DINO-VO: A feature-based visual odometry leveraging a visual foundation model,” IEEE Robot. Autom. Lett. , vol. 10, no. 9, pp. 9152–9159, 2025. [142] X. Fang, Z. Li, and J. Ma, “SigMa: Semantic similarity-guided semi-dense feature matching,” IEEE Trans. Image Process. , vol. 35, pp. 872– 887, 2026. [143] Y. Zhang, K. Sun, C. Tang, Y. Liu, and X. Li, “SGAT: learning feature matching with singularity-enhanced graph attention network,” in Proc. AAAI Conf. Artif. Intell. (AAAI) , 2026, pp. 12 952–12 960. [144] M. Yang, F. Fan, Z. Li, S. Deng, Y. Ma, and J. Ma, “DistillMatch: Leveraging knowledge distillation from vision foundation model for multimodal image matching,” arXiv preprint arXiv:2509.16017 , 2025. [145] Z. Zheng, J. Feng, N. Savaliya, Z.-H. Yeh, B. Lang, and M. C. Chuah, “TextFM: Robust semi-dense feature matching with language guidance,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2026, pp. 16 635–16 644. [146] X. Li, S. Duan, S. Wang, Z. Mao, B. Hu, and G. Zhang, “RIM: A retrieval-in-matching framework for cross-domain global visual localization of uavs,” arXiv preprint arXiv:2607.20116 , 2026. [147] J. Lee, S. Kang, and S. Yoo, “MV-RoMa: From pairwise matching into multi-view track reconstruction,” arXiv preprint arXiv:2603.27542 ,2026. [148] Y. Zhang and X. Zhao, “DMESA: Densely matching everything by segmenting anything,” arXiv preprint arXiv:2408.00279 , 2024. [149] J. Wu, R. Xu, Z. Wood-Doughty, C. Wang, S. Xu, and E. Y. Lam, “Segment anything model is a good teacher for local feature learning,” 
+
+IEEE Trans. Image Process. , vol. 34, pp. 2097–2111, 2025. [150] X. Pan, Q. Ma, M. Dong, H. Chen, W. Ji, and X. Zheng, “SAMatcher: Co-visibility modeling with segment anything for robust feature match-ing,” arXiv preprint arXiv:2606.03406 , 2026. [151] L. Tang, M. Jia, Q. Wang, C. P. Phoo, and B. Hariharan, “Emergent correspondence from image diffusion,” in Proc. Adv. Neural Inf. Process. Syst. (NeurIPS) , 2023, pp. 1363–1389. [152] F. Xue, S. Elflein, L. Leal-Taix´ e, and Q. Zhou, “MATCHA: Towards matching anything,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2025, pp. 27 081–27 091. [153] S. Wang, V. Leroy, Y. Cabon, B. Chidlovskii, and J. Revaud, “DUSt3R: Geometric 3D vision made easy,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2024, pp. 20 697–20 709. 20 
+
+[154] L. Yang, B. Kang, Z. Huang, Z. Zhao, X. Xu, J. Feng, and H. Zhao, “Depth anything v2,” in Proc. Adv. Neural Inf. Process. Syst. (NeurIPS) ,2024, pp. 21 875–21 911. [155] Y. Deng, B. Wang, K. Zhang, H. Zhang, and J. Ma, “Sgpfeat: Semantic and geometric priors for multi-modal image matching,” in Proc. AAAI Conf. Artif. Intell. (AAAI) , 2026, pp. 3569–3577. [156] S. Zhu and X. Liu, “PMatch: Paired masked image modeling for dense geometric matching,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2023, pp. 21 909–21 918. [157] X. Shen, Z. Cai, W. Yin, M. M¨ uller, Z. Li, K. Wang, X. Chen, and C. Wang, “GIM: Learning generalizable image matcher from internet videos,” arXiv preprint arXiv:2402.11095 , 2024. [158] J. Ren, X. Jiang, Z. Li, D. Liang, X. Zhou, and X. Bai, “MINIMA: Modality invariant image matching,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2025, pp. 23 059–23 068. [159] X. He, H. Yu, S. Peng, D. Tan, Z. Shen, H. Bao, and X. Zhou, “MatchAnything: Universal cross-modality image matching with large-scale pre-training,” arXiv preprint arXiv:2501.07556 , 2025. [160] Y. Liang, Y. Hu, W. Shao, and Y. Fu, “Learning dense feature matching via lifting single 2D image to 3D space,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , October 2025, pp. 6621–6631. [161] P. J. Huber and E. M. Ronchetti, Robust Statistics , ser. Wiley Series in Probability and Statistics. Hoboken, NJ: John Wiley & Sons, Inc., 2009. [162] I. Diakonikolas and D. M. Kane, Algorithmic high-dimensional robust statistics . Cambridge, United Kingdom: Cambridge University Press, 2023. [163] M. A. Fischler and R. C. Bolles, “Random sample consensus: a paradigm for model fitting with applications to image analysis and automated cartography,” Commun. ACM , vol. 24, no. 6, pp. 381–395, 1981. [164] J. M. Mart´ ınez-Otzeta, I. Rodr´ ıguez-Moreno, I. Mendialdua, and B. Sierra, “RANSAC for robotic applications: A survey,” Sensors ,vol. 23, no. 1, pp. 327.1–327.26, 2023. [165] P. H. Torr and A. Zisserman, “Robust parameterization and computation of the trifocal tensor,” Image Vis. Comput. , vol. 15, no. 8, pp. 591–605, 1997. [166] P. H. S. Torr and A. Zisserman, “MLESAC: A new robust estimator with application to estimating image geometry,” Comput. Vis. Image Underst. , vol. 78, no. 1, pp. 138–156, 2000. [167] P. H. S. Torr, “Bayesian model estimation and selection for epipolar geometry and generic manifold fitting,” Int. J. Comput. Vis. , vol. 50, no. 1, pp. 35–61, 2002. [168] O. Chum, J. Matas, and J. Kittler, “Locally optimized RANSAC,” in 
+
+Joint Pattern Recognition Symposium , 2003, pp. 236–243. [169] P. S. Victor Fragoso, Christopher Sweeney and M. Turk, “ANSAC: Adaptive non-minimal sample and consensus,” in Proc. Br. Mach. Vis. Conf. (BMVC) , September 2017, pp. 43.1–43.11. [170] V. Piedade and P. Miraldo, “BANSAC: A dynamic Bayesian network for adaptive sample consensus,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2023, pp. 3715–3724. [171] C. Olsson, O. Enqvist, and F. Kahl, “A polynomial-time bound for matching and registration with outliers,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2008. [172] H. Le, T.-J. Chin, and D. Suter, “An exact penalty method for locally convergent maximum consensus,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2017, pp. 1888–1896. [173] Z. Cai, T.-J. Chin, H. Le, and D. Suter, “Deterministic consensus max-imization with biconvex programming,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2018, pp. 685–700. [174] D. Barath and J. Matas, “Graph-cut RANSAC,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2018, pp. 6733–6741. [175] Barath, Daniel and Matas, Jiri, “Graph-Cut RANSAC: Local optimiza-tion on spatially coherent structures,” IEEE Trans. Pattern Anal. Mach. Intell. , vol. 44, no. 9, pp. 4961–4974, 2022. [176] A. Prasad, A. S. Suggala, S. Balakrishnan, and P. Ravikumar, “Robust estimation via robust gradient estimation,” J. R. Stat. Soc. Ser. B Stat. Methodol. , vol. 82, no. 3, pp. 601–627, 2020. [177] E. Brachmann, A. Krull, S. Nowozin, J. Shotton, F. Michel, S. Gumhold, and C. Rother, “DSAC - differentiable RANSAC for cam-era localization,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2017, pp. 6684–6692. [178] D. Barath, L. Cavalli, and M. Pollefeys, “Learning to find good models in RANSAC,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2022, pp. 15 744–15 753. [179] C. Zhao, Y. Ge, F. Zhu, R. Zhao, H. Li, and M. Salzmann, “Progressive correspondence pruning by consensus learning,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2021, pp. 6464–6473. [180] E. Brachmann and C. Rother, “Neural-guided RANSAC: Learning where to sample model hypotheses,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2019, pp. 4322–4331. [181] T. Wei, Y. Patel, A. Shekhovtsov, J. Matas, and D. Barath, “Generalized differentiable RANSAC,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2023, pp. 17 649–17 660. [182] T. Probst, D. P. Paudel, A. Chhatkuli, and L. V. Gool, “Unsupervised learning of consensus maximization for 3D vision problems,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2019, pp. 929–938. [183] B. Thomee, D. A. Shamma, G. Friedland, B. Elizalde, K. Ni, D. Poland, D. Borth, and L.-J. Li, “YFCC100M: The new data in multimedia research,” Commun. ACM , vol. 59, no. 2, pp. 64–73, 2016. [184] J. Zhang, D. Sun, Z. Luo, A. Yao, L. Zhou, T. Shen, Y. Chen, L. Quan, and H. Liao, “Learning two-view correspondences and geometry using order-aware network,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2019, pp. 5845–5854. [185] J. L. Schonberger and J.-M. Frahm, “Structure-from-motion revisited,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) ,2016, pp. 4104–4113. [186] Z. Li and N. Snavely, “MegaDepth: Learning single-view depth pre-diction from internet photos,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2018, pp. 2041–2050. [187] A. Dai, A. X. Chang, M. Savva, M. Halber, T. Funkhouser, and M. Nießner, “ScanNet: Richly-annotated 3D reconstructions of indoor scenes,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2017, pp. 5828–5839. [188] J. Xiao, A. Owens, and A. Torralba, “SUN3D: A database of big spaces reconstructed using SfM and object labels,” in Proc. Int. Conf. Comput. Vis. (ICCV) , 2013, pp. 1625–1632. [189] R. Hartley and A. Zisserman, Multiple view geometry in computer vision . Cambridge University Press, 2003. [190] V. Balntas, K. Lenc, A. Vedaldi, and K. Mikolajczyk, “HPatches: A benchmark and evaluation of handcrafted and learned local descrip-tors,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) ,2017, pp. 5173–5182. [191] T. Sattler, W. Maddern, C. Toft, A. Torii, L. Hammarstrand, E. Sten-borg, D. Safari, M. Okutomi, M. Pollefeys, J. Sivic et al. , “Bench-marking 6DoF outdoor visual localization in changing conditions,” in 
+
+Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2018, pp. 8601–8610. [192] H. Taira, M. Okutomi, T. Sattler, M. Cimpoi, M. Pollefeys, J. Sivic, T. Pajdla, and A. Torii, “InLoc: Indoor visual localization with dense matching and view synthesis,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2018, pp. 7199–7209. [193] P.-E. Sarlin, C. Cadena, R. Siegwart, and M. Dymczyk, “From coarse to fine: Robust hierarchical localization at large scale,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2019, pp. 12 716–12 725. [194] R. Arandjelovi´ c, P. Gronat, A. Torii, T. Pajdla, and J. Sivic, “NetVLAD: CNN architecture for weakly supervised place recognition,” IEEE Trans. Pattern Anal. Mach. Intell. , vol. 40, no. 6, pp. 1437–1451, 2018.

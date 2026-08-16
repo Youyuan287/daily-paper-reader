@@ -1,0 +1,777 @@
+Title: DiCoR: Decoupled Referent Disambiguation and Contour Recalibration for Efficient Referring Remote Sensing Image Segmentation
+
+URL Source: https://arxiv.org/pdf/2608.12980v1
+
+Published Time: Fri, 14 Aug 2026 00:43:31 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+1
+
+# DiCoR: Decoupled Referent Disambiguation and Contour Recalibration for Efficient Referring Remote Sensing Image Segmentation 
+
+Ziyang Gao, Zhizhuo Jiang, Jingjing Chang, Yixin Yang, Yuwen Pan, Yong-Qiang Mao, Yu Liu, Hai-Bao Chen 
+
+Abstract —Referring remote sensing image segmentation (RRSIS) aims to delineate targets specified by natural language expressions in remote sensing imagery, providing a flexible paradigm for fine-grained scene interpretation. Existing RRSIS methods generally follow two paradigms: joint fusion segmenta-tion (JFS) and decoupled prompt segmentation (DPS) based on foundation models. JFS supports efficient inference but often yields limited accuracy, since referent localization and mask delineation are optimized under a unified objective. DPS explicitly separates referent localization from mask generation through spatial prompts and powerful segmenters, but usually intro-duces substantial memory consumption and inference latency. To bridge this gap, we propose DiCoR, a decoupled referent disambiguation and contour recalibration framework for RRSIS. Built upon the efficient JFS pipeline, DiCoR introduces dedicated optimization mechanisms for two key challenges: identifying the correct referent among ambiguous candidates and recalibrating coarse mask predictions after initial localization. Specifically, a disambiguation-aware localization guidance strategy refor-mulates referent grounding as candidate-level competition by ranking salient candidate regions with adaptive linguistic cues and injecting the resulting localization prior into fused features. In addition, a lightweight contour recalibration module predicts residual corrections to coarse logits under localized contour supervision, thereby improving mask delineation with limited computational overhead. Extensive experiments on RefSegRS, RRSIS-D, and RISBench show that DiCoR achieves the best segmentation accuracy across all three benchmarks. On Ref-SegRS, DiCoR outperforms the competitive JFS method by 5.28% and 2.87% in mIoU and gIoU, while running 4.7× faster than the representative DPS method, demonstrating a favorable accuracy-efficiency trade-off. The code is available at https://github.com/zyGao1126/DiCoR. 
+
+Index Terms —Remote sensing, referring image segmentation, visual grounding, efficient segmentation 
+
+I. I NTRODUCTION 
+
+Referring Remote Sensing Image Segmentation (RRSIS) has recently emerged as a key task in vision–language un-derstanding for earth observation, enabling precise localization 
+
+This work was supported in part by the National Natural Science Foundation of China under Grant 62401335, Grant 62425117, Grant 62501352; in part by China Postdoctoral Science Foundation under Grant 2025M773484; and in part by the Postdoctoral Innovation Talents Support Program under Grant BX20250413. (Corresponding author: Hai-Bao Chen, Yu Liu.) 
+
+Ziyang Gao, Jingjing Chang, Yixin Yang, and Hai-Bao Chen are with the School of Integrated Circuits, School of Information Science and Electronic Engineering, Shanghai Jiao Tong University, Shanghai 200240, China. Zhizhuo Jiang is with the College of Computer Science, Nankai University, Tianjin 300350, China. Yuwen Pan is with the Department of Electronic Engineering, Tsinghua Shenzhen International Graduate School, Tsinghua University, Shenzhen 518055, China. Yong-Qiang Mao and Yu Liu are with the Department of Electronic Engineering, Tsinghua University, Beijing 100084, China. SegEarth-R2   
+
+> (3325M) MCD-Net (355M) SegEarth-R1 (1589M) RSRefSeg-1 (984M) RSRefSeg-2
+> (1447M)
+> RMSIN (240M) LAVT (228M) CroBIM* (222M) FIANet (256M) DiCoR (251M)
+> Better 9.3% Higher
+
+Fig. 1: Accuracy–efficiency trade-off on the RefSegRS bench-mark. DiCoR is compared with representative JFS and DPS methods in terms of mIoU, inference speed, and model size, where the bubble size indicates the number of parameters. * denotes results obtained from our reimplementation. and segmentation of targets described by natural language [1]– [4]. This text-conditioned segmentation paradigm supports high impact applications in complex operational environments, including disaster response, military monitoring, and urban management [5]–[8]. In practice, RRSIS systems are often required to deliver reliable instance identification and accurate boundary delineation while meeting strict requirements on inference latency and memory footprint to enable real-time assessment [9], [10]. Existing RRSIS methods can be broadly grouped into two paradigms: Joint Fusion Segmentation (JFS) [1]–[4], [11]– [18] and Decoupled Prompt Segmentation (DPS) [19]–[23]. JFS performs referring segmentation in an end-to-end manner by injecting linguistic features into the visual backbone via cross-modal fusion, thereby jointly learning target grounding and mask delineation from fused representations. This unified design is generally inference-efficient, as the target mask can be generated in a single forward pass without invoking an external segmenter. However, JFS is commonly optimized with pixel-wise losses that jointly supervise localization and segmentation accuracy, which may bias training toward coarse localization errors that incur larger penalties while providing weaker correction for fine boundary discrepancies after the target has been approximately localized. This limitation is particularly pronounced in remote sensing imagery, where arXiv:2608.12980v1 [cs.CV] 13 Aug 2026 2
+
+small objects are prevalent and minor contour deviations can substantially affect segmentation quality. In contrast, the DPS paradigm decouples target grounding from mask generation by first deriving intermediate spatial prompts and then feeding these prompts into strong segmenta-tion foundation models to produce the final mask. By external-izing “where to segment” as a prompt, DPS provides a clearer interface between localization and mask synthesis and often achieves accurate mask delineation. However, foundation-model-based pipelines typically incur substantial inference time overhead, resulting in increased memory footprint and latency that can hinder practical deployment. Moreover, such pipelines can be sensitive to remote sensing domain character-istics, such as sensor modality variations and complex back-ground textures, making domain shift a persistent challenge. These observations raise a central question: can we preserve the efficiency of JFS while incorporating the grounding reli-ability and contour fidelity offered by DPS? To this end, we propose DiCoR, a decoupled referent disambiguation and con-tour recalibration framework for RRSIS. DiCoR is motivated by the decoupling philosophy behind DPS, yet implements it with lightweight modules and task-specific supervision instead of relying on a heavy foundation model during inference. As shown in Fig. 1, DiCoR demonstrates a favorable balance be-tween segmentation performance and computational efficiency among representative RRSIS methods. We next explain how this objective is achieved through referent disambiguation and contour recalibration. 
+
+(1) Referent ambiguity under distractors and competing cues. A central challenge in RRSIS is to identify the target referent among distractor candidates that share similar appear-ance, geometry, or spatial context. This challenge is further amplified when an expression contains multiple cues, such as location, size, and attributes, whose reliability varies across samples. Conventional JFS methods couple referent grounding with mask prediction under a unified objective, which does not explicitly resolve the competition among plausible same-image candidates. DiCoR addresses this issue by reformulating refer-ent grounding as a candidate competition problem, where the model is encouraged to distinguish competing high-response regions and concentrate evidence on the true referent. From the representation perspective, we introduce a Disambiguation-aware Localization Guidance (DLG) strategy that constructs a compact set of candidate regions from the intermediate response map and ranks them with candidate-conditioned linguistic and geometric evidence. From the supervision per-spective, DLG is trained with a complementary localization-and-ranking objective, where distractors extracted by offline SAM3 [24] are used to guide the intermediate response map, and a ranking loss encourages the model to select the ground-truth referent over competing candidates. 
+
+(2) Contour imprecision under coarse localization. Even when the referent has been approximately localized, accurate mask delineation remains difficult. This is because standard pixel-wise supervision is dominated by localization errors, leaving much weaker signals for correcting the remaining contour deviations. As a result, boundary errors are often insufficiently corrected in JFS models. To address this issue, DiCoR introduces a Lightweight Contour Recalibration (LCR) module after the coarse decoder and trains it in a decoupled manner. Taking the input image and the coarse prediction as Decoder Fusion  
+
+> The ship positioned at the
+> top of the image, extending
+> from near the center towards the right edge. The ship positioned at the
+> top of the image, extending
+> from near the center towards the right edge.
+> Unified pixel-wise mask supervision
+> The ship positioned at the top of the image, extending from near the center towards the right edge. The ship positioned at the top of the image, extending from near the center towards the right edge.
+> Vision Encoder Fusion DLG
+> Coarse
+> Decoder
+> Coarse
+> Decoder
+> LCR
+> Vision Encoder
+> Language Encoder
+
+++ 
+
+> (a) (b)
+> Language Encoder
+> Training only Training only Training & Inference Training & Inference
+> Contour Imprecision Contour Imprecision GT Contour
+> Decoupled supervision Decoupled supervision
+> Grounding Confusion Grounding Confusion
+
+Fig. 2: Comparison of conventional JFS pipeline and DiCoR. (a) A conventional JFS pipeline trained under unified pixel-wise mask supervision. (b) DiCoR introduces DLG and LCR, each optimized with dedicated supervision for referent disam-biguation and contour recalibration. input, LCR learns residual corrections to the coarse logits under localized contour supervision that emphasizes uncertain boundary regions, rather than re-segmenting the target from scratch. To improve robustness under realistic coarse priors, coarse predictions from multiple checkpoints are collected and filtered by localization quality, then further diversified with morphological perturbations. Fig. 2 provides a conceptual summary of DiCoR. By moving beyond the unified pixel-wise supervision used in con-ventional JFS, DiCoR adopts a lightweight decoupled design centered on the two key challenges of referent disambiguation and contour recalibration, while maintaining efficient infer-ence. To summarize, the main contributions of this paper are as follows:  
+
+> •
+
+We propose DiCoR, a decoupled referent disambiguation and contour recalibration framework for efficient RRSIS, which improves both grounding reliability and mask delineation quality within a lightweight and efficient inference pipeline.  
+
+> •
+
+We introduce a disambiguation-aware localization guid-ance strategy that reformulates referent grounding in RRSIS as a candidate competition problem, enabling the model to identify the correct referent through candidate-level discrimination and explicit ranking supervision.  
+
+> •
+
+We introduce a lightweight contour recalibration module, inspired by the decoupling philosophy of prompt-based methods, which improves boundary delineation through residual correction with limited inference overhead.  
+
+> •
+
+Extensive experiments on public RRSIS benchmarks demonstrate that DiCoR achieves a favorable trade-off be-tween segmentation accuracy and deployment efficiency. The remainder of this paper is organized as follows. Sec-tion II reviews related studies on referring image segmentation and referring remote sensing image segmentation. Section III presents the proposed DiCoR framework and details its refer-ent disambiguation and contour recalibration components. Sec-tion IV reports comprehensive experiments on public RRSIS 3
+
+benchmarks and analyzes the effectiveness of the proposed modules. Finally, Section V concludes the paper. II. R ELATED WORK 
+
+A. Referring Image Segmentation 
+
+Referring image segmentation (RIS) aims to segment im-age regions specified by natural-language expressions. Early RIS methods [25]–[29] typically combined CNN-based vi-sual encoders with RNN/LSTM language encoders, followed by late multimodal fusion for pixel-wise prediction. Subse-quent transformer-based approaches introduced stronger global context modeling and more flexible vision-language interac-tion [30]–[33], thereby mitigating the locality limitations of earlier CNN–RNN pipelines. Building on this trend, LAVT [34] advanced RIS by injecting linguistic information into the intermediate stages of the visual encoder, enabling language-aware visual representation learning throughout the encoding process rather than only after unimodal feature extraction. This design substantially influenced later RIS research, with methods such as SLViT [35] and CARIS [36] further improv-ing scale-aware interaction and context-aware alignment. More recently, RIS has increasingly benefited from large pretrained models [37]–[40], particularly through CLIP-based alignment transfer [41], [42] and prompt-driven SAM frameworks [43], [44], which further improve semantic understanding and mask generation quality. Overall, RIS in natural images has evolved toward stronger cross-modal alignment, finer interaction, and more effective exploitation of pre-trained knowledge. How-ever, these methods are largely developed for natural-image scenarios and therefore do not directly address the small-object density, arbitrary orientations, long-range spatial relations, and referential ambiguity that characterize remote sensing imagery. Related boundary-aware segmentation studies have further shown that contour-sensitive modeling and boundary displacement correction can improve mask delineation near object edges [45]–[47], which also provides useful motivation for contour recalibration in RRSIS. 
+
+B. Referring Remote Sensing Image Segmentation 
+
+Referring image segmentation was first introduced into the remote sensing domain by [1], which established a dedicated benchmark and stimulated subsequent research in this area. Most existing studies follow the joint fusion segmentation (JFS) paradigm introduced above, where multimodal encoding, cross-modal interaction, and pixel-level decoding are opti-mized within a unified end-to-end network. Early JFS methods mainly focused on modeling characteristics specific to remote sensing imagery, such as large-scale variation and orienta-tion diversity [2], while later studies progressively improve multimodal representation through finer image–text alignment, stronger bidirectional interaction, and more effective multi-level feature aggregation [3], [4], [14], [15]. More recent work has further explored longer-range semantic guidance, dual alignment, uncertainty-aware modeling, fine-grained decoding, and stronger collaborative encoding strategies [11]–[13], [16]– [18]. Despite these advances, existing JFS methods still largely couple target grounding and mask delineation under shared pixel-wise supervision, leaving limited explicit mechanisms for resolving ambiguous same-image candidates or correcting fine contour errors. Meanwhile, recent advances in large pretrained vi-sion–language and promptable segmentation models have opened another important direction for RRSIS. In these meth-ods, which we term decoupled prompt segmentation (DPS), multimodal cues are converted into explicit spatial prompts by multimodal representation or grounding models [48]–[51]. Strong pretrained segmenters [52]–[55] are then adopted to generate the final masks. Representative studies have devel-oped prompting pipelines built on foundation models, cus-tomized promptable segmentation frameworks, and segmenta-tion schemes that combine coarse localization with subsequent mask refinement [19], [20], [23], [56]. Recent studies on large models further broaden this direction to more diverse query forms and more complex reasoning processes [21], [22]. Although these approaches benefit from the rich prior knowl-edge and strong mask generation capability of foundation models, their reliance on external heavy segmenters and staged inference pipelines typically leads to higher computational and memory overhead, while also making overall performance more sensitive to prompt quality and cross-domain adaptation. Our method is conceptually aligned with the decoupling motivation of this line of research, but realizes it within a lightweight implicit fusion pipeline rather than through a heavy external segmenter. III. M ETHODOLOGY 
+
+A. Overview 
+
+We first present an overview of DiCoR in Fig. 3. Built on an efficient end-to-end fusion pipeline, DiCoR is designed to improve referent disambiguation and contour recalibration in response to two persistent challenges in RRSIS. Specifi-cally, the input image is first encoded by Swin Transformer backbone [57], and the referring expression is encoded by BERT [58]. The two streams are progressively integrated through four vision-language fusion (VLF) blocks to produce multi-level multimodal representations. These features are then aggregated by a multi-scale aggregation (MSA) module and decoded to generate a coarse segmentation prediction, which is further refined to obtain the final mask. To improve referent localization, DiCoR introduces adisambiguation-aware localization guidance (DLG) module, which formulates referent grounding as a candidate competi-tion process. This design allows the model to resolve ambigu-ity among same-image candidates and focus on the top-ranked referent. Starting from the fused representation after the third VLF block, the DLG module first predicts an intermediate response map and organizes salient responses into a compact set of candidate regions. These candidates are then assessed using candidate-aware language cues, where token responses are adaptively reweighted according to candidate-level visual evidence. The selected candidate is subsequently transformed into a localization prior and injected back into the same fused representation through residual spatial recalibration, thereby guiding subsequent fusion and decoding toward the true referent. During training, same-image distractors mined offline by SAM3 model provide explicit competitive super-vision, encouraging the model to preserve a discriminative candidate structure and distinguish the ground-truth referent from visually confusing competitors. 4Enhancement 
+
+> Repression Enhancement
+> Repression
+
+Coarse Decoder 
+
+> Coarse IoU: 0.82 Coarse IoU: 0.82
+
+VLF Block2 VLF Block2 VLF Block1 VLF Block1 VLF Block4 VLF Block4 
+
+DLG Module 
+
+> Reweight Token
+> ... ...
+> Reweight Token
+> ...
+
+MSA Module 
+
+The small vehicle positioned at the top center. 
+
+BERT 
+
+The small vehicle positioned at the top center. 
+
+BERT 
+
+> ... ...
+
+Segmentation Module 
+
+Segmentation Module 
+
+(a) 
+
+(b) (c)   
+
+> (a) Overall pipeline ( Sec. 3.1 )(a) Overall pipeline ( Sec. 3.1 )
+
+Prior Augment 
+
+LCR Module ++
+
+> Train only
+
+Swin Transformer               
+
+> Final Mask Final Mask
+> (b) Disambiguation-aware Localization Guidance ( Sec. 3.3 )
+> (b) Disambiguation-aware Localization Guidance ( Sec. 3.3 )
+> (c) Lightweight Contour Recalibration (Sec. 3.4 )
+> (c) Lightweight Contour Recalibration (Sec. 3.4 )
+> VLF: Vision-Language Fusion
+> MSA: MultiScale Aggregation
+> (Sec.3.2 )(Sec.3.2 )
+> VLF: Vision-Language Fusion
+> MSA: MultiScale Aggregation
+> (Sec.3.2 )(Sec.3.2 )
+> ··Spatial Recalibration ·Spatial Recalibration
+> ++Residual Aggregation +Residual Aggregation
+> ·Spatial Recalibration
+> +Residual Aggregation
+
+Supervised  
+
+> x_c3
+
+Dense Candidate Estimator VLF Block3 Candidates Proposal  
+
+> Top-K Candidates Best Candidate Map
+
+··
+
+> Prob_Map Prob_Map
+> ... ...
+
+Candidate 
+
+Ranker 
+
+> guide
+> ...
+
+Candidate 
+
+Ranker 
+
+> guide
+
+Dense Candidate Estimator VLF Block3 Candidates Proposal  
+
+> Top-K Candidates Best Candidate Map
+
+·
+
+> Prob_Map
+> ...
+
+Candidate 
+
+Ranker  
+
+> guide
+> ... ... ...
+> Final Prior Map Final Prior Map
+> x_c3
+
+Dense Candidate Estimator VLF Block3 Candidates Proposal  
+
+> Top-K Candidates Best Candidate Map
+
+·
+
+> Prob_Map
+> ...
+
+Candidate 
+
+Ranker 
+
+> guide
+> ...
+> Final Prior Map
+> ... ...
+> Reweight Token
+> ...
+> Reweight Token
+
+SAM3 SAM3 
+
+> Offline Processing
+> Target Distractor
+> Target Distractor
+> Target Distractor
+
+SAM3  
+
+> Offline Processing
+> Target Distractor
+> pos neg
+
+SAM3  
+
+> Offline Processing
+> Target Distractor
+> pos neg
+> Final IoU: 0.95 Final IoU: 0.95
+
+Fig. 3: Overview of the proposed DiCoR framework, including (a) the overall pipeline built upon a JFS backbone, (b) disambiguation-aware localization guidance for referent disambiguation, and (c) lightweight contour recalibration for boundary correction. For contour recalibration, DiCoR further employs alightweight contour recalibration (LCR) module after the coarse decoder. Taking the input image and the coarse pre-diction as input, LCR predicts a residual correction to the coarse logits, so that the final mask is improved through lo-calized boundary adjustment rather than full re-segmentation. Accordingly, LCR adopts a lightweight encoder-decoder archi-tecture with mirrored skip connections, enabling local contour correction while preserving fine spatial details. For training data construction, we collect coarse predictions from multi-ple intermediate checkpoints, retain samples with sufficiently reliable localization, and further diversify them with mor-phological perturbations to cover richer boundary deviations. For training supervision, LCR is optimized with a localized contour objective that emphasizes uncertain boundary regions while suppressing unnecessary residual responses outside the recalibration area. This design improves contour quality with limited additional overhead. 
+
+B. Multi-Scale Joint Fusion Backbone 
+
+Given a remote sensing image I ∈ R3×H×W and a referring expression T = ( w1, . . . , w n), the visual encoder produces a hierarchy of visual features at four scales, denoted by 
+
+{Vl}4
+
+l=1 , while the language encoder converts the expression into token embeddings L = [ l1, . . . , l n]⊤. Here, ln denotes the embedding of the n-th token. At each fusion stage, a language-guided attention module incorporates linguistic information from L into the corresponding visual feature Vl, yielding multi-level vision-language features {Xl}4
+
+l=1 . These represen-tations preserve complementary cues across resolutions, with shallow features emphasizing local spatial detail and deeper features capturing richer semantic context. The multi-scale features are subsequently aggregated through MSA module and decoded to produce the prediction mask P .To strengthen cross-scale interaction, bidirectional vision-language attention is introduced into the MSA module. As illustrated in Fig. 4, multimodal features from four encoder stages are first aligned by pyramid pooling and flattened into a unified visual sequence. Different from conventional aggregation methods that mainly inject textual semantics into visual features, the proposed interaction scheme further uses visual evidence to update linguistic representations. Con-cretely, L2V multi-head attention refines the visual sequence under language guidance, whereas V2L multi-head attention recalibrates the language sequence according to the visual content. The updated visual representation is subsequently processed by visual self-attention to model long-range spatial dependencies and global contextual relations. Finally, the aggregated representation is decomposed back into four scales and fused into the original feature hierarchy through scale-aware gating, allowing information to propagate adaptively across resolutions. Block 1 
+
+... 
+
+Block 2 Block K 
+
+++++++++
+
+Gate Gate 
+
+Gate Gate 
+
+Split 
+
+Xin = [ X1,X 2,X 3,X 4]
+
+Lin 
+
+Fout =[ F1,F 2,F 3,F 4]Flatten V2L-MHA L2V-MHA FFN FFN V2V-MHA   
+
+> Q = L seq K,V = Vseq Q = L seq K,V = Vseq
+
+Flatten V2L-MHA L2V-MHA FFN FFN V2V-MHA  
+
+> Q = L seq K,V = Vseq
+
+Flatten V2L-MHA L2V-MHA FFN FFN V2V-MHA    
+
+> Q = L seq K,V = Vseq Q = V seq K,V = Lseq Q = V seq K,V = Lseq
+
+++ Add operator + Add operator 
+
+Gate Conv + BN Gate Conv + BN 
+
++ Add operator 
+
+Gate Conv + BN 
+
+Fig. 4: Structure of the MSA module. 5
+
+C. Disambiguation-aware Localization Guidance 
+
+Although the joint fusion backbone provides an efficient basis for RRSIS, it remains vulnerable to ambiguous ground-ing when multiple same-image instances share similar ap-pearance or spatial layout. As shown in Fig. 5, the fused feature X3 already activates the ground-truth referent, but comparable responses also appear on confusing distractors. This suggests that the failure is not simply caused by missing referent evidence. Instead, multiple plausible regions are often activated simultaneously, while the model lacks an explicit mechanism to resolve their competition. Since standard pixel-wise supervision mainly enforces foreground-background sep-aration, it provides limited guidance for distinguishing among high response candidate instances. The resulting ambiguity can therefore propagate to the decoder and lead to incorrect masks. The aircraft located near the center of the image. 
+
+The vehicle positioned in the bottom-left of the image and close to left edge. 
+
+Fig. 5: Failure cases of the JFS backbone. From left to right are the input image, the activation visualization of X3, the predicted mask, and the ground-truth mask. To make this competition explicit, DLG module is intro-duced to reformulate referent grounding as candidate-level competition. As illustrated in Fig. 6, DLG contains three stages: a dense response estimator, a candidate generator, and a candidate ranker. Given the third-stage fused feature X3
+
+and the language feature L, the dense response estimator first predicts a response map 
+
+R = Φ resp (X3), R ∈ [0 , 1] H3×W3 . (1) where Φresp is implemented by two lightweight Conv-Norm-GELU blocks followed by a sigmoid activation. The response map R captures the spatial distribution of potential referent cues in the deep multimodal representation. The candidate generator then extracts a compact set of candidate regions from R. A peak selection operator Φpeak (·)
+
+identifies local maxima, removes redundant responses by non-maximum suppression, and retains the top-K peaks: 
+
+{pi}Ki=1 = Φ peak (R), (2) each peak pi is then converted into a localized candidate support by Gaussian-gated response aggregation 
+
+Ci(u) = R(u) · exp 
+
+
+
+− ∥u − pi∥22
+
+2σ2
+
+c
+
+
+
+, i = 1 , . . . , K, (3) where u denotes the spatial coordinate and σc controls the support range. After normalization, each candidate support Linear Block MLP Block L                                                       
+
+> CC
+> ... ... Token Weights ... Token Weights ... Token Weights viFgiF
+> 1. Dense Response Estimator 2. Candidate Generator
+> Response Maps
+> 3. Candidate Ranker
+> Conv Block
+> Conv Block
+> Candidate
+> Embedding Text Feature LText Feature LText Feature L
+> Sigmoid
+> Local Maxima NMS Top-K Selection Local Maxima NMS Top-K Selection
+> Candidate Maps 1{}KiiMM==Candidate Maps 1{}KiiMM==
+> ... ... ...
+> Local Maxima NMS Top-K Selection
+> Candidate Maps 1{}KiiMM==
+> ...
+> Vis. Feature 1{}vvKiiFF==
+> ... ...
+> Vis. Feature 1{}vvKiiFF==
+> ...
+> Geo. Feature
+> (x 1,y 1)(x 2,y 2)(x 3,y 3)
+> (x 1,y 1)(x 2,y 2)(x 3,y 3)1{}ggKiiFF==
+> Geo. Feature
+> (x 1,y 1)(x 2,y 2)(x 3,y 3)1{}ggKiiFF==
+> Vis. Feature 1{}vvKiiFF==
+> ...
+> Geo. Feature
+> (x 1,y 1)(x 2,y 2)(x 3,y 3)1{}ggKiiFF==
+> ··Top-rank
+> Selection
+> Linear
+> Block
+> i= 1 2
+> Ki= 1 2
+> K
+> Vision Feature 3
+> XVision Feature 3
+> XVision Feature 3
+> XRecalibrated Vision Feature
+> Reweighted Text Feature Reweighted Text Feature
+> ××
+
+Fig. 6: Architecture of the proposed DLG module. DLG pro-duces a candidate-specific localization prior and a reweighted text feature, and then feeds the selected prior back into X3 for spatial recalibration. is used to pool a visual feature F vi from X3. In parallel, a geometric feature F gi is constructed from the spatial distri-bution, including the normalized center, effective area, and spatial dispersion. Together, F vi and F gi define the candidate representation for subsequent ranking. The candidate ranker then estimates referent confidence for each candidate. Since different regions may rely on different linguistic cues for disambiguation, token importance should be estimated in a candidate-adaptive manner. For candidate i,the visual feature and geometric feature are concatenated into a candidate embedding ci = [ vi; gi]. This embedding inter-acts with the linguistic features through separate lightweight projection networks Φc(·) and Φl(·), followed by a routing network Φrt (·) to obtain normalized token weights: 
+
+ωi = Φ rt ([Φ c(ci); Φ l(L)]) , ωi ∈ RN . (4) The resulting ωi reweight the token-level language features to produce a candidate-specific text representation: 
+
+˜li =
+
+NX
+
+n=1 
+
+ωi,n ln. (5) The referent confidence si of each candidate is then com-puted by jointly considering semantic similarity and geometric consistency: 
+
+si = ⟨vi, ˜li⟩ + λg Φg
+
+
+
+[gi; ˜li]
+
+
+
+. (6) where ⟨· , ·⟩ denotes cosine similarity computation, Φc(·),
+
+Φl(·) and Φg (·) are implemented as lightweight MLPs, and 
+
+λg balances the contribution of geometric evidence. Finally, the candidate with the highest confidence is selected as the winning referent: 
+
+i∗ = arg max 
+
+i si. (7) This explicit candidate-level selection converts ambiguous intermediate responses into a referent competition process. The selected support is then injected back into X3 through residual spatial recalibration: 
+
+˜X3 = X3 ⊙  1 + α ¯Ci∗
+
+ . (8) 6
+
+where α controls the spatial guidance strength and ⊙ denotes broadcasting along the channel dimension. In this way, the recalibrated feature ˜X3 guides the decoder toward the resolved referred instance. To supervise the DLG module effectively, it is necessary to jointly ensure accurate candidate ranking and reliable candi-date generation. As the candidate generation process relies on non-differentiable discrete operations, directly optimizing can-didate quality through gradient-based learning is non-trivial. Consequently, the quality of the response map R becomes the primary factor governing candidate reliability. We therefore introduce two complementary objectives: re-sponse supervision for stable candidate generation and ranking supervision for explicit referent selection. Specifically, re-sponse supervision encourages R to produce strong activations over potential referent regions. Directly applying ground-truth masks as positive supervision is inconsistent with the role of deep multimodal features, which are expected to highlight candidate evidence regions rather than reconstruct rigid target extents. To address this, we partition the response space into three regions, including the target positive foreground P, the clean background B, and the hard instance background H,where P is defined as a compact region centered at the ground-truth target, B consists of regions sufficiently distant from the target, and H captures hard distractor instances. The response supervision loss is defined as 
+
+Lresp = Lbce (RP , 1) + Lbce (RB, 0) + λhLbce (RH, 0). (9) where Lbce (·, ·) denotes the standard binary cross-entropy loss, and each term is averaged over the corresponding region. 
+
+RP , RB, RH denote the response values sampled from region 
+
+P, B and H respectively. It should be noted that H is constructed via offline mining using a frozen SAM3 model. Candidate object proposals with high confidence but low over-lap with the ground-truth mask are retained as distractors and aggregated into a proposal set to form H, thereby introducing structured hard negatives that explicitly model intra-image ambiguity. To resolve ambiguity among competing candidates, we further impose ranking supervision via a cross-entropy loss. Let y denote the ground-truth candidate index, the ranking loss is defined as 
+
+Lrank = − log exp( sy )
+
+PKi=1 exp( si) . (10) This objective enforces explicit competition among candidates and promotes correct referent selection. The overall DLG objective is formulated as 
+
+LDLG = λresp Lresp + λrank Lrank , (11) where λresp and λrank control the relative contributions of response estimation and candidate ranking, yielding comple-mentary supervision during training. 
+
+D. Lightweight Contour Recalibration 
+
+Although DLG improves referent localization by resolving ambiguity through candidate-level disambiguation, accurate mask prediction still depends on the decoder’s ability to delineate object contours. In conventional JFS frameworks, lo-calization and contour delineation are optimized jointly under a unified mask objective. Once the referent has been approxi-mately grounded, boundary deviations tend to induce weaker gradients than residual localization errors under the same objective, leading to insufficient optimization of fine-grained contour delineation. To address this optimization imbalance, we introduce a decoupled lightweight contour recalibration module, termed LCR, which explicitly decouples contour correction from coarse localization via residual recalibration. Coarse Prediction Coarse Prediction Final Prediction Final Prediction          
+
+> Contour Recalibration
+> EncBlock1 EncBlock2 EncBlock3 DecBlock1 DecBlock2 DecBlock3 EncBlock1 EncBlock2 EncBlock3 DecBlock1 DecBlock2 DecBlock3
+> Contour Recalibration
+> EncBlock1 EncBlock2 EncBlock3 DecBlock1 DecBlock2 DecBlock3
+> ++
+> Residual Correction
+> suppression Promotion
+> suppression Promotion
+> Residual Correction
+> suppression Promotion
+> Input Image Input Image Ground Truth Ground Truth Input Image Ground Truth
+> Recalibration Training Setup
+> Input Image Ground Truth
+> Recalibration Training Setup
+> Low-weight region High-weight region Low-weight region High-weight region
+> Low-weight region High-weight region
+> Region-Aware Supervision
+> Low-weight region High-weight region
+> Region-Aware Supervision
+> Multi-Checkpoint Coarse Masks
+> ... ...
+> Multi-Checkpoint Coarse Masks
+> ...
+> supervised by trained with
+> Coarse Prediction Final Prediction
+> Contour Recalibration
+> EncBlock1 EncBlock2 EncBlock3 DecBlock1 DecBlock2 DecBlock3
+> +
+> Residual Correction
+> suppression Promotion
+> Input Image Ground Truth
+> Recalibration Training Setup
+> Low-weight region High-weight region
+> Region-Aware Supervision
+> Multi-Checkpoint Coarse Masks
+> ...
+> supervised by trained with
+
+Fig. 7: Structure of the LCR module. Let Z denote the coarse segmentation logits produced by the decoder and P = σ(Z) denote the corresponding mask prediction through sigmoid activation, the LCR module takes the input image I and P as guidance to estimate a residual correction ∆Z in the logit domain: 
+
+∆Z = Φ lcr (I ⊕ P ) , (12) where ⊕ denotes channel-wise concatenation and Φlcr denotes the lightweight recalibration network. As illustrated in Fig. 7, 
+
+Φlcr adopts a compact encoder–decoder architecture composed of convolutional layers, normalization and ReLU activation. Skip connections are introduced between mirrored stages to preserve fine spatial structures during recalibration. The recalibrated logits ˜Z and the final prediction ˜P are obtained as 
+
+˜Z = Z + ∆ Z, ˜P = σ( ˜Z). (13) This residual formulation constrains LCR to perform localized contour correction conditioned on the coarse prediction, while preserving the overall object support established by Z.To focus optimization on residual contour errors, LCR adopts a region-aware loss function instead of uniform pixel-wise supervision. As illustrated in Fig. 7, the weight map 
+
+W (u) is constructed from the coarse prediction, assigning higher weights to pixels in the vicinity of predicted contours and lower weights to regions with confident foreground or background responses. Let G denote the ground-truth binary mask, the training objective is defined as 
+
+LLCR = λce Lrce + λdice Lrdice , (14) where Lrce and Lrdice denote the region-aware cross-entropy and Dice losses, which are commonly used in RRSIS tasks to balance pixel accuracy and region overlap [4], [13], [20]. 7
+
+The coefficients λce and λdice balance the two loss terms. Specifically, Lrce is defined as: 
+
+Lrce = 1
+
+P 
+
+> u∈Ω
+
+W (u)
+
+X
+
+> u∈Ω
+
+W (u) CE 
+
+ ˜P (u), G (u)
+
+
+
+, (15) where Ω denotes the spatial domain and u indexes pixel locations. The weight map W (u) modulates the contribution of each pixel by assigning larger values to contour-adjacent re-gions and smaller values to regions with confident predictions. Similarly, Lrdice is computed as: 
+
+Lrdice = Dice 
+
+
+
+{W (u) ˜P (u)}u∈Ω, {W (u)G(u)}u∈Ω
+
+
+
+. (16) Together, these losses define a spatially selective supervision that enables effective contour recalibration through residual correction based on coarse prior, providing an efficient alter-native to foundation-model-based refinement pipelines. 
+
+E. Decoupled Training Strategy 
+
+This section presents the decoupled training strategy for optimizing DiCoR. Following existing JFS methods [4], [13], the vision-language fusion backbone and the coarse decoder are first trained with the standard segmentation loss. To pro-vide the auxiliary modules with a broader and more realistic training distribution, intermediate checkpoints from different training stages are subsequently sampled to construct diverse pretraining data. Specifically, third-level fused features are extracted for DLG pretraining, while coarse decoder logits are collected as foreground priors for LCR. For LCR pretraining, only samples with sufficiently reliable coarse localization are retained. This filtering removes severely mislocalized predic-tions that would otherwise introduce inconsistent correction targets and interfere with LCR optimization. To further enrich boundary variations and improve the generalization ability of contour recalibration, the retained coarse priors are augmented with morphological perturbations, including dilation and ero-sion. Once the auxiliary modules have been pretrained, DLG is further optimized in a joint adaptation stage with the final seg-mentation supervision. Through this process, the reweighted text tokens are jointly tuned with the downstream segmentation model, enabling DLG to generate localization priors that are both discriminative for referent selection and compatible with final mask prediction. By comparison, LCR is directly plugged into the trained framework after pretraining. At inference time, DiCoR adds only the lightweight DLG and LCR modules to a standard JFS pipeline, thus avoiding the heavy computational cost of foundation-model-based segmentation. IV. E XPERIMENTS 
+
+A. Datasets and Metrics 
+
+Datasets. We evaluate DiCoR on three public referring re-mote sensing image segmentation benchmarks, including Ref-SegRS [1], RRSIS-D [2], and RISBench [3]. RefSegRS con-tains 4,420 image-expression-mask triplets collected from 285 remote sensing scenes, covering 14 object categories. The dataset is split into 2,172 training samples, 431 validation samples, and 1,817 test samples. RRSIS-D provides a larger benchmark with 17,402 annotated samples from 20 categories, including 12,181 training samples, 1,740 validation samples, and 3,481 test samples. RISBench further increases the scale, scene diversity, and referring complexity of the task, providing a challenging testbed for evaluating model robustness. These datasets exhibit substantial differences in object scale, scene composition, and semantic coverage, and therefore provide a comprehensive evaluation protocol for RRSIS. 
+
+Metrics. Following prior RRSIS studies, we adopt mean In-tersection over Union (mIoU), global Intersection over Union (gIoU), and precision under different IoU thresholds (Pr) as evaluation metrics. For the i-th test sample, the IoU between the predicted mask Pi and the ground-truth mask Gi is defined as: 
+
+IoU i = |Pi ∩ Gi||Pi ∪ Gi| . (17) The mIoU is computed by averaging the IoU values over all 
+
+N test samples: 
+
+mIoU = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+IoU i. (18) The gIoU is calculated by accumulating the intersection and union areas over the entire test set: 
+
+gIoU = 
+
+PNi=1 |Pi ∩ Gi|
+
+PNi=1 |Pi ∪ Gi| . (19) In addition, Pr measures the proportion of test samples whose IoU exceeds a given threshold, reflecting the reliability of predictions under different segmentation quality requirements. 
+
+B. Implementation Details 
+
+Model configuration. For DLG, the number of candidate K
+
+and the Gaussian support scale σc are set to 5 and 3 respec-tively, considering the generally small size and dense spatial distribution of referred objects in remote sensing imagery. The residual guidance strength α is set to 0.5 to recalibrate the third-level feature without disrupting the original fused repre-sentation, and the geometric correction weight λg is set to 0.5. For the DLG supervision, λresp and λrank are set to 0.9 and 1.1 respectively, which enables the ranker to better distinguish the true referent from competing instances. For LCR, coarse predictions with IoU values in [0 .5, 0.95) are retained for LCR pretraining, which are regarded as sufficiently localized yet still requiring contour recalibration. The region-aware loss weights λce and λdice are both set to 1.0. During pretraining, checkpoints from epochs 10, 20, 25, 30, and 39 are sampled to provide diverse pretraining samples. 
+
+Training configuration. During training, all input images are resized to 480 ×480 and converted to tensors. Experiments are conducted on NVIDIA RTX 4090 GPUs with a batch size of 8, and AdamW is used as the optimizer for all training stages. The coarse segmentation model is trained for 40 epochs with an initial learning rate of 5 × 10 −5 and a weight decay of 
+
+1 × 10 −2. During DLG and LCR module pretraining, DLG is trained for 20 epochs with a learning rate of 1 × 10 −3 and a weight decay of 1 × 10 −4, while LCR is trained for 40 epochs with a learning rate of 5×10 −5 and a weight decay of 1×10 −2.After pretraining, the joint fine tuning stage is conducted for 10 epochs using an initial learning rate of 1 × 10 −5 and a weight decay of 1 × 10 −2.8
+
+TABLE I: Comparison of segmentation performance on the RefSegRS dataset across various evaluation metrics.                                                                                                                                                                                 
+
+> Method Publication Pr@0.5 Pr@0.6 Pr@0.7 Pr@0.8 Pr@0.9 gIoU mIoU
+> LSCM [59] ECCV’20 31.54 20.41 9.51 5.29 0.84 61.27 35.54 CMPC+ [60] TPAMI’21 49.19 28.31 15.31 8.12 2.55 66.53 43.65 LAVT [34] CVPR’22 51.84 30.27 17.34 9.52 2.09 71.86 47.40 CARIS [36] ACM MM’23 45.40 27.19 15.08 8.87 1.98 69.74 42.66 RIS-DMMI [61] ICCV’23 63.89 44.30 19.81 6.49 1.00 68.58 52.15 CrossVLT [62] TMM’23 71.16 58.28 34.51 16.35 5.06 77.44 58.84 EVF-SAM [43] arXiv’24 35.17 22.34 9.36 2.86 0.39 55.51 36.64 CroBIM [3] arXiv’24 75.89 61.42 34.07 12.99 2.75 72.33 59.77 LGCE [1] TGRS’24 73.75 61.14 39.46 16.02 5.45 76.81 59.96 DANet [11] ACM MM’24 76.61 64.59 42.72 18.29 8.04 79.53 62.14 RMSIN [2] CVPR’24 79.20 65.99 42.98 16.51 3.25 75.72 62.58 FIANet [4] TGRS’24 84.09 77.05 61.86 33.41 7.10 78.32 68.67 SBANet [14] ISPRS’25 77.02 –44.15 –8.97 79.86 62.73 BTDNet [15] arXiv’25 83.60 75.07 62.69 34.40 9.14 80.57 67.95 SegEarth-R1 [21] arXiv’25 86.30 79.53 69.57 48.87 10.73 79.00 72.45 RSRefSeg-2 [20] TGRS’25 88.22 82.99 73.97 60.92 34.40 81.24 77.39 CroBIM-U [17] TGRS’26 76.68 62.54 34.81 13.50 3.26 73.81 60.08 MCD-Net [18] TGRS’26 85.64 79.75 69.68 50.41 14.42 81.23 72.68 SegEarth-R2 [22] CVPR’26 ––––––74.80 RS2-SAM 2 [23] AAAI’26 84.31 79.42 70.89 55.70 21.19 80.87 73.90
+> Ours –87.34 83.28 75.84 62.85 35.67 84.10 77.96
+
+C. Accuracy Performance 
+
+We compare DiCoR with representative state-of-the-art methods from both JFS and DPS paradigms. The recent JFS methods mainly include FIANet [4], LSCF [13], SBANet [14], BTDNet [15], CroBIM-U [17], and MCD-Net [18], while the DPS methods include the RSRefSeg series [19], [20], SegEarth series [21], [22], and RS2-SAM 2 [23]. 
+
+Results on RefSegRS. As shown in Table I, DiCoR achieves the best overall performance on RefSegRS. Com-pared with the recent JFS method MCD-Net, DiCoR improves gIoU and mIoU by 2.87% and 5.28%, respectively, validating the effectiveness of the proposed decoupled optimization strat-egy. The gain is particularly pronounced on Pr@0.9, where DiCoR exceeds MCD-Net by 21.25%. This improvement is mainly attributed to the contour recalibration module, which enhances high-quality mask prediction under strict IoU cri-teria. Compared with the DPS method RSRefSeg-2, which benefits from foundation model segmentation, DiCoR still improves gIoU and mIoU by 2.86% and 0.57%, respectively. Together with the inference-speed advantage discussed in Sec. IV-D, these results indicate a favorable balance between segmentation accuracy and computational efficiency. 
+
+Results on RISBench. The quantitative results on RIS-Bench are presented in Table II. DiCoR achieves the best gIoU and mIoU among all evaluated methods, demonstrating its robustness under more diverse remote sensing scenes and more complex referring expressions. Compared with Ref-SegRS and RRSIS-D, RISBench contains more heterogeneous spatial layouts and more fine-grained semantic descriptions, making both referent localization and boundary delineation more challenging. On the localization-oriented low-threshold metrics, DiCoR achieves the highest Pr@0.5 and Pr@0.6, reaching 77.94% and 74.36% respectively, indicating that DLG helps the model identify the referred target more reliably in complex scenes. Moreover, DiCoR surpasses LSCF by 2.66% on Pr@0.9, further validating the contribution of LCR to fine boundary recovery. These results show that the advantage of DiCoR remains consistent on a larger and more challenging benchmark. 
+
+Results on RRSIS-D. As reported in Table III, DiCoR achieves the best overall performance on RRSIS-D. In par-ticular, it obtains the highest gIoU and mIoU of 79.45% and 66.94% respectively. Compared with the recent JFS baseline CroBIM-U, DiCoR improves gIoU and mIoU by 2.75% and 1.87%, respectively. It also consistently outper-forms other strong JFS baselines, including FIANet, LSCF, SBANet, BTDNet, and MCD-Net, indicating that the proposed decoupled design generalizes well to larger scale RRSIS data. Compared with DPS methods, DiCoR achieves higher gIoU and mIoU than RSRefSeg-1, SegEarth-R1, and RS2-SAM 2, which further reflects its advantage in producing high-quality segmentation masks. 
+
+Visualization analysis. Figs. 8, 9, and 10 present qualitative results on RefSegRS, RISBench, and RRSIS-D respectively. On RefSegRS, the referring expressions are relatively simple, whereas the referred targets often occupy large and spatially extended regions, such as roads, impervious surfaces, and sidewalks. In these cases, DiCoR produces more complete masks and more coherent contours than both FIANet and the coarse prediction, indicating that the recalibration process can improve structural consistency while preserving reliable coarse localization. On RISBench and RRSIS-D, the scenes are more complex and the expressions usually involve more detailed spatial relations and semantic cues, making both target discrimination and boundary delineation more challenging. DiCoR shows clearer advantages in focusing on the target referent and suppressing irrelevant responses from surrounding regions. Notably, the ∆Z heatmaps are concentrated around uncertain regions, highlighting the localized residual correc-tion performed by LCR. This contour-aware recalibration is particularly beneficial for small remote sensing objects, such as vehicles and ships, where slight boundary deviations can substantially degrade high-threshold precision. 
+
+D. Efficiency Performance 
+
+To further evaluate the computational practicality of DiCoR, Table IV compares it with representative JFS and DPS meth-ods. Following the common practice of evaluating efficient 9road road light-duty vehicle light-duty vehicle impervious surface impervious surface sidewalk sidewalk impervious     
+
+> surface
+> impervious
+> surface
+> Input Image Referring Ground Truth FIANet Refiner Delta Coarse Mask Final Mask
+
+Fig. 8: Qualitative results of the proposed DiCoR on the RefSegRS dataset. architectures by jointly considering predictive accuracy and measured inference speed or latency [65], [66], we define an accuracy-efficiency index (AEI) to summarize the trade-off among segmentation accuracy, inference throughput, and computational complexity: 
+
+AEI i = mIoU i · FPS i
+
+max k∈M FPS k
+
+·
+
+r min k∈M GFLOPs k
+
+GFLOPs i
+
+,
+
+(20) where M denotes the set of compared methods. A larger AEI indicates a more favorable overall trade-off. Compared with existing JFS methods, the main advan-tage of DiCoR lies in its stronger segmentation accuracy. DiCoR achieves the highest mIoU among all JFS methods, outperforming FIANet and MCD-Net by 9.29% and 5.28% respectively. At the same time, this accuracy gain is obtained without a substantial efficiency sacrifice: DiCoR maintains a model size comparable to FIANet and an inference speed close to LAVT, while achieving the highest AEI within the JFS group. These results indicate that the proposed decoupled design improves segmentation quality while preserving the practical efficiency of the JFS paradigm. Compared with DPS methods, DiCoR exhibits a clear efficiency advantage. DPS methods typically rely on large vision-language encoders or foundation segmenters, which introduce considerable computational overhead and slow down inference. In contrast, DiCoR retains an efficient JFS inference pipeline and incorporates only lightweight auxiliary modules. As a result, DiCoR achieves the highest AEI among all com-pared methods, demonstrating a favorable balance between segmentation accuracy and inference efficiency. 
+
+E. Ablation Study 
+
+We conduct ablation experiments on the RISBench dataset to examine the contributions of the proposed components. To provide a clear and intuitive analysis of how each module affects performance, all ablation variants are constructed by modifying the same baseline model with a single component added or replaced at a time. Unless otherwise specified, all experiments are performed under the same training protocol. 
+
+1) Overall component ablation. Table V presents the overall component ablation. Different feature aggregation set-tings are first compared without the decoupled modules. The variant without multi-scale aggregation (w/o MSA) directly uses the original hierarchical features for decoding and yields 10 
+
+TABLE II: Comparison of segmentation performance on the RISBench dataset across various evaluation metrics. 
+
+Method Publication Pr@0.5 Pr@0.6 Pr@0.7 Pr@0.8 Pr@0.9 gIoU mIoU 
+
+BRINet [29] CVPR’20 52.87 45.39 38.64 30.79 11.86 48.73 42.91 LSCM [59] ECCV’20 55.26 47.14 40.10 33.29 13.91 50.08 43.69 CMPC [63] CVPR’20 55.17 47.84 40.28 32.87 14.55 50.24 43.82 CMPC+ [60] TPAMI’21 58.02 49.00 42.53 35.26 17.88 53.98 46.73 CRIS [37] CVPR’22 63.67 55.73 44.42 28.80 13.27 69.11 55.18 LAVT [34] CVPR’22 69.40 63.66 56.10 44.95 25.21 74.15 61.93 ETRIS [41] ICCV’23 60.98 51.88 39.87 24.49 11.18 67.61 53.06 CrossVLT [62] TMM’23 70.62 65.05 57.40 45.80 26.10 74.33 62.84 RIS-DMMI [61] ICCV’23 72.05 66.48 59.07 47.16 26.57 74.82 63.93 CARIS [36] ACM MM’23 73.94 68.93 62.08 50.31 29.08 75.10 65.79 robust-ref-seg [64] TIP’24 69.15 63.24 55.33 43.27 24.20 74.23 61.25 LGCE [1] TGRS’24 69.64 64.07 56.26 44.92 25.74 73.87 62.13 RMSIN [2] CVPR’24 71.01 65.46 57.69 45.50 25.92 74.09 63.07 CroBIM-Swin [3] arXiv’24 75.75 70.34 63.12 51.12 28.45 73.61 67.32 CroBIM-ConvNeXt [3] arXiv’24 77.55 72.83 66.38 55.93 34.07 73.04 69.33 LSCF [13] TGRS’25 76.08 71.29 64.96 55.13 36.73 74.88 68.53 CSINet [16] arXiv’25 77.12 72.40 66.04 55.86 35.34 75.36 69.25 MCD-Net [18] TGRS’26 76.81 71.92 64.75 53.94 32.50 74.86 68.47 CroBIM-U [17] TGRS’26 77.73 73.40 67.05 56.85 35.52 73.04 69.62 Ours – 77.94 74.36 68.66 59.48 39.39 75.51 70.30 Input Image Referring Ground Truth FIANet Refiner Delta Coarse Mask Final Mask 
+
+The Ship positioned in the 
+
+top-middle area. 
+
+The Ship positioned in the 
+
+top-middle area. 
+
+The train station is located in the bottom right area of the image. The train station is located in the bottom right area of the image. 
+
+The small vehicle parked on the top left corner of the image. The small vehicle parked on the top left corner of the image. 
+
+The dam, 
+
+stretches from the mid-left to the bottom-right part of the image. 
+
+The dam, 
+
+stretches from the mid-left to the bottom-right part of the image. 
+
+The roundabout located in the right of the image is the bottom-
+
+most of the two 
+
+roundabouts. The roundabout located in the right of the image is the bottom-
+
+most of the two 
+
+roundabouts. 
+
+Fig. 9: Qualitative results of the proposed DiCoR on the RISBench dataset. the weakest performance, indicating that explicit interaction is necessary for accurate referring segmentation. TMEM [4] improves the results by introducing cross-scale feature in-teraction, while the adopted MSA provides a stronger basis for referring segmentation, confirming the importance of bidi-rectional aggregation. Built on this aggregation design, DLG and LCR bring complementary improvements: DLG enhances referent localization by resolving candidate-level ambiguity, whereas LCR improves high-quality mask prediction by re-calibrating residual contour errors. Their combination achieves 11 
+
+TABLE III: Comparison of segmentation performance on the RRSIS-D dataset across various evaluation metrics. 
+
+Method Publication Pr@0.5 Pr@0.6 Pr@0.7 Pr@0.8 Pr@0.9 gIoU mIoU 
+
+BRINet [29] CVPR’20 56.90 48.77 39.12 27.03 8.73 69.88 49.65 CMPC+ [60] TPAMI’21 57.65 47.51 36.97 24.33 7.78 68.64 50.24 LAVT [34] CVPR’22 69.52 63.63 53.29 41.60 24.94 77.19 61.04 RIS-DMMI [61] ICCV’23 68.74 60.96 50.33 38.38 21.63 76.20 60.12 CrossVLT [62] TMM’23 70.38 63.83 52.86 42.11 25.02 76.32 61.00 LGCE [1] TGRS’24 67.65 61.53 51.45 39.62 23.33 76.34 59.37 EVF-SAM [43] arXiv’24 72.16 66.50 56.59 43.92 25.48 76.77 62.75 FIANet [4] TGRS’24 74.46 66.96 56.31 42.83 24.13 76.91 64.01 RMSIN [2] CVPR’24 74.26 67.25 55.93 42.55 24.53 77.79 64.20 CroBIM [3] arXiv’24 74.58 67.57 55.59 41.63 23.56 75.99 64.46 CADFormer [12] JSTARS’25 74.20 67.62 55.59 42.37 23.59 77.26 63.77 LSCF [13] TGRS’25 74.30 67.69 56.32 43.08 25.67 77.42 64.25 RSRefSeg-1 [19] IGARSS’25 74.49 68.33 58.73 48.50 30.80 77.24 64.67 SBANet [14] ISPRS’25 75.91 – 57.05 – 25.38 79.22 65.52 BTDNet [15] arXiv’25 75.93 69.92 59.29 46.25 27.46 79.23 66.04 SegEarth-R1 [21] arXiv’25 76.96 – – – – 78.01 66.40 MCD-Net [18] TGRS’26 75.58 68.74 57.51 44.15 25.97 78.14 65.05 CroBIM-U [17] TGRS’26 75.60 67.68 56.47 42.57 24.16 76.70 65.07 RS2-SAM 2 [23] AAAI’26 77.56 72.34 61.76 47.92 29.73 78.99 66.72 
+
+Ours - 78.23 71.78 64.01 48.57 30.16 79.45 66.94 Input Image Referring Ground Truth FIANet Refiner Delta Coarse Mask Final Mask 
+
+A airport in the middle. A airport in the middle. A small bridge. A small bridge. The ground track field on the top. The ground track field on the top. 
+
+The vehicle is on the upper left of the gray expressway toll 
+
+station in the 
+
+middle. The vehicle is on the upper left of the gray expressway toll 
+
+station in the 
+
+middle. 
+
+The slender gray 
+
+expressway toll station in the middle. 
+
+The slender gray 
+
+expressway toll station in the middle. 
+
+Input Image Referring Ground Truth FIANet Refiner Delta Coarse Mask Final Mask 
+
+A airport in the middle. A small bridge. The ground track field on the top. 
+
+The vehicle is on the upper left of the gray expressway toll 
+
+station in the 
+
+middle. 
+
+The slender gray 
+
+expressway toll station in the middle. 
+
+Fig. 10: Qualitative results of the proposed DiCoR on the RRSIS-D dataset. the best overall performance in terms of Pr@0.5, mIoU, and gIoU, with Pr@0.9 remaining comparable to the LCR-only variant. These results validate the effectiveness of the proposed decoupled disambiguation and recalibration design. 
+
+2) Ablation of DLG components and configurations. 
+
+As shown in Table VI, we first evaluate whether a learned 12 
+
+TABLE IV: Efficiency comparison with typical JFS and DPS methods on RefSegRS dataset.                                                                         
+
+> Paradigm Method Backbone Segmenter Params (M) GFLOPs FPS mIoU (%) AEI
+> JFS LAVT [34] Swin-B + BERT Conv. decoder 227.74 198.82 28.65 47.40 47.40 RMSIN [2] Swin-B + BERT Conv. decoder 240.04 200.33 17.50 62.58 38.08 FIANet [4] Swin-B + BERT Conv. decoder 256.17 210.44 24.18 68.67 56.33 MCD-Net [18] Swin-B + BERT Conv. decoder 354.97 482.73 4.22 72.68 6.87 DPS RSRefSeg-1 [19] CLIP SAM 984.28 1610.75 6.62 72.45 5.88 RSRefSeg-2 [20] CLIP SAM 1447.13 2563.51 5.40 77.39 4.06 SegEarth-R1 [21] Swin-B + Phi-1.5B Mask2Former 1589.29 2750.90 5.27 72.45 3.58 SegEarth-R2 [22] Swin-B/SigLIP + Phi-2B Mask2Former 3325.06 6018.13 2.41 74.80 1.14
+> JFS Ours Swin-B + BERT Conv. decoder 251.49 248.32 25.54 77.96 62.19
+> All methods are evaluated based on their publicly available implementations on a NVIDIA RTX 4090 GPU. The image input resolution and maximum text length are kept identical for fair comparison.
+
+TABLE V: Ablation of feature aggregation and decoupled modules on RISBench.                                        
+
+> Aggregation Modules Performance (%) DLG LCR Pr@0.5 Pr@0.9 mIoU gIoU
+> w/o MSA ––74.44 30.09 66.45 72.92 TMEM [4] ––75.53 31.75 67.48 74.39 MSA ––76.30 32.68 68.18 74.86
+> ✓–77.55 32.89 69.15 75.12 –✓76.52 39.45 69.56 75.30
+> ✓✓77.94 39.39 70.30 75.51
+
+response map is necessary for candidate discovery. Removing the response estimator (w/o Resp) yields inferior performance compared with adding an explicit response estimation network (w/ Resp), which improves mIoU from 67.63 to 69.15. This indicates that although the fused features already contain rich semantic information, they cannot directly reflect discrimina-tive hotspot regions for the referred target. We further study the number of generated candidates and the candidate ranking strategy. Among the tested settings, 
+
+K = 5 achieves the best results across all four metrics. Reducing the number to three may omit plausible referent regions, whereas increasing it to seven slightly degrades performance, suggesting that excessive candidates introduce additional ambiguity without improving target coverage. For candidate selection, choosing the candidate solely according to its response strength (w/o Rank) produces the weakest results, indicating that response map alone is insufficient for reliable target discrimination. The visual-only ranker (Visual-Only), which performs ranking solely based on visual features, improves the performance by suppressing visually inconsistent candidates and enhancing discrimination among candidate regions. In contrast, the visual-text ranker (Visual-Text) further incorporates textual guidance by re-weighting textual represen-tations according to visual features, enabling more effective cross-modal candidate ranking and achieving the best overall performance. 
+
+3) Ablation of DLG spatial guidance injection. Figure 11 evaluates spatial guidance injection across different aggrega-tion stages and feature levels. Injecting guidance before MSA consistently achieves the strongest performance, indicating that the recalibrated features benefit from the complete multi-scale interaction process. By contrast, injecting guidance within MSA performs worse than applying it either before or after 
+
+TABLE VI: Ablation of DLG components and configurations.                                      
+
+> Component Setting Pr@0.5 Pr@0.9 gIoU mIoU
+> Response Estimator w/o Resp 75.83 32.12 74.52 67.63 w/ Resp 77.55 32.89 75.12 69.15
+> Candidate Generator K=3 76.89 32.40 74.83 68.86 K=5 77.55 32.89 75.12 69.15
+> K=7 77.34 32.41 74.91 69.10 Candidate Ranker w/o Rank 75.34 31.15 73.96 67.25 Visual-Only 77.00 32.97 74.87 67.90 Visual-Text 77.55 32.89 75.12 69.15
+
+MSA, suggesting that spatial modulation between successive aggregation operations disrupts cross-scale feature interaction. Across all three injection stages, guiding X3 yields the best results because its higher-level representation provides more reliable referent semantics than the relatively low-level X2.Jointly guiding X2 and X3 provides no additional benefit and is particularly detrimental when applied within MSA, indicating that repeated modulation may introduce redundant or conflicting spatial cues. 
+
+4) Ablation of DLG supervision strategies. Table VII evaluates different supervision strategies for the DLG response estimator. Supervising the entire target mask with BCE ( LM )performs suboptimally because it encourages the response estimator to reconstruct the target extent, whereas its intended role is to identify compact and discriminative evidence for candidate discovery. Replacing full-mask supervision with a compact positive region centered on the referent ( LP ) im-proves all four metrics, confirming that localized response supervision is better aligned with this objective. Adding clean-background suppression ( LB) produces only marginal and mixed changes, indicating that separating the referent from ordinary background is insufficient to resolve ambiguity among visually similar instances. Incorporating SAM3-mined hard negatives ( LH) yields consistent improvements across all metrics, which demonstrate that instance-level distractor supervision promotes more effective response estimation and provides more reliable candidates for downstream ranking. 
+
+5) Ablation of LCR training data construction. Figure 12 examines the effects of checkpoint sampling, localization filtering, and morphological perturbation on LCR pretraining. Using coarse predictions from a single final checkpoint pro-vides limited recalibration performance, since LCR is exposed to a narrow distribution of prediction errors. Introducing fil-tering consistently improves all checkpoint settings, especially 13 X2 X3 X2 + X3       
+
+> Pre In Post
+> 76.96 77.55 77.46 73.82 74.56 72.05 75.26 76.21 74.93 73.0 74.0 75.0 76.0 77.0
+
+(a) Pr@0.5 X2 X3 X2 + X3        
+
+> Pre In Post
+> 32.72 32.89 32.82 31.15 30.89 30.67 31.27 31.96 31.10 31.0 31.5 32.0 32.5
+
+(b) Pr@0.9 X2 X3 X2 + X3       
+
+> Pre In Post
+> 74.83 75.12 74.80 73.12 73.20 72.66 74.23 74.75 73.89 73.0 73.5 74.0 74.5 75.0
+
+(c) gIoU X2 X3 X2 + X3        
+
+> Pre In Post
+> 68.38 69.15 68.96 65.89 66.24 64.32 67.21 67.83 66.98 65.0 66.0 67.0 68.0 69.0
+
+(d) mIoU 
+
+Fig. 11: Ablation of spatial guidance injection across aggrega-tion stages and feature levels. Pre, In, and Post denote injec-tion before, within, and after the MSA module respectively. Columns indicate the guided feature levels. Higher values indicate better performance. TABLE VII: Ablation of response supervision in DLG.                                    
+
+> LMLPLBLHPr@0.5 Pr@0.9 gIoU mIoU
+> ✓–––75.20 31.09 74.12 67.26 –✓––76.34 32.08 74.58 68.21 –✓✓–76.52 31.95 74.44 68.35 –✓✓✓77.55 32.89 75.12 69.15
+
+on Pr@0.9, indicating that poorly localized coarse priors should be excluded from residual recalibration training. Sparse and dense sampling of multiple training stages progressively broaden the distribution of contour deviations and prediction qualities. Morphological perturbation further enriches bound-ary variations by simulating local expansion and shrinkage, yielding the strongest overall results under dense checkpoint sampling. 
+
+6) Ablation of LCR localized contour supervision. Ta-ble VIII evaluates different supervision regions and weighting strategies for LCR. Specifically, Dense applies uniform recal-ibration supervision over the entire image, Local-U restricts supervision to localized contour regions with uniform weights, and Local-W further introduces region-dependent weights within the localized supervision regions. Dense supervision provides a reasonable baseline but treats all pixels equally, which is not fully consistent with the goal of residual boundary correction. In contrast, Local-U improves performance by concentrating supervision on contour related regions, indicat-ing that recalibration benefits more from boundary focused optimization than from dense uniform supervision. Local-W further improves the results by assigning larger weights to boundary-sensitive regions, which encourages the model to focus on more informative correction areas and yields the best overall performance. R F FM R F FM R F FM   
+
+> 020 40 60 80
+> Precision (%)
+> Single Sparse Dense
+> 67 69 71 73 75
+> IoU (%)
+> Pr@0.5 Pr@0.9 Pr@0.6 gIoU Pr@0.7 mIoU Pr@0.8
+
+Fig. 12: Ablation of LCR training data construction. Single denotes coarse predictions from the final checkpoint, whereas Sparse and Dense denote predictions sampled at increasing densities from multiple training checkpoints. R, F, and FM denote raw predictions, predictions filtered by localization quality, and filtered predictions with morphological perturba-tion respectively. 
+
+TABLE VIII: Ablation of localized contour supervision for LCR.                               
+
+> Lrce Lrdice Pr@0.5 Pr@0.9 gIoU mIoU
+> Dense –76.08 35.47 74.78 68.44 Local-U –76.45 37.72 74.91 68.99 Local-U Local-U 76.52 38.60 75.27 69.15 Local-W –76.43 38.06 75.18 69.23 Local-W Local-W 76.52 39.45 75.30 69.56
+
+F. Limitations 
+
+Although the proposed framework improves both referent localization and mask refinement, it still has several limita-tions. First, the localization process still depends on the quality of the initial spatial response map. When the response estima-tor fails to activate around the true referent, the subsequent candidate generator and ranker have limited ability to recover the correct target. This indicates that spatial prior injection has a performance ceiling, since it does not directly optimize early feature extraction or cross-modal fusion. Future work may therefore explore more integrated localization mechanisms, such as object-level cross-modal reasoning and localization feature learning from earlier network stages. Second, the contour recalibration module is more effective for small tar-gets, whose coarse masks often suffer from local omissions or boundary erosion. For large targets, however, boundary errors usually involve longer contours and broader structural inconsistencies, which are difficult to correct through local residual recalibration alone. Future recalibration strategies may therefore benefit from stronger global boundary modeling while preserving the efficiency of residual contour correction. V. C ONCLUSION 
+
+In this paper, we presented DiCoR, a decoupled referent disambiguation and contour recalibration framework for ef-ficient referring remote sensing image segmentation. DiCoR 14 
+
+addresses the accuracy-efficiency dilemma between joint fu-sion segmentation and decoupled prompt segmentation by preserving an efficient inference pipeline while introducing dedicated mechanisms for improving grounding reliability and contour recovery. Specifically, the proposed disambiguation-aware localization guidance strategy organizes response-based candidate regions and ranks them with adaptive linguistic features, enabling the model to identify the referred tar-get under SAM-assisted distractor supervision. In addition, the lightweight contour recalibration module learns residual boundary corrections from diverse coarse predictions under localized contour supervision, thereby improving mask delin-eation without relying on a foundation model during inference. Extensive experiments on RefSegRS, RRSIS-D, and RISBench demonstrate that DiCoR consistently improves segmentation accuracy and achieves a favorable accuracy-efficiency trade-off compared with existing RRSIS methods. Future work will further explore more robust early-stage localization and global boundary modeling to handle more challenging referential ambiguity and large-scale target structures. REFERENCES [1] Z. Yuan, L. Mou, Y. Hua, and X. X. Zhu, “Rrsis: Referring remote sensing image segmentation,” IEEE Transactions on Geoscience and Remote Sensing , vol. 62, pp. 1–12, 2024. [2] S. Liu, Y. Ma, X. Zhang, H. Wang, J. Ji, X. Sun, and R. Ji, “Rotated multi-scale interaction network for referring remote sensing image seg-mentation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 26 658–26 668. [3] Z. Dong, Y. Sun, T. Liu, W. Zuo, and Y. Gu, “Cross-modal bidirectional interaction model for referring remote sensing image segmentation,” 
+
+arXiv preprint arXiv:2410.08613 , 2024. [4] S. Lei, X. Xiao, T. Zhang, H.-C. Li, Z. Shi, and Q. Zhu, “Exploring fine-grained image-text alignment for referring remote sensing image segmentation,” IEEE Transactions on Geoscience and Remote Sensing ,vol. 63, pp. 1–11, 2025. [5] Z. Yang, H. Yao, L. Tian, X. Zhao, Q. Li, and Q. Wang, “A large-scale referring remote sensing image segmentation dataset and benchmark,” 
+
+arXiv preprint arXiv:2506.03583 , 2025. [6] R. Ou, Y. Hu, F. Zhang, J. Chen, and Y. Liu, “Geopix: A multimodal large language model for pixel-level image understanding in remote sensing,” IEEE Geoscience and Remote Sensing Magazine , 2025. [7] X. Lu, L. Sun, L. Li, L. Jiao, Y. Yang, Z. Huang, J. Chai, X. Liu, F. Liu, W. Ma et al. , “Rrsecs: Referring remote sensing expression com-prehension and segmentation,” IEEE Geoscience and Remote Sensing Magazine , 2025. [8] J. Sosa, D. Rukhovich, A. Kacem, and D. Aouada, “Enabling training-free text-based remote sensing segmentation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2026, pp. 8041–8052. [9] C. Broni-Bediako, J. Xia, and N. Yokoya, “Real-time semantic segmen-tation: A brief survey and comparative study in remote sensing,” IEEE Geoscience and Remote Sensing Magazine , vol. 11, no. 4, pp. 94–124, 2023. [10] S. Liu, J. Cheng, L. Liang, H. Bai, and W. Dang, “Light-weight semantic segmentation network for uav remote sensing images,” IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing ,vol. 14, pp. 8287–8296, 2021. [11] Y. Pan, R. Sun, Y. Wang, T. Zhang, and Y. Zhang, “Rethinking the implicit optimization paradigm with dual alignments for referring remote sensing image segmentation,” in Proceedings of the 32nd ACM International Conference on Multimedia , 2024, pp. 2031–2040. [12] M. Liu, X. Jiang, and X. Zhang, “Cadformer: Fine-grained cross-modal alignment and decoding transformer for referring remote sensing image segmentation,” IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing , 2025. [13] Q. Ma, L. Li, X. Lu, L. Jiao, F. Liu, W. Ma, X. Liu, and L. Sun, “Lscf: Long-term semantic-guidance convformer for referring remote sensing image segmentation,” IEEE Transactions on Geoscience and Remote Sensing , 2025. [14] K. Li, G. Vosselman, and M. Y. Yang, “Scale-wise bidirectional align-ment network for referring remote sensing image segmentation,” ISPRS Journal of Photogrammetry and Remote Sensing , vol. 226, pp. 350–363, 2025. [15] T. Zhang, Z. Wen, B. Kong, K. Liu, Y. Zhang, P. Zhuang, and J. Li, “Referring remote sensing image segmentation via bidirectional alignment guided joint prediction,” arXiv preprint arXiv:2502.08486 ,2025. [16] J. Yang, L. Zhang, and H. Lu, “Referring remote sensing image segmen-tation with cross-view semantics interaction network,” arXiv preprint arXiv:2508.01331 , 2025. [17] Y. Sun, Z. Dong, H. Jiang, Y. Gu, and T. Liu, “Crobim-u: Uncertainty-driven referring remote sensing image segmentation,” IEEE Transactions on Geoscience and Remote Sensing , 2026. [18] J. Zhang, L. Li, L. Jiao, X. Liu, F. Liu, W. Ma, and S. Yang, “A multiscale vision–text collaborative dual encoder for referring rs image segmentation,” IEEE Transactions on Geoscience and Remote Sensing ,vol. 64, pp. 1–15, 2026. [19] K. Chen, J. Zhang, C. Liu, Z. Zou, and Z. Shi, “Rsrefseg: Referring remote sensing image segmentation with foundation models,” in IGARSS 2025-2025 IEEE International Geoscience and Remote Sensing Sympo-sium . IEEE, 2025, pp. 1070–1074. [20] K. Chen, C. Liu, B. Chen, J. Zhang, Z. Zou, and Z. Shi, “Rsrefseg 2: decoupling referring remote sensing image segmentation with foundation models,” arXiv preprint arXiv:2507.06231 , 2025. [21] K. Li, Z. Xin, L. Pang, C. Pang, Y. Deng, J. Yao, G. Xia, D. Meng, Z. Wang, and X. Cao, “Segearth-r1: Geospatial pixel reasoning via large language model,” arXiv preprint arXiv:2504.09644 , 2025. [22] Z. Xin, K. Li, L. Chen, W. Li, Y. Xiao, H. Qiao, W. Zhang, D. Meng, and X. Cao, “Segearth-r2: Towards comprehensive language-guided seg-mentation for remote sensing images,” arXiv preprint arXiv:2512.20013 ,2025. [23] F. Rong, M. Lan, Q. Zhang, and L. Zhang, “Customized sam 2 for referring remote sensing image segmentation,” arXiv e-prints , pp. arXiv– 2503, 2025. [24] N. Carion, L. Gustafson, Y.-T. Hu, S. Debnath, R. Hu, D. Suris, C. Ryali, K. V. Alwala, H. Khedr, A. Huang et al. , “Sam 3: Segment anything with concepts,” arXiv preprint arXiv:2511.16719 , 2025. [25] R. Hu, M. Rohrbach, and T. Darrell, “Segmentation from natural language expressions,” in European Conference on Computer Vision .Springer, 2016, pp. 108–124. [26] R. Li, K. Li, Y.-C. Kuo, M. Shu, X. Qi, X. Shen, and J. Jia, “Referring image segmentation via recurrent refinement networks,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition ,2018, pp. 5745–5753. [27] E. Margffoy-Tuay, J. C. Perez, E. Botero, and P. Arbelaez, “Dynamic multimodal instance segmentation guided by natural language queries,” in European Conference on Computer Vision . Springer, 2018, pp. 630– 645. [28] L. Ye, M. Rochan, Z. Liu, and Y. Wang, “Cross-modal self-attention network for referring image segmentation,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2019, pp. 10 502–10 511. [29] Z. Hu, G. Feng, J. Sun, L. Zhang, and H. Lu, “Bi-directional relationship inferring network for referring image segmentation,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,2020, pp. 4424–4433. [30] G. Luo, Y. Zhou, X. Sun, L. Cao, C. Wu, C. Deng, and R. Ji, “Multi-task collaborative network for joint referring expression comprehension and segmentation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2020, pp. 10 034–10 043. [31] G. Feng, Z. Hu, L. Zhang, and H. Lu, “Encoder fusion network with co-attention embedding for referring image segmentation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-tion , 2021, pp. 15 506–15 515. [32] H. Ding, C. Liu, S. Wang, and X. Jiang, “Vision-language transformer and query generation for referring segmentation,” in Proceedings of the IEEE/CVF international conference on computer vision , 2021, pp. 16 321–16 330. [33] N. Kim, D. Kim, C. Lan, W. Zeng, and S. Kwak, “Restr: Convolution-free referring image segmentation using transformers,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,2022, pp. 18 145–18 154. [34] Z. Yang, J. Wang, Y. Tang, K. Chen, H. Zhao, and P. H. Torr, “Lavt: Language-aware vision transformer for referring image segmentation,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2022, pp. 18 155–18 165. [35] S. Ouyang, H. Wang, S. Xie, Z. Niu, R. Tong, Y.-W. Chen, and L. Lin, “Slvit: Scale-wise language-guided vision transformer for referring image segmentation.” in IJCAI , vol. 8, 2023. [36] S.-A. Liu, Y. Zhang, Z. Qiu, H. Xie, Y. Zhang, and T. Yao, “Caris: Context-aware referring image segmentation,” in Proceedings of the 31st ACM International Conference on Multimedia , 2023, pp. 779–788. 15 
+
+[37] Z. Wang, Y. Lu, Q. Li, X. Tao, Y. Guo, M. Gong, and T. Liu, “Cris: Clip-driven referring image segmentation,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2022, pp. 11 686–11 695. [38] S. Kim, M. Kang, D. Kim, J. Park, and S. Kwak, “Extending clip’s image-text alignment to referring image segmentation,” in Proceedings of the 2024 Conference of the North American Chapter of the Asso-ciation for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers) , 2024, pp. 4611–4628. [39] C. Shang, Z. Song, H. Qiu, L. Wang, F. Meng, and H. Li, “Prompt-driven referring image segmentation with instance contrasting,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-tion , 2024, pp. 4124–4134. [40] X. Lai, Z. Tian, Y. Chen, Y. Li, Y. Yuan, S. Liu, and J. Jia, “LISA: Reasoning segmentation via large language model,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2024, pp. 9579–9589. [41] Z. Xu, Z. Chen, Y. Zhang, Y. Song, X. Wan, and G. Li, “Bridging vision and language encoders: Parameter-efficient tuning for referring image segmentation,” in Proceedings of the IEEE/CVF international conference on computer vision , 2023, pp. 17 503–17 512. [42] S. Yu, P. H. Seo, and J. Son, “Zero-shot referring image segmentation with global-local context features,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023, pp. 19 456–19 465. [43] Y. Zhang, T. Cheng, L. Zhu, R. Hu, L. Liu, H. Liu, L. Ran, X. Chen, W. Liu, and X. Wang, “Evf-sam: Early vision-language fusion for text-prompted segment anything model,” arXiv preprint arXiv:2406.20076 ,2024. [44] K. Ito, “Feature design for bridging SAM and CLIP toward referring image segmentation,” in Proceedings of the Winter Conference on Applications of Computer Vision , 2025, pp. 8357–8367. [45] T. Takikawa, D. Acuna, V. Jampani, and S. Fidler, “Gated-SCNN: Gated shape CNNs for semantic segmentation,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2019, pp. 5229–5238. [46] Y. Yuan, J. Xie, X. Chen, and J. Wang, “SegFix: Model-agnostic boundary refinement for segmentation,” in European Conference on Computer Vision . Springer, 2020, pp. 489–506. [47] B. Cheng, R. Girshick, P. Dollar, A. C. Berg, and A. Kirillov, “Boundary IoU: Improving object-centric image segmentation evaluation,” in Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2021, pp. 15 334–15 342. [48] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark et al. , “Learning transferable visual models from natural language supervision,” in International conference on machine learning . PmLR, 2021, pp. 8748–8763. [49] L. H. Li, P. Zhang, H. Zhang, J. Yang, C. Li, Y. Zhong, L. Wang, L. Yuan, L. Zhang, J.-N. Hwang, K.-W. Chang, and J. Gao, “Grounded language-image pre-training,” in Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition , 2022, pp. 10 965– 10 975. [50] S. Liu, Z. Zeng, T. Ren, F. Li, H. Zhang, J. Yang, Q. Jiang, C. Li, J. Yang, H. Su, J. Zhu, and L. Zhang, “Grounding DINO: Marrying DINO with grounded pre-training for open-set object detection,” in 
+
+European Conference on Computer Vision . Springer, 2024, pp. 38– 55. [51] F. Liu, D. Chen, Z. Guan, X. Zhou, J. Zhu, Q. Ye, L. Fu, and J. Zhou, “RemoteCLIP: A vision language foundation model for remote sensing,” 
+
+IEEE Transactions on Geoscience and Remote Sensing , vol. 62, pp. 1– 16, 2024. [52] A. Kirillov, E. Mintun, N. Ravi, H. Mao, C. Rolland, L. Gustafson, T. Xiao, S. Whitehead, A. C. Berg, W.-Y. Lo et al. , “Segment anything,” in Proceedings of the IEEE/CVF international conference on computer vision , 2023, pp. 4015–4026. [53] X. Zou, J. Yang, H. Zhang, F. Li, L. Li, J. Wang, L. Wang, J. Gao, and Y. J. Lee, “Segment everything everywhere all at once,” in Advances in Neural Information Processing Systems , vol. 36, 2023, pp. 19 769– 19 782. [54] L. Ke, M. Ye, M. Danelljan, Y. Liu, Y.-W. Tai, C.-K. Tang, and F. Yu, “Segment anything in high quality,” in Advances in Neural Information Processing Systems , vol. 36, 2023, pp. 29 914–29 934. [55] N. Ravi, V. Gabeur, Y.-T. Hu, R. Hu, C. Ryali, T. Ma, H. Khedr, R. Radle, C. Rolland, L. Gustafson, E. Mintun, J. Pan, K. V. Alwala, N. Carion, C.-Y. Wu, R. Girshick, P. Dollar, and C. Feichtenhofer, “SAM 2: Segment anything in images and videos,” in International Conference on Learning Representations , 2025. [56] S. Li, S. Wang, Z. Sun, and J. Xiao, “Semantic localization guiding seg-ment anything model for reference remote sensing image segmentation,” 
+
+arXiv preprint arXiv:2506.10503 , 2025. [57] Z. Liu, Y. Lin, Y. Cao, H. Hu, Y. Wei, Z. Zhang, S. Lin, and B. Guo, “Swin transformer: Hierarchical vision transformer using shifted windows,” in Proceedings of the IEEE/CVF international conference on computer vision , 2021, pp. 10 012–10 022. [58] J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova, “Bert: Pre-training of deep bidirectional transformers for language understanding,” in Pro-ceedings of the 2019 conference of the North American chapter of the association for computational linguistics: human language technologies, volume 1 (long and short papers) , 2019, pp. 4171–4186. [59] T. Hui, S. Liu, S. Huang, G. Li, S. Yu, F. Zhang, and J. Han, “Linguistic structure guided context modeling for referring image segmentation,” in 
+
+European conference on computer vision . Springer, 2020, pp. 59–75. [60] S. Liu, T. Hui, S. Huang, Y. Wei, B. Li, and G. Li, “Cross-modal pro-gressive comprehension for referring segmentation,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 44, no. 9, pp. 4761– 4775, 2021. [61] Y. Hu, Q. Wang, W. Shao, E. Xie, Z. Li, J. Han, and P. Luo, “Beyond one-to-one: Rethinking the referring image segmentation,” in 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 4067–4077. [62] Y. Cho, H. Yu, and S.-J. Kang, “Cross-aware early fusion with stage-divided vision and language transformer encoders for referring image segmentation,” IEEE Transactions on Multimedia , vol. 26, pp. 5823– 5833, 2023. [63] S. Huang, T. Hui, S. Liu, G. Li, Y. Wei, J. Han, L. Liu, and B. Li, “Refer-ring image segmentation via cross-modal progressive comprehension,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2020, pp. 10 488–10 497. [64] J. Wu, X. Li, X. Li, H. Ding, Y. Tong, and D. Tao, “Toward robust referring image segmentation,” IEEE Transactions on Image Processing ,vol. 33, pp. 1782–1794, 2024. [65] M. Tan, B. Chen, R. Pang, V. Vasudevan, M. Sandler, A. Howard, and Q. V. Le, “MnasNet: Platform-aware neural architecture search for mobile,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2019, pp. 2815–2823. [66] S. Lee, J. Choi, and H. J. Kim, “EfficientViM: Efficient vision mamba with hidden state mixer based state space duality,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2025, pp. 14 923–14 933.

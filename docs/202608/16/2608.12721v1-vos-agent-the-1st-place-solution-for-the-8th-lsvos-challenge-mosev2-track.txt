@@ -1,0 +1,332 @@
+Title: VOS-Agent: The 1st Place Solution for the 8th LSVOS Challenge (MOSEv2 Track)
+
+URL Source: https://arxiv.org/pdf/2608.12721v1
+
+Published Time: Fri, 14 Aug 2026 00:31:36 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# VOS-Agent: The 1st Place Solution for the 8th LSVOS Challenge (MOSEv2 Track) 
+
+Canyang Wu 1, Jinrong Zhang 1, Xusheng He 1, Ce Bian 1, Xianjing Han 2, and Jianlong Wu 1,3 
+
+> 1
+
+Harbin Institute of Technology, Shenzhen  
+
+> 2
+
+Nanyang Technological University  
+
+> 3
+
+Shenzhen Loop Area Institute Team: HITsz-Dragon 
+
+Abstract. Complex video object segmentation requires robust target propagation under severe occlusion, disappearance and reappearance. Although SAM3 provides strong promptable mask propagation, a uni-form inference path remains unreliable for tiny targets with insufficient visual evidence and semantic-dominated targets whose identities depend on explicit attributes. To this end, we present VOS-Agent, a collabo-rative framework that retains SAM3 as the shared dense segmentation module and conditionally activates specialized agents according to tar-get characteristics. A Target Perception and Routing Agent assigns each sequence to a regular, tiny, or semantic-dominated route. Tiny targets are supported by a Visual Tracking Agent through confidence-aware box prompts, while semantic-dominated targets are handled by an MLLM-based Semantic Agent through description-guided localization and candi-date verification. On the MOSEv2 test set, VOS-Agent achieves 69.82% on the official J & ˙F metric and ranks first in the MOSEv2 Track of the 8th LSVOS Challenge at ECCV 2026. 
+
+Keywords: Video object segmentation · Semi-Supervised · MOSEv2 
+
+## 1 Introduction 
+
+The 8th Large-scale Video Object Segmentation (LSVOS) Challenge aims to advance video object segmentation toward increasingly complex and realistic scenarios. The challenge includes three tracks: Complex Video Object Segmen-tation (MOSEv2), Text-based Referring Motion Expression Video Segmentation (MeViSv2-Text), and Audio-based Referring Motion Expression Video Segmen-tation (MeViSv2-Audio) [9]. The MOSEv2 track focuses on tracking and seg-menting objects under challenging real-world conditions [7], while the MeViSv2-Text and MeViSv2-Audio tracks investigate motion-expression-guided video seg-mentation using textual and spoken descriptions, respectively [6]. This paper focuses on the MOSEv2 track. Semi-supervised video object segmentation (VOS) aims to delineate one or more target objects throughout a video, given their segmentation masks in an ini-tial frame. Recent researches have substantially improved mask propagation and arXiv:2608.12721v1 [cs.CV] 13 Aug 2026 2 C. Wu et al . 
+
+> Fig. 1: Visualization of the three target types in the MOSEv2 dataset, highlighting the challenges posed by tiny targets and semantic-dominated targets in complex en-vironments. Tiny targets provide insufficient visual evidence for stable long-range cor-respondence while semantic-dominated targets remain difficult to indentity as mutiple nearby instances share similiar low-level appearance.
+
+long-term association on established VOS benchmarks [1,3,4,8,10,12]. However, high performance on videos containing salient and relatively isolated objects does not necessarily translate to robustness in unconstrained environments. MOSE and its more challenging successor, MOSEv2, were introduced to evaluate VOS under crowded scenes, severe occlusion, object disappearance and reappearance, small or camouflaged targets, adverse illumination and weather conditions, and visually similar distractors [5, 7]. A dominant line of VOS research improves temporal correspondence and memory construction. XMem organizes complementary memory stores for ef-ficient long-term propagation [4], while Cutie introduces object-level memory reading to reduce matching noise in distractor-rich scenes [3]. SAM2 provides a general framework for prompt-conditioned mask propagation [10], and sub-sequent methods improve its robustness through multi-path memory search or distractor-aware memory management [8, 12]. SAM3 further integrates concept-conditioned detection with video mask propagation, providing a strong founda-tion for promptable video segmentation [1]. Despite these advances, complex VOS still presents heterogeneous failure modes that cannot always be addressed by a single uniform inference path. In MOSEv2, as shown in Fig. 1, tiny objects may occupy only a few pixels and provide insufficient visual evidence for stable long-range correspondence. They are therefore particularly vulnerable to background clutter, occlusion, and accumulated localization errors. Other targets have sufficient spatial extent but remain difficult to identify because multiple nearby instances share similar low-level appearance. Their identities may instead depend on higher-level attributes such as text, logos, symbols, colors, or distinctive clothing. We refer to targets whose identity is primarily determined by such explicit semantic attributes as 
+
+semantic-dominated targets .Despite the strong promptable segmentation and temporal propagation ca-pabilities of foundation models such as SAM3, these two failure modes remain The 1st Solution for 8th LSVOS Challenge MOSEv2 Track 3
+
+difficult to resolve through a uniform inference path. For tiny targets, insuffi-cient visual evidence limits reliable localization and long-term propagation. For semantic-dominated targets, low-level visual correspondence alone is often in-adequate for preserving identity among similar instances. At their core, both failures arise from the same limitation: SAM3 propagates the target primarily through prompt-conditioned visual features and temporal memory. When the target representation is either severely under-resolved or visually ambiguous, the tracker lacks sufficient evidence to determine where the target is or which instance should be preserved. To this end, we propose VOS-Agent, a task-oriented collaborative multi-agent framework for complex video object segmentation. VOS-Agent comprises four components: a Target Perception and Routing Agent, a SAM3 Segmenta-tion Agent, a Visual Tracking Agent, and an MLLM-based Semantic Agent. The Perception and Routing Agent analyzes the initial target scale and semantic dis-tinctiveness and assigns each sequence to a regular, tiny, or semantic-dominated processing route. Regular targets are handled directly by the SAM3 Agent. For tiny targets, the Visual Tracking Agent uses the initial target crop as a visual template and collaborates with SAM3 through confidence-aware bounding-box prompts [2]. For semantic-dominated targets, the Semantic Agent constructs a discriminative description of the target, performs language-guided localiza-tion, and compares candidate regions before returning the selected prompt to SAM3 [13]. The specialized agents operate primarily at the target-localization and identity-reasoning level, whereas the SAM3 Agent converts their guidance into dense pixel-level masks. Overall, VOS-Agent provides a modular and training-free solution for com-plex video object segmentation. By routing heterogeneous targets to specialized processing paths, the framework preserves the strong pixel-level mask genera-tion capability of SAM3 while complementing it with visual-exemplar tracking for tiny targets and semantic identity reasoning for semantic-dominated targets. VOS-Agent achieves a J &F∗ score of 69.82% on the MOSEv2 test set and ranks 1st in the MOSEv2 Track of the 8th LSVOS Challenge at ECCV 2026. 
+
+## 2 Solution 
+
+2.1 Problem Formulation 
+
+Given a video sequence V = {It}Tt=1 and the ground-truth mask M1 of a target object in the first frame, semi-supervised video object segmentation aims to predict a sequence of masks { cMt}Tt=2 that consistently delineates the same target throughout the video. 
+
+2.2 Framework Overview 
+
+As illustrated in Fig. 2, VOS-Agent consists of four core components: a Target Perception and Routing Agent, a SAM3 Segmentation Agent, a Visual Track-ing Agent, and a Semantic Agent. Given the first frame and its target mask, 4 C. Wu et al .
+
+Fig. 2: Overview of the proposed VOS-Agent framework. Given the first frame and its target mask, the Target Perception and Routing Agent categorizes the target as regular, tiny, or semantic-dominated according to its spatial scale and semantic distinctiveness. Regular targets are processed directly by the SAM3 Agent. For tiny targets, the Visual Tracking Agent recursively estimates the target location and provides a corrective box prompt when its high-confidence prediction disagrees with SAM3. For semantic-dominated targets, the Semantic Agent performs description-guided localization and candidate verification to preserve target identity. 
+
+the Routing Agent assigns the target to one of three processing routes. Regular targets are processed directly by the SAM3 Agent. For tiny targets, the Visual Tracking Agent recursively estimates the target location and provides a correc-tive box prompt when its high-confidence prediction disagrees with SAM3. For semantic-dominated targets, the Semantic Agent performs description-guided localization and candidate verification to preserve target identity. 
+
+2.3 Target Perception and Routing Agent 
+
+The Routing Agent analyzes two complementary properties of the reference tar-get: its spatial scale and its semantic distinctiveness. 
+
+Spatial-scale analysis. Let A(M1) denote the foreground area of the initial target mask, and let A(I1) denote the image area. We define the normalized target area as 
+
+rarea = A(M1)
+
+A(I1) . (1) A target is categorized as tiny when rarea < τ area , where τarea is selected on the validation set. This criterion reflects the observation that very small targets The 1st Solution for 8th LSVOS Challenge MOSEv2 Track 5
+
+provide limited pixel-level evidence and are particularly susceptible to feature degradation, background interference, and accumulated localization errors. 
+
+Semantic-distinctiveness analysis. For a non-tiny target, an MLLM exam-ines the reference crop and its surrounding context and determines whether ex-plicit semantic attributes are required to preserve target identity. The decision is written as 
+
+ssem = Asem -cls (I1, M 1), ssem ∈ { 0, 1}. (2) Examples of discriminative attributes include printed text, logos, symbols, dis-tinctive colors, playing-card identities, or unusual clothing. A target is considered semantic-dominated when these attributes are necessary to distinguish it from nearby instances with similar low-level appearance. The final routing decision is 
+
+z =
+
+
+
+tiny , rarea < τ area ,
+
+semantic , rarea ≥ τarea and ssem = 1 ,
+
+regular , otherwise .
+
+(3) 
+
+2.4 SAM3 Segmentation Agent 
+
+The SAM3 Agent serves as the shared dense segmentation and temporal prop-agation module in all processing routes. [1]. The initial mask M1 initializes a target masklet and its conditioning memory. For each subsequent frame It, the tracker predicts the current target mask by combining the current-frame features with a memory bank constructed from the initial conditioning frame and confidently tracked previous frames. For regular targets, no additional prompt is introduced after initialization, and SAM3 performs standard memory-based mask propagation. For tiny and semantic-dominated targets, a specialized agent may provide a bounding-box prompt on a selected frame. The prompt is used to refine the current masklet and provide an updated conditioning reference for subsequent propagation. 
+
+2.5 Tracking Agent–SAM3 Agent Collaboration 
+
+Tiny targets often provide insufficient pixel-level evidence for stable long-term mask propagation. We therefore instantiate the Visual Tracking Agent with SU-Track, which performs recursive single-object tracking using visual templates and a local search region [2]. The tracker is initialized with the target box derived from the first-frame mask: 
+
+Btrk 1 = B(M1), Zsta = Crop( I1, B trk 1 ), (4) where Zsta denotes the static target template retained throughout the sequence. SUTrack additionally maintains a dynamic template Zdyn  
+
+> t−1
+
+, which is updated online according to its confidence-based template update strategy. 6 C. Wu et al .
+
+For each subsequent frame, a search region is cropped around the previous tracking result: 
+
+Xt = Crop  It, Expand  Btrk 
+
+> t−1
+
+ . (5) The Tracking Agent then estimates the current target box and its confidence from the static template, the dynamic template, and the current search region: 
+
+ Btrk  
+
+> t
+
+, c trk 
+
+> t
+
+ = Atrk 
+
+
+
+Zsta , Z dyn  
+
+> t−1
+
+, X t
+
+
+
+. (6) In parallel, the SAM3 Agent propagates its target masklet and produces a native mask M sam  
+
+> t
+
+. Let Bsam  
+
+> t
+
+denote the tight bounding box enclosing this mask. The agreement between the two agents is measured as 
+
+qtrk  
+
+> t
+
+= IoU  Bsam  
+
+> t
+
+, B trk 
+
+> t
+
+. (7) A low agreement does not by itself indicate that the tracking result is more reliable. We therefore accept the auxiliary tracking prompt only when the two predictions disagree and the tracking confidence is sufficiently high: 
+
+ηtrk  
+
+> t
+
+= I qtrk  
+
+> t
+
+< τ iou ∧ ctrk  
+
+> t
+
+≥ τconf 
+
+ . (8) When ηtrk  
+
+> t
+
+= 1 , the tracking box is introduced as an additional box prompt on frame t. SAM3 uses the accepted box prompt to refine the mask on the current frame and to update its conditioning state for subsequent mask propagation. If the tracking prompt is rejected, the native SAM3 prediction is retained. The two agents consequently maintain complementary temporal states. SU-Track recursively estimates target location from its previous tracking result and template state, whereas SAM3 propagates a dense mask through its video mem-ory. The Tracking Agent intervenes only when it provides a confident localization that is inconsistent with the native SAM3 prediction. SAM3 then converts the accepted coarse box into a dense mask and continues propagation from the cor-rected conditioning state. 
+
+2.6 Semantic Agent–SAM3 Agent Collaboration 
+
+Semantic-dominated targets are generally large enough to be segmented, but their identities may not be reliably preserved through low-level visual correspon-dence alone. This situation commonly occurs when several nearby instances share similar shapes, textures, or colors, while the designated target is distinguished by explicit attributes such as text, logos, symbols, or distinctive clothing. We therefore employ an MLLM-based Semantic Agent to complement SAM3 with identity-level reasoning. The Semantic Agent first generates a discriminative description from the initial target: 
+
+D = Adesc sem 
+
+ I1, M 1
+
+, (9) where D summarizes the visible attributes that distinguish the designated target from same-category distractors. The 1st Solution for 8th LSVOS Challenge MOSEv2 Track 7
+
+For each subsequent frame, the Semantic Agent performs language-guided localization using the target description: 
+
+Bsem  
+
+> t
+
+= Aloc sem 
+
+ It, D , (10) where Bsem  
+
+> t
+
+denotes the semantic localization result. In parallel, the SAM3 Agent propagates its target masklet and produces the native mask M sam  
+
+> t
+
+. Let Bsam 
+
+> t
+
+denote the tight bounding box enclosing this mask. Their spatial agreement is measured by 
+
+qsem  
+
+> t
+
+= IoU  Bsam  
+
+> t
+
+, B sem 
+
+> t
+
+. (11) When qsem  
+
+> t
+
+≥ τsem , the two agents provide consistent localization and the native SAM3 prediction is retained. When their agreement falls below τsem , the Semantic Agent performs explicit candidate verification. We first extract the reference target and the two current-frame candidates: 
+
+Rref 1 = Crop  I1, B(M1),Rsam  
+
+> t
+
+= Crop  It, B sam 
+
+> t
+
+,Rsem  
+
+> t
+
+= Crop  It, B sem 
+
+> t
+
+.
+
+(12) The Semantic Agent then compares both candidates with the initial target and its discriminative description: 
+
+ysem  
+
+> t
+
+= Ajudge sem 
+
+ Rref 1 , D, R sam  
+
+> t
+
+, R sem 
+
+> t
+
+ , ysem  
+
+> t
+
+∈ { sam , semantic }. (13) Here, ysem  
+
+> t
+
+= semantic indicates that the language-guided candidate is judged to be more consistent with the designated target than the native SAM3 candidate. The semantic correction is accepted only when the two agents disagree and the semantic candidate is selected: 
+
+ηsem  
+
+> t
+
+= I [qsem  
+
+> t
+
+< τ sem ∧ ysem  
+
+> t
+
+= semantic ] . (14) When ηsem  
+
+> t
+
+= 1 , the semantic bounding box is introduced as an additional conditioning prompt on frame t to refine the mask. The Semantic Agent intervenes only when the language-guided localization conflicts with the native SAM3 prediction and is judged to better preserve the original target identity. SAM3 then refines the accepted bounding-box prompt into a dense mask and updates its conditioning state for subsequent propagation. 
+
+## 3 Experiment 
+
+3.1 Dataset and Challenge Protocol 
+
+We evaluate VOS-Agent on the MOSEv2 track of the 8th Large-scale Video Ob-ject Segmentation Challenge at ECCV 2026. MOSEv2 contains 5,024 videos, 10,074 annotated objects from 200 categories, and more than 701,000 high-quality masks [7]. Compared with conventional VOS benchmarks, it contains 8 C. Wu et al .
+
+Table 1: Quantitative comparison of VOS-Agent with existing solutions on the MO-SEv2 test set. We report the overall J & ˙F, region similarity J , boundary accuracy ˙F,and performance on disappearance ( d) and reappearance ( r) scenarios.                                    
+
+> Participant J&˙FJ˙FJ&˙FdJ&˙FrFJ&F
+> HITsz-Dragon 69.82 68.21 71.43 79.12 34.87 73.76 70.99
+> mmm 66.20 64.79 67.60 81.57 26.88 69.74 67.26 kjeong 64.37 63.16 65.59 80.26 27.53 67.09 65.12
+
+Table 2: Ablation study on the MOSEv2 test set. The best result in each column is shown in bold. The subscripts d and r denote disappearance and reappearance scenar-ios, respectively.                                    
+
+> Method J&˙FJ˙FJ&˙FdJ&˙FrFJ&F
+> SAM3 Agent 62.49 61.38 63.59 78.93 25.31 65.41 63.40 Routing + Semantic Agent + SAM3 Agent 67.07 65.68 68.47 79.12 31.24 70.35 68.02
+> Full VOS-Agent 69.82 68.21 71.43 79.12 34.87 73.76 70.99
+
+more frequent disappearance and reappearance events, smaller and less conspic-uous targets, severe occlusion, crowded scenes, adverse weather, low-light envi-ronments, multi-shot sequences, camouflaged objects, non-physical targets, and cases that require external knowledge. The first-frame mask of each evaluated target is provided, while the masks of the remaining frames must be inferred. 
+
+3.2 Implementation Details 
+
+The SAM3 Agent is implemented using the official SAM3 model [1]. The Target Perception and Routing Agent is instantiated with Qwen3.5-397B-A17B [11]. The Visual Tracking Agent is instantiated with SUTrack [2] and receives the RGB crop enclosed by the first-frame mask as its visual exemplar. The Seman-tic Agent is instantiated with Qwen3.5-397B-A17B [11], which performs target-description generation, language-guided localization, and candidate comparison. 
+
+3.3 Main Results 
+
+Tab. 1 reports the final performance of VOS-Agent on the MOSEv2 test set. Our method ranks 1st in the challenge leaderboard and achieves 69.82 on the official J & ˙F metric. This result suggests that routing heterogeneous targets to specialized tracking and semantic reasoning agents, while retaining SAM3 as the shared mask-propagation module, is effective for handling tiny targets, semantic-dominated targets, and frequent disappearance–reappearance patterns. As shown in Fig. 3, the qualitative results further illustrate the behavior of VOS-Agent across different target types. For regular targets, SAM3 produces accurate and temporally consistent masks without additional intervention. For The 1st Solution for 8th LSVOS Challenge MOSEv2 Track 9 
+
+> Fig. 3: Qualitative visualization of segmentation results on the MOSEv2 test set. The visualizations demonstrate that the tracking and segmentation contours for both tiny and semantic-dominated targets remain clean, tight, and temporally stable, validating the efficacy of VOS-Agent.
+
+tiny targets, the Tracking Agent maintains stable localization despite the ex-tremely small object scale, allowing SAM3 to recover compact masks across suc-cessive frames. For semantic-dominated targets, the Semantic Agent preserves the identity of the designated instance among visually similar objects and pre-vents instance switching. These examples strongly demonstrate that the spe-cialized agents provide complementary guidance for challenging localization and identity disambiguation cases. 
+
+3.4 Ablation Study 
+
+To validate the effectiveness of each core agent, we evaluate three configurations directly on the official MOSEv2 test set: (1) use the SAM3 Agent alone and applies the same propagation path to all targets; (2) introduce the Target Per-ception and Routing Agent together with the Semantic Agent; (3) the complete VOS-Agent further activates the Visual Tracking Agent for tiny targets. 10 C. Wu et al .
+
+As shown in Tab. 2, introducing target routing and the Semantic Agent improves the primary J & ˙F score from 62.49 to 67.07, demonstrating the benefit of explicit identity reasoning for semantic-dominated targets. Adding the Visual Tracking Agent further raises the score to 69.82. Overall, VOS-Agent improves 
+
+J & ˙F by 7.33 points, indicating that the tracking and semantic agents provide complementary localization cues for heterogeneous target types. 
+
+## 4 Conclusion 
+
+In this report, we presented VOS-Agent, our solution to the MOSEv2 Track of the 8th LSVOS Challenge. VOS-Agent complements SAM3 with category-specific tracking and semantic reasoning for tiny and semantic-dominated tar-gets, improving robustness to target loss, identity ambiguity, and reappearance without fine-tuning the SAM3 backbone. Our method achieves 69.82% J & ˙F on the MOSEv2 test set and ranks first in the challenge, showing that specialized agent collaboration is an effective strategy for complex semi-supervised VOS. 
+
+## References 
+
+1. Carion, N., Gustafson, L., Hu, Y.T., Debnath, S., Hu, R., Coll-Vinent, D.S., Ryali, C., Alwala, K.V., Khedr, H., Huang, A., Lei, J., Ma, T., Guo, B., Kalla, A., Marks, M., Greer, J., Wang, M., Sun, P., Rädle, R., Afouras, T., Mavroudi, E., Xu, K., Wu, T.H., Zhou, Y., Momeni, L., HAZRA, R., Ding, S., Vaze, S., Porcher, F., Li, F., Li, S., Kamath, A., Cheng, H.K., Dollar, P., Ravi, N., Saenko, K., Zhang, P., Feichtenhofer, C.: SAM 3: Segment anything with concepts. In: ICLR (2026), 
+
+https://openreview.net/forum?id=r35clVtGzw 2, 5, 8 2. Chen, X., Kang, B., Geng, W., Zhu, J., Liu, Y., Wang, D., Lu, H.: Sutrack: Towards simple and unified single object tracking. In: AAAI. vol. 39, pp. 2239–2247 (2025) 3, 5, 8 3. Cheng, H.K., Oh, S.W., Price, B., Lee, J.Y., Schwing, A.: Putting the object back into video object segmentation. In: CVPR. pp. 3151–3161 (2024) 2 4. Cheng, H.K., Schwing, A.G.: Xmem: Long-term video object segmentation with an atkinson-shiffrin memory model. In: ECCV. pp. 640–658. Springer (2022) 2 5. Ding, H., Liu, C., He, S., Jiang, X., Torr, P.H., Bai, S.: Mose: A new dataset for video object segmentation in complex scenes. In: CVPR. pp. 20224–20234 (2023) 26. Ding, H., Liu, C., He, S., Ying, K., Jiang, X., Loy, C.C., Jiang, Y.G.: MeViS: A multi-modal dataset for referring motion expression video segmentation. IEEE TPAMI 47 (12), 11400–11416 (2025) 1 7. Ding, H., Ying, K., Liu, C., He, S., Jiang, X., Jiang, Y.G., Torr, P.H., Bai, S.: Mosev2: A more challenging dataset for video object segmentation in complex scenes. arXiv preprint arXiv:2508.05630 (2025) 1, 2, 7 8. Ding, S., Qian, R., Dong, X., Zhang, P., Zang, Y., Cao, Y., Guo, Y., Lin, D., Wang, J.: Sam2long: Enhancing sam 2 for long video segmentation with a training-free memory tree. In: ICCV. pp. 13614–13624 (2025) 2 9. LSVOS Challenge Organizers: The 8th large-scale video object segmentation chal-lenge. https://lsvos.github.io/ (2026), eCCV 2026 Challenge 1 The 1st Solution for 8th LSVOS Challenge MOSEv2 Track 11 10. Ravi, N., Gabeur, V., Hu, Y.T., Hu, R., Ryali, C., Ma, T., Khedr, H., Rädle, R., Rolland, C., Gustafson, L., et al.: Sam 2: Segment anything in images and videos. In: ICLR. vol. 2025, pp. 28085–28128 (2025) 2 11. Team, Q.: Qwen3. 5: Accelerating productivity with native multimodal agents, february 2026. URL https://qwen. ai/blog pp. 51991–52008 (2026) 8 12. Videnovic, J., Lukezic, A., Kristan, M.: A distractor-aware memory for visual ob-ject tracking with sam2. In: CVPR. pp. 24255–24264 (2025) 2 13. Zhang, Z., Ding, S., Dong, X., He, S., Lin, J., Tang, J., Zang, Y., Cao, Y., Lin, D., Wang, J.: Advancing complex video object segmentation via progressive concept construction. In: ICLR (2026), https://openreview.net/forum?id=hDM3YphhVx 
+
+3
