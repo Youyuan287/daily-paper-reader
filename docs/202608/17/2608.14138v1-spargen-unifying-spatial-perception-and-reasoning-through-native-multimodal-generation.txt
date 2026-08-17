@@ -1,0 +1,356 @@
+Title: SPARGen: Unifying Spatial Perception and Reasoning through Native Multimodal Generation
+
+URL Source: https://arxiv.org/pdf/2608.14138v1
+
+Published Time: Mon, 17 Aug 2026 00:39:14 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# SPARGen: Unifying Spatial Perception and Reasoning through Native Multimodal Generation 
+
+## Jinsheng Quan 1,2 , Jianhua Li 2, Siyi Xie 2,3 , Xuanke Shi 2, Kewang Deng 2, Zukai Chen 2, Feifei Shao 1,Lei Yang 2, Quan Wang 2∗, Yawei Luo 1∗
+
+> 1
+
+Zhejiang University 2SenseTime Research 3Peking University Correspondence 
+
+# ... 
+
+Recover the scene's depth, camera poses, point cloud, and optical flow, and describe its spatial layout. 
+
+# SPARGen 
+
+One Unified Model Native Generation 
+
+... 
+
+T S
+
+... 
+
+D
+
+... 
+
+Geometry   
+
+> Camera Pose Depth Point Map Temporal Optical Flow Cross-view Optical Flow (Sampled)
+
+Reasoning 
+
+A red-hatted dwarf holding a lantern stands beside a wooden chest and a brown sofa in a brick-walled room.  
+
+> Understanding Spatial Reasoning
+
+If I were standing where the two single sofas are and facing forward in the same direction, what would be on the right side of the white table? The leather two-seater sofa. 
+
+T
+
+... 
+
+I
+
+> T
+> Input image tokens Input text tokens
+> DS
+> Output dense tokens Output sequence tokens
+> I
+
+Figure 1: SPARGen unifies spatial perception and reasoning through native multimodal generation. Conditioned on visual observations and natural-language instructions, a single model generates dense geometric fields and token sequences for 3D reconstruction, correspondence estimation, visual understanding, and spatial reasoning, without task-specific modules. 
+
+Abstract 
+
+Spatial perception and reasoning from visual observations require recovering geometric structure, establishing corre-spondences, and understanding spatial relations. Existing ap-proaches typically address these capabilities separately us-ing task-specific architectures or external geometric modules, limiting knowledge transfer among complementary represen-
+
+> ∗
+
+Corresponding author. tations of the same physical scene. We introduce SPARGen, a unified multimodal framework that casts 3D reconstruction, dense correspondence, and spatial reasoning as instruction-conditioned generation tasks. SPARGen serializes compact structured and linguistic outputs as token sequences while generating dense geometric fields in image-aligned forms, en-abling spatial supervision to jointly shape shared representa-tions within a native multimodal generative model. Experi-ments across benchmarks for 3D reconstruction, correspon-arXiv:2608.14138v1 [cs.CV] 14 Aug 2026 dence, and spatial reasoning show that SPARGen achieves competitive performance across heterogeneous spatial tasks within a single native multimodal generative framework. 
+
+## 1 Introduction 
+
+Recovering the geometry of a 3D scene and reasoning about it are complementary capabilities for perceiving and inter-acting with the physical world. Recent advances have made substantial progress in geometric reconstruction (Wang et al. 2024a, 2025a; Lin et al. 2025a), correspondence estima-tion (Zhang et al. 2025c; Edstedt et al. 2024; Huang et al. 2022), and spatial reasoning (Chen et al. 2024a; Azuma et al. 2022; Ma et al. 2025). These capabilities play differ-ent but interconnected roles: reconstruction recovers scene structure, correspondence associates evidence across views or time, and reasoning converts spatial representations into task-relevant conclusions. Unifying these capabilities is desirable because they pro-vide complementary supervision for the same underlying physical scene. Depth, camera motion, point maps, and op-tical flow jointly characterize scene structure and its vari-ation across observations, while spatial question answering requires abstracting such geometric evidence into semantic relations. Learning these tasks together therefore has the po-tential to promote knowledge transfer across tasks, improve the consistency of spatial predictions, and connect geometric scene understanding with high-level reasoning. However, existing approaches address only parts of this problem. Feed-forward geometry models provide accurate depth, point maps, camera poses, or correspondences, but generally do not support spatial question answering through the same model (Lin et al. 2025a; Wang et al. 2025b,d; Cong et al. 2026). Multimodal models offer flexible instruction fol-lowing and spatial reasoning, yet typically receive limited su-pervision from dense geometry and correspondences (Huang et al. 2024; Chen et al. 2024b; Deng et al. 2025b). Recent unified models combine geometric perception with multi-modal understanding, but often introduce geometry-specific encoders, regression heads, or external modules (Qi et al. 2024; Hu et al. 2026; Xu et al. 2025). Consequently, existing systems provide limited opportunities for dense geometric, correspondence, and semantic supervision to jointly shape shared spatial representations. In this paper, we present SPARGen, a unified framework for spatial perception and reasoning, as illustrated in Fig. 1. Our design is motivated by a simple view: spatial intelli-gence is not merely a collection of isolated tasks, but a pro-cess of constructing spatial representations from observa-tions and using them to answer conditioned queries. Accord-ingly, SPARGen formulates geometric reconstruction, corre-spondence estimation, and spatial reasoning as instruction-conditioned generation tasks within a single multimodal model. Built on Bagel (Deng et al. 2025a), SPARGen predicts depth maps, camera poses, and point maps for 3D reconstruc-tion; optical flow for dense correspondence estimation; and textual answers for spatial question answering. To accommodate these heterogeneous outputs, SPARGen adopts two complementary generative formulations. Dense spatial fields, including depth maps, point maps, and optical flow, are encoded as image-like representations and gener-ated through the model’s native image-generation pathway. Compact structured outputs, such as camera poses, as well as answers to spatial questions, are serialized as token sequences and generated through the autoregressive pathway. Both gen-erative pathways are integrated within a shared Mixture-of-Transformer-Experts (MoT) backbone, allowing geometric, correspondence, and semantic supervision to jointly shape the model’s multimodal representations. SPARGen thus pro-vides a shared instruction interface for constructing and us-ing spatial representations without introducing task-specific regression heads or external geometric prediction modules. This native generative formulation distinguishes SPAR-Gen by how spatial capabilities are incorporated into a foun-dation model. Prior approaches typically specialize in either dense geometric prediction or language-based spatial rea-soning (Wang et al. 2025a; Lin et al. 2025a; Chen et al. 2024a; Wu et al. 2026). SPARGen instead supports both within a single instruction-conditioned multimodal architec-ture. More closely related to our work, G 2VLM (Hu et al. 2026) unifies language understanding and geometric predic-tion by introducing geometry-specific components. In con-trast, SPARGen starts from a pretrained unified multimodal model and represents heterogeneous spatial targets in forms that can be directly produced by its native image-generation and autoregressive pathways. This design enables dense geo-metric fields, dense correspondences, and structured spatial answers to be learned through a shared generative interface, without task-specific prediction heads or external geometric modules. Our main contributions are as follows: 
+
+• We formulate 3D reconstruction, dense correspondence, and spatial reasoning as instruction-conditioned genera-tion tasks, representing dense outputs as image-aligned fields and structured outputs as token sequences. 
+
+• We instantiate this formulation in SPARGen, which lever-ages the native image-generation and autoregressive path-ways of a shared MoT backbone to support heterogeneous spatial tasks without external geometric modules. 
+
+• Experiments demonstrate that a single SPARGen model achieves competitive performance across visual-geometry, optical flow, and spatial-reasoning bench-marks. Ablations further reveal positive interactions among heterogeneous supervision. 
+
+## 2 Related Work 
+
+3D Reconstruction and Dense Correspondence. Visual geometry systems recover camera motion and scene struc-ture (Schönberger and Frahm 2016). More recently, feed-forward reconstruction models have moved toward broader geometric representations. DUSt3R casts uncalibrated stereo reconstruction as pointmap regression (Wang et al. 2024b; Yang et al. 2025). VGGT jointly predicts camera poses, depth, point maps, and tracks from one or multiple views (Wang et al. 2025a), while VGGT-Ω scales this paradigm to substantially larger models and datasets and extends it to dynamic scenes (Wang et al. 2026). A com-plementary line of work repurposes generative priors for Text instruction    
+
+> •Estimate per-pixel relative depth.
+> •Reconstruct 3D pointmaps from these images.
+> •Predict the optical flow of adjacent frames.
+
+...   
+
+> •Estimate camera pose: quaternion, offset and scale.
+> •What's in front of the sofa to the right?
+
+... Text Tokenizer      
+
+> QKV QKV
+> Multi-modal Self Attention
+> FFN FFN
+> ViT Encoder VAE Encoder
+> VAE Decoder
+> Sequences output
+> •Pose: <quat> q </quat> <offset> t </offset>
+> •The chest is in front of the sofa on the right.
+
+...   
+
+> Dense field output Autoregressive Decoding
+> Train
+> Depth Point map Flow
+> VAE Encoder Noise
+> ×N
+
+Figure 2: Overview of SPARGen. Given a sequence of RGB images and a language instruction, SPARGen represents spatial outputs as sequences or image-aligned fields. These two output formats are generated through the native autoregressive and rectified-flow pathways of a shared MoT backbone. The dashed box denotes the training-only encoding of target fields. dense prediction: Marigold adapts a diffusion model for depth estimation (Ke et al. 2024), and Edit2Perceive uses an image-editing model for depth estimation, surface-normal estimation, and matting (Shi, Song, and Shou 2026). Sim-ilarly, learning-based matching methods replace individual stages of traditional correspondence pipelines: LoFTR per-forms detector-free matching with transformers (Sun et al. 2021), while DKM (Edstedt et al. 2023) and RoMa (Edstedt et al. 2024) directly predict dense correspondences for robust two-view geometry. These methods demonstrate increasingly general geometric perception, but typically expose their ca-pabilities through fixed pipelines and geometric objectives. In contrast, SPARGen casts both reconstruction and corre-spondence estimation as instruction-conditioned behaviors of a multimodal generative model. 
+
+Geometry-Aware Spatial Reasoning. Vision-language models acquire strong semantic knowledge but remain un-reliable in recovering geometric structure. SpatialVLM ad-dresses this limitation by training on large-scale spatial question-answering data (Chen et al. 2024a), whereas Spa-tialRGPT combines region-level supervision with a plug-in depth representation (Cheng et al. 2024). Other approaches inject stronger reconstruction priors. VLM-3R derives im-plicit spatial and camera tokens from a geometry encoder for monocular video reasoning (Fan et al. 2026), and Spatial-MLLM combines semantic and geometry-oriented visual en-coders (Ma et al. 2025). More tightly coupled designs learn geometry within the multimodal model: G 2VLM adopts dedicated geometric and semantic transformer experts with shared attention to support reconstruction and spatial reason-ing (Hu et al. 2026). Collectively, these works establish that explicit geometry benefits spatial reasoning. Nevertheless, geometric information is commonly provided by an exter-nal encoder or modeled through dedicated experts or output heads, and most systems combine language reasoning with only a limited set of geometric capabilities. SPARGen in-stead places spatial perception and reasoning under the same instruction-conditioned training interface. 
+
+Unified Multimodal Understanding and Generation. 
+
+Recent multimodal foundation models seek to replace sep-arate understanding and generation systems with a shared model. Chameleon represents images and text as interleaved discrete tokens in an early-fusion architecture (Chameleon Team 2024); Show-o combines autoregressive language modeling with discrete diffusion in a single transformer (Xie et al. 2025); and Janus decouples the visual encoding path-ways for understanding and generation while retaining a shared autoregressive backbone (Wu et al. 2025). Bagel fur-ther scales unified pretraining on interleaved text and image data, exhibiting broad multimodal reasoning and generation capabilities (Deng et al. 2025a). These models are primarily developed for semantic understanding, content generation, and image editing, leaving precise geometric prediction and dense correspondence comparatively underexplored. 
+
+## 3 Method 
+
+We first introduce the problem formulation and provide an overview of SPARGen in Sec. 3.1. We then describe its ar-chitecture and two native output representations in Sec. 3.2, followed by the corresponding training objectives in Sec. 3.3. 
+
+3.1 Problem Formulation and Overview 
+
+Given a sequence of RGB images I = {Ii}Ni=1 , where Ii ∈
+
+RH×W ×3, and a tokenized natural-language instruction p =(pl)Lp 
+
+> l=1
+
+∈ V Lp , our goal is to predict a target Yτ for a spatial task τ ∈ T = Tseq ∪ T field . Here, V denotes the tokenizer vocabulary, and Tseq and Tfield denote the sets of token-sequence and dense-field generation tasks, respectively. Rather than introducing a separate module for each task, SPARGen represents spatial targets using two native genera-tive formats: 
+
+Rτ (Yτ ) = 
+
+(Sτ (Yτ ) ∈ V Lτ , τ ∈ T seq ,
+
+Φτ (Yτ ) ∈ RMτ ×H×W ×3, τ ∈ T field . (1) Here, Sτ serializes a sequence target into Lτ discrete tokens, whereas Φτ encodes a dense target as Mτ image-aligned fields. The conditional generative model is defined as: 
+
+pθ (Rτ (Yτ ) | I , p ). (2) This formulation unifies diverse spatial tasks while preserv-ing the structural properties of their respective outputs. As illustrated in Fig. 2, SPARGen builds on the MoT ar-chitecture of Bagel (Deng et al. 2025a). The input images are encoded into visual-understanding tokens by a ViT en-coder, while the instruction is represented as text tokens. Text and visual tokens interact through joint multimodal self-attention. Sequence targets are generated autoregressively, whereas dense fields are generated in the VAE latent space through rectified flow. During training, the frozen VAE en-coder maps the target fields to clean target latents, which are interpolated with Gaussian noise to construct noisy visual tokens for rectified-flow training. 
+
+3.2 Unified Generative Architecture 
+
+Unified Architecture for Spatial Generation. SPARGen adopts the MoT architecture, which consists of an under-standing expert and a generation expert. The two token streams use modality-specific projections and feed-forward networks but interact through joint multimodal self-attention. This design allows semantic and geometric information to interact throughout the backbone while retaining their re-spective generation mechanisms. Given an image sequence I and an instruction p, the con-ditioning contexts for token-sequence and dense-field gener-ation are constructed as 
+
+Cseq = Concat( Etext (p), E vit (I)) ,Cfield = Concat( Etext (p), E vit (I), E vae (I)) , (3) where Etext denotes the text embedding module, Evit de-notes the visual-understanding encoder, and Evae denotes the frozen VAE encoder. Thus, dense-field generation is condi-tioned on both the ViT and VAE tokens of the input images. For a token-sequence task τ ∈ Tseq , let Sτ (Yτ ) =(s1, . . . , s Lτ ) denote its serialized target. The model gen-erates the sequence autoregressively: 
+
+pθ (Sτ (Yτ ) | I , p ) = 
+
+> Lτ
+
+Y
+
+> j=1
+
+pθ (sj | Cseq , s <j ). (4) For a dense-field task τ ∈ Tfield , the target is first mapped to a clean latent by the frozen VAE encoder z0 =
+
+Evae (Φ τ (Yτ )) . We then construct a linear rectified-flow path between the clean latent z0 and Gaussian noise ϵ:
+
+zt = (1 − t)z0 + tϵ, t ∼ U (0 , 1) , ϵ ∼ N (0 , I). (5) The target velocity is ut = ϵ − z0. Conditioned on the multi-modal context, the generation pathway predicts the velocity field bvt = vθ (zt, t ; Cfield ), which is trained to match ut.At inference time, sampling starts from z1 ∼ N (0 , I) and integrates the predicted velocity field from t = 1 to t = 0 .The resulting latent bz0 is decoded by the frozen VAE decoder. 
+
+Sparse and Structured Outputs as Sequences. For each task τ ∈ T seq , the serializer Sτ maps its target Yτ to a canonical token sequence that is generated autoregressively and deterministically deserialized. 
+
+Textual Answers and Sparse Geometric States. Some spatial QA tasks require only a small number of query-specific geometric quantities rather than a dense field. We serialize these quantities, such as depths at queried points and numerical spatial attributes, in the order specified by the instruction, followed by the final answer when applicable. Text-only QA directly uses the answer tokens. This design provides sparse geometric supervision while retaining stan-dard autoregressive decoding. 
+
+Structured Camera Poses. For structured outputs like camera poses, we use special tokens to represent them. We parameterize a camera pose (R, t) as 
+
+q = Quat( R), d = t
+
+∥t∥2
+
+, r = ∥t∥2, (6) where q is the rotation quaternion, and (d, r ) denote the trans-lation direction and magnitude, respectively. Their scalar components are quantized with a resolution of 10 −3, mapped to dedicated numerical tokens, and serialized in a fixed order. 
+
+Dense outputs as Image-Aligned Fields. For each task 
+
+τ ∈ T field , the deterministic transform Φτ maps Yτ to image-aligned fields. These fields follow the shape of RGB images while encoding geometric quantities. Before VAE encoding, each field is rescaled to the input range of the VAE. 
+
+Depth. Given a depth map D, we normalize its values as 
+
+bD = 1 − D − dmin 
+
+dmax − dmin + ϵ , (7) where dmin and dmax denote the minimum and maximum depths in the image. Nearby and distant regions are mapped toward 1 and 0, respectively, and the resulting relative-depth representation is replicated across three channels. 
+
+Point Maps. All point maps {Pi}Ni=1 are expressed in a common coordinate system whose origin is the first camera. We normalize them using a center and scale shared across the sequence: 
+
+c = 12N
+
+> N
+
+X
+
+> i=1
+
+(min 
+
+> p∈Ωi
+
+Pi(p) + max 
+
+> p∈Ωi
+
+Pi(p)) ,s = max 
+
+> i, p ∈Ωi
+
+∥Pi(p) − c∥∞, bPi = Pi − cs + ϵ ,
+
+(8) where the minimum and maximum are computed element-wise over pixels. The three channels of bPi encode the normal-ized Cartesian coordinates (X, Y, Z ). Sharing c and s across the sequence preserves relative geometry across views. 
+
+Optical Flow. Given an optical flow field (u, v ), we nor-malize the displacements by the image dimensions and apply a signed square-root transform: 
+
+bu = ρ( uW ), bv = ρ( vH ), ρ(x) = sgn( x)p|x|, (9) where only the first two channels are used for decoding and the third channel encodes the flow magnitude. Additionally, we design an optical flow refinement pro-cedure. At inference time, SPARGen refines optical flow through a predict–warp–predict procedure. Given the cur-rent estimate F , we align the second frame to the first as 
+
+I′
+
+> 2
+
+(x) = I2(x + F (x)) , and predict a residual flow ∆F be-tween I1 and I′
+
+> 2
+
+. The estimated flow is given by F + ∆ F .3.3 Training Objectives 
+
+SPARGen is jointly trained on a mixture of token-sequence and dense-field generation tasks. 
+
+Sequence Generation Objective. For a task τ ∈ T seq ,let Sτ (Yτ ) = ( s1, . . . , s Lτ ) denote its serialized target. We minimize the average cross-entropy over the target tokens: 
+
+Lseq = − 1
+
+LτLτX
+
+> j=1
+
+log pθ (sj | Cseq , s <j ). (10) Cross-entropy is evaluated only at target-token positions. 
+
+Dense Field Generation Objective. For a task τ ∈ T field ,we optimize the rectified-flow matching objective 
+
+Lfield = Et,ϵ [ 1
+
+dτ
+
+∥vθ (zt, t ; Cfield ) − ut∥22], (11) where t ∼ U (0 , 1) , ϵ ∼ N (0 , I), and dτ denotes the total number of scalar elements in the target latent representation. Each training example activates the objective associated with its target representation. The per-example loss is 
+
+Lτ =
+
+(λLseq , τ ∈ T seq ,
+
+Lfield , τ ∈ T field , (12) where λ controls the weight of the sequence generation objec-tive. The overall training objective is L = E(I,p,Y τ ,τ )∼D [Lτ ],where D denotes the training distribution. 
+
+## 4 Experiments 
+
+4.1 Experimental Settings 
+
+Training Datasets. We train SPARGen using three groups of supervision: spatial understanding, visual geometry, and optical flow. 1) For spatial reasoning, following G 2VLM (Hu et al. 2026), we use the official training splits of Mind-Cube, OmniSpatial, OST-Bench, SPAR-7M and general VQA dataset LLaVA-OneVision. 2) For visual geometry, including relative-depth estimation, camera pose prediction, and multi-view point map reconstruction, we aggregate train-ing data from ASE, BlendedMVS, CO3D, DeMoN, DL3DV, Hypersim, IRS, MegaSynth, MVS-Synth, Objaverse, Om-niObject3D, ScanNet v2, ScanNet++, SceneNet RGB-D, Taskonomy, and WildRGB-D. Depending on the available annotations, each sample may supervise one or more visual-geometry tasks. Although several datasets provide metric ge-ometric annotations, we normalize the depth and point map targets and train the model in a relative-scale coordinate sys-tem. For samples with sparse or incomplete geometric anno-tations, we additionally use MoGe (Wang et al. 2025c) to gen-erate dense, image-aligned geometric pseudo-labels for train-ing the dense-field pathway. 3) For optical flow estimation, we use TartanAir, AutoFlow, FlyingChairs, FlyingChairs2, FlyingThings3D, Monkaa, Kubric-4D, ParallelDomain-4D, and Spring. 
+
+Benchmarks. We follow the evaluation protocol of G2VLM (Hu et al. 2026), the most closely related baseline. 1) For visual-geometry evaluation, we use Sintel (Bozic et al. 2021) and NYU-v2 (Silberman et al. 2012) for depth estima-tion, 7Scenes (Shotton et al. 2013) and ETH3D (Schöps et al. 2017) for 3D reconstruction, and CO3D v2 (Reizenstein et al. 2021) for camera pose estimation. 2) For spatial reasoning, we evaluate on the official test sets of MindCube Tiny (Yin et al. 2025), OmniSpatial (Jia et al. 2025), OST-Bench (Lin et al. 2025b), and SPAR-Bench (Zhang et al. 2025a). 3) For optical flow estimation, we evaluate zero-shot transfer on the KITTI training set (Geiger et al. 2013), without fine-tuning on the benchmark. 
+
+Baselines and Metrics. We organize our comparisons into three task groups. 1) For visual geometry, we compare SPARGen with the specialized models DUSt3R (Wang et al. 2024b), FLARE (Zhang et al. 2025b), and VGGT (Wang et al. 2025a), as well as the unified model G 2VLM (Hu et al. 2026). We report AbsRel and δ1 for depth estimation; reconstruc-tion accuracy error (Acc.) and completeness error (Comp.) for 3D reconstruction; and relative rotation accuracy (RRA), relative translation accuracy (RTA), and area under the curve (AUC) for camera pose estimation. 2) For optical flow, we compare with RAFT (Teed and Deng 2020), GMFlow (Xu et al. 2022), and FlowFormer (Huang et al. 2022), reporting end-point error (EPE) and F1-all. 3) For spatial reasoning, we compare with the proprietary models GPT-4o (Hurst et al. 2024) and Claude Sonnet 4.6 (Anthropic 2026); general-purpose vision-language models Qwen2.5-VL-7B/72B (Bai et al. 2025), LLaVA-Video (Zhang et al. 2024), and LLaVA-OneVision (Li et al. 2024); the spatial-specialist models Spatial-MLLM (Ma et al. 2025) and VLM3R-7B (Fan et al. 2026); and the unified model G 2VLM (Hu et al. 2026). We report answer accuracy on each benchmark. 
+
+Implementation Details. We initialize SPARGen from the pretrained Bagel weights and jointly optimize the token-sequence and dense-field generation objectives. The VAE encoder and decoder are frozen, while all other model pa-rameters are fine-tuned for 100K iterations using AdamW on 64 NVIDIA H100 GPUs. For depth estimation, point map re-construction, and optical flow estimation, the maximum ViT input resolutions are set to 518 , 448 , and 980 , respectively, and the corresponding maximum VAE input resolutions are 
+
+1024 , 512 , and 1024 . We set the sequence-loss weight in Eq. 12 to λ = 0 .25 and use a learning rate of 2.5 × 10 −5.SPARGen predicts normalized depth and point maps, and therefore, like VGGT (Wang et al. 2025a) and G 2VLM (Hu et al. 2026), cannot recover metric scale. We follow their standard scale-aligned evaluation protocol. More details can be found in the appendix. 
+
+4.2 Comparisons with Prior Work 
+
+We compare SPARGen with specialized models and spatially unified models across visual geometry, spatial reasoning, and optical flow benchmarks. SPARGen remains competi-tive with specialized geometry and flow models, and achieves the strongest spatial-reasoning performance among the com-pared models. These results demonstrate that spatial capa-bilities can be supported within a native multimodal model. 
+
+Visual Geometry. Table 1 reports results on depth estima-tion, point map reconstruction, and camera pose estimation. Compared with the most relevant spatially unified baseline, G2VLM, SPARGen performs better on most metrics. In par-ticular, it improves both depth metrics on Sintel, reduces Model Depth Estimation Point Map Estimation Camera Pose Estimation Sintel NYU-v2 7Scenes ETH3D Co3Dv2 
+
+AbsRel ↓ δ1 ↑ AbsRel ↓ δ1 ↑ Acc. ↓ Comp. ↓ Acc. ↓ Comp. ↓ RRA@30 ↑ RTA@30 ↑ AUC@30 ↑
+
+Specialized Geometry Models 
+
+FLARE (Zhang et al. 2025b) 0.409 0.438 0.164 0.740 0.035 0.043 0.470 0.667 97.08 94.31 77.99 DUSt3R (Wang et al. 2024b) 0.362 0.557 0.134 0.833 0.026 0.035 0.360 0.401 98.34 94.09 79.33 VGGT (Wang et al. 2025a) 0.265 0.676 0.065 0.938 0.022 0.032 0.311 0.372 98.79 96.89 89.78 
+
+Spatial Unified Models 
+
+G2VLM (Hu et al. 2026) 0.257 0.674 0.079 0.935 0.062 0.031 0.539 0.355 96.69 92.22 56.85 
+
+SPARGen (Ours) 0.235 0.725 0.071 0.935 0.034 0.028 0.393 0.445 96.84 94.33 74.32 
+
+Table 1: Comparison across depth estimation, point map estimation, and camera pose estimation benchmarks. Bold indicates the best performance within each model group.                                                                                                                                                                                         
+
+> SPARGen Model MindCube OmniSpatial OST SPAR
+> Avg. Rotation Among Around Avg. SI PT Avg. A. State A. Info AO. Avg. Low Medium High
+> Proprietary Models
+> GPT-4o (Hurst et al. 2024) 41.52 34.50 41.67 46.80 42.39 48.67 39.04 51.42 40.93 68.38 39.25 37.88 35.36 28.40 43.27 Claude Sonnet 4.6 (Anthropic 2026) 44.19 42.50 43.00 48.40 53.89 67.00 46.88 42.18 35.84 63.30 29.35 37.55 36.63 35.33 39.20
+> Open-Source Models
+> Qwen2.5-VL-7B (Bai et al. 2025) 36.00 37.50 32.33 43.60 45.99 54.67 41.35 40.08 38.48 50.20 31.27 34.84 26.36 36.09 41.97 Qwen2.5-VL-72B (Bai et al. 2025) 41.71 40.50 40.67 45.20 52.03 61.33 47.06 49.23 39.05 65.78 37.37 39.34 34.29 36.84 44.80 LLaVA-Video-7B (Zhang et al. 2024) 43.24 36.50 43.50 48.00 49.71 55.33 46.70 44.54 32.31 62.25 32.29 34.09 24.99 31.77 43.10 LLaVA-OneVision-7B (Li et al. 2024) 40.86 33.50 37.17 55.60 46.92 52.67 43.85 35.87 24.97 44.85 31.22 29.47 19.88 30.49 37.66 Bagel-7B (Deng et al. 2025a) 41.20 36.50 39.50 52.40 45.29 49.33 43.14 32.73 42.87 26.49 35.11 39.51 34.59 36.19 45.15
+> Spatial Expert Models
+> VLM3R-7B (Fan et al. 2026) 37.90 36.50 42.50 28.00 46.69 49.33 45.28 51.03 38.32 68.30 39.35 41.89 36.36 28.38 51.92 Spatial-MLLM-7B (Ma et al. 2025) 66.19 41.00 66.83 74.80 45.30 47.00 44.39 39.90 32.28 46.80 36.08 33.92 23.90 33.74 42.95
+> Spatial Unified Models
+> G2VLM-2B (Hu et al. 2026) 28.48 25.50 30.17 26.80 42.62 44.33 41.71 28.80 27.13 35.43 23.24 38.73 51.24 28.82 31.27
+> SPARGen-7B (Ours) 76.04 63.50 79.16 78.60 54.00 55.33 53.29 56.02 47.10 72.30 43.98 66.60 49.35 74.04 79.25
+
+Table 2: Results on spatial-reasoning benchmarks. Bold and underlined values indicate the best and second-best results among non-proprietary models. 
+
+Model KITTI 
+
+EPE ↓ F1-all ↓
+
+RAFT (Teed and Deng 2020) 5.03 17.45 GMFlow (Xu et al. 2022) 7.77 23.40 FlowFormer (Huang et al. 2022) 4.10 14.51 SPARGen w/o refinement 5.26 21.82 
+
+SPARGen (Ours) 4.09 13.34 
+
+Table 3: Zero-shot optical flow results on KITTI. 
+
+Bold values indicate the best performance. 
+
+Model 7Scenes KITTI SPAR 
+
+Acc. ↓ Comp. ↓ EPE ↓ F1-all ↓ Avg. ↑ Low ↑ Med. ↑ High ↑
+
+w/o Geometry - - 4.29 14.73 62.41 45.97 66.49 75.59 w/o Flow 0.040 0.038 - - 65.92 48.41 73.52 78.75 w/o Reasoning 0.037 0.031 4.06 13.01 - - - -
+
+SPARGen (Ours) 0.034 0.028 4.09 13.34 66.60 49.35 74.04 79.25 
+
+Table 4: Ablation of geometry, optical flow, and spatial-reasoning supervi-sion. Bold values indicate the best performance. AbsRel while matching δ1 on NYU-v2, and achieves better reconstruction results on 7Scenes. It also improves camera pose estimation across all three CO3D v2 metrics. Although specialized geometry models such as VGGT retain an ad-vantage on several reconstruction metrics, SPARGen sub-stantially narrows the gap with the native unified model. 
+
+Spatial Understanding and Reasoning. As shown in Ta-ble 2, SPARGen achieves the highest average score on all four spatial-reasoning benchmarks and ranks first in 13 of the 15 reported categories among the compared non-proprietary models. Relative to the strongest competing result on each benchmark, SPARGen improves the average score by 9.85 points on MindCube, 1.97 points on OmniSpatial, 4.99 points on OST, and 24.71 points on SPAR. The gains are particu-larly pronounced on the medium and high subsets of SPAR. While SPARGen benefits from a 7B foundation backbone, its gains cannot be attributed solely to model scale, as it also outperforms substantially larger open-source baselines such as Qwen2.5-VL-72B. 
+
+Optical Flow Estimation. Table 3 reports zero-shot opti-cal flow results on KITTI. SPARGen achieves an EPE of 4.09 and an F1-all score of 13.34, outperforming the compared methods on both metrics. These results show that SPARGen can learn effective dense correspondence estimation through ...    
+
+> Input frame 1 Input frame 2 Initial flow prediction Refined flow prediction Initial endpoint error Refined endpoint error
+> ...
+> Input images Predicted point maps Input image Predicted depth Input images Predicted point maps
+
+Figure 3: Qualitative results of SPARGen on point map reconstruction, optical flow estimation, and depth estimation. For optical flow, we show the predictions and error maps before and after refinement. its native generation pathway. 
+
+Qualitative Results. Figure 3 presents representative pre-dictions for 3D reconstruction, optical flow estimation, and depth estimation. For 3D reconstruction, SPARGen recovers coherent global layouts in both indoor and outdoor scenes. Its optical flow predictions capture the dominant motion of foreground vehicles while producing relatively consistent es-timates over static background regions. The refinement stage further corrects residual misalignments in the initial predic-tions. For depth estimation, SPARGen recovers the overall near-to-far structure of the scene and preserves the bound-aries of major objects. Overall, SPARGen improves over the existing unified baseline on visual geometry, achieves the strongest spatial-reasoning results, and remains competitive with special-ized optical flow methods, all within a shared instruction-conditioned generative framework. 
+
+4.3 Ablation Studies and Analysis 
+
+To examine whether the results are consistent with comple-mentary effects among different supervision types, we train variants with one supervision category removed at a time. 
+
+(1) Removing Geometry Supervision. We remove geom-etry supervision. This ablation examines whether 3D super-vision provides transferable structural information for dense correspondence and spatial reasoning. 
+
+(2) Removing Optical Flow Supervision. We remove op-tical flow supervision. This setting evaluates whether dense correspondence learning contributes to multi-view recon-struction and spatial reasoning. 
+
+(3) Removing Reasoning Supervision. We remove spatial-reasoning and question-answering supervision. This ablation examines whether high-level semantic objectives can improve dense geometric perception. 
+
+Results & Analysis. Table 4 presents the results. (1) Re-moving geometry supervision degrades both optical flow estimation and spatial reasoning, suggesting that explicit 3D supervision may provide structural information useful for dense correspondence and language-based reasoning. (2) Removing optical flow supervision increases the reconstruc-tion accuracy and completeness errors on 7Scenes and re-duces the average SPAR score, consistent with dense cor-respondence supervision benefiting cross-view consistency and spatial reasoning. (3) Removing reasoning supervision slightly degrades reconstruction, suggesting a possible bene-fit of high-level semantic supervision for geometric represen-tation learning. However, optical flow performance improves slightly in the absence of reasoning supervision. We attribute this to a mild capacity competition in multi-task learning: while semantic reasoning aids static 3D structure, the au-toregressive token generation slightly competes for the MoT backbone’s capacity against dynamic dense-field prediction. 
+
+## 5 Conclusion 
+
+We presented SPARGen, a unified multimodal frame-work that formulates spatial perception and reasoning as instruction-conditioned generation. SPARGen serializes compact structured and linguistic outputs as token sequences and represents dense geometric and correspondence fields as image-aligned outputs. It thereby uses the native autore-gressive and rectified-flow pathways of a shared MoT back-bone without external modules. Across visual-geometry, op-tical flow, and spatial-reasoning benchmarks, SPARGen re-mains competitive with specialized perception methods, and achieves strong spatial-reasoning performance. Our ablations provide preliminary evidence consistent with complemen-tary effects among geometry, correspondence, and reasoning supervision. These findings demonstrate the feasibility of using native multimodal generation as a shared interface for spatial perception and reasoning tasks. 
+
+Limitations. While leveraging a frozen VAE allows SPARGen to reuse pretrained multimodal generative path-ways, VAE spatial compression inherently poses a bottleneck for geometric edges and high-precision physical quantities. References 
+
+Anthropic. 2026. Claude Sonnet 4.6 System Card. Technical report, Anthropic. Accessed: 2026-07-27. Azuma, D.; Miyanishi, T.; Kurita, S.; and Kawanabe, M. 2022. Scanqa: 3d question answering for spatial scene un-derstanding. In proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 19129–19139. Bai, S.; Chen, K.; Liu, X.; Wang, J.; Ge, W.; Song, S.; Dang, K.; Wang, P.; Wang, S.; Tang, J.; Zhong, H.; Zhu, Y.; Yang, M.; Li, Z.; Wan, J.; Wang, P.; Ding, W.; Fu, Z.; Xu, Y.; Ye, J.; Zhang, X.; Xie, T.; Cheng, Z.; Zhang, H.; Yang, Z.; Xu, H.; and Lin, J. 2025. Qwen2.5-VL Technical Report. arXiv preprint arXiv:2502.13923 .Bozic, A.; Palafox, P.; Thies, J.; Dai, A.; and Nießner, M. 2021. Transformerfusion: Monocular rgb scene reconstruc-tion using transformers. Advances in Neural Information Processing Systems , 34: 1403–1414. Chameleon Team. 2024. Chameleon: Mixed-Modal Early-Fusion Foundation Models. arXiv preprint arXiv:2405.09818 .Chen, B.; Xu, Z.; Kirmani, S.; Ichter, B.; Sadigh, D.; Guibas, L.; and Xia, F. 2024a. Spatialvlm: Endowing vision-language models with spatial reasoning capabilities. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 14455–14465. Chen, Y.; Yang, S.; Huang, H.; Wang, T.; Xu, R.; Lyu, R.; Lin, D.; and Pang, J. 2024b. Grounded 3d-llm with referent tokens. arXiv preprint arXiv:2405.10370 .Cheng, A.-C.; Yin, H.; Fu, Y.; Guo, Q.; Yang, R.; Kautz, J.; Wang, X.; and Liu, S. 2024. SpatialRGPT: Grounded Spatial Reasoning in Vision Language Models. In Advances in Neural Information Processing Systems .Cong, Z.; Zhao, Q.; Jeon, M.; and Tulsiani, S. 2026. Flow3r: Factored flow prediction for scalable visual geometry learn-ing. In Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition , 438–447. Deng, C.; Zhu, D.; Li, K.; Gou, C.; Li, F.; Wang, Z.; Zhong, S.; Yu, W.; Nie, X.; Song, Z.; et al. 2025a. Emerging properties in unified multimodal pretraining. arXiv preprint arXiv:2505.14683 .Deng, J.; He, T.; Jiang, L.; Wang, T.; Dayoub, F.; and Reid, I. 2025b. 3d-llava: Towards generalist 3d lmms with omni superpoint transformer. In Proceedings of the Computer Vision and Pattern Recognition Conference , 3772–3782. Edstedt, J.; Athanasiadis, I.; Wadenbäck, M.; and Felsberg, M. 2023. DKM: Dense Kernelized Feature Matching for Ge-ometry Estimation. In Proceedings of the IEEE/CVF Con-ference on Computer Vision and Pattern Recognition .Edstedt, J.; Sun, Q.; Bökman, G.; Wadenbäck, M.; and Fels-berg, M. 2024. Roma: Robust dense feature matching. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 19790–19800. Fan, Z.; Zhang, J.; Li, R.; Zhang, J.; Chen, R.; Hu, H.; Wang, K.; Wang, P.; Qu, H.; Zhou, S.; et al. 2026. Vlm-3r: Vision-language models augmented with instruction-aligned 3d re-construction. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 31054–31065. Geiger, A.; Lenz, P.; Stiller, C.; and Urtasun, R. 2013. Vision meets Robotics: The KITTI Dataset. International Journal of Robotics Research (IJRR) .Hu, W.; Lin, J.; Long, Y.; Ran, Y.; Jiang, L.; Wang, Y.; Zhu, C.; Xu, R.; Wang, T.; and Pang, J. 2026. G2VLM: Geometry Grounded Vision Language Model with Unified 3D Reconstruction and Spatial Reasoning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 9535–9546. Huang, H.; Chen, Y.; Wang, Z.; Huang, R.; Xu, R.; Wang, T.; Liu, L.; Cheng, X.; Zhao, Y.; Pang, J.; et al. 2024. Chat-scene: Bridging 3d scene and large language models with object identifiers. Advances in Neural Information Process-ing Systems , 37: 113991–114017. Huang, Z.; Shi, X.; Zhang, C.; Wang, Q.; Cheung, K. C.; Qin, H.; Dai, J.; and Li, H. 2022. Flowformer: A transformer architecture for optical flow. In European conference on computer vision , 668–685. Springer. Hurst, A.; Lerer, A.; Goucher, A. P.; Perelman, A.; Ramesh, A.; Clark, A.; Ostrow, A.; Welihinda, A.; Hayes, A.; Rad-ford, A.; et al. 2024. Gpt-4o system card. arXiv preprint arXiv:2410.21276 .Jia, M.; Qi, Z.; Zhang, S.; Zhang, W.; Yu, X.; He, J.; Wang, H.; and Yi, L. 2025. Omnispatial: Towards comprehensive spatial reasoning benchmark for vision language models. 
+
+arXiv preprint arXiv:2506.03135 .Ke, B.; Obukhov, A.; Huang, S.; Metzger, N.; Daudt, R. C.; and Schindler, K. 2024. Repurposing Diffusion-Based Image Generators for Monocular Depth Estimation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pat-tern Recognition .Li, B.; Zhang, Y.; Guo, D.; Zhang, R.; Li, F.; Zhang, H.; Zhang, K.; Zhang, P.; Li, Y.; Liu, Z.; et al. 2024. Llava-onevision: Easy visual task transfer. arXiv preprint arXiv:2408.03326 .Lin, H.; Chen, S.; Liew, J.; Chen, D. Y.; Li, Z.; Shi, G.; Feng, J.; and Kang, B. 2025a. Depth anything 3: Recovering the vi-sual space from any views. arXiv preprint arXiv:2511.10647 .Lin, J.; Zhu, C.; Xu, R.; Mao, X.; Liu, X.; Wang, T.; and Pang, J. 2025b. OST-Bench: Evaluating the Capabilities of MLLMs in Online Spatio-Temporal Scene Understanding. In Advances in Neural Information Processing Systems , vol-ume 38. Ma, W.; Ye, L.; de Melo, C. M.; Yuille, A.; and Chen, J. 2025. Spatialllm: A compound 3d-informed design towards spatially-intelligent large multimodal models. In Proceed-ings of the Computer Vision and Pattern Recognition Con-ference , 17249–17260. Qi, Z.; Fang, Y.; Sun, Z.; Wu, X.; Wu, T.; Wang, J.; Lin, D.; and Zhao, H. 2024. Gpt4point: A unified framework for point-language understanding and generation. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 26417–26427. Reizenstein, J.; Shapovalov, R.; Henzler, P.; Sbordone, L.; Labatut, P.; and Novotny, D. 2021. Common objects in 3d: Large-scale learning and evaluation of real-life 3d category reconstruction. In Proceedings of the IEEE/CVF interna-tional conference on computer vision , 10901–10911. Schönberger, J. L.; and Frahm, J.-M. 2016. Structure-from-Motion Revisited. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition .Schöps, T.; Schönberger, J. L.; Galliani, S.; Sattler, T.; Schindler, K.; Pollefeys, M.; and Geiger, A. 2017. A Multi-View Stereo Benchmark with High-Resolution Images and Multi-Camera Videos. In Proceedings of the IEEE Confer-ence on Computer Vision and Pattern Recognition , 3260– 3269. Shi, Y.; Song, Y.; and Shou, M. Z. 2026. Edit2Perceive: Im-age Editing Diffusion Models Are Strong Dense Perceivers. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition .Shotton, J.; Glocker, B.; Zach, C.; Izadi, S.; Criminisi, A.; and Fitzgibbon, A. 2013. Scene coordinate regression forests for camera relocalization in RGB-D images. In Proceedings of the IEEE conference on computer vision and pattern recog-nition , 2930–2937. Silberman, N.; Hoiem, D.; Kohli, P.; and Fergus, R. 2012. Indoor segmentation and support inference from rgbd im-ages. In European conference on computer vision , 746–760. Springer. Sun, J.; Shen, Z.; Wang, Y.; Bao, H.; and Zhou, X. 2021. LoFTR: Detector-Free Local Feature Matching with Trans-formers. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition .Teed, Z.; and Deng, J. 2020. Raft: Recurrent all-pairs field transforms for optical flow. In European conference on com-puter vision , 402–419. Springer. Wang, J.; Chen, M.; Karaev, N.; Vedaldi, A.; Rupprecht, C.; and Novotny, D. 2025a. Vggt: Visual geometry grounded transformer. In Proceedings of the Computer Vision and Pattern Recognition Conference , 5294–5306. Wang, J.; Chen, M.; Zhang, S.; Karaev, N.; Schönberger, J.; Labatut, P.; Bojanowski, P.; Novotny, D.; Vedaldi, A.; and Rupprecht, C. 2026. VGGT-Ω. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .Wang, J.; Karaev, N.; Rupprecht, C.; and Novotny, D. 2024a. Vggsfm: Visual geometry grounded deep structure from mo-tion. In Proceedings of the IEEE/CVF conference on com-puter vision and pattern recognition , 21686–21697. Wang, Q.; Zhang, Y.; Holynski, A.; Efros, A. A.; and Kanazawa, A. 2025b. Continuous 3d perception model with persistent state. In Proceedings of the Computer Vision and Pattern Recognition Conference , 10510–10522. Wang, R.; Xu, S.; Dai, C.; Xiang, J.; Deng, Y.; Tong, X.; and Yang, J. 2025c. Moge: Unlocking accurate monocular geometry estimation for open-domain images with optimal training supervision. In Proceedings of the Computer Vision and Pattern Recognition Conference , 5261–5271. Wang, S.; Leroy, V.; Cabon, Y.; Chidlovskii, B.; and Revaud, J. 2024b. Dust3r: Geometric 3d vision made easy. In Pro-ceedings of the IEEE/CVF conference on computer vision and pattern recognition , 20697–20709. Wang, Y.; Zhou, J.; Zhu, H.; Chang, W.; Zhou, Y.; Li, Z.; Chen, J.; Pang, J.; Shen, C.; and He, T. 2025d. π3:Permutation-Equivariant Visual Geometry Learning. arXiv preprint arXiv:2507.13347 .Wu, C.; Chen, X.; Wu, Z.; Ma, Y.; Liu, X.; Pan, Z.; Liu, W.; Xie, Z.; Yu, X.; Ruan, C.; and Luo, P. 2025. Janus: Decoupling Visual Encoding for Unified Multimodal Under-standing and Generation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition .Wu, D.; Liu, F.; Hung, Y.-H.; and Duan, Y. 2026. Spatial-mllm: Boosting mllm capabilities in visual-based spatial in-telligence. Advances in neural information processing sys-tems , 38: 13569–13597. Xie, J.; Mao, W.; Bai, Z.; Zhang, D. J.; Wang, W.; Lin, K. Q.; Gu, Y.; Chen, Z.; Yang, Z.; and Shou, M. Z. 2025. Show-o: One Single Transformer to Unify Multimodal Understanding and Generation. In International Conference on Learning Representations .Xu, H.; Zhang, J.; Cai, J.; Rezatofighi, H.; and Tao, D. 2022. GMFlow: Learning Optical Flow via Global Matching. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vi-sion and Pattern Recognition , 8121–8130. Xu, Y.; Zhang, J.; Huang, Z.; Chen, Y.; Zhou, Y.; Chen, Z.; Yuan, Y.-J.; Xia, P.; Huang, G.; Cai, X.; et al. 2025. Uni-ugg: Unified 3d understanding and generation via geometric-semantic encoding. arXiv preprint arXiv:2508.11952 .Yang, J.; Sax, A.; Liang, K. J.; Henaff, M.; Tang, H.; Cao, A.; Chai, J.; Meier, F.; and Feiszli, M. 2025. Fast3R: Towards 3D Reconstruction of 1000+ Images in One Forward Pass. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .Yin, B.; Wang, Q.; Zhang, P.; Zhang, J.; Wang, K.; Wang, Z.; Zhang, J.; Chandrasegaran, K.; Liu, H.; Krishna, R.; et al. 2025. Spatial mental modeling from limited views. In Struc-tural Priors for Vision Workshop at ICCV’25 .Zhang, J.; Chen, Y.; Zhou, Y.; Xu, Y.; Huang, Z.; Mei, J.; Chen, J.; Yuan, Y.-J.; Cai, X.; Huang, G.; Quan, X.; Xu, H.; and Zhang, L. 2025a. From Flatland to Space: Teach-ing Vision-Language Models to Perceive and Reason in 3D. In Advances in Neural Information Processing Systems , vol-ume 38. Zhang, S.; Wang, J.; Xu, Y.; Xue, N.; Rupprecht, C.; Zhou, X.; Shen, Y.; and Wetzstein, G. 2025b. Flare: Feed-forward geometry, appearance and camera estimation from uncali-brated sparse views. In Proceedings of the Computer Vision and Pattern Recognition Conference , 21936–21947. Zhang, Y.; Keetha, N. V.; Lyu, C.; Jhamb, B.; Chen, Y.; Qiu, Y.; Karhade, J.; Jha, S.; Hu, Y.; Ramanan, D.; et al. 2025c. UFM: A Simple Path towards Unified Dense Correspondence with Flow. In The Thirty-ninth Annual Conference on Neural Information Processing Systems .Zhang, Y.; Wu, J.; Li, W.; Li, B.; Ma, Z.; Liu, Z.; and Li, C. 2024. Video Instruction Tuning With Synthetic Data. arXiv:2410.02713.

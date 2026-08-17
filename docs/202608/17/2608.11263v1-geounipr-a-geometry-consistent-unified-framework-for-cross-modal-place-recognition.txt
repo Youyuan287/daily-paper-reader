@@ -1,0 +1,482 @@
+Title: GeoUniPR: A Geometry-Consistent Unified Framework for Cross-Modal Place Recognition
+
+URL Source: https://arxiv.org/pdf/2608.11263v1
+
+Published Time: Thu, 13 Aug 2026 00:02:45 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# GeoUniPR: A Geometry-Consistent Unified Framework for Cross-Modal Place Recognition 
+
+Wonbong Kim 1, Jiatong Xiao 1, Rui Li 1, Xufei Wang 3
+
+Qiwen Gu 1, Junqiao Zhao 1,2,∗, Chen Ye 1, Guang Chen 1,4
+
+> 1
+
+School of Computer Science and Technology, Tongji University, Shanghai, China 
+
+> 2
+
+MOE Key Lab of Embedded System and Service Computing, Tongji University, Shanghai, China 
+
+> 3
+
+Shanghai Research Institute for Intelligent Autonomous System, Tongji University, Shanghai, China 
+
+> 4
+
+Shanghai Innovation Institute, Shanghai, China 
+
+{2493052,2354218,2351610,tjwangxufei,2432178, zhaojunqiao,yechen,guangchen}@tongji.edu.cn 
+
+## Abstract 
+
+Cross-modal place recognition (CMPR) aims to identify the same location across heterogeneous sensing modalities, such as vision and LiDAR. Existing methods commonly bridge the modality gap using complex alignment modules, multi-stage training, or full fine-tuning of pretrained backbones. In this work, we revisit CMPR from the perspective of geometric consistency and propose GeoUniPR, a unified and concise geometry-consistent framework. GeoUniPR reduces cross-modal discrepancy at the representation level by projecting LiDAR point clouds into the camera perspective to construct Geometry-Consistent depth image views (DIV), which establish direct RGB–LiDAR correspondence. We further augment DIV with native LiDAR cues, including intensity and surface-normal informa-tion, yielding a multi-channel geometric representation that improves structural consistency. Based on this representation, GeoUniPR learns a unified embedding space using two modality-specific ViT-based encoders with identical architectures, trained through parameter-efficient adaptation without auxiliary alignment mod-ules, multi-stage training, or full backbone fine-tuning. In addition, we introduce Spatially-Consistent InfoNCE (SC-InfoNCE), a CMPR-specific contrastive ob-jective that suppresses distance-induced false negatives under spatial continuity. Extensive experiments on KITTI and KITTI-360 demonstrate that GeoUniPR achieves state-of-the-art (SOTA) performance in both same-modal and cross-modal place recognition, with strong cross-dataset generalization. 
+
+## 1 Introduction 
+
+Place recognition [1] is a fundamental capability in autonomous systems, supporting applications such as navigation [2], loop closure [3], map reuse [4], and global localization [5]. Traditional place recognition methods are typically studied under a single-modality setting [6], where both the query and the reference database are captured using the same sensing modality. In real-world autonomous systems, however, sensing configurations are often heterogeneous. Differ-ences between the sensing modalities of queries and reference maps naturally give rise to Cross-Modal 
+
+> *Corresponding author. Preprint. arXiv:2608.11263v1 [cs.CV] 10 Aug 2026
+
+Place Recognition (CMPR), which aims to localize a query from one modality (e.g., vision or Li-DAR) by retrieving its corresponding place from a database constructed using another modality. By enabling retrieval across vision and LiDAR, CMPR unifies both same-modal (2D →2D, 3D →3D) and cross-modal (2D →3D, 3D →2D) localization, allowing autonomous systems to reuse existing maps and remain robust under changing sensing conditions or sensor failures. The core challenge of CMPR lies in the substantial heterogeneity between sparse geometric 3D point clouds and dense texture-rich 2D images. To bridge this modality gap, many recent approaches [7–9] rely on increasingly complex architectures, typically by introducing auxiliary alignment modules [7, 8], adopting multi-stage optimization pipelines [9], or fully fine-tuning pretrained backbones [10, 11]. These methods largely follow a feature-level alignment paradigm: RGB and LiDAR inputs are first encoded into modality-specific feature spaces, after which additional modules or optimization strategies are introduced to reduce the discrepancy between the learned embeddings. However, this paradigm leaves the underlying geometric inconsistency unresolved. When the two modalities are encoded under incompatible projection geometries, subsequent feature-level alignment must simultaneously compensate for perspective mismatch, sensor-specific distortions, and modality appearance gaps, making the learned correspondence unnecessarily indirect and fragile. Meanwhile, CMPR pipelines also attempt to reduce modality discrepancy through geometric projec-tion. Common representations include Range Image View (RIV) [10], Depth Image View (DIV) [8], and Bird’s-Eye-View (BEV) alignment [12]. These parameterizations expose a fundamental trade-off between geometric correspondence and information integrity. RIV adopts spherical projection and is therefore geometrically inconsistent with the camera perspective, preventing direct pixel-wise RGB–LiDAR correspondence and typically requiring explicit overlap handling (e.g., horizontal FOV alignment). DIV naturally preserves pixel-aligned correspondence under the camera model, but becomes intrinsically sparse after projection. BEV unifies both modalities on the ground plane, yet is mainly applicable to driving scenarios and requires an additional lift-and-project pipeline. 
+
+Figure 1: GeoUniPR achieves SOTA performance on KITTI and KITTI-360. Note that Cross-PRNet reports only 2D →3D results, and UniLoc reports re-sults only on KITTI-360, so the remain-ing entries are unavailable. These observations motivate a different perspective: in-stead of compensating for modality discrepancy after fea-ture extraction, CMPR should first establish geometry-consistent representations before learning modality-invariant descriptors. Among existing geometric param-eterizations, camera-perspective DIV provides the most direct way to preserve pixel-wise RGB–LiDAR correspon-dence under a shared projection geometry. Based on this principle, we propose GeoUniPR, a geometry-consistent representation learning framework for CMPR. Rather than relying on explicit feature alignment modules, GeoUniPR reduces modality discrepancy before feature extraction by projecting LiDAR scans into camera-aligned multi-channel DIVs. Specifically, LiDAR point clouds are projected into the camera perspective to construct multi-channel DIVs jointly encoding depth, intensity, and surface-normal cues. The resulting DIVs are processed using modality-specific ViT-based encoders [13–15] with identical architectures and parameter-efficient adaptation [16, 17]. RGB and LiDAR embeddings are then aligned in a unified representation space through contrastive learning [18]. To further im-prove cross-modal optimization, we introduce Spatially-Consistent InfoNCE (SC-InfoNCE), which relaxes the strict negative assumption in conventional InfoNCE by suppressing spatially adjacent false negatives under trajectory continuity. The main contributions of this work are summarized as follows: • We propose GeoUniPR, a geometry-consistent representation learning framework for CMPR that shifts cross-modal alignment from post-hoc feature matching to geometry-consistent representations. GeoUniPR constructs camera-perspective multi-channel DIVs to establish 2direct RGB–LiDAR correspondence without auxiliary alignment modules, multi-stage training, or full backbone fine-tuning. • We introduce Spatially-Consistent InfoNCE (SC-InfoNCE), which mitigates distance-induced false negatives by suppressing or reweighting spatially adjacent negatives, thereby improving contrastive learning under spatial continuity. • We conduct extensive experiments on KITTI and KITTI-360, demonstrating that GeoUniPR achieves state-of-the-art performance across both same-modal and cross-modal retrieval settings, while exhibiting strong cross-dataset generalization. 
+
+## 2 Related Work 
+
+2.1 Cross-Modal Place Recognition 
+
+The key challenge of CMPR is to learn descriptors that are simultaneously modality-aligned and place-discriminative despite the heterogeneous 2D appearance and 3D geometry. Cattaneo et al. [19] pioneered the application of knowledge distillation to CMPR, employing a teacher–student framework to train a 3D network that mimics the feature space of a 2D image network using triplet loss. Later, LC 2 [9] improves cross-modal matching by introducing a shared intermediate representation and opti-mizing it with a staged training procedure. LiP-Loc [10] pioneers the use of pretrained ViT backbones in CMPR, enabling direct cross-modal descriptor learning via contrastive loss. VXP [11] further strengthens cross-modal coupling through a teacher-guided framework that aligns local descriptors between modalities via voxel-to-pixel correspondence. UniLoc [7] extends CMPR to a universal setting by aligning natural language, images, and point clouds within a shared embedding space using hierarchical instance-level and scene-level matching. Most recently, Cross-PRNet [20] introduces a Transformer–Mamba based design to enhance contextual modeling for learning discriminative cross-modal place descriptors. Overall, prior CMPR methods often rely on auxiliary modules or staged optimization, and some further adopt full backbone fine-tuning to obtain strong cross-modal retrieval performance. 
+
+2.2 Geometric Consistency in Cross-Modal Place Recognition 
+
+A common line of work in CMPR seeks to induce geometrically meaningful 2D–3D associations by reducing the representational gap between images and point clouds. To this end, projection-based representations are widely adopted, mapping one or both modalities into structured intermediate views that facilitate cross-modal alignment and retrieval. 
+
+RIV-based consistency. A common design is to project LiDAR scans into range image views (RIV) for dense matching. LiP-Loc [10] follows this paradigm and applies Field of View (FOV)-aligned cropping to match the camera view, reducing mismatch within the shared FOV. LC 2 [9] further aligns modalities in a shared 2.5D space by lifting images to depth via depth estimation and projecting LiDAR into RIV, enabling correspondence learning under staged optimization. 
+
+DIV-based consistency. Another line of work projects LiDAR onto the image plane as depth image view (DIV), aligning 3D geometry with the camera perspective. VXP [11] voxelizes point clouds with sparse convolution and projects voxel features onto the pixel plane to enforce voxel-to-pixel coupling guided by an image teacher. InsCMPR [8] similarly obtains image-plane DIV via camera projection and further applies depth densification to better match the dense image grid. 
+
+BEV-based consistency. Beyond perspective views, I2P-Rec [12] lifts images to 3D through depth estimation, reconstructs pseudo point clouds, and projects both modalities into BEV space for retrieval against point-cloud maps. In contrast to prior works that use geometric projections mainly as preprocessing or auxiliary alignment signals, GeoUniPR treats projection geometry as the central representation-learning principle. The key distinction is that we seek to minimize cross-modal discrepancy before feature extraction, rather than relying on downstream feature interaction modules to repair modality mismatch after encoding. Besides, existing CMPR pipelines primarily rely on the geometric channel (range or depth) and, to the best of our knowledge, have not incorporated LiDAR-native cues such as intensity and surface normals. 3DIV 
+
+> Normal
+> Intensity Depth
+> Normal
+> Intensity Depth
+> LiDAR LiDAR
+
+SALAD 
+
+> Adapter SALAD DINO
+
+RGB RGB 
+
+> DINO
+> Adapter
+> DINO
+> Adapter
+> Ambiguous Negative Positive
+> INP1
+> I3P1
+> I2P1
+> I3P2
+> I1P2
+> INP3
+> I2P3
+> I3PN
+> I1PN
+> INP2
+> I2PN
+> IN
+> I3
+
+I2 
+
+> I1I1P1
+> I3P3
+> INPN
+> I2P2
+> ... ... ... ...
+
+... 
+
+> ... ... ... ... ... ...
+
+... 
+
+> I1P3I1P3
+> INP1
+> I3P1
+> I2P1
+> I3P2
+> I1P2
+> INP3
+> I2P3
+> I3PN
+> I1PN
+> INP2
+> I2PN
+> IN
+> I3
+
+I2 
+
+> I1I1P1
+> I3P3
+> INPN
+> I2P2
+> ... ... ... ...
+
+... 
+
+> ... ... ... ... ... ...
+
+... 
+
+> I1P3
+
+Figure 2: Overview of GeoUniPR framework. LiDAR scans are projected and densified into a DIV containing depth, intensity, and normal ratio channels to establish pixel-wise geometric alignment with RGB images. Both modalities are encoded by modality-specific DINO ViT backbones [13] with lightweight adapters and aggregated via SALAD [21]. To improve training, we employ a SC-InfoNCE loss that explicitly handles spatially ambiguous regions by suppressing or reweighting nearby non-matching pairs, effectively mitigating distance-induced false negatives. 
+
+## 3 Preliminaries 
+
+3.1 Problem Formulation 
+
+Let DI = {xIi }Ni=1 and DP = {xPi }Ni=1 denote paired RGB–LiDAR observations, where each pair (xIi , x Pi ) is captured at the same place. The goal is to learn two encoders fI : XI → Rd and 
+
+fP : XP → Rd that map heterogeneous inputs into a shared embedding space. During inference, we perform cross-modal place recognition via similarity-based retrieval in the shared embedding space. Given a query from one modality, we rank samples from the other-modality database by embedding similarity and return the top-K candidates (for both I → P and P → I). A prediction is considered correct if the spatial distance between the query location and the retrieved match is within a tolerance threshold δ.
+
+3.2 Cross-Modal Contrastive Learning 
+
+Given a batch of N paired RGB–LiDAR samples {(xIi , x Pi )}Ni=1 , we encode them into ℓ2-normalized embeddings zIi = fI (xIi )/∥fI (xIi )∥2 and zPi = fP (xPi )/∥fP (xPi )∥2. The cross-modal matching logit is defined as 
+
+sij = (zIi )⊤zPj
+
+τ , (1) where τ is the temperature. Standard InfoNCE optimizes RGB-to-LiDAR retrieval by aligning each positive pair (zIi , zPi ) and treating other in-batch samples as negatives: LInfoNCE  
+
+> I→P
+
+= − 1
+
+> N
+
+PNi=1 log exp( sii )   
+
+> PNj=1 exp( sij )
+
+. Following CLIP [18], we use a symmetric objective by also optimizing the reverse direction, LInfoNCE   
+
+> P→I
+
+=
+
+− 1
+
+> N
+
+PNi=1 log exp( sii )  
+
+> PNj=1 exp( sji )
+
+. The final loss is L = 12 (LInfoNCE  
+
+> I→P
+
++ LInfoNCE   
+
+> P→I
+
+)
+
+44 Methodology 
+
+4.1 Overview 
+
+Figure 2 presents an overview of the proposed GeoUniPR framework. GeoUniPR is built upon a representation-first view of CMPR. Instead of encoding RGB and LiDAR under incompatible geometric parameterizations and compensating for the resulting discrepancy afterward, we first transform LiDAR into a camera-perspective representation that shares the same projection geometry as RGB images. This enables the two modalities to be processed by architecturally identical encoders and aligned through a simple contrastive objective. Specifically, we instantiate two modality-specific encoders with identical architectures but separate parameters for RGB and DIV inputs. As the backbone, we adopt a pre-trained DINO ViT encoder [13–15] and perform parameter-efficient fine-tuning (PEFT) following [17]. In particular, lightweight MultiConv adapters [16] are attached in parallel to selected frozen transformer blocks at fixed intervals, enabling the model to adapt intermediate patch representations to domain-specific geometric patterns while preserving the semantic priors of the pre-trained backbone. For global descriptor aggregation, we employ SALAD [21], which maps adapter-refined local patch features into learnable clusters through optimal transport (Sinkhorn iterations) and fuses them with the global [CLS] token produced by the ViT backbone, yielding compact and discriminative representations for cross-modal retrieval. Built upon this unified and efficient framework, we further introduce geometry-consistent designs tailored to heterogeneous RGB–LiDAR inputs. At the representation level, LiDAR point clouds are projected into a normal-augmented multi-channel DIV (Section 4.2), establishing strict pixel-wise correspondence with RGB observations. At the optimization level, we introduce SC-InfoNCE (Section 4.3), a spatially-consistent contrastive objective that suppresses false negatives arising from spatially continuous trajectories, thereby stabilizing cross-modal embedding learning. 
+
+4.2 Geometry-Consistent Depth Image View 
+
+We adopt DIV as the intermediate representation to establish a geometry-consistent bridge between RGB images and LiDAR point clouds. By projecting 3D LiDAR points onto the camera plane, we naturally resolve the horizontal FOV discrepancy and obtain a perspective-consistent, pixel-aligned signal that directly corresponds to the RGB image. 
+
+Perspective Projection. Given a point cloud P, we project each point onto the image plane using the camera intrinsic matrix K and the LiDAR-to-camera extrinsic transformation Tv→c. For a point 
+
+pi, its image coordinate is computed as zi ˜ui = KT v→c ˜pi. Since the mapping from 3D to 2D is non-injective, multiple points may project onto the same pixel. We resolve such collisions using z-buffering, retaining only the closest point for each pixel. 
+
+Multi-channel DIV Construction and Densification. We construct a camera-aligned multi-channel map Idiv ∈ RH×W ×3, which jointly encodes complementary geometric cues: (1) metric depth, serving as the primary geometric signal after perspective projection; (2) intensity, providing an additional sensor-dependent cue complementary to depth; and (3) normal ratio, a local surface-structure descriptor computed from the eigenvalue ratio of the neighborhood covariance matrix [22]. Because perspective projection produces sparse observations on the image plane, we adopt the training-free IP-Basic densification method [23] to propagate valid measurements into unobserved regions, resulting in a dense pixel-aligned representation. Finally, we crop the upper non-overlapping region to account for the vertical FOV discrepancy between LiDAR and camera views. 
+
+4.3 Spatially-Consistent Contrastive Learning Unified Spatially-Consistent Weighting. Standard InfoNCE assumes that for any anchor sample i,all distinct samples j̸ = i correspond to true negatives. However, place recognition data are inherently spatially continuous. Samples captured at nearby locations often share significant geometric and semantic overlap. Treating such spatially adjacent samples as hard negatives forces the model to separate highly similar observations, leading to the false-negative problem. 5To suppress distance-induced false negatives, we propose Spatially-Consistent Contrastive Learning (SC-InfoNCE), which introduces distance-dependent reweighting into the InfoNCE denominator. Let 
+
+gi denote the metric location of sample i and dij = ∥gi − gj ∥2 denote the pairwise distance. We define a weighting function ω : R≥0 → [0 , 1] and formulate the RGB →LiDAR loss as: 
+
+LSC  
+
+> I→P
+
+(ω) = − 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+log exp( sii )
+
+PNj=1 ω(dij ) exp( sij ) , (2) where sij is defined in Equation (1). We enforce ω(dii ) = 1 to preserve positive pairs. In practice, we employ the symmetric bidirectional formulation by averaging Equation (2) with its LiDAR →RGB counterpart, and omit the reverse-direction expression for brevity. Within this unified framework, we consider two instantiations of ω(·): hard masking and hybrid reweighting. 
+
+Spatially-Consistent Hard Masking (SC-Hard). SC-Hard suppresses spatially ambiguous pairs through an ambiguous-region radius Rn. For each anchor i, all off-diagonal pairs satisfying 0 < d ij ≤
+
+Rn are removed from the contrastive denominator, thereby preventing false-negative penalization. Equivalently, this can be implemented through the binary distance mask: 
+
+ωhard (dij ) = 
+
+
+
+1, dij = 0 ,
+
+0, 0 < d ij ≤ Rn,
+
+1, dij > R n.
+
+(3) 
+
+Spatially-Consistent Hybrid Reweighting (SC-Hybrid). While SC-Hard is simple and effective, it treats all ambiguous pairs equally. SC-Hybrid instead provides a smooth relaxation by progressively increasing the negative penalty with distance. Specifically, we introduce two thresholds: an exclusion radius Re and a saturation radius Rs. Pairs within Re are fully suppressed, whereas pairs beyond 
+
+Rs are treated as standard negatives. For intermediate distances, the negative weight is smoothly interpolated from 0 to 1 to reflect the gradual decrease in semantic similarity as physical distance increases. With curvature parameter p ≥ 1, the weighting function is defined as: 
+
+ωhyb (dij ) = 
+
+
+
+1 dij = 0 ,
+
+0 0 < d ij ≤ Re, dij −Re
+
+> Rs−Re
+
+p
+
+Re < d ij < R s,
+
+1 dij ≥ Rs.
+
+(4) This formulation generalizes standard InfoNCE, which can be viewed as the special case where 
+
+Re = Rs = 0 or equivalently ω(·) ≡ 1.
+
+## 5 Experiments 
+
+Our evaluation includes: (i) main comparisons on KITTI and KITTI-360, (ii) ablations on DIV and SC-InfoNCE, (iii) robustness to architectural choices, and (iv) qualitative visualization of cross-modal alignment. 
+
+5.1 Evaluation Protocol Datasets. We evaluate on KITTI-360 and KITTI Odometry. Following the common protocol in UniLoc [7], we use KITTI-360 for training and in-domain evaluation, with sequences 00, 02, 04, 06, and 07 for training, sequence 10 for validation, and sequences 03, 05, and 09 for testing. KITTI-360 [24] provides synchronized LiDAR–image pairs captured with a Velodyne HDL-64E and a front-facing perspective stereo camera, together with accurate IMU/GPS-based vehicle poses. To assess cross-dataset generalization, we additionally evaluate on KITTI Odometry [25] sequences 00, 02, 07, and 08. Since the driving routes of KITTI and KITTI-360 do not overlap, cross-dataset evaluation measures generalization across different environments. 6Table 1: Comparison to SOTA methods on KITTI and KITTI-360 datasets. The best is highlighted in 
+
+bold and the second is underlined. Results for UniLoc and Cross-PRNet are taken from the original papers. GeoUniPR uses DIV with SALAD. Our variants differ in backbone and contrastive loss: (v1) DINOv1+InfoNCE, (v2) DINOv1+SC-Hard, (v3) DINOv1+SC-Hybrid, (v4) DINOv3+SC-Hard.                                                                                                                                                           
+
+> KITTI (Generalization) KITTI-360 Method 2D →3D 3D →2D 2D →2D 3D →3D 2D →3D 3D →2D 2D →2D 3D →3D R@1 R@5 R@1 R@5 R@1 R@5 R@1 R@5 R@1 R@5 R@1 R@5 R@1 R@5 R@1 R@5 LiP-Loc 62.82 83.32 63.10 83.89 98.94 99.91 96.47 99.60 73.37 89.51 73.50 90.83 97.71 99.45 97.74 99.67 VXP 23.11 30.68 17.28 25.52 99.85 100.00 97.77 99.82 33.25 42.17 27.41 35.88 99.75 99.96 98.22 99.86 UniLoc †––––––––93.50 97.70 94.40 98.00 96.50 98.90 97.20 99.20 Cross-PRNet ∗84.66 92.72 ––––––89.58 96.79 ––––––GeoUniPR (v1) 94.93 99.14 93.85 98.65 99.28 99.96 98.72 99.89 95.73 99.24 95.45 99.18 98.01 99.70 97.90 99.65 GeoUniPR (v2) 95.90 99.30 94.75 98.68 99.71 99.99 99.29 99.94 96.97 99.45 96.94 99.37 98.99 99.92 98.82 99.82 GeoUniPR (v3) 96.08 99.26 95.62 99.03 99.67 99.99 99.22 99.95 97.29 99.58 97.03 99.51 99.00 99.87 98.79 99.85 GeoUniPR (v4) 97.20 99.79 96.97 99.59 99.65 100.00 99.38 99.96 97.41 99.58 97.49 99.60 98.85 99.86 98.91 99.87
+> †UniLoc results are reported under a 20 m threshold.
+> *Cross-PRNet is trained on KITTI and KITTI-360 separately, and evaluated on their corresponding test datasets.
+
+Metrics. We evaluate retrieval performance using Recall@K (R@K), defined as the percentage of queries for which at least one of the top-K retrieved database elements falls within a spatial distance threshold δ of the ground-truth location. Unless otherwise stated, we report R@1 under a fixed threshold of δ = 10 m . To avoid trivial matches, we exclude the cross-modal paired element captured at the same frame as the query from being counted as a correct retrieval. 
+
+Implementation Details. By default, we employ DINOv1 ViT-S/16 as the backbone for both the image and LiDAR branches. Following standard practice, RGB images and DIVs are resized to 
+
+224 × 224 for the ViT encoders. See Appendix A for full implementation details. 
+
+5.2 Comparison with SOTA Methods 
+
+Table 1 summarizes cross-modal place recognition results on KITTI and KITTI-360 under a unified evaluation protocol. We compare against representative SOTA methods, including LiP-Loc [10], VXP [11], UniLoc [7], and Cross-PRNet [20]. Among them, LiP-Loc and VXP are trained under the same training/validation splits as our setting. Note that the VXP performance reported here differs from the original paper because we evaluate it under the same cross-dataset protocol as GeoUniPR, rather than the original VXP split. Results for UniLoc and Cross-PRNet are taken from the original papers; UniLoc reports results at a 20 m threshold, whereas all other methods are evaluated at the stricter 10 m threshold. On KITTI-360, GeoUniPR attains the highest retrieval accuracy. Our best variant (v4) achieves 97.41% and 97.49% R@1 for 2D →3D and 3D →2D retrieval, respectively, distinctly outperforming other methods. On the KITTI dataset, our method demonstrates remarkable robustness, where v4 reaches 97.20% (2D →3D) and 96.97% (3D →2D). Moreover, all our DINOv1-based variants (v1–v3) consistently exceed the performance of existing SOTA methods across these cross-modal benchmarks. 
+
+Cross-dataset generalization. GeoUniPR demonstrates superior performance and robustness compared to baselines on both datasets. Notably, while methods like LiP-Loc achieve reasonable in-domain results on KITTI-360, they experience a sharp performance decline ( ∼10% drop in R@1) when evaluated on KITTI. This degradation likely stems from their reliance on RIV, where sensor-configuration variations introduce projection-level domain shifts that disrupt the learned cross-modal alignment. This interpretation is further supported by the controlled LiP-Loc comparison in Appendix C, where replacing RIV with DIV improves cross-modal retrieval under the same backbone and training protocol. In contrast, GeoUniPR maintains consistent accuracy across datasets by constructing Geometry-Consistent DIVs that establish pixel-level RGB–LiDAR correspondence and reduce sensor-dependent geometric distortions at the representation level. This result supports our central claim that reducing modality discrepancy at the representation level yields better cross-domain robustness than compensating for projection mismatch through feature-level alignment. 7Table 2: Geometry-Consistent DIV and channel ablation (R@1, %). CH1 denotes the primary geometric channel (Range for RIV and Depth for DIV), CH2 is intensity, and CH3 is Normal Ratio. Best and second best in each column are in bold and underlined.                                     
+
+> View Input Channels KITTI KITTI-360 CH1 CH2 CH3 2D →3D 3D →2D 2D →3D 3D →2D RIV ✓✓✓92.51 90.46 97.19 97.10
+> DIV
+> ✓86.20 77.34 94.43 94.37
+> ✓✓87.54 82.94 96.42 96.48
+> ✓✓95.56 94.28 96.83 96.85
+> ✓✓✓95.90 94.75 96.97 96.94
+
+Table 3: SC-InfoNCE hyperparameter study (R@1, %). SC-Hard sweeps the ambiguous-region radius Rn. SC-Hybrid fixes Re = 3 ,
+
+Rs = 20 and sweeps p. Best and second best in each column are in bold and underlined.                                                 
+
+> Loss Params KITTI KITTI-360 2D →3D 3D →2D 2D →3D 3D →2D InfoNCE –94.93 93.85 95.73 95.45 SC-Hard
+> Rn=195.23 94.94 95.83 95.96
+> Rn=395.81 95.10 96.95 96.83
+> Rn= 10 95.74 95.39 97.09 96.98
+> Rn= 20 95.90 94.75 96.97 96.94 SC-Hybrid
+> p= 1 96.04 95.07 97.08 97.17
+> p= 2 96.08 95.62 97.29 97.03
+> p= 3 95.92 95.54 97.02 97.06
+
+5.3 Ablation Studies 
+
+We perform controlled ablations to quantify the contribution of each component in GeoUniPR. Unless otherwise specified, all ablations are based on GeoUniPR (v2), which adopts three-channel DIV, DINOv1 ViT-S/16, adapters, SALAD, and SC-Hard with an ambiguous-region radius Rn = 20 . We report cross-modal Recall@1 (R@1, %) for both 2D →3D and 3D →2D on KITTI and KITTI-360. 
+
+Geometry-Consistent DIV. We isolate the impact of Geometry-Consistent representation by comparing DIV with a strong RIV baseline. The RIV baseline is additionally aligned to the camera FOV, ensuring that the comparison focuses on the representation itself rather than FOV differences. As shown in Table 2, depth-only DIV achieves competitive performance by establishing camera-perspective RGB–LiDAR correspondence. Nevertheless, perspective projection alone is insufficient for robust cross-dataset generalization, as a single depth channel provides limited local structural information. By incorporating LiDAR-native cues, multi-channel DIV substantially improves cross-modal retrieval, with the normal-ratio channel (CH3) contributing the most significant gain. On cross-dataset KITTI evaluation, multi-channel DIV improves over depth-only DIV by 9.70 percentage points in 2D →3D R@1 (86.20% → 95.90%) and 17.41 percentage points in 3D →2D R@1 (77.34% → 94.75%). Specifically, depth provides the primary camera-aligned geometry, intensity adds reflectance cues, and the normal-ratio channel captures local surface-structure variations and discontinuities that are more comparable to image-space geometric patterns. The full multi-channel DIV further surpasses the aligned RIV baseline on cross-dataset KITTI by +3.39% and +4.29% for 2D →3D and 3D →2D retrieval, respectively. These results show that camera-perspective projection provides a strong geometric basis, while LiDAR-native structural enrichment is crucial for achieving robust cross-dataset CMPR. 
+
+SC-InfoNCE Hyperparameters. We study the sensitivity of SC-InfoNCE to its key hyperpa-rameters under the default training protocol. We consider two instantiations: (i) SC-Hard, which suppresses spatially ambiguous pairs within an ambiguous region of radius Rn, and (ii) SC-Hybrid, which applies distance-aware soft reweighting controlled by the exponent p. For SC-Hybrid, we fix Re = 3 and Rs = 20 following the empirical range suggested by the SC-Hard sweep. Table 3 summarizes the results. Both SC-Hard and SC-Hybrid improve over the InfoNCE baseline across datasets and retrieval directions. SC-Hard remains robust over a wide range of Rn, while SC-Hybrid provides comparable gains with a smooth relaxation. Guided by the robustness trend in Table 3 and the supplementary stability analysis in Appendix B, we use Rn = 20 as the default setting for SC-Hard, and set p = 2 
+
+as the default exponent for SC-Hybrid. 8Table 4: Aggregation ablation (R@1, %). Best results in each column are in bold and underlined.                               
+
+> Loss Aggregation KITTI KITTI-360 2D →3D 3D →2D 2D →3D 3D →2D InfoNCE GeM 77.19 70.00 88.66 87.92 SPM 79.46 76.47 88.01 88.09 SALAD 94.93 93.85 95.73 95.45 SC-Hard GeM 80.96 74.93 90.76 90.80 SPM 82.98 79.06 92.03 91.51 SALAD 95.90 94.75 96.97 96.94
+
+Table 5: Backbone scaling study (R@1, %). All backbones are ViT-S. Best and second best in each column are in bold and underlined.                  
+
+> Backbone KITTI KITTI-360 2D →3D 3D →2D 2D →3D 3D →2D DINOv1 95.90 94.75 96.97 96.94 DINOv2 96.97 96.74 97.16 97.11 DINOv3 97.20 96.97 97.41 97.49
+
+Impact of Aggregation. We study the compatibility of SC-Hard with different aggregation heads. Table 4 compares GeM, SPM [16], and SALAD under InfoNCE and SC-Hard training. SC-Hard consistently improves retrieval accuracy across all aggregators, showing that SC-Hard is comple-mentary to the aggregation design. Among the tested heads, SALAD achieves the best performance, highlighting the importance of discriminative global descriptors for cross-modal alignment. 
+
+Backbone Scaling. We further evaluate scalability by replacing the backbone while keeping the remaining pipeline unchanged. Following prior place recognition frameworks [10, 22], we adopt ViT-S variants of DINOv1, DINOv2, and DINOv3. As shown in Table 5, performance improves consistently with stronger backbones across datasets and retrieval directions, demonstrating that our Geometry-Consistent input and SC-Hard are compatible with backbone scaling. 
+
+5.4 Qualitative Analysis InfoNCE SC-Hard SC-Hybrid Query Positive Negative 
+
+Figure 3: t-SNE visualization of 2D →3D embed-dings on KITTI sequence 00 under different loss functions. Query and its positive match are high-lighted in color, while negatives are shown in gray. 
+
+t-SNE visualization. We qualitatively inspect the learned embedding geometry using t-SNE [26] on KITTI sequence 00. Figure 3 visualizes 2D →3D retrieval features trained with InfoNCE, SC-Hard, and SC-Hybrid. While most query– positive structures are similar across losses, SC-Hard and SC-Hybrid yield more compact local neighborhoods for certain queries, such as the highlighted orange one. This indicates that SC-InfoNCE mitigates distance-induced false neg-atives by preserving spatially adjacent samples rather than pushing them apart as strict nega-tives. SC-Hybrid further shows slightly more coherent local compactness, benefiting from its smooth distance-aware weighting. Additional qualitative retrieval examples for both KITTI and KITTI-360 are provided in Appendix E. 
+
+## 6 Limitations 
+
+GeoUniPR has three main limitations. First, its cross-sensor generalization is limited because DIV is directly tied to LiDAR geometry and point distribution; as a result, a model trained on HDL-64E data degrades when transferred to a different and sparser sensor such as HDL-32E. Second, multi-channel DIV construction introduces extra online cost, mainly from normal-ratio computation and densification, especially for 3D →2D retrieval. Third, since DIV depends on camera-aligned projection, the method is sensitive to large extrinsic perturbations, particularly rotational noise. Additional analysis is provided in Appendix D. 97 Conclusion 
+
+We presented GeoUniPR, a unified framework for bidirectional cross-modal place recognition between RGB and LiDAR that bridges the modality gap through complementary input- and loss-level designs. At the input level, GeoUniPR constructs Geometry-Consistent DIVs by projecting LiDAR data onto the camera plane, enforcing pixel-level alignment while incorporating surface normals as geometric priors. At the loss level, SC-InfoNCE mitigates ambiguity from trajectory continuity and refines the cross-modal embedding space. Experiments on KITTI and KITTI-360 demonstrate that GeoUniPR achieves SOTA performance for both 2D →3D and 3D →2D retrieval. Crucially, under reliable camera–LiDAR calibration, GeoUniPR outperforms spherical projection methods in cross-dataset generalization, supporting the benefit of representation-level geometric alignment. Future work will focus on improving deployment robustness through cross-sensor generalization, more efficient DIV construction, and calibration-robust training. 
+
+## References 
+
+[1] Peng Yin, Jianhao Jiao, Shiqi Zhao, Lingyun Xu, Guoquan Huang, Howie Choset, Sebastian Scherer, and Jianda Han. General place recognition survey: Towards real-world autonomy. IEEE Transactions on Robotics , 41:3019–3038, 2025. doi: 10.1109/TRO.2025.3550771. [2] César Cadena, Luca Carlone, Henry Carrillo, Yasir Latif, Davide Scaramuzza, José Neira, Ian D. Reid, and John J. Leonard. Past, present, and future of simultaneous localization and mapping: Toward the robust-perception age. IEEE Transactions on Robotics , 32(6):1309–1332, 2016. doi: 10.1109/TRO.2016.2624754. [3] Paul M. Newman, John J. Leonard, Juan D. Tardós, and José Neira. Explore and return: Experimental validation of real-time concurrent mapping and localization. In Proceedings of the IEEE International Conference on Robotics and Automation (ICRA) , pages 1802–1809. IEEE, 2002. doi: 10.1109/ROBOT. 2002.1014803. [4] Sebastian Ratz, Marcin Dymczyk, Roland Siegwart, and Renaud Dubé. OneShot global localization: Instant LiDAR-visual pose estimation. In Proceedings of the IEEE International Conference on Robotics and Automation (ICRA) , pages 5415–5421. IEEE, 2020. doi: 10.1109/ICRA40945.2020.9197458. [5] Paul-Edouard Sarlin, César Cadena, Roland Siegwart, and Marcin Dymczyk. From coarse to fine: Robust hierarchical localization at large scale. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 12716–12725, 2019. [6] Tiago Barros, Ricardo Pereira, Luís Garrote, Cristiano Premebida, and Urbano J. Nunes. Place recognition survey: An update on deep learning approaches. CoRR , abs/2106.10458, 2021. URL https://arxiv. org/abs/2106.10458 .[7] Yifan Xia, Ziyuan Li, Y. J. Li, Lei Shi, H. Cao, Joao F. Henriques, and Daniel Cremers. UniLoc: Towards universal place recognition using any single modality. arXiv preprint , 2024. [8] Sheng Jiao, Zhenyu Su, Luyang Luo, Haoyu Yu, Zihan Zhou, Huimin Lu, and Xieyuanli Chen. InsCMPR: Efficient cross-modal place recognition via instance-aware hybrid mamba-transformer. In Proceedings of the IEEE International Conference on Robotics and Automation (ICRA) , pages 2212–2218. IEEE, 2025. [9] A. J. Lee, Seunghyeon Song, Hyungtae Lim, Wooseok Lee, and Hyun Myung. LiDAR-camera loop constraints for cross-modal place recognition. IEEE Robotics and Automation Letters , 8(6):3589–3596, 2023. [10] S. S. Puligilla, M. Omama, H. Zaidi, U. S. Parihar, and M. Krishna. LIP-Loc: LiDAR image pretraining for cross-modal localization. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision Workshops (WACVW) , pages 939–948. IEEE, 2024. [11] Y. J. Li, Maria Gladkova, Yifan Xia, Rui Wang, and Daniel Cremers. VXP: Voxel-cross-pixel large-scale camera-LiDAR place recognition. In Proceedings of the International Conference on 3D Vision (3DV) ,pages 1233–1242. IEEE, 2025. [12] Shen Zheng, Yiming Li, Zhihao Yu, Bowen Yu, Shuangyuan Cao, M. Wang, et al. I2P-Rec: Recognizing images on large-scale point cloud maps through bird’s eye view projections. In Proceedings of the IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pages 1395–1400. IEEE, 2023. 
+
+10 [13] Mathilde Caron, Hugo Touvron, Ishan Misra, Herve Jegou, Julien Mairal, Piotr Bojanowski, and Armand Joulin. Emerging properties in self-supervised vision transformers. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pages 9650–9660, 2021. [14] Maxime Oquab, Timothee Darcet, Theo Moutakanni, Huy Vo, Marcin Szafraniec, Vasil Khalidov, Pierre Fernandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, et al. DINOv2: Learning robust visual features without supervision. arXiv preprint , 2023. [15] Oriane Simeoni, Huy V. Vo, Maximilian Seitzer, Federico Baldassarre, Maxime Oquab, Cesar Jose, et al. DINOv3. arXiv preprint , 2025. [16] Feng Lu, Xiaoyan Lan, Lei Zhang, Dong Jiang, Yao Wang, and Chun Yuan. CricAVPR: Cross-image correlation-aware representation learning for visual place recognition. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 16772–16782, 2024. [17] Feng Lu, Tian Jin, Xiaoyan Lan, Lei Zhang, Yuting Liu, Yao Wang, and Chun Yuan. SelaVPR++: Towards seamless adaptation of foundation models for efficient place recognition. arXiv preprint , 2025. [18] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever. Learning transferable visual models from natural language supervision. In Proceedings of the 38th International Conference on Machine Learning (ICML) , pages 8748–8763. PMLR, 2021. [19] Davide Cattaneo, Marco Vaghi, Simone Fontana, Alessandro L. Ballardini, and Domenico G. Sorrenti. Global visual localization in LiDAR-maps through shared 2D-3D embedding space. In Proceedings of the IEEE International Conference on Robotics and Automation (ICRA) , pages 4365–4371. IEEE, 2020. [20] S. Meng, Y. Wang, H. Xu, and Lap-Pui Chau. Contrastive learning-based place descriptor representation for cross-modality place recognition. Information Fusion , page 103351, 2025. [21] Sergio Izquierdo and Javier Civera. Optimal transport aggregation for visual place recognition. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 17658–17668, 2024. [22] Minwoo Jung, Lanke Frank Tarimo Fu, Maurice Fallon, and Ayoung Kim. ImLPR: Image-based LiDAR place recognition using vision foundation models. In Proceedings of the Conference on Robot Learning (CoRL) , Seoul, September 2025. [23] Jason Ku, Ali Harakeh, and Steven L. Waslander. In defense of classical image processing: Fast depth completion on the CPU. In Proceedings of the 15th Conference on Computer and Robot Vision (CRV) ,pages 16–22. IEEE, 2018. [24] Yiyi Liao, Jun Xie, and Andreas Geiger. KITTI-360: A novel dataset and benchmarks for urban scene understanding in 2D and 3D. IEEE Transactions on Pattern Analysis and Machine Intelligence , 45(3): 3292–3310, 2023. doi: 10.1109/TPAMI.2022.3179507. [25] Andreas Geiger, Philip Lenz, and Raquel Urtasun. Are we ready for autonomous driving? the KITTI vision benchmark suite. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , pages 3354–3361. IEEE, 2012. [26] Laurens van der Maaten and Geoffrey Hinton. Visualizing data using t-SNE. Journal of Machine Learning Research , 9:2579–2605, 2008. 
+
+11 Appendix Overview. This appendix is organized as follows: • Appendix A details the implementation setup, including the network architecture, DIV construction pipeline, and training configuration. • Appendix B provides supplementary training-dynamics and run-to-run stability analyses for SC-InfoNCE. • Appendix C provides an additional controlled comparison between RIV and DIV within LiP-Loc to further isolate the effect of the LiDAR view representation. • Appendix D presents supplementary analyses of robustness to calibration perturbations and practical efficiency during training and inference. • Appendix E shows qualitative retrieval examples on KITTI and KITTI-360. 
+
+## A Implementation Details 
+
+Network Architecture and Variants. By default, we employ DINOv1 ViT-S/16 as the backbone for both RGB and LiDAR modalities, utilizing separate parameters to accommodate domain-specific distributions. We adopt a parameter-efficient fine-tuning (PEFT) protocol, where only the last two transformer blocks are fine-tuned, and lightweight MultiConv adapters are attached in parallel to every third transformer block, keeping the remaining blocks frozen. Feature aggregation is performed using a SALAD head to extract global descriptors. Specifically, the SALAD head is configured with M = 64 clusters, each possessing a feature dimension of 128 , while the global [CLS] token is projected to a separate 256 -dimensional embedding. To assess the scalability of our approach, we also benchmark against DINOv2 Vit-S/14 and DINOv3 Vit-S/16 backbones. Crucially, when transitioning between these backbones, the downstream architecture—including the placement of adapters and the specific parameterization of the SALAD head (i.e., cluster count and dimensions)—remains 
+
+strictly identical , ensuring that performance differences are solely attributable to the visual foundation models themselves. 
+
+DIV Generation and Preprocessing. The LiDAR input is projected into a Depth Image View (DIV) comprising three physical channels: metric depth, intensity, and normal ratio. Specifically, the normal ratio is derived from the logarithmic ratio of the largest to smallest singular values, ln( σ1/σ 3),calculated via Singular Value Decomposition (SVD) on the covariance matrix of k-nearest neighbors (k = 15 ). To resolve projection sparsity, these channels are processed using the training-free IP-Basic densification method [23] in its default “fast” variant. To ensure cross-modal geometric alignment, both RGB and DIV inputs are cropped to remove the upper non-overlapping region and resized to a canonical resolution of 224 × 224 .
+
+Training Configuration. All models are trained for 50 epochs using a symmetric contrastive loss with a temperature τ = 0 .07 and a batch size of 64. Optimization is performed using AdamW (weight decay 1 × 10 −3) with an initial learning rate of 1 × 10 −4, controlled by a ReduceLROnPlateau scheduler. All experiments are implemented in PyTorch and conducted on a single NVIDIA GeForce RTX 3090 GPU. 
+
+## B Additional Training Dynamics and Stability Analysis 
+
+Effectiveness of SC-InfoNCE. As shown in Table 1, SC-InfoNCE (GeoUniPR (v2-v3)) con-sistently improve cross-modal retrieval performance by effectively suppressing distance-induced false negatives. For example, on KITTI-360, SC-Hybrid (GeoUniPR (v3)) improves 2D →3D R@1 from 95.73% to 97.29%, yielding an absolute gain of 1.56 percentage points, with similar gains for 3D →2D. Figure 4 shows that SC-Hard/SC-Hybrid converge faster and achieve substantially lower validation loss than InfoNCE baselines, validating the effectiveness of combining explicit alignment DIV with Spatially-Consistent supervision. 
+
+Stability Across Runs. Figure 5 reports cross-modal R@1 over five independent runs using mean ±std. 12 Figure 4: Validation loss curves across various combinations of image-view representations and contrastive loss formulations; DIV reduces the loss difficulty compared to RIV, and SC-InfoNCE further improves convergence by suppressing distance-induced false negatives. 
+
+Figure 5: Cross-modal R@1 (mean ±std over five runs) on KITTI and KITTI-360; SC-Hard yields lower variance, while SC-Hybrid attains higher mean accuracy under cross-dataset evaluation. Across both datasets and retrieval directions, SC-Hard consistently shows the smallest standard deviation, indicating more stable performance under repeated training. Meanwhile, SC-Hybrid achieves a higher mean accuracy on KITTI (cross-dataset evaluation) for both 2D →3D and 3D →2D retrieval, while remaining competitive on KITTI-360. A possible interpretation is that the soft distance-aware weighting provides a less abrupt treatment of spatially nearby samples than hard masking, which may lead to representations that generalize better across dataset shifts. 
+
+## C Single-Channel RIV vs. DIV in LiP-Loc 
+
+Figure 6 is designed to isolate the effect of the LiDAR view representation under a strong, closely related CMPR baseline. We adopt LiP-Loc, which performs full fine-tuning of a pretrained ViT backbone for cross-modal place recognition, and keep the architecture and training protocol fixed. Under the same single-channel LiDAR input budget, we only replace the LiDAR view from range-only RIV to depth-only DIV. Across KITTI and KITTI-360, this substitution yields higher cross-modal R@1 for both 2D →3D and 3D →2D, indicating that a camera-plane depth view provides a more compatible geometric signal for RGB–LiDAR matching than a spherical range view under the same fine-tuning setup. 13 00 02 07 08 0003 0005 0009 Sequence 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 R@1 (%) 
+
+> 63.75 54.39 82.56 66.10 70.69 84.02 68.51 65.07 54.19 82.65 65.81 72.97 84.33 68.40 87.05 81.25 90.10 80.91 81.49 95.28 88.73 83.02 75.82 86.01 71.09 84.46 95.57 88.40
+
+RIV (1-ch) 2D →3D 
+
+RIV (1-ch) 3D →2D 
+
+DIV (1-ch) 2D →3D 
+
+DIV (1-ch) 3D →2D Figure 6: Cross-modal retrieval accuracy (R@1, %) of LiP-Loc under two single-channel LiDAR input parameterizations. We compare 1-channel RIV (range-only spherical RIV) and 1-channel DIV (depth-only perspective DIV) on both retrieval directions (2D →3D and 3D →2D). The x-axis lists evaluation sequences from two datasets: KITTI (00/02/07/08) and KITTI-360 (0003/0005/0009). 
+
+## D Additional Robustness and Efficiency Analysis 
+
+This appendix complements the main paper with additional analysis of GeoUniPR(v2) from two practical perspectives: robustness to imperfect sensor calibration and computational efficiency during training and inference. 
+
+D.1 Robustness to Calibration Perturbations 
+
+Robustness to calibration errors is important for real-world deployment because the proposed depth image view (DIV) is generated by projecting LiDAR points into the camera frame. To evaluate this dependency, we perturb the camera extrinsics only at inference time , without introducing perturbation-aware augmentation during training. For each preset interval, the perturbation is randomly sampled within the specified range (e.g., [−1◦, 1◦]), rather than evaluated only at the boundary values. Table 6 shows that GeoUniPR(v2) remains stable under mild projection errors. On KITTI-00, the 
+
+R@1 score stays above 96% under ±1◦ rotation or ±0.2 m translation in both retrieval directions. On KITTI-360-0003, the score remains above 84% under ±1◦ rotation or ±0.1 m translation. As the perturbation magnitude increases, the performance degrades progressively. Translation noise is consistently less harmful than rotational noise, whereas larger rotational perturbations (e.g., ±5◦)cause a much clearer drop because they more directly disrupt perspective alignment during DIV construction. Overall, these results indicate that GeoUniPR(v2) is reasonably tolerant to mild-to-moderate calibration errors, while larger miscalibration mainly affects projection quality. 
+
+D.2 Training Cost and Parameter Efficiency 
+
+We compare the training cost of GeoUniPR(v2) against LiP-Loc. As shown in Table 7, GeoUniPR(v2) has a slightly larger total parameter count, but requires substantially fewer trainable parameters and 14 Table 6: Robustness of GeoUniPR(v2) to inference-time camera extrinsic perturbations. Perturbations are randomly sampled within each preset interval rather than evaluated only at the boundary values. No perturbation-aware training is used in this experiment. 
+
+Rot ( ◦) Trans (m) KITTI-00 R@1 (%) KITTI-360-0003 R@1 (%) 2D →3D 3D →2D 2D →3D 3D →2D 0 0 97.62 97.38 88.42 86.24 
+
+[−1, 1] 0 96.28 96.50 84.65 84.85 
+
+[−2, 2] 0 93.75 93.64 79.50 75.64 
+
+[−5, 5] 0 78.07 64.81 59.21 41.98 
+
+0 [−0.05 , 0.05] 97.56 97.20 87.62 86.34 
+
+0 [−0.1, 0.1] 97.25 97.14 85.74 85.54 
+
+0 [−0.2, 0.2] 96.26 96.37 82.87 82.87 
+
+[−1, 1] [−0.05 , 0.05] 96.52 96.39 85.05 83.96 
+
+[−2, 2] [−0.1, 0.1] 93.42 93.02 79.31 75.25 
+
+[−5, 5] [−0.2, 0.2] 77.36 62.45 60.30 41.19 Table 7: Training cost comparison with LiP-Loc. GeoUniPR(v2) uses PEFT and therefore optimizes substantially fewer parameters despite a slightly larger total model size. 
+
+Method Total Params (M) Trainable Params (M) Training Time (min/epoch) 
+
+LiP-Loc 42 42 4.36 GeoUniPR (v2) 48 14 2.56 
+
+less training time per epoch. This behavior is consistent with the parameter-efficient fine-tuning (PEFT) design adopted in our framework, which reduces optimization cost relative to full backbone fine-tuning. In addition, the DIV inputs used during training can be precomputed offline, further improving practical training efficiency. 
+
+D.3 Inference Latency and Cost Breakdown 
+
+Table 8 compares the inference latency of LiP-Loc and GeoUniPR(v2). In the 2D →3D direction, GeoUniPR(v2) is comparable to LiP-Loc on both datasets. In contrast, in the 3D →2D direction, GeoUniPR(v2) is noticeably slower because the multi-channel DIV must be constructed online for each LiDAR query. The main overhead comes from two preprocessing stages: normal-ratio computation and multi-channel densification. The average normal-ratio computation takes 47 .39 ms on KITTI and 54 .48 ms on KITTI-360, corresponding to an overall average of about 50 .47 ms. The densification step adds another 21 .03 ms on average. This breakdown explains why GeoUniPR(v2) remains efficient in 2D →3D retrieval, where database descriptors can be precomputed offline, but is less efficient in 3D →2D retrieval, where online DIV generation becomes part of the critical path. Overall, these supplementary results show that GeoUniPR(v2) remains stable under mild calibration noise and achieves favorable training efficiency through PEFT, while its main practical bottleneck lies in the online construction of multi-channel DIV for 3D →2D retrieval. 
+
+## E Qualitative Retrieval Examples 
+
+We visualize top-3 cross-modal retrieval results of GeoUniPR on representative frames from KITTI (sequences 00/02/07/08) and KITTI-360 (sequences 0003/0005/0009). For each sequence, we report both directions: 2D →3D (RGB query retrieving LiDAR database) and 3D →2D (LiDAR query retrieving RGB database). Green borders denote correct matches under the same evaluation tolerance used in the main paper, while red borders indicate incorrect matches. 15 Table 8: Inference latency comparison between LiP-Loc and GeoUniPR(v2). GeoUniPR(v2) is competitive in 2D →3D retrieval, while the 3D →2D direction is slower because DIV generation must be executed online. 
+
+Method KITTI-00 Latency (ms) KITTI-360-0003 Latency (ms) 2D →3D 3D →2D 2D →3D 3D →2D 
+
+LiP-Loc 13.93 21.09 14.38 21.23 
+
+GeoUniPR (v2) 14.13 81.22 15.15 86.89 Query Top1 Top2 Top3 2D 3D 2D 3D 3D 2D 3D 2D             
+
+> 2D 3D 2D 3D
+> 3D 2D 3D 2D
+> 2D 3D 2D 3D
+> 3D 2D 3D 2D 2D 3D 2D 3D 3D 2D 3D 2D
+
+Figure 7: KITTI qualitative top-3 retrievals. Each pair of rows corresponds to one sequence frame: the first row is 2D →3D and the second row is 3D →2D. From top to bottom, the four blocks correspond to KITTI sequences 00, 02, 07, and 08. Each row shows the query (left) and the top-3 retrieved candidates (right). Green borders indicate correct matches. 
+
+Correct top-1 retrievals. Figures 7 and 8 show examples where the top-1 retrieval is correct. Across both datasets and multiple sequences, GeoUniPR retrieves RGB/LiDAR candidates that remain visually and geometrically consistent with the query, and the behavior is generally stable in both directions (2D →3D and 3D →2D). Qualitatively, the retrieved matches preserve salient layout cues (e.g., road geometry, curb/building boundaries, and nearby structural arrangement), suggesting that the learned embedding emphasizes transferable geometric structure rather than appearance-only similarity. 
+
+Failure cases and characteristic confusions. Figures 9 and 10 present cases where the top-1 or some top-3 candidates are incorrect. A recurrent pattern is directional asymmetry: in several frames, 2D →3D is less reliable when the RGB observation lacks distinctive landmarks (e.g., weak building presence or repetitive roadside structure), while the corresponding 3D →2D retrieval remains correct (and vice versa in some cases). We interpret this as modality-dependent ambiguity: appearance cues may be less discriminative in visually repetitive regions, whereas geometric cues can still constrain the match, or conversely, sparse LiDAR structure can be less informative in certain configurations. Importantly, even incorrect matches typically share highly similar global structure with the query (e.g., comparable road shape and boundary layout), indicating that most failures arise from confusing near-duplicate places rather than arbitrary mismatches. 16 Query Top1 Top2 Top3 2D 3D 2D 3D 3D 2D 3D 2D 2D 3D 2D 3D       
+
+> 3D 2D 3D 2D
+> 2D 3D 2D 3D
+> 3D 2D 3D 2D
+
+Figure 8: KITTI-360 qualitative top-3 retrievals. Each pair of rows corresponds to one sequence frame: the first row is 2D →3D and the second row is 3D →2D. From top to bottom, the three blocks correspond to KITTI-360 sequences 0003, 0005, and 0009. Each row shows the query (left) and the top-3 retrieved candidates (right). Green borders denote correct matches, while red borders indicate incorrect matches. Query Top1 Top2 Top3 2D 3D 2D 3D 3D 2D 3D 2D             
+
+> 2D 3D 2D 3D
+> 3D 2D 3D 2D
+> 2D 3D 2D 3D
+> 3D 2D 3D 2D 2D 3D 2D 3D 3D 2D 3D 2D
+
+Figure 9: KITTI qualitative top-3 retrievals with errors. Layout follows Figure 7: for each sequence frame, the first row is 2D →3D and the second row is 3D →2D; blocks from top to bottom correspond to sequences 00, 02, 07, and 08. Green borders denote correct matches, while red borders indicate incorrect matches. Query Top1 Top2 Top3 2D 3D 2D 3D 3D 2D 3D 2D 2D 3D 2D 3D       
+
+> 3D 2D 3D 2D
+> 2D 3D 2D 3D
+> 3D 2D 3D 2D
+
+Figure 10: KITTI-360 qualitative top-3 retrievals with errors. Layout follows Figure 8: for each sequence frame, the first row is 2D →3D and the second row is 3D →2D; blocks from top to bottom correspond to sequences 0003, 0005, and 0009. Green borders denote correct matches, while red borders indicate incorrect matches. 17

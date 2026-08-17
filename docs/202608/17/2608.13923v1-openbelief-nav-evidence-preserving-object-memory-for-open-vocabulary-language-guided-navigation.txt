@@ -1,0 +1,428 @@
+Title: OpenBelief-Nav: Evidence-Preserving Object Memory for Open-Vocabulary Language-Guided Navigation
+
+URL Source: https://arxiv.org/pdf/2608.13923v1
+
+Published Time: Mon, 17 Aug 2026 00:23:11 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# OpenBelief-Nav: Evidence-Preserving Object Memory for Open-Vocabulary Language-Guided Navigation 
+
+Dinh Tuan Nguyen 1,∗, Anh Dao 1,∗,Phuong Nam Dang 1, Quan-Dung Pham 1, Tuyen P. Le 1, Truong Nguyen 1, Quan Nguyen 2
+
+Abstract — Open-vocabulary 3D scene graphs provide com-pact semantic memory for language-guided navigation, but mapped objects are often exposed through a single fused feature or committed semantic label. Such commitment can remove minority yet task-relevant hypotheses from the task-time in-terface. We present OpenBelief-Nav, an evidence-preserving object memory that retains observation-level phrases, reliability cues, and frame–mask provenance while maintaining separate aggregate geometric and visual representations. Semantically related phrases are consolidated into a vocabulary-independent object belief from which task-specific readouts perform fixed-vocabulary projection or free-form retrieval. On five Scan-Net200 and eight Replica scenes, full-belief projection achieves mIoU scores of 0.2742 and 0.2912, compared with 0.2393 and 0.2701 for a matched early-commit readout. Across 78 HM3D– YCB navigation trials, consensus and early-commit retrieval each achieve 60/78 successes, compared with 58/78 for belief-weighted retrieval and 55/78 for DualMap. Across 20 Unitree G1 runs organized as 10 matched evaluation cases, a correction policy permitting at most two verified candidate attempts improves target-confirmation success from 6/10 to 8/10 relative to top-1-only execution. Code will be released upon acceptance at https://openbelief-nav.github.io/ .
+
+I. I NTRODUCTION 
+
+Language-guided navigation requires a robot to ground natural-language concepts in persistent spatial knowledge. Given a request such as “take me to the fire extinguisher,” the robot must identify the most plausible mapped instance and produce a reachable navigation goal. Open-vocabulary 3D scene graphs combine metric geom-etry with language-aligned semantics. ConceptGraphs [1] builds object-centric graphs from multi-view detections, HOV-SG [2] organizes features hierarchically, FSR-VLN [3] adds view-level retrieval, and DualMap [4] supports online target reselection. Their standard task-time interfaces nev-ertheless rely primarily on an aggregate descriptor, selected view, or consensus object state rather than exposing multi-ple same-object linguistic hypotheses as a reusable readout interface. We identify three consequences of early semantic commit-ment. 
+
+First, early commitment can discard recoverable ev-idence. Different views may describe the same object in-consistently because of occlusion, distance, segmentation noise, or foundation-model uncertainty. A dominant label may therefore be incorrect even when the correct concept remains present in the observation history. 
+
+> 1VinMotion, Inc., Vietnam
+> 2University of Southern California, USA
+> ∗Equal contribution
+
+Second, one semantic readout need not be best for every task. Closed-vocabulary segmentation requires pro-jection onto a supplied label set, whereas navigation re-trieval must ground a free-form query. Under the evaluated protocols, full-belief projection achieves the highest fixed-vocabulary segmentation performance, whereas consensus and early-commit retrieval obtain the highest navigation success. 
+
+Third, a top-ranked target remains a hypothesis during execution. A semantically plausible node may correspond to a distractor or to an instance that cannot be confirmed from the arrival observation. The robot should therefore verify the selected query-to-node binding and, when verification fails, re-ground the unchanged query over the remaining mapped candidates. We introduce OpenBelief-Nav, an open-vocabulary object-memory framework based on delayed semantic commitment. Each linguistic observation retains its phrase, reliability cues, and frame–mask provenance, while the associated object node maintains aggregate geometry and a separate aggregate visual feature. Multi-view phrases are consolidated into object-specific concept hypotheses and accumulated as a regularized semantic belief without assigning a benchmark-specific class during mapping. At task time, separate readouts perform fixed-vocabulary projection and reliability-aware free-form retrieval. During physical execution, arrival RGB-D observations can con-firm, re-observe, or reject a selected candidate. Rejected candidates are excluded only for the current query, and the unchanged instruction is re-grounded over the remaining mapped candidates without modifying the persistent graph. The mechanism therefore corrects the current query-to-node binding rather than performing general dynamic-map repair or absent-target inference. Figure 1 summarizes the pipeline. We evaluate OpenBelief-Nav on open-vocabulary semantic segmentation and language-guided navigation using Scan-Net200 [5], Replica [6] and HM3D [7] scenes augmented with YCB objects [8]. The controlled comparisons show task-dependent behavior among semantic readouts while keeping the stored observations and object geometry fixed within each evaluation.We additionally evaluate execution-grounded candidate correction through 20 real-world runs organized as 10 matched evaluation cases on a Unitree G1 humanoid. Under correct and confusable candidate condi-tions, correction increases the observed task success from 6/10 (60%) to 8/10 (80%). 
+
+Contributions. arXiv:2608.13923v1 [cs.CV] 14 Aug 2026 Fig. 1: Overview of OpenBelief-Nav. Mapping retains observation-level phrases, reliability cues, frame–mask provenance, and separate aggregate geometric and visual representations. Task-time readouts perform fixed-vocabulary projection or free-form retrieval, while arrival verification enables query-specific candidate correction without modifying the persistent graph. 1) An evidence-preserving object-memory interface. 
+
+We introduce an object-centric representation that re-tains per-observation language phrases, reliability cues, and frame–mask provenance while maintaining a sep-arate aggregate visual feature, enabling semantic deci-sions to be recomputed at task time. 2) Task-specific readouts over a shared frozen graph. 
+
+We instantiate full-belief fixed-vocabulary projection together with consensus, early-commit, and belief-weighted free-form retrieval as separate readouts over the same stored object evidence. Within each con-trolled comparison, the variants use identical observa-tions and object geometry. 3) Query-specific execution correction. We formulate a query-preserving verification loop that excludes a can-didate failing arrival verification only for the current query and re-grounds the unchanged request over the remaining mapped candidates without modifying the persistent graph. The loop terminates when a candidate is confirmed, no untried mapped candidate remains, or the candidate-attempt budget is reached. We evaluate the mechanism in a 20-run pilot study comprising 10 matched evaluation cases on a Unitree G1 humanoid. II. R ELATED WORK 
+
+A. Open-Vocabulary Semantic Mapping 
+
+Open-vocabulary mapping attaches language-aligned fea-tures to geometric map elements. ConceptFusion [9] and VLMaps [10] embed vision-language features densely into points and grids; ConceptGraphs [1] lifts this to object-centric 3D scene graphs by incrementally fus-ing per-detection CLIP features into a single running-average embedding per object. HOV-SG [2] builds a hi-erarchical floor–room–object graph for large environments. OGScene3D [11] incrementally maintains semantic 3D Gaussians and scene-graph relations using confidence-aware optimization. ThinkGraphs [12] maintains incremental object tracks and asynchronously enriches them with VLM-derived labels and descriptions. These methods demonstrate the value of structured semantic memory, but their downstream interfaces still rely on a committed or consensus object rep-resentation. Our focus is complementary: we retain object-specific observation-level linguistic evidence and expose it to multiple task-time readouts while maintaining aggregate geometric and visual representations. Classical semantic mapping has long maintained fixed-vocabulary class distributions, for example in SemanticFu-sion [13]. Our representation differs in that the concept set is not fixed during map construction. Each node accumulates object-specific phrases, which are projected onto a consumer vocabulary only at read time. We use Dirichlet-inspired pseudo-count smoothing and adopt “evidence” in the broad subjective-logic sense [14], [15]; we do not claim learned evidential calibration. 
+
+B. Scene Graphs for Language Navigation 
+
+FSR-VLN [3] performs efficient hierarchical retrieval and then applies slower VLM reasoning. SysNav [16] separates semantic reasoning, planning, and embodiment-specific con-trol for real-world cross-embodiment navigation. Our method does not propose a new low-level navigation architecture. Instead, it improves the object-memory and target-grounding interface supplied to a conventional planner. TABLE I: Comparison with related open-vocabulary scene-graph systems. “Evidence @ query” denotes multiple same-object linguistic hypotheses available to task-time readouts. 
+
+✓: supported; △: supported through a different formulation; 
+
+✗: unsupported.                      
+
+> System Open-vocab Evidence @ query Exec.-grounded correction Training-free ConceptGraphs [1] ✓✗✗✓
+> HOV-SG [2] ✓✗✗✓
+> FSR-VLN [3] ✓✗✗✓
+> DualMap [4] ✓✗△✓
+> OpenBelief-Nav (ours) ✓✓✓✓
+
+C. Dynamic Mapping and Target Correction 
+
+DualMap combines an abstract global map with online local mapping and supports target reselection when a queried object changes location [4]. OpenIN [17] and DOVSG [18] update carrier-relation or dynamic scene graphs when ob-jects relocate. ThinkGraphs repairs fragmented tracks during graph construction using asynchronous VLM agents [12]. Our execution correction has a narrower objective. It does not update the persistent graph, discover a newly introduced object, infer that a queried object is globally absent, or claim general relocation recovery. Instead, an arrival RGB-D observation tests the current query-to-node hypothesis. A candidate that fails verification is excluded only for that query, and the unchanged instruction is re-grounded over the remaining mapped candidates. The procedure ends in failure when no candidate is confirmed within the candidate-attempt budget or when no untried mapped candidate remains. Table I positions OpenBelief-Nav against the most closely related systems along the axes developed above. III. P ROBLEM FORMULATION 
+
+We are given a stream of posed RGB-D observations D =
+
+{(It, D t, T t)}Nt=1 with camera-to-world poses Tt ∈ SE (3) ,and must build a persistent spatial memory that answers free-form language queries with reachable navigation goals. We organize the environment as a hierarchical scene graph over floor, room, view, and object nodes; our contribution concerns the object nodes and the interface they expose to downstream tasks. Conventional maps often compress an object’s observa-tions into one label or fused embedding during construction. A task-relevant minority hypothesis discarded by this com-mitment cannot be recovered at read time without rerunning perception. We instead retain observation-level linguistic evi-dence and an independent aggregate visual feature, deferring semantic decisions to task-time readouts. The resulting object state Bi is defined in Section IV-A. Given a query q, the system produces a per-object score 
+
+Si(q) and selects the highest-scoring mapped candidate that has not previously been excluded for that query. During deployment, the selected target is treated as a hypothesis rather than a fixed semantic fact. At correction attempt k,the robot acquires an arrival observation z(k) and verifies the selected candidate i(k). If verification fails, the candidate is added to a query-specific exclusion set, 
+
+R(k+1)  
+
+> q
+
+= R(k) 
+
+> q
+
+∪ { i(k)}, q(k+1) = q. (1) The unchanged query is then re-grounded over the remaining mapped candidates. The persistent graph is not modified. Ex-ecution terminates when a candidate is confirmed, no untried mapped candidate remains, or the candidate-attempt budget is reached. The design question addressed by this paper is where semantic commitment should occur across map construction, task-time readout, and physical verification. IV. M ETHOD 
+
+A. Overview: object nodes as evidence, not decisions 
+
+In a pipeline that assigns each object a single label and embedding at construction time, a task-relevant category can remain present in the accumulated multi-view phrases yet be absent from the committed readout. Early commitment therefore does not merely risk perceptual error: it can remove already acquired semantic hypotheses from the task-time object state. Our response is to defer commitment. An object node stores the evidence together with a cheap summary of it, and every semantic decision is computed downstream from that evidence: 
+
+Bi =  Pi, f vi , Oi, Vi, pi, f ti , ρ i
+
+ , (2) where Pi is the point cloud, f vi is an aggregate visual embedding, Oi is the list of language observations, Vi =
+
+{Vik }Ki 
+
+> k=1
+
+is the concept-evidence vector, pi = {pik }Ki 
+
+> k=1
+
+is its normalized relative-support distribution, f ti is the consen-sus text feature defined in Eq. (8), and ρi is the trust status defined in Sec. IV-D. The representation obeys a separation invariant: the visual channel f vi and the language channels 
+
+(Oi, Vi, pi, f ti ) are maintained independently and are never destructively fused during mapping; all cross-modal fusion is deferred to the task-time readouts of Section IV-E. We are precise about what is preserved: the language evidence is retained per observation, whereas the visual embedding is an aggregate. The remainder of the method consists of four stages—evidence acquisition, geometric–visual association, belief construction, and task-time readout with execution-time verification—each of which defers task-specific com-mitment while preserving the evidence required by down-stream readouts. 
+
+B. Multimodal evidence acquisition 
+
+For each frame It, a vision–language model proposes a set of object phrases and a promptable segmentation model grounds each phrase as one or more masks, so that every mask retains the phrase that produced it together with its frame and mask provenance. Following FSR-VLN [3], we compute each mask’s appearance feature using global–local CLIP aggregation and back-project its valid depth pixels into the world frame using Tt. The mask is stored as a single observation 
+
+oe = ( te, j e, ℓ e, c e, n e, P e, f ve ), (3) where the entries denote the source frame, mask index, phrase, segmentation confidence, valid-point count, back-projected point cloud, and normalized visual feature, respec-tively. The unit of preserved semantic evidence is the obser-vation, not the final object. Multiple observations assigned to one object may therefore retain different or contradictory phrases. This disagreement is not removed during mapping; it becomes the input to the belief construction. 
+
+C. Geometric–visual object association 
+
+Per-frame observations must be associated into object in-stances before semantic belief is inferred. Association cannot rely on generated prompts, predicted names, or semantic agreement, since doing so would make instance formation depend on the uncertain evidence that the subsequent belief model is intended to resolve. We instead adopt conservative geometry-based association, using visual similarity only to reject inconsistent matches: 
+
+oe ∼ oe′ . ⇐⇒ Ωr (Pe, P e′ ) ≥ τg ∧ ⟨ f ve , f ve′ ⟩ ≥ τv , (4) where Pe and f ve denote the spatial support and normalized visual feature of observation oe and Ωr is the radius-based point-cloud overlap function used by the mapping pipeline. Object instances are formed as connected components of this relation. We favor high-precision association because false merges irreversibly mix evidence from distinct objects, whereas missed associations remain as separate candidates. Downstream grounding may select among these candidates but does not repair their object identities. 
+
+D. Evidence-preserving semantic belief 
+
+Given a node’s observations, we summarize the language evidence as a smoothed relative-support distribution over its retained concept hypotheses. Pseudo-count smoothing regularizes competition among retained hypotheses, while an observation-count trust status separately limits reliance on sparse language evidence. 
+
+Reliability: VLM phrase proposals carry no usable per-object confidence, so we weight each observation only by quantities we do possess—its segmentation confidence and the square root of its 3D support: 
+
+we = ce
+
+√ne. (5) 
+
+Synonym-aware concept consolidation: Multi-view obser-vations may describe the same object using semantically equivalent phrases, causing its evidence to be fragmented across lexical variants. After geometric association, we em-bed the observed phrases in a shared text space and group semantically similar expressions into object-level concept hypotheses. The support for concept k of object i is accu-mulated as 
+
+Vik = X 
+
+> oe∈O i:ℓe∈C ik
+
+we, (6) where Cik denotes the phrase cluster associated with that concept. This consolidation reduces synonym-induced vote splitting while retaining semantically distinct hypotheses as competing alternatives. 
+
+Low-evidence regularization: For Ki > 0, symmetric pseudo-count smoothing gives 
+
+pik = Vik + α
+
+PKi 
+
+> j=1
+
+Vij + αK i
+
+, α > 0. (7) This preserves nonzero relative support for retained compet-ing hypotheses but is not a calibrated uncertainty estimate. We separately set ρi = degraded when |O i| < m min and 
+
+ρi = trusted otherwise. During free-form retrieval, degraded nodes place less weight on the language branch. 
+
+Consensus text feature: For nodes with Ki > 0, we additionally maintain a consensus text feature, the belief-weighted combination of its consolidated concept embed-dings, 
+
+f ti = normalize 
+
+ KiX
+
+> k=1
+
+pik gik 
+
+
+
+, (8) where gik is the normalized text embedding of concept Cik .This is a summary for scoring only; the underlying belief pi
+
+remains available to every readout. 
+
+E. Task-time semantic readouts 
+
+Because a node stores evidence rather than a decision, “what is this object?” is answered differently for different tasks over the same frozen graph. We instantiate fixed-vocabulary projection and free-form retrieval and compare alternative semantic readouts over identical stored observa-tions and object geometry. 
+
+Reliability-aware free-form retrieval: Given a normalized query embedding fq , the three evaluated language readouts are 
+
+Hcon  
+
+> i
+
+(q) = f ti , f q , (9) 
+
+Hearly  
+
+> i
+
+(q) = gik ⋆i , f q , k⋆i = arg max  
+
+> k
+
+Vik , (10) 
+
+Hbel  
+
+> i
+
+(q) = 
+
+> Ki
+
+X
+
+> k=1
+
+pik ⟨gik , f q ⟩ . (11) For a selected readout r ∈ { con , early , bel }, the object score is 
+
+S(r) 
+
+> i
+
+(q) = λi ⟨f vi , f q ⟩ + (1 − λi)H(r) 
+
+> i
+
+(q), (12) where 
+
+λi =
+
+
+
+1.0, Ki = 0 ,
+
+0.7, ρi = degraded ,
+
+0.2, ρi = trusted .
+
+(13) Thus, nodes without linguistic evidence are scored visually, degraded nodes lean toward the visual branch, and trusted nodes place greater weight on the selected language readout. Let Vo denote the mapped object nodes and Aq = Vo \R q
+
+the candidates not excluded for query q. Retrieval is defined as 
+
+retrieve( q, Rq ) = 
+
+
+
+NONE , Aq = ∅,
+
+arg max 
+
+> i∈A q
+
+S(r) 
+
+> i
+
+(q), otherwise . (14) The sentinel NONE indicates only that no untried mapped candidate remains under the current query-specific exclusion state. It is not an absent-query prediction and does not imply that the queried object is absent from the environment. 
+
+Delayed semantic commitment for fixed-vocabulary read-out: Graph construction operates over free-form concepts, whereas benchmark segmentation requires classification over a closed vocabulary available only at evaluation time. We therefore avoid early benchmark-label assignment and retain for each object (i) a compact belief pi = {pik }Ki 
+
+> k=1
+
+over its consolidated concepts. Although not lossless, this repre-sentation remains independent of the downstream vocabulary and preserves plausible secondary hypotheses discarded by an early top-1 decision. Once the target vocabulary is known, visual evidence refines the belief only within its retained semantic support: 
+
+epik = pγik exp ( ⟨gik , f vi ⟩ /T vis )
+
+PKi 
+
+> j=1
+
+pγij exp ( ⟨gij , f vi ⟩ /T vis ) , (15) where gik is the text embedding of concept Cik , 0 < γ ≤ 1
+
+tempers an over-concentrated support distribution, and Tvis 
+
+controls visual re-ranking. This support-preserving refine-ment cannot introduce concepts outside the retained belief, but may promote a visually consistent retained secondary hypothesis. For benchmark class c, define the direct visual prediction 
+
+vi(c) = softmax c
+
+ ⟨f vi , t c⟩
+
+Tobj 
+
+
+
+, (16) where tc is the normalized text embedding of class c, and define the concept-to-class affinity 
+
+Wikc = softmax c
+
+ ⟨gik , t c⟩
+
+Tproj 
+
+
+
+. (17) The full-belief class distribution is 
+
+bpi(c) = 
+
+
+
+vi(c), Ki = 0 ,
+
+(1 − λvis )
+
+> Ki
+
+X
+
+> k=1
+
+epik Wikc + λvis vi(c), Ki > 0.
+
+(18) The predicted benchmark label is byi = arg max c bpi(c).For the controlled readout comparison, visual-only uses 
+
+vi(c) directly. Consensus projects the consensus feature as 
+
+bpcon  
+
+> i
+
+(c) = 
+
+
+
+vi(c), Ki = 0 ,
+
+softmax c
+
+ ⟨f ti , t c⟩
+
+Tproj 
+
+
+
+, Ki > 0. (19) 
+
+Early-commit replaces pi with a one-hot distribution at 
+
+k⋆i = arg max k Vik before applying the same benchmark-conditioned projection as Eq. (18). Full-belief projection 
+
+retains all hypotheses and uses Eq. (18). Benchmark-specific projection is used only for semantic-segmentation evaluation and is not stored in the graph. 
+
+F. Execution-Grounded Candidate Correction 
+
+A retrieved object node is treated as a hypothesis rather than an immediately confirmed target. After navigating to the candidate goal, the robot acquires a local RGB-D ob-servation and applies three ordered checks. First, it checks 
+
+Algorithm 1 Query-preserving execution correction                                                 
+
+> Require: Query q, frozen graph G, attempt budget Kmax
+> Ensure: Outcome in {CONFIRM ,FAIL }
+> 1: Rq←∅
+> 2: for k= 1 , . . . , K max do
+> 3: i←retrieve( q, Rq)
+> 4: if i= NONE then
+> 5: return FAIL
+> 6: end if
+> 7: Navigate to the candidate goal g⋆i
+> 8: Acquire an arrival RGB-D observation and evaluate candi-date i
+> 9: if the candidate has insufficient visibility then
+> 10: Execute one bounded re-observation and re-evaluate candidate i
+> 11: end if
+> 12: if the candidate is confirmed then
+> 13: return CONFIRM
+> 14: end if
+> 15: Rq← R q∪ { i}
+> 16: end for
+> 17: return FAIL
+
+whether enough of the stored candidate geometry should be visible from the arrival viewpoint. If visibility is below τν ,the robot performs one bounded re-observation. Second, it checks whether the strongest local query–mask similarity exceeds τq . Third, it checks whether the query-matching local mask geometrically overlaps the stored candidate by at least τarr . The candidate is confirmed only when the visibility, semantic, and geometric checks are satisfied. A candidate that remains unconfirmed after the verification procedure, including bounded re-observation when required, is excluded only for the current query. The persistent graph is not modified, and the original query is re-grounded over the remaining mapped candidates. Consequently, the mechanism corrects the current query-to-node binding but does not infer that the queried object is absent, perform general dynamic-map repair, or recover an object at a location absent from the stored graph. The correction procedure assumes that the navigation stack reaches the candidate observation viewpoint. Failures of the underlying navigation stack are not interpreted as semantic evidence against the selected candidate. 
+
+G. Navigation Interface 
+
+The object’s point cloud is projected onto the traversability map. The planner selects the nearest collision-free boundary pose with expected visibility and executes it using a con-ventional global/local navigation stack. Embodiment control is outside our contribution; OpenBelief-Nav supplies the object-level semantic target. V. E XPERIMENTS 
+
+A. Experimental Setup 
+
+We evaluate two complementary uses of the same object representation: fixed-vocabulary 3D semantic segmentation and language-guided object navigation. a) Open-vocabulary semantic segmentation: 
+
+Following HOV-SG and DualMap, we evaluate on five ScanNet200 scenes: scene0011 00 , scene0050 00 ,
+
+scene0231 00 , scene0378 00 , and scene0518 00 .We additionally evaluate on eight Replica scenes, 
+
+office0--office4 and room0--room2 . All OpenBelief-Nav variants share identical observations and object geometry and differ only in their task-time semantic readout. Visual-only uses the direct object visual prediction vi(c). Consensus projects the belief-weighted consensus feature using Eq. (19). Early-commit retains only the highest-support concept before applying the same benchmark-conditioned projection. Full-belief projection 
+
+retains all concept hypotheses and delays projection to the benchmark vocabulary until evaluation. We follow the point-wise evaluation protocol of HOV-SG and DualMap and report mean intersection-over-union (mIoU), frequency-weighted IoU (F-mIoU), and mean accuracy (mAcc). 
+
+b) Language-guided navigation: We evaluate in Habitat-Sim [19] on HM3D scenes 00829 , 00848 , and 
+
+00880 , following the static navigation protocol of DualMap with inserted YCB objects. For each query, the system retrieves an object node and navigates to its mapped location. A trial succeeds when the final agent position is within 1 m of the target, and performance is reported as SR@1m. The evaluation contains 78 trials per method. We compare ConceptGraphs, HOV-SG, and DualMap as reference systems against the consensus, early-commit, and belief-weighted retrieval readouts of OpenBelief-Nav. The controlled claims among OpenBelief-Nav variants are based on identical graph geometry, observations, and navigation stacks; these variants differ only in semantic target selection. 
+
+c) Implementation details: Phrase proposals are generated by Qwen3-VL-4B-Instruct [20], grounded into object masks using SAM 3 [21], and encoded with MobileCLIP2-S4 [22] for both visual and textual features. Mapping is performed offline on a workstation equipped with one NVIDIA RTX 5090 GPU (32 GB), while task-time readouts operate online. Unless stated otherwise, (τg , τ v , α, m min , γ, T vis , T proj , T obj , λ vis ) =(0 .75 , 0.85 , 0.50 , 3, 0.50 , 0.10 , 0.02 , 0.02 , 0.25) , and 
+
+(τν , τ q , τ arr , K max ) = (0 .25 , 0.50 , 0.20 , 2) .
+
+B. Open-Vocabulary Semantic Segmentation 
+
+Table II reports the main results. Among matched OpenBelief-Nav readouts, full-belief projection achieves the highest mIoU on ScanNet200 and Replica, improving over early-commit projection from 0.2393 to 0.2742 and from 0.2701 to 0.2912, respectively. It also obtains the highest reported mAcc on both datasets and the highest F-mIoU on ScanNet200, while closely matching DualMap on Replica F-mIoU (0.5204 versus 0.5207). These controlled comparisons support retaining secondary hypotheses until the downstream vocabulary is known. 
+
+C. Language-Guided Navigation in Simulation 
+
+Table III reports SR@1m under the HM3D–YCB proto-col. Consensus and early-commit obtain the highest aver-TABLE II: Open-vocabulary 3D semantic segmentation. OpenBelief-Nav variants share the same graph. Higher is better; best and second-best results are shown in bold green and amber.                                      
+
+> Dataset Method mIoU ↑F-mIoU ↑mAcc ↑
+> Replica ConceptGraphs 0.1501 0.3858 0.3559 HOV-SG 0.2050 0.4846 0.3835 DualMap 0.2538 0.5207 0.4024 Ours (Consensus) 0.2831 0.4647 0.4774 Ours (Full belief) 0.2912 0.5204 0.4822
+> ScanNet200 ConceptGraphs 0.0882 0.3077 0.3538 HOV-SG 0.1333 0.3381 0.3714 DualMap 0.1604 0.3288 0.3794 Ours (Consensus) 0.2107 0.4887 0.4580 Ours (Full belief) 0.2742 0.5276 0.4685
+
+TABLE III: HM3D–YCB navigation SR@1m (%); 78 trials per method. Best and second-best results are shown in bold green and amber.                              
+
+> Method 00829 00848 00880 Avg. SR@1m ↑
+> ConceptGraphs [1] 69.2 53.8 61.5 61.5 HOV-SG [2] 53.8 46.2 57.7 52.6 DualMap [4] 73.1 69.2 69.2 70.5 Consensus-only 80.8 76.9 73.1 76.9
+> Early-commit 84.6 73.1 73.1 76.9
+> Belief-weighted 76.9 73.1 73.1 74.4
+
+age score among the evaluated readouts, 76.9%, while the belief-weighted readout obtains 74.4%. The corresponding DualMap, ConceptGraphs, and HOV-SG reference scores are 70.5%, 61.5%, and 52.6%, respectively. No internal readout dominates every scene: early-commit is strongest on 
+
+00829 , consensus is strongest on 00848 , and the three text-based variants tie on 00880 . Together with the segmentation results, this variation motivates task-specific readouts rather than treating one committed representation as uniformly optimal across the evaluated tasks. 
+
+D. Real-World Language-Guided Navigation 
+
+We deploy the proposed pipeline on a Unitree G1 hu-manoid equipped with an Intel RealSense D435i RGB-D camera and a Livox MID-360 LiDAR (Fig. 2a). An external workstation with an NVIDIA GeForce RTX 5090 GPU and Intel Core Ultra 9 285K CPU performs semantic map-ping, open-vocabulary retrieval, and language-conditioned reasoning. An onboard NVIDIA Jetson AGX Orin runs ROS 2 [23] and Nav2 [24] and interfaces with the low-level robot controller. The two computers communicate through Zenoh, keeping compute-intensive semantic reasoning off-board while preserving onboard motion planning and control. Each free-form query is grounded to a target pose using consensus retrieval. After navigation, arrival RGB-D obser-vations verify the candidate as described in Section IV-F. Full correction permits at most Kmax = 2 verified candidate attempts. (a) Unitree G1 platform and hardware configuration. (b) Execution-grounded candidate correction. 
+
+Fig. 2: Real-world platform and deployment procedure. TABLE V: Belief-construction ablation using the consensus semantic readout. Navigation uses 78 HM3D–YCB trials, including 18 inserted-object trials.                            
+
+> Variant ScanNet200 mIoU ↑Nav SR@1m ↑YCB SR@1m ↑
+> Default belief construction 0.2107 76.9 (60/78) 61.1 (11/18)
+> we= 1 0.2010 70.5 (55/78) 55.6 (10/18)
+> we=cene0.2117 74.4 (58/78) 50.0 (9/18) No synonym consolidation 0.2067 75.6 (59/78) 61.1 (11/18) No low-evidence regularization 0.2095 70.5 (55/78) 50.0 (9/18)
+
+TABLE VI: Semantic readout ablation. Higher mIoU is better. Best results per dataset are highlighted in green (bold).            
+
+> Dataset Semantic readout mIoU ↑
+> ScanNet200 Visual-only 0.1286 Consensus-only 0.2107 Early-commit 0.2393 Full-belief projection 0.2742
+> Replica Visual-only 0.2287 Consensus-only 0.2831 Early-commit 0.2701 Full-belief projection 0.2912
+
+TABLE IV: Matched real-world target-confirmation results. Each matched case is run once per method using the same frozen graph, query, object configuration, and reset start pose. The evaluation therefore contains 20 robot runs in total.             
+
+> Condition Runs per method Top-1 only Confirmation SR Full correction Confirmation SR Full correction mean visits Correct 55/5 (100%) 5/5 (100%) 1.00 Confusable 51/5 (20%) 3/5 (60%) 1.80 Overall 10 6/10 (60%) 8/10 (80%) 1.40
+
+We evaluate five paired episodes with a correct initial candidate and five with a competing distractor, using the same graph, query, configuration, and start pose for top-1-only and full-correction execution. Table IV shows that success increases from 6/10 to 8/10; under the confusable condition, it increases from 1/5 to 3/5. Full correction visits 1.40 candidates per episode on average. 
+
+Scope. This pilot evaluates recovery when the intended target remains mapped; it does not evaluate absent-query rejection, removed-target detection, general map repair, or broad real-world generalization. 
+
+E. Ablation Studies 
+
+We separately ablate semantic belief construction and task-time readout while keeping object geometry and observa-tions fixed. Table V isolates belief construction using the consensus readout, whereas Table VI and Fig. 3 compares alternative semantic readouts. Table V shows that uniform evidence weighting reduces both segmentation and navigation performance. Linear sup-port weighting slightly improves mIoU but reduces naviga-tion success, particularly on inserted YCB objects, indicating that observation size alone is an imperfect proxy for seman-tic quality. Removing low-evidence regularization accounts for the largest overall navigation drop. Removing synonym consolidation causes a small decrease in mIoU and overall navigation success while leaving YCB success unchanged. Table VI shows that preserving additional semantic hy-potheses improves fixed-vocabulary projection. On Scan-Net200, mIoU increases from 0.1286 with visual-only pre-diction to 0.2107 with consensus, 0.2393 with early com-mitment, and 0.2742 with full-belief projection. On Replica, full-belief projection similarly obtains the highest mIoU, 0.2912. Figure 3 provides a qualitative example of this progres-sion. On the illustrated ScanNet200 scene, scene-level mIoU increases from 0.0914 with visual-only prediction to 0.3832 with consensus and 0.5505 with full-belief projection. VI. C ONCLUSION 
+
+We introduced OpenBelief-Nav, an evidence-preserving object memory for open-vocabulary language-guided nav-igation. By retaining observation-level linguistic evidence, reliability cues, and frame–mask provenance alongside ag-gregate geometry and a separate aggregate visual fea-ture, OpenBelief-Nav defers semantic commitment to task-time readouts. Over the same frozen object graph, full-belief fixed-vocabulary projection achieves the highest mIoU Ground Truth Visual Only (0.0914) 
+
+Consensus (0.3832) 
+
+Ours (Full-belief) (0.5505)          
+
+> chair table door cabinet sink armchair refrigerator kitchen cabinet tv trash can kitchen counter doorframe
+
+Fig. 3: Qualitative effect of task-time semantic readout on a representative ScanNet200 scene. Parentheses report scene-level mIoU. Consensus recovers the semantic structure missed by visual-only prediction, while full-belief projection resolves additional class confusions. among the evaluated readouts on ScanNet200 and Replica, while consensus and early-commit retrieval obtain the high-est navigation success under the HM3D–YCB protocol. In 10 matched real-world cases comprising 20 Unitree G1 runs, execution-grounded verification and query-specific candidate exclusion increase the observed intended-target confirmation rate from 6/10 to 8/10 without modifying the persistent graph or rewriting the instruction. These results provide initial evidence that delayed semantic commitment allows different downstream tasks to consume the same stored object evi-dence and enables physical execution to correct an erroneous query-to-node binding when the intended target remains represented in the map. The current evaluation is limited to the reported datasets and scenes and to a pilot-scale real-world study. Future work will evaluate the framework across more diverse environments and extend evidence-preserving memory to non-stationary scenes. REFERENCES [1] Q. Gu, A. Kuwajerwala, S. Morin, K. M. Jatavallabhula, B. Sen, A. Agarwal, C. Rivera, W. Paul, K. Ellis, R. Chellappa, et al. ,“Conceptgraphs: Open-vocabulary 3d scene graphs for perception and planning,” in 2024 IEEE International Conference on Robotics and Automation (ICRA) , pp. 5021–5028, IEEE, 2024. [2] A. Werby, C. Huang, M. B¨ uchner, A. Valada, and W. Burgard, “Hierarchical open-vocabulary 3d scene graphs for language-grounded robot navigation,” in First Workshop on Vision-Language Models for Navigation and Manipulation at ICRA 2024 , 2024. [3] X. Zhou, T. Xiao, L. Liu, Y. Wang, M. Chen, X. Meng, X. Wang, W. Feng, W. Sui, and Z. Su, “Fsr-vln: Fast and slow reasoning for vision-language navigation with hierarchical multi-modal scene graph,” arXiv preprint arXiv:2509.13733 , 2025. [4] J. Jiang, Y. Zhu, Z. Wu, and J. Song, “Dualmap: Online open-vocabulary semantic mapping for natural language navigation in dynamic changing scenes,” IEEE Robotics and Automation Letters ,2025. [5] A. Dai, A. X. Chang, M. Savva, M. Halber, T. Funkhouser, and M. Nießner, “Scannet: Richly-annotated 3d reconstructions of indoor scenes,” in Proc. Computer Vision and Pattern Recognition (CVPR), IEEE , 2017. [6] J. Straub, T. Whelan, L. Ma, Y. Chen, E. Wijmans, S. Green, J. J. Engel, R. Mur-Artal, C. Ren, S. Verma, et al. , “The replica dataset: A digital replica of indoor spaces,” arXiv preprint arXiv:1906.05797 ,2019. [7] K. Yadav, R. Ramrakhya, S. K. Ramakrishnan, T. Gervet, J. Turner, A. Gokaslan, N. Maestre, A. X. Chang, D. Batra, M. Savva, et al. ,“Habitat-matterport 3d semantics dataset,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pp. 4927–4936, 2023. [8] B. Calli, A. Singh, J. Bruce, A. Walsman, K. Konolige, S. Srini-vasa, P. Abbeel, and A. M. Dollar, “Yale-cmu-berkeley dataset for robotic manipulation research,” The International Journal of Robotics Research , vol. 36, no. 3, pp. 261–268, 2017. [9] K. M. Jatavallabhula, A. Kuwajerwala, Q. Gu, M. Omama, T. Chen, A. Maalouf, S. Li, G. Iyer, S. Saryazdi, N. Keetha, et al. ,“Conceptfusion: Open-set multimodal 3d mapping,” arXiv preprint arXiv:2302.07241 , 2023. [10] C. Huang, O. Mees, A. Zeng, and W. Burgard, “Visual language maps for robot navigation,” in 2023 IEEE International Conference on Robotics and Automation (ICRA) , pp. 10608–10615, IEEE, 2023. [11] S. Zhu, Z. Lu, G. Wang, C. Huang, Y. Chen, I. Chen, W. Burgard, H. Wang, et al. , “Ogscene3d: Incremental open-vocabulary 3d gaus-sian scene graph mapping for scene understanding,” arXiv preprint arXiv:2603.16301 , 2026. [12] D. Bickici, M. Pabst, S. Mori, and D. Schmalstieg, “Think while you map: Asynchronous vision-language agents for incremental 3d scene graphs,” arXiv preprint arXiv:2606.31471 , 2026. [13] J. McCormac, A. Handa, A. Davison, and S. Leutenegger, “Se-manticfusion: Dense 3d semantic mapping with convolutional neural networks,” in 2017 IEEE International Conference on Robotics and automation (ICRA) , pp. 4628–4635, IEEE, 2017. [14] A. Jsang, Subjective Logic: A formalism for reasoning under uncer-tainty . Springer Publishing Company, Incorporated, 2018. [15] M. Sensoy, L. Kaplan, and M. Kandemir, “Evidential deep learning to quantify classification uncertainty,” Advances in neural information processing systems , vol. 31, 2018. [16] H. Zhu, Z. Li, Z. Liu, K. Guo, Z. Lin, Y. Cai, G. Chen, C. Lv, W. Wang, J. Oh, et al. , “Sysnav: Multi-level systematic cooperation en-ables real-world, cross-embodiment object navigation,” arXiv preprint arXiv:2603.06914 , 2026. [17] Y. Tang, M. Wang, Y. Deng, Z. Zheng, J. Deng, S. Zuo, and Y. Yue, “Openin: Open-vocabulary instance-oriented navigation in dynamic domestic environments,” IEEE Robotics and Automation Letters , vol. 10, no. 9, pp. 9256–9263, 2025. [18] Z. Yan, S. Li, Z. Wang, L. Wu, H. Wang, J. Zhu, L. Chen, and J. Liu, “Dynamic open-vocabulary 3d scene graphs for long-term language-guided mobile manipulation,” IEEE Robotics and Automation Letters ,2025. [19] X. Puig, E. Undersander, A. Szot, M. Dallaire Cote, T.-Y. Yang, R. Partsey, R. Desai, A. Clegg, M. Hlavac, S. Y. Min, et al. , “Habitat 3.0: A co-habitat for humans, avatars, and robots,” in International Conference on Learning Representations , vol. 2024, pp. 15306–15336, 2024. [20] S. Bai, Y. Cai, R. Chen, K. Chen, X. Chen, Z. Cheng, L. Deng, W. Ding, C. Gao, C. Ge, et al. , “Qwen3-vl technical report,” arXiv preprint arXiv:2511.21631 , 2025. [21] N. Carion, L. Gustafson, Y.-T. Hu, S. Debnath, R. Hu, D. Suris, C. Ryali, K. V. Alwala, H. Khedr, A. Huang, et al. , “Sam 3: Segment anything with concepts,” arXiv preprint arXiv:2511.16719 , 2025. [22] F. Faghri, P. K. A. Vasu, C. Koc, V. Shankar, A. Toshev, O. Tuzel, and H. Pouransari, “Mobileclip2: Improving multi-modal reinforced training,” arXiv preprint arXiv:2508.20691 , 2025. [23] S. Macenski, T. Foote, B. Gerkey, C. Lalancette, and W. Woodall, “Robot operating system 2: Design, architecture, and uses in the wild,” 
+
+Science Robotics , vol. 7, no. 66, p. eabm6074, 2022. [24] S. Macenski, F. Martin, R. White, and J. Gin´ es Clavero, “The marathon 2: A navigation system,” in 2020 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , 2020.

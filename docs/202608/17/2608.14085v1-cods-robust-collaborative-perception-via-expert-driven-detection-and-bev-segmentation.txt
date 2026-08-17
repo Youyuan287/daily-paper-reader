@@ -1,0 +1,444 @@
+Title: CoDS: Robust Collaborative Perception via Expert-driven Detection and BEV Segmentation
+
+URL Source: https://arxiv.org/pdf/2608.14085v1
+
+Published Time: Mon, 17 Aug 2026 00:49:36 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# CoDS: Robust Collaborative Perception via Expert-driven Detection and BEV Segmentation 
+
+# Jinlong Wang 
+
+Guangdong Provincial Key Laboratory of Ultra High Definition Immersive Media Technology, Shenzhen Graduate School Peking University Shenzhen, China 2601212983@stu.pku.edu.cn 
+
+# Yuang Jia 
+
+Guangdong Provincial Key Laboratory of Ultra High Definition Immersive Media Technology, Shenzhen Graduate School Peking University Shenzhen, China 2601111556@stu.pku.edu.cn 
+
+# Junhong Lin 
+
+Guangdong Provincial Key Laboratory of Ultra High Definition Immersive Media Technology, Shenzhen Graduate School Peking University Shenzhen, China jhlin42in@gmail.com 
+
+# Nannan Li 
+
+School of Computer Science and Engineering Macau University of Science and Technology Macau, China nnli@must.edu.mo 
+
+# Wei Gao ✉∗
+
+Guangdong Provincial Key Laboratory of Ultra High Definition Immersive Media Technology, Shenzhen Graduate School Peking University Shenzhen, China Peng Cheng Laboratory Shenzhen, China gaowei262@pku.edu.cn 
+
+## Abstract 
+
+Collaborative perception breaks through single-view limitations via multi-agent information exchange. However, multi-source noise such as pose errors and communication delays degrades fusion feature quality, constraining perception performance. Joint train-ing of detection and BEV segmentation provides a natural remedy, where segmented road regions help constrain target distributions and detection bounding boxes help recover ambiguous segmenta-tion boundaries. To this end, we propose a robust Collaborative perception framework with expert-driven Detection and bev Seg-mentation (CoDS). To address spatial inconsistency in fusion qual-ity, we first introduce the Collaborative Reliability Map (CoRM) to explicitly quantify feature quality distribution. Based on CoRM, we design the Semantic Mixture-of-Experts (S-MoE) module to extract differentiated features for inconsistent feature demands. Finally, to further mitigate feature noise degradation, the Bidirec-tional Task Complementary Interaction (BTCI) refines task-aware 
+
+> ∗Corresponding author: Wei Gao. This work was supported by National Science and Technology Major Project (2024ZD01NL00101), Natural Science Foundation of China (62271013), Guangdong Provincial Key Laboratory of Ultra High Defini-tion Immersive Media Technology (2024B1212010006), Guangdong Province Pearl River Talent Program (2021QN020708), Guangdong Basic and Applied Basic Re-search Foundation (2024A1515010155), Shenzhen Science and Technology Program (JCYJ20240813160202004, JCYJ20230807120808017, SYSPG20241211173440004), Shen-zhen Fundamental Research Program (GXWD20201231165807007-20200806163656003), and financially supported for Outstanding Talents Training Fund in Shenzhen.
+> This work is licensed under a Creative Commons Attribution 4.0 International License.
+> MM ’26, Rio de Janeiro, Brazil.
+> © 2026 Copyright held by the owner/author(s). ACM ISBN 979-8-4007-2213-4/2026/11 https://doi.org/10.1145/3767308.3835282
+
+features through bidirectional injection. Extensive experiments on OPV2V and V2V4Real datasets show that our CoDS surpasses exist-ing baselines on both tasks and maintains stable robustness under multi-source noise. Code: https://github.com/JinlongW128/CoDS and https://openi.pcl.ac.cn/OpenAIDriving/CoDS. 
+
+## CCS Concepts 
+
+• Computing methodologies → Scene understanding .
+
+## Keywords 
+
+Collaborative Perception, Multi-task Learning, BEV Perception, Mixture-of-Experts 
+
+ACM Reference Format: 
+
+Jinlong Wang, Yuang Jia, Junhong Lin, Nannan Li, and Wei Gao. 2026. CoDS: Robust Collaborative Perception via Expert-driven Detection and BEV Segmentation. In Proceedings of the 34th ACM International Conference on Multimedia (MM ’26), November 10–14, 2026, Rio de Janeiro, Brazil. ACM, New York, NY, USA, 10 pages. https://doi.org/10.1145/3767308.3835282 
+
+## 1 Introduction 
+
+A core prerequisite for L4/L5 autonomous driving is reliable, com-prehensive environmental perception [6, 15, 20, 21]. However, single-vehicle perception suffers from a limited field of view, facing inher-ent challenges in scenarios involving occlusions, distant targets, and viewpoint blind spots [11, 20, 26]. Collaboration breaks these view-point boundaries by multi-agent sharing, emerging as an important research direction in autonomous driving recently [33, 35]. However, the collaborative fusion process faces interference from multi-source noise [2]. Sensor measurement errors and GPS/IMU positioning drift lead to deviations in inter-vehicle pose estima-tion [28], while communication delays result in BEV features from arXiv:2608.14085v1 [cs.CV] 14 Aug 2026 MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. Jinlong Wang, Yuang Jia, Junhong Lin, Nannan Li, and Wei Gao Agent1    
+
+> Agent2
+> Ego
+> Agent3
+> Segmenter
+> Detector
+> CoDS
+> “ Can we leverage your complementary advantages
+> to achieve robust collaborative perception? "
+> Misalignment!
+> Collaboration
+> “ I can segment roads, but mis -
+> alignment blurs my boundaries ! "
+> “ I can detect objects, but noisy
+> fusion degrades my localization ! "
+> Collaborative perception faces inter -
+> ference from multiple sources of noise .
+> S-MoE
+> Data Fusion Encoder Output Task-Aware
+> Ours ( CoDS )
+
+Figure 1: The motivation of our CoDS framework. 
+
+different agents not originating from the same time instance [2, 10]. These factors collectively cause spatial misalignment and noise accumulation during multi-agent BEV feature alignment, leading to local quality degradation of fusion features and constraining the performance ceiling of collaboration. We observe that stable road region responses from BEV semantic segmentation can provide spatial location priors for detection [1], constraining reasonable target distribution ranges; target bound-ing boxes from 3D object detection naturally delineate the spatial boundaries between object contours and road backgrounds [31], providing precise references for segmentation to recover confused boundaries. Based on these observations, a natural question arises, as shown in Fig.1, can we leverage complementary supervision signals between tasks to achieve robust collaborative perception ?However, most existing collaborative perception methods design independent pipelines to achieve 3D object detection [2, 19, 28, 32, 37, 42] and BEV semantic segmentation [7, 13, 16, 39], resulting in significant redundancy in backbone computation. Although some works simultaneously handle both tasks [22, 29, 34, 43, 47, 50], they either focus on single-agent scenarios without considering the unique challenges of collaborative settings [22, 47, 50], or perform both tasks in collaborative scenarios but lack cross-task bidirec-tional interaction [8, 29, 34, 43]. It is worth noting that collaborative fusion features are a mixed representation of foreground and background information from multiple vehicles and viewpoints, exhibiting higher feature density and spatial heterogeneity [45]. Therefore, achieving joint training for detection and segmentation faces two challenges. First, fusion quality demonstrates spatial inconsistency where well-aligned re-gions generate highly coherent and consistent multi-vehicle fea-tures. Conversely, regions with pose errors suffer from misalign-ment and noise that significantly degrade the resulting local feature quality. The second issue is the inconsistent feature requirements between tasks [12, 49], as detection relies on locally accurate fore-ground boundary features, while segmentation relies on globally continuous background structural features. To this end, we propose a robust Co llaborative perception frame-work with expert-driven Detection and BEV Segmentation ( CoDS ). The core idea is to use fusion reliability as a prior to drive task-specific feature extraction and cross-task interaction. To address the spatial inconsistency in fusion quality, we introduce the Collabora-tive Reliability Map (CoRM) to explicitly quantify the spatial quality distribution of BEV fusion features. Based on CoRM, we design the Semantic Mixture-of-Experts (S-MoE) module to extract task-aware features for inconsistent feature demands. Additionally, to further mitigate the noise-induced degradation of task-aware features, we design the Bidirectional Task Complementary Interaction (BTCI) to refine task-aware features via bidirectional injection. We conduct comprehensive experiments on the OPV2V [42] and V2V4Real [40] datasets. Results demonstrate that our CoDS sur-passes existing collaborative perception baselines on both 3D object detection and BEV semantic segmentation tasks. Additionally, our CoDS maintains stable robustness under multi-source noise, vali-dating the effectiveness of our expert-driven multi-task framework in combating fusion uncertainty. The main contributions of this paper are summarized as follows: 
+
+• We propose the CoDS , a robust collaborative perception frame-work with expert-driven detection and BEV segmentation. It achieves robust perception by leveraging complementary inter-actions between detection and BEV segmentation. 
+
+• We introduce the Collaborative Reliability Map (CoRM) to quan-tify the spatial inconsistency in fusion quality, and propose the Semantic Mixture-of-Experts (S-MoE) module for the inconsis-tent feature demands. To further mitigate the noise degradation, we design the Bidirectional Task Complementary Interaction (BTCI) to refine task-aware features. 
+
+• Extensive experiments on OPV2V and V2V4Real datasets demon-strate that our CoDS surpasses existing baselines on both detec-tion and bev segmentation tasks and maintains stable robustness under multi-source noise. 
+
+## 2 Related work 2.1 Collaborative Perception 
+
+Collaborative perception overcomes the fixed FOV limit of single-vehicle perception by sharing complementary information among agents. Existing fusion paradigms can be categorized into early [4, 25, 30], intermediate [2, 18, 19, 23, 28, 37, 39, 42, 44, 48], and late fu-sion [9, 38] based on the fusion stage. Intermediate fusion offers the best trade-off between performance and cost, so most works study efficient feature fusion [17], communication strategies [37], and pose alignment [28]. However, intermediate fusion relies on feature-level alignment. This makes it sensitive to multi-source noise. Sen-sor errors, GPS/IMU drift, and latency cause spatial misalignment and noise accumulation in BEV alignment [2, 10, 28, 46], degrad-ing local fusion quality and limiting collaboration performance. Existing robust methods mainly handle pose correction [10, 28], compression and denoising [46], and synchronization [2]. However, these methods neglect the spatial inconsistency of fusion quality, CoDS: Robust Collaborative Perception via Expert-driven Detection and BEV Segmentation MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. (a) Co llaborative Reliability Map ( CoRM )
+
+# …
+
+R-Map 
+
+(b) Semantic Mixture-of-Experts ( S-MoE ) 
+
+> Fused Future R-Map
+> C
+> BEV Grid Sampler
+
+(c) Bidirectional Task 
+
+Complementary Interaction ( BTCI )   
+
+> Det2Seg
+> R-Map Gate
+> Reliable Confi-
+> dence Generator
+> Spatial-aware
+> Router
+> SH-Expert FG-Expert BG-Expert
+> S
+> Task-aware
+> Feature
+> CConcat
+> SWeighted Sum
+> Weights
+
+Data Encoder 
+
+(a) CoRM 
+
+> Agent1
+> Agent2
+> Ego
+> Agent3
+
+Agent Fusion 
+
+(b) S-MoE 
+
+(c) BTCI 
+
+> Det
+> Head
+> Seg
+> Head
+
+Raw 
+
+Data 
+
+> Seg2Det
+> Detachment
+> FC-Network
+> Channel-wise
+> Multiplication
+> Detachment
+> FC-Network
+> Channel-wise
+> Multiplication
+
+Figure 2: CoDS framework. Given 𝑁 CAV-encoded BEV features warped to ego coordinate via pose matrices, we get multi-agent features {F 𝑤 𝑖 ∈ R𝐻 ×𝑊 ×𝐶 }𝑁 𝑖 =1. CoRM first analyzes pixel-wise consistency across these features, yielding a collaborative reliability map (R-Map) R ∈ ( 0, 1]𝐻 ×𝑊 . The fused BEV feature F 𝑐𝑜𝑜𝑝 ∈ R𝐻 ×𝑊 ×𝐶 is concatenated with R and passed to S-MoE. S-MoE uses R
+
+as a routing prior to distribute features among three semantic experts, producing F𝑑𝑒𝑡 and F𝑠𝑒𝑔 . Finally, BTCI uses R as a gating signal for bidirectional interaction between F𝑑𝑒𝑡 and F𝑠𝑒𝑔 , yielding refined ˆF𝑑𝑒𝑡 and ˆF𝑠𝑒𝑔 for detection and segmentation heads. 
+
+where well-aligned regions coexist with error-prone ones, and lack explicit mechanisms to model this quality distribution and handle it adaptively, limiting robustness under real-world uncertainties. 
+
+## 2.2 Multi-Task Learning for Perception 
+
+Existing collaborative works have made much progress in 3D de-tection [2, 18, 19, 28, 37, 42, 44, 48] and BEV segmentation [7, 13, 16, 39] separately. However, they are often treated as independent pipelines, causing redundant backbone computation and missing their complementarity. Some works jointly handle both tasks in single-vehicle settings [5, 22, 24, 27, 36, 47, 50], but they ignore challenges unique to collaborative fusion. In fusion, BEV features aggregate info from multiple vehicles and viewpoints, showing higher spatial variety than single-agent features [45]. This leads to uneven fusion quality and different task needs. A few works ad-dress both tasks in collaborative settings [8, 23, 29, 34, 43]. But they either process each task alone without interaction [8, 23, 29, 34], or use segmentation only as a communication filter, not as a com-plement to detection [43]. To this end, we aim to fully exploit their bidirectional complementarity for robust multi-task collaboration. 
+
+## 3 Methodology 3.1 Preliminaries 
+
+In collaborative perception, ego vehicle and surrounding Connected Automated Vehicles (CAVs) share intermediate BEV features for per-ception. Each agent 𝑖 extracts the local BEV feature F𝑖 ∈ R𝐻 ×𝑊 ×𝐶 ,which are spatially aligned by pose transformation and fused into a collaborative BEV feature F 𝑐𝑜𝑜𝑝 ∈ R𝐻 ×𝑊 ×𝐶 . However, pose es-timation errors from sensor noise and GPS/IMU drift, along with temporal misalignment from communication latency, introduce spatial inconsistencies during feature alignment, leading to hetero-geneous fusion quality across the BEV space. To achieve robust collaborative perception, we jointly optimize 3D object detection and BEV semantic segmentation. For 3D object detection, our model regresses a set of 3D bounding boxes B𝑑𝑒𝑡 =
+
+{𝑏 𝑖 }𝑁 𝑏 
+
+> 𝑖 =1
+
+, where each 𝑏 𝑖 ∈ R7 encodes position, dimensions, and orientation. For BEV semantic segmentation, it predicts per-pixel semantic labels S𝑠𝑒𝑔 ∈ R𝐻 ×𝑊 ×𝑁 𝑐 over 𝑁 𝑐 categories (e.g., road, lane, and dynamic objects). 
+
+## 3.2 Overall Design 
+
+As shown in Fig. 2, we propose CoDS , an expert-driven framework for robust collaborative perception with detection and BEV segmen-tation. First, to tackle the spatial inconsistency of fusion quality, the Co llaborative Reliability Map (CoRM) generation (Fig. 2 (a)) explicitly quantifies the spatial quality distribution of collaborative BEV features. Based on CoRM, the Semantic Mixture-of-Experts (S-MoE) module (Fig. 2 (b)) performs task-aware feature extraction for inconsistent feature demands. Moreover, to further mitigate the noise-induced degradation, the Bidirectional Task Complementary 
+
+Interaction (BTCI) module (Fig. 2 (c)) refines features via bidirec-tional injection. More detailed implementation is provided below. MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. Jinlong Wang, Yuang Jia, Junhong Lin, Nannan Li, and Wei Gao 
+
+Figure 3: Visualization of R-Map under Gaussian pose noise 
+
+𝜂 (2.0 m, 2.0◦) on OPV2V. Low-reliability regions (blue) coin-cide with areas of dense vehicle presence, where pose noise induces severe feature misalignment. 
+
+## 3.3 Collaborative Reliability Map 
+
+Collaborative perception aligns agent BEV features via pose trans-form before fusion. Pose estimation errors and communication delays introduce spatial misalignment during warping, leading to heterogeneous fusion quality across the BEV space: well-aligned regions exhibit high inter-agent feature consistency and reliable collaborative information, whereas misaligned regions suffer from spatial offset and noise accumulation. However, existing methods treat fused features uniformly, ignoring spatial quality modeling. To address this, we propose the Co llaborative Reliability Map (CoRM ) generation module, which explicitly quantifies the spatial quality distribution of collaborative BEV features by measuring pixel-wise inter-agent feature consistency. Regions of high consis-tency indicate successful alignment and trustworthy collaborative information, while low-consistency regions signal potential mis-alignment and warrant reliability-aware processing. 
+
+Spatial Consistency Measurement. Given 𝑁 surrounding agents participating in collaborative perception, each agent 𝑖 ex-tracts its local BEV feature F𝑖 ∈ R𝐻 ×𝑊 ×𝐶 and transforms it to the ego vehicle’s coordinate system via spatial warping, yielding warped features {F 𝑤  
+
+> 1
+
+, F 𝑤  
+
+> 2
+
+, . . . , F 𝑤 𝑁 }. As shown in Fig. 2 (a), we stack these features along the agent dimension and compute the pixel-wise variance across agents to capture spatial inconsistency. Specifically, at each pixel-wise spatial location (ℎ, 𝑤 ), we obtain a variance vector across all channels: 
+
+V ( ℎ, 𝑤 ) = Var ({F 𝑤 𝑖 (:, ℎ, 𝑤 )} 𝑁 𝑖 =1) ∈ R𝐶 , (1) where V ( ℎ, 𝑤 ) represents the channel-wise variance vector at loca-tion (ℎ, 𝑤 ). Higher variance indicates greater feature disagreement among agents, signaling potential spatial misalignment. To aggre-gate the channel-wise variance into a scalar spatial inconsistency measure, we compute the L2 norm: 
+
+𝜑 (ℎ, 𝑤 ) = ∥V ( ℎ, 𝑤 )∥ 2 ∈ R. (2) BEV Grid Sampler 
+
+> Center-crop
+> FG-Expert
+> Local Edge Branch
+> C
+> 1×1 Conv
+> IN+DP
+
+＋
+
+> ReLU
+> Shape
+> Context
+> Branch
+> Avg Pool
+> SH-Expert
+> Max Pool
+> 1×1 Conv
+> LN+DP
+
+＋
+
+> ReLU
+> BG-Expert
+> 1×1
+> Conv
+> ASPP
+> r={1,3,6}
+> Global Avg Pool
+> Multi-scale Fusion
+> 1×1 Conv
+> GN+DP
+
+＋   
+
+> ReLU
+> Weighted Sum Spatial-aware
+> Router
+> Task-aware
+> Feature
+> Semantic Mixture-of-Experts
+> (S-MoE) Fused
+> Feature
+> CConcat
+
++ Add     
+
+> IN Instance Norm
+> GN Group Norm
+> LN Layer Norm
+> DP Dropout
+> Shard MLP
+> Full resolution Downsample
+
+Figure 4: Semantic Mixture-of-Experts (S-MoE). The fused feature F 𝑐𝑜𝑜𝑝 , concatenated with the reliability map R, is routed to the semantic experts via a reliability-guided gating mechanism, producing task-aware features F𝑑𝑒𝑡 and F𝑠𝑒𝑔 .R-Map Generation. To convert spatial inconsistency into re-liability, we apply an inverse transformation. The collaborative reliability map (R-Map) is generated as: 
+
+R ( ℎ, 𝑤 ) = 11 + 𝜑 (ℎ, 𝑤 ) ∈ ( 0, 1], (3) where larger variance 𝜑 (ℎ, 𝑤 ) yields lower reliability scores, and vise versa. The resulting reliability map R ∈ R𝐻 ×𝑊 ×1 provides pixel-wise confidence estimation of the collaborative feature F 𝑐𝑜𝑜𝑝 .As illustrated in Fig. 3, regions with high reliability scores corre-spond to well-aligned collaborative features with consistent multi-agent information, while low-reliability regions indicate spatial misalignment and noise-corrupted features. This explicit spatial quality quantification serves as a prior to guide subsequent task-specific feature extraction in the S-MoE. 
+
+## 3.4 Semantic Mixture-of-Experts 
+
+The fused collaborative feature F 𝑐𝑜𝑜𝑝 aggregates multi-view fore-ground and background, exhibiting two forms of spatial heterogene-ity that a single extractor cannot adequately handle. First, detection and segmentation have different needs: detection needs fine bound-aries in sparse foreground, while BEV segmentation needs spa-tial continuity for road topology. Second, pose errors cause fusion quality to vary spatially. Routing low-reliability regions blindly to experts may amplify noise. Thus, we propose the Semantic Mixture-
+
+of-Experts ( S-MoE ), which uses reliability-guided, task-aware ex-traction to address both issues. Since dynamic object segmentation shares semantic targets with detection, we design experts by semantics, not tasks. As shown in Fig. 4, the foreground expert ( FG-Expert ) extracts fine boundaries via two parallel branches: a 3 ×3 convolution for local edges and CoDS: Robust Collaborative Perception via Expert-driven Detection and BEV Segmentation MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. 
+
+a 5 ×5 depthwise separable convolution that encodes shape con-text. Their outputs are summed and passed through a residual path with InstanceNorm for sparse activations. To cover both lane mark-ings and intersections, the background expert ( BG-Expert ) adopts Atrous Spatial Pyramid Pooling (ASPP) [3] with rates {1, 3, 6} to aggregate multi-scale road patterns, with GroupNorm for stable dense training. The shared expert ( SH-Expert ) performs global channel recalibration via dual-path SE attention [14], avoiding spa-tial bias and serving as a fallback for uncertain regions. All expert outputs are bilinearly re-aligned to 𝐻 ×𝑊 with residual correction, yielding E𝑓 𝑔 , E𝑏𝑔 , E𝑠ℎ ∈ R𝐶 ×𝐻 ×𝑊 .Given distinct foreground and background distributions, we adopt multi-scale BEV grid sampling to give each expert tailored inputs. Specifically, the FG-Expert gets a downsampled full-range feature to broaden context for sparse objects. BG-Expert uses a cropped and upsampled central region to preserve fine details like lane markings. SH-Expert directly uses full-resolution F 𝑐𝑜𝑜𝑝 .We then design a spatial-aware router for the three experts at each spatial location. As shown in Fig. 2 (b), to allow the router to identify not only what semantic content a region contains but also how reliable it is, we first design a reliable confidence gen-erator H𝑐𝑜𝑛𝑓 that introduces the collaborative reliability map R
+
+as an additional prior into the confidence estimation process. The generator concatenates F 𝑐𝑜𝑜𝑝 with R and feeds the result into two parallel lightweight convolutional branches, producing foreground confidence P𝑓 𝑔 and background confidence P𝑏𝑔 :
+
+P𝑓 𝑔 , P𝑏𝑔 = H𝑐𝑜𝑛𝑓 
+
+ [F 𝑐𝑜𝑜𝑝 , R]  . (4) The spatial-aware router combines a semantic routing prior 
+
+{𝝅 𝑑𝑒𝑡 , 𝝅 𝑠𝑒𝑔 } with a learned routing signal {𝝀 𝑑𝑒𝑡 , 𝝀 𝑠𝑒𝑔 } . For detec-tion, the FG-Expert weight is proportional to P𝑓 𝑔 , with the SH-Expert compensating in low-reliability regions. For segmentation, all three experts participate in routing according to foreground confidence, background confidence, and positional uncertainty: 
+
+𝝅 𝑑𝑒𝑡 (𝑖, 𝑗 ) = P𝑓 𝑔 , 0, P𝑏𝑔 
+
+,
+
+𝝅 𝑠𝑒𝑔 (𝑖, 𝑗 ) = P𝑓 𝑔 , P𝑏𝑔 , 1 − max (P 𝑓 𝑔 , P𝑏𝑔 ), (5) where 𝝅 𝜏 (𝑖, 𝑗 ) ∈ R3 denotes the semantic routing prior at spatial location (𝑖, 𝑗 ) for task 𝜏 , with entries ordered as {𝑓 𝑔, 𝑏𝑔, 𝑠ℎ } and 
+
+P𝑏𝑔 = 1 − P 𝑓 𝑔 represents the background confidence derived from CoRM. And the learned routing signal 𝝀 𝜏 ∈ R𝐻 ×𝑊 ×3 is obtained from a 3 ×3 local spatial attention branch conditioned on the task-modulated feature. The two signals are combined via a task-specific learnable scalar 𝛼 𝜏 before Softmax normalization: 
+
+G𝜏 = Softmax  𝛼 𝜏 · 𝝅 𝜏 + ( 1 − 𝛼 𝜏 ) · 𝝀 𝜏 
+
+, 𝜏 ∈ { det , seg }, (6) where G𝜏 ∈ R𝐻 ×𝑊 ×3 is the normalized gating weight map for task 
+
+𝜏 , and 𝛼 𝜏 is initialized to 0 .7 for detection and 0 .45 for segmentation. This is to emphasize the semantic prior in the detection task, while the segmentation relies more on the learned signal. Finally, the task-specific features are obtained by spatially weighted summation of the three expert outputs: 
+
+F𝜏 =∑︁   
+
+> 𝑘 ∈ { 𝑓 𝑔, 𝑏𝑔, 𝑠ℎ }
+
+G (𝑘 ) 
+
+> 𝜏
+
+⊙ E 𝑘 , 𝜏 ∈ { det , seg }, (7) where ⊙ denotes element-wise multiplication. The aggregated fea-tures are then refined by a lightweight task adaptor (1 ×1 residual convolution) to produce task-aware F𝑑𝑒𝑡 and F𝑠𝑒𝑔 .
+
+## 3.5 Bidirectional Task Complementary Interaction 
+
+Detection features carry precise boundary knowledge around sparse objects, while segmentation features contain stable prior knowl-edge of large-scale road structures, providing a natural opportunity for bidirectional complementarity. Although S-MoE can generate task-specific features F𝑑𝑒𝑡 and F𝑠𝑒𝑔 , these two features are still sus-ceptible to noise interference in low-reliability areas, and simple cross-task interaction may pose a risk of training instability. To this end, we propose the Bidirectional Task Complementary Interaction 
+
+(BTCI) module to refine the task-aware features through the bidi-rectional feature injection. As shown in Fig. 2 (c), BTCI extracts channel weights from the source via global average pooling and lightweight full-connection network and then performs reliability-gated channel-wise multipli-cation on target. It also detaches gradients bidirectionally to ensure independent branch convergence. Taking the det2seg direction as an example, a channel descriptor is extracted from F𝑑𝑒𝑡 by global average pooling and passed through a two-layer Fully Connected (FC) Network to produce channel weights: 
+
+W = 𝜎 W2 𝛿 W1
+
+1
+
+𝐻𝑊 ∑︁ ℎ,𝑤 
+
+F ℎ,𝑤 𝑑𝑒𝑡 
+
+!! 
+
+∈ ( 0, 1)𝐶 , (8) where 𝐶 is channel, W1 ∈ R(𝐶 /𝜌 ) × 𝐶 and W2 ∈ R𝐶 × ( 𝐶 /𝜌 ) denote the FC weight matrices with channel reduction ratio 𝜌 = 8, 𝜎 (·) is the sigmoid function, and 𝛿 (·) is the ReLU activation. The weights and bias of W2 are zero-initialized, ensuring W ≡ 𝜇 at the start of training, where 𝜇 = 0.5 is the sigmoid midpoint. This ensures that in the early stages of training, BTCI starts learning from the identity mapping. Then, BTCI computes a scalar gate 𝛽 = 1
+
+> 𝐻𝑊
+
+Íℎ,𝑤 Rℎ,𝑤 ∈ ( 0, 1]
+
+from the reliability map R to uniformly control the interaction strength in both directions. Subsequently, the channel weights modulate the target feature via multiplicative residual injection: ˆF𝑠𝑒𝑔 = F𝑠𝑒𝑔 ⊙ ( 1 + 𝛽 · ( W − 𝜇 )) , (9) where ⊙ denotes element-wise multiplication. When 𝛽 → 0, the injection term vanishes and the module reduces to an identity map-ping in low-reliability regions. BTCI applies the same mechanism symmetrically in the seg2det direction, sharing 𝛽 across both direc-tions while maintaining separate FC parameters. Stop-gradient is applied to the source feature in each direction to prevent cross-task gradient interference, yielding the complete bidirectional formulation: ˆF𝑠𝑒𝑔 = F𝑠𝑒𝑔 ⊙ ( 1 + · 𝛽 · ( W𝑑 2𝑠 (sg [F 𝑑𝑒𝑡 ]) − 𝜇 )) , (10) ˆF𝑑𝑒𝑡 = F𝑑𝑒𝑡 ⊙  1 + · 𝛽 ·  W𝑠 2𝑑 
+
+ sg [F 𝑠𝑒𝑔 ] − 𝜇  , (11) where W𝑑 2𝑠 and W𝑠 2𝑑 denote the FC networks for the det2seg and 
+
+seg2det directions respectively, and sg [·] denotes the stop-gradient operation. The final refined features ˆF𝑑𝑒𝑡 and ˆF𝑠𝑒𝑔 are input into task heads to complete detection and BEV segmentation. MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. Jinlong Wang, Yuang Jia, Junhong Lin, Nannan Li, and Wei Gao 
+
+Table 1: Results on the OPV2V. Best results are in bold. Method Detection Segmentation AP @0.3 AP @0.5 AP @0.7 Dynamic Road Lane                                     
+
+> AttFuse [42] 89.94 89.41 83.65 71.20 63.97 48.08 Where2comm [17] 90.19 89.20 80.55 70.19 63.43 47.36 CoBEVT [39] 92.09 91.09 80.95 73.97 65.53 50.84 CoAlign [28] 89.27 88.85 82.73 71.57 63.88 48.33 CoSDH [37] 91.06 90.54 82.48 72.54 62.35 46.31 Ours (CoDS) 94.64 94.05 86.88 76.47 69.38 55.19
+
+Table 2: Results on the V2V4Real. Best results are in bold. Method Public AP @0.3 AP @0.5 AP @0.7 Dynamic                               
+
+> AttFuse [42] ICRA 2022 66.45 59.23 31.43 54.29 Where2comm [17] NeurIPS 2022 65.11 58.77 31.21 63.44 CoBEVT [39] CoRL 2022 68.05 58.78 31.70 64.94 CoAlign [28] ICRA 2023 69.45 62.02 31.81 57.58 CoSDH [37] CVPR 2025 67.64 61.42 31.00 61.58 Ours (CoDS) -72.63 66.04 38.33 65.32
+
+## 3.6 Loss Function 
+
+The total training loss L is defined as: 
+
+L = 𝜁 𝑐𝑙𝑠 L𝑐𝑙𝑠 + 𝜁 𝑟𝑒𝑔 L𝑟𝑒𝑔 + 𝜁 𝑠𝑒𝑔 L𝑠𝑒𝑔 , (12) where L𝑐𝑙𝑠 and L𝑟𝑒𝑔 are the focal loss for classification and smooth-
+
+ℓ1 loss for box regression with 𝜁 𝑐𝑙𝑠 =1.0, 𝜁 𝑟𝑒𝑔 =2.0. And Lseg = 𝜁 𝑠 L𝑠 +
+
+𝜁 𝑑 L𝑑 supervises static and dynamic semantics with 𝜁 𝑠 =1.0, 𝜁 𝑑 =2.0. 
+
+## 4 Experiments 4.1 Experimental Settings 
+
+Datasets. We validate our CoDS on two datasets: OPV2V [42] and V2V4Real [40]. OPV2V is a large-scale open-source simulated dataset, which provides annotations for both 3D object detection and BEV semantic segmentation. V2V4Real is a large-scale real-world dataset with detection annotations, enabling evaluation of generalization in real-world environments. 
+
+Baselines Selection. We evaluate CoDS against two groups of baselines. The first includes representative single-task cooperative perception methods for either detection or BEV segmentation [17, 28, 37, 39, 42]. The second covers multi-task frameworks spanning single-agent [47] and cooperative settings [29, 43]. 
+
+Implementation Details. Our CoDS is built upon the interme-diate fusion strategy of AttFuse [42] and trained and evaluated on both OPV2V [42] and V2V4Real [40]. The LiDAR range for detec-tion is set to 𝑥 ∈ [− 140 .8, 140 .8] m and 𝑦 ∈ [− 38 .4, 38 .4] m. For BEV semantic segmentation, we follow the annotation range provided by OPV2V, configured as 𝑥, 𝑦 ∈ [− 51 .2, 51 .2] m. V2V4Real lacks BEV segmentation annotations, so we use detection GT boxes to generate dynamic ground truth, validating segmentation effective-ness under real-world noise. The learning rate is reduced by a factor of 0.1 at epochs 10 and 20, with training running for 30 epochs in total. The batch size is set to 2, and the maximum number of CAVs per frame is capped at 5. To ensure fair comparison, all baselines are retrained under the identical experimental configuration as [42], and all results are obtained from two NVIDIA RTX 4090 GPUs. More details are provided in the Appx. .
+
+Table 3: Ablation study of each proposed module on OPV2V. “Baseline (only-det)” and “Baseline (only-seg)” denote single-task detection and segmentation models. Best in bold. Module Test (AP @0.3/0.5/0.7) Dynamic Road Lane                         
+
+> Baseline [42] (only-det) 89.94 / 89.41 / 83.65 ---Baseline [42] (only-seg) -71.20 63.97 48.08 +Seg Head 92.98 / 92.01 / 84.59 71.05 62.39 46.82 +S-MoE 93.32 / 92.62 / 86.03 73.73 65.13 50.44 +R-Map 94.22 / 93.56 / 85.68 75.82 67.44 53.11 +BTCI (Ours) 94.64 / 94.05 / 86.88 76.47 69.38 55.19
+
+## 4.2 Performance Results 
+
+Results on the OPV2V. Table 1 reports the 3D detection and BEV segmentation results on OPV2V. Overall, CoDS achieves the best performance across all metrics. For detection, it attains AP@0.3, AP@0.5, and AP@0.7 of 94.64, 94.05, and 86.88, surpassing Att-Fuse [42] by 4.70, 4.64, and 3.23 points. Notably, CoDS achieves the most consistent improvement at AP@0.7, indicating that seg-mentation knowledge helps refine bounding box localization. For segmentation, CoDS outperforms AttFuse by 5.27, 5.41, and 7.11 points on Dynamic, Road, and Lane IoU, respectively. The notable gain on Dynamic shows that detection provides useful cues for seg-menting moving objects, confirming the complementary benefits of joint multi-task modeling. 
+
+Results on the V2V4Real. Table 2 presents results on the real-world V2V4Real dataset. CoDS consistently outperforms all base-lines across detection metrics, achieving 72.63, 66.04, and 38.33 for AP@0.3, AP@0.5, and AP@0.7, respectively. The pronounced improvement at the strict AP@0.7 metric verifies CoDS’s robust-ness under real-world sensor noise and pose perturbations. For segmentation, CoDS also achieves the best Dynamic IoU of 65.32, further validating the effectiveness of cross-task complementarity in challenging real-world scenarios. 
+
+## 4.3 Ablation Study 
+
+We conduct an incremental ablation study (Table 3) on OPV2V. Single-task AttFuse [42] serves as the baseline. First, adding a paral-lel segmentation head to detection (+Seg Head) improves detection at all IoU thresholds, confirming joint training helps detection. But segmentation slightly degrades relative to the only-seg, showing a plain head cannot handle the different feature needs of both tasks. Second, adding S-MoE (+S-MoE) gains both tasks, with AP@0.7 rises to 86.03 and all segmentation IoUs improve. This shows task-specific extraction effectively alleviates the multi-task bottleneck. Third, adding R-Map (+R-Map) provides spatial quality priors to guide routing, steadily improving both tasks and proving the need to model fusion reliability. Finally, adding BTCI (+BTCI) achieves the best results, raising AP@0.7 by 2.29 and Dynamic IoU by 5.42 over the naive multi-task baseline (+Seg Head). This confirms the complementary gains from bidirectional feature injection. 
+
+## 4.4 Analysis Experiments 
+
+Robustness to Localization Noise. Following the noise injec-tion protocol of [17] and [41], we apply Gaussian noise 𝜂 from 
+
+(0.0 m , 0.0◦) to (0.6 m , 0.6◦) to pose estimates to simulate local-ization errors. Results are in Fig. 5. As noise grows, all methods CoDS: Robust Collaborative Perception via Expert-driven Detection and BEV Segmentation MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. 
+
+Figure 5: Robustness evaluation under increasing Gaussian localization noise on OPV2V. The x-axis denotes the injected pose noise level (translation in meters / rotation in degrees), ranging from (0.0 m, 0.0◦) to (0.6 m, 0.6◦). The top row reports detection performance at AP @0.3/AP @0.5/AP @0.7, while the bottom row reports BEV segmentation IoU for Dynamic, Road, and Lane. Table 4: Robustness evaluation under varying communication latency on OPV2V. We sample a random latency from a uniform distribution U[0, 𝐿 ], gradually increasing the maximum latency 𝐿 from 200,ms to 500,ms. AP @0.5, AP @0.7, and Dynamic IoU are reported for each latency setting. Best results are in bold. Method 0 ms 0–200 ms 0–300 ms 0–400 ms 0–500 ms AP @0.5 AP @0.7 Dynamic AP @0.5 AP @0.7 Dynamic AP @0.5 AP @0.7 Dynamic AP @0.5 AP @0.7 Dynamic AP @0.5 AP @0.7 Dynamic                                                             
+
+> AttFuse [42] 89.41 83.65 71.20 82.34 61.03 68.12 73.47 53.08 66.16 67.45 49.53 64.24 63.56 47.29 62.33 CoAlign [28] 88.85 82.73 71.57 81.07 58.89 68.76 72.02 51.89 66.58 65.32 47.51 65.08 61.83 45.59 63.47 CoSDH [37] 90.54 82.48 72.54 79.94 56.22 69.16 69.78 48.70 66.60 63.19 45.24 64.66 58.47 42.33 62.34 Ours 94.05 86.88 76.47 88.05 63.98 72.95 79.47 55.71 70.68 72.98 51.63 68.58 68.89 50.08 66.50
+
+degrade on both tasks. However, our CoDS maintains a clear lead over all baselines across all metrics. We believe that this robustness advantage stems from the Collaborative Reliability Map (CoRM) and Semantic Mixture-of-Experts (S-MoE), which perform differen-tiated processing. This effectively mitigates the destructive effects of noise accumulation on the fused features, enabling CoDS to remain stable even with severe errors. 
+
+Robustness to Communication Latency. To further assess how each method withstands communication delays, we inject ran-dom latency sampled from a uniform distribution U[0, 𝐿 ] and gradu-ally increase the upper bound 𝐿 from 200 ms to 500 ms, with results presented in Table 4. While all methods exhibit varying degrees of performance degradation as latency grows, our CoDS sustains a clear and consistent advantage over every baseline throughout all delay conditions, with a comparatively more gradual performance decline. Taking the most demanding setting of 500 ms as an ex-ample, CoDS still records AP@0.5, AP@0.7, and Dynamic IoU of 68.89, 50.08, and 66.50, respectively, retaining a meaningful margin over the best-performing competitor. These findings highlight the stronger perceptual stability of CoDS in realistic communication environments where temporal asynchrony is inevitable. 
+
+Effect of the Joint Multi-task Training. To investigate whether complementary supervision between detection and segmentation 
+
+Table 5: Effect of joint multi-task training on OPV2V. “Det-only” and “Seg-only” denote models trained with a single task objective, while “Joint Training” refers to the full CoDS trained with both tasks simultaneously. Best in bold. Module Test (AP @0.3/0.5/0.7) Dynamic Road Lane 
+
+Det-only 92.38 / 91.69 / 84.59 - - -Seg-only - 71.22 65.46 49.68 Joint Training 94.64 / 94.05 / 86.88 76.47 69.38 55.19 
+
+can lead to bidirectional performance improvement, we removed the segmentation head and detection head from the Joint Training model, respectively, to obtain a Detection-only model (Det-only) and a Segmentation-only model (Seg-only). The results are shown in Table 5. Compared with the Det-only, Joint Training achieves consistent improvements across all IoU thresholds. Meanwhile, Joint Training also surpasses the Seg-only across all three semantic categories, with Dynamic, Road, and Lane IoU improving by 5.25, 3.92, and 5.51 points, respectively, validating that joint training effectively drives mutual performance improvements on both tasks. 
+
+Comparison with Multi-task Frameworks. Table 6 presents a comprehensive comparison between our CoDS and existing single-agent as well as cooperative multi-task frameworks on OPV2V. MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. Jinlong Wang, Yuang Jia, Junhong Lin, Nannan Li, and Wei Gao 
+
+Table 6: Comparison with single-agent and cooperative multi-task frameworks on OPV2V. BEVerse [47] is adapted to the collaborative scenario following the intermediate fusion strategy of AttFuse [42] for fair comparison. Results for ICA-V2X [43] are reproduced from the original paper, as no official code has been released. Best in bold. Method AP @0.3/0.5/0.7 Dynamic Road Lane                 
+
+> BEVerse [47] 92.66 / 91.65 / 82.75 69.32 63.61 44.78 CoBEVFusion [29] 93.26 / 92.59 / 83.55 73.32 59.83 45.13 ICA-V2X [43] - / 92.10 / 84.50 -64.70 53.70 Ours (CoDS) 94.64 / 94.05 / 86.88 76.47 69.38 55.19
+
+Table 7: Comparison of model efficiency. Params., FLOPs, and Mem. denote the parameter count, floating-point operations, and average GPU memory consumption during inference. Method Params. ↓ FLOPs ↓ Mem. ↓ AP @0.5 Dynamic Lane                         
+
+> AttFuse [42] 8.1M 97.3 G 616.3 MB 89.4 --CoBEVT [39] 12.2M 190.8 G 573.0 MB -74.0 50.8 NCM 20.3M 381.2 G 1336.7 MB 89.4 74.0 50.8 Ours 11.0M 283.9 G 673.0 MB 94.1 76.5 55.2
+
+Overall, CoDS consistently outperforms all multi-task baselines on both detection and segmentation tasks. In comparison with the single-agent multi-task method BEVerse [47], CoDS achieves notable improvements on both tasks, which we attribute to the explicit modeling of spatial inconsistency in collaborative fusion, allowing CoDS to better exploit the complementary information across multiple vehicles and yield superior perception performance. In comparison with the cooperative multi-task methods CoBEVFu-sion [29] and ICA-V2X [43], our CoDS still maintains a consistent performance lead, with particularly pronounced gains on the Dy-namic and Road categories of the segmentation task. These results further validate the effectiveness of our CoDS in mitigating spatial inconsistency in fusion quality and addressing the limitations of fused features on multi-task representation. 
+
+Efficiency of Joint Multi-task Training. Table 7 evaluates CoDS against single-task models and the Naïve Cascade Model (NCM) across three efficiency dimensions: parameter count, FLOPs, and average GPU memory consumption during inference. NCM is con-structed by directly combining the single-task detection model AttFuse [42] and the single-task segmentation model CoBEVT [39] without any task interaction. Compared with NCM, CoDS reduces the parameter count by 45.8%, FLOPs by 25.5%, and inference mem-ory by 49.7%, while simultaneously achieving superior performance on both detection and segmentation tasks. These results highlight the practical efficiency advantage of CoDS and demonstrate its potential for real-world deployment. 
+
+## 4.5 Qualitative Analysis 
+
+To show our CoDS robustness under multi-source noise, we in-ject localization noise of (0.2 m , 0.2◦) and compare its detection and segmentation visualizations with three baselines (Fig. 6). In detection (left), AttFuse [42], CoAlign [28], and CoSDH [37] all ex-hibit obvious missed detections or localization offsets under noise perturbation, whereas CoDS maintains substantially higher spatial AttFuse   
+
+> Ours
+> AttFuse
+> Ours
+> CoAlign CoAlign
+> CoSDH CoSDH
+
+Figure 6: Qualitative comparison of detection and BEV seg-mentation results. Left column: 3D detection results, where green and red boxes denote ground truth and predictions, respectively. Right column: BEV segmentation results, where orangered, royalblue, and white regions represent road, lane, and dynamic objects, respectively. 
+
+alignment between predicted and ground-truth bounding boxes with more complete object recall. In segmentation (right), baselines produce considerable noise fragments and boundary confusion in road and lane regions. Moreover, dynamic objects are often under-segmented or blended with background. In contrast, CoDS yields more structurally coherent segmentation maps with well-defined road boundaries, intact lane markings, and more complete delin-eation of dynamic objects. These results confirm CoDS achieves more robust perception in both detection and segmentation. 
+
+## 5 Conclusion 
+
+In this paper, we propose CoDS , a robust collaborative multi-task perception framework that jointly optimizes 3D object detection and BEV semantic segmentation under multi-source noise. To han-dle spatial inconsistency in fusion quality, we introduce CoRM to explicitly quantify the spatial quality distribution of BEV fusion features. Built on CoRM, the S-MoE performs differentiated feature extraction for each task to address the inconsistent feature demands between the two tasks. Moreover, BTCI further mitigates noise-induced feature degradation via bidirectional injection, enabling mutual refinement of task-aware features. Extensive experiments on OPV2V and V2V4Real demonstrate that our CoDS outperforms baselines on both tasks and exhibits strong robustness under lo-calization noise and communication latency perturbations. In sum-mary, our CoDS provides a new paradigm for robust perception and reliable deployment in collaborative systems. 
+
+Limitation. CoDS currently focuses on joint training of 3D object detection and BEV segmentation. A promising direction is integrating additional tasks into the collaborative framework. CoDS: Robust Collaborative Perception via Expert-driven Detection and BEV Segmentation MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. 
+
+## References 
+
+[1] Loick Chambon, Éloi Zablocki, Mickaël Chen, Florent Bartoccioni, Patrick Peréz, and Matthieu Cord. 2024. PointBeV: A Sparse Approach to BeV Predictions. In 
+
+2024 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .IEEE, Seattle WA, USA, 15195–15204. [2] Gong Chen, Chaokun Zhang, Tao Tang, Pengcheng Lv, Feng Li, and Xin Xie. 2026. 
+
+CATNet: Collaborative Alignment and Transformation Network for Cooperative Perception .[3] Liang-Chieh Chen, George Papandreou, Iasonas Kokkinos, Kevin Murphy, and Alan L Yuille. 2017. Deeplab: Semantic image segmentation with deep convolu-tional nets, atrous convolution, and fully connected crfs. IEEE transactions on pattern analysis and machine intelligence 40, 4 (2017), 834–848. [4] Qi Chen, Sihai Tang, Qing Yang, and Song Fu. 2019. Cooper: Cooperative Perception for Connected Autonomous Vehicles based on 3D Point Clouds .[5] Xuesong Chen, Shaoshuai Shi, Tao Ma, Jingqiu Zhou, Simon See, Ka Chun Che-ung, and Hongsheng Li. 2025. M3net: Multimodal multi-task learning for 3d detection, segmentation, and occupancy prediction in autonomous driving. In 
+
+Proceedings of the AAAI Conference on Artificial Intelligence . AAAI Press, Philadel-phia, Pennsylvania, USA, 2275–2283. [6] Can Cui, Yunsheng Ma, Xu Cao, Wenqian Ye, Yang Zhou, Kaizhao Liang, Jintai Chen, Juanwu Lu, Zichong Yang, Kuei-Da Liao, et al. 2024. A survey on mul-timodal large language models for autonomous driving. In Proceedings of the IEEE/CVF winter conference on applications of computer vision . IEEE, Waikoloa, HI, USA, 958–979. [7] Jiahui Fu, Yue Gong, Luting Wang, Shifeng Zhang, Xu Zhou, and Si Liu. 2025. Generative map priors for collaborative BEV semantic segmentation. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . IEEE, Nashville, TN, USA, 11919–11928. [8] Xiangbo Gao, Runsheng Xu, Jiachen Li, Ziran Wang, Zhiwen Fan, and Zhengzhong Tu. 2025. Stamp: Scalable task and model-agnostic collaborative perception . https://arxiv.org/abs/2501.18616 [9] Nathaniel Glaser, Yen-Cheng Liu, Junjiao Tian, and Zsolt Kira. 2021. Overcoming obstructions via bandwidth-limited multi-agent spatial handshaking. In 2021 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, Prague, Czech Republic, 2406–2413. [10] Jiaming Gu, Jingyu Zhang, Muyang Zhang, Weiliang Meng, Shibiao Xu, Jiguang Zhang, and Xiaopeng Zhang. 2023. Feaco: Reaching robust feature-level con-sensus in noisy pose conditions. In Proceedings of the 31st ACM International Conference on Multimedia . ACM Press, Ottawa, Canada, 3628–3636. [11] Yushan Han, Hui Zhang, Huifang Li, Yi Jin, Congyan Lang, and Yidong Li. 2023. Collaborative perception in autonomous driving: Methods, datasets, and chal-lenges. IEEE Intelligent Transportation Systems Magazine 15, 6 (2023), 131–151. [12] Bharath Hariharan, Pablo Arbeláez, Ross Girshick, and Jitendra Malik. 2014. 
+
+Simultaneous Detection and Segmentation .[13] Tianyu Hong, Xiaobo Zhou, Wenkai Hu, Qi Xie, Zhihui Ke, and Tie Qiu. 2025. Communication-Efficient Multi-Vehicle Collaborative Semantic Segmentation via Sparse 3D Gaussian Sharing. In Proceedings of the IEEE/CVF International Conference on Computer Vision . IEEE, Honolulu, Hawaií, USA, 28622–28631. [14] Jie Hu, Li Shen, and Gang Sun. 2018. Squeeze-and-excitation networks. In Pro-ceedings of the IEEE conference on computer vision and pattern recognition . IEEE, Salt Lake City, UT, USA, 7132–7141. [15] Senkang Hu, Zhengru Fang, Yiqin Deng, Xianhao Chen, and Yuguang Fang. 2024. Collaborative Perception for Connected and Autonomous Driving: Challenges, Possible Solutions and Opportunities .[16] Senkang Hu, Zhengru Fang, Yiqin Deng, Xianhao Chen, Yuguang Fang, and Sam Kwong. 2024. Toward full-scene domain generalization in multi-agent collabora-tive bird’s eye view segmentation for connected and autonomous driving. IEEE Transactions on Intelligent Transportation Systems 26, 2 (2024), 1783–1796. [17] Yue Hu, Shaoheng Fang, Zixing Lei, Yiqi Zhong, and Siheng Chen. 2022. Where2comm: Communication-efficient collaborative perception via spatial con-fidence maps. Advances in neural information processing systems 35 (2022), 4874– 4886. [18] Yue Hu, Yifan Lu, Runsheng Xu, Weidi Xie, Siheng Chen, and Yanfeng Wang. 2023. Collaboration helps camera overtake lidar in 3d detection. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . IEEE, Vancouver,Canada, 9243–9252. [19] Xun Huang, Jinlong Wang, Qiming Xia, Siheng Chen, Bisheng Yang, Xin Li, Cheng Wang, and Chenglu Wen. 2025. V2x-r: Cooperative lidar-4d radar fusion with denoising diffusion for 3d object detection. In Proceedings of the computer vision and pattern recognition conference . IEEE, Nashville,TN, USA, 27390–27400. [20] Xun Huang, Ziyu Xu, Hai Wu, Jinlong Wang, Qiming Xia, Yan Xia, Jonathan Li, Kyle Gao, Chenglu Wen, and Cheng Wang. 2025. L4dr: Lidar-4dradar fusion for weather-robust 3d object detection. In Proceedings of the AAAI conference on artificial intelligence . AAAI Press, Philadelphia, Pennsylvania, USA, 3806–3814. [21] Yu Huang and Yue Chen. 2020. Autonomous driving with deep learning: A survey of state-of-art technologies .[22] Changwon Kang, Jisong Kim, Hongjae Shin, Junseo Park, and Jun Won Choi. 2025. MAESTRO: Task-Relevant Optimization via Adaptive Feature Enhancement and Suppression for Multi-task 3D Perception. In Proceedings of the IEEE/CVF International Conference on Computer Vision . IEEE, Honolulu, Hawaií, USA, 28313– 28323. [23] Lingzhao Kong, Jiacheng Lin, Siyu Li, Kai Luo, Zhiyong Li, and Kailun Yang. 2025. 
+
+CoBEVMoE: Heterogeneity-aware Feature Fusion with Dynamic Mixture-of-Experts for Collaborative Perception .[24] Duy-Tho Le, Hengcan Shi, Jianfei Cai, and Hamid Rezatofighi. 2024. Diffusion model for robust multi-sensor fusion in 3d object detection and bev segmentation. In European Conference on Computer Vision . Springer, Milan, Italy, 232–249. [25] Yiming Li, Shunli Ren, Pengxiang Wu, Siheng Chen, Chen Feng, and Wenjun Zhang. 2021. Learning distilled collaboration graph for multi-agent perception. 
+
+Advances in Neural Information Processing Systems 34 (2021), 29541–29552. [26] Si Liu, Chen Gao, Yuan Chen, Xingyu Peng, Xianghao Kong, Kun Wang, Runsheng Xu, Wentao Jiang, Hao Xiang, Jiaqi Ma, et al. 2023. Towards vehicle-to-everything autonomous driving: A survey on collaborative perception .[27] Zhijian Liu, Haotian Tang, Alexander Amini, Xinyu Yang, Huizi Mao, Daniela L Rus, and Song Han. 2023. Bevfusion: Multi-task multi-sensor fusion with unified bird’s-eye view representation. In 2023 IEEE international conference on robotics and automation (ICRA) . IEEE, London,UK, 2774–2781. [28] Yifan Lu, Quanhao Li, Baoan Liu, Mehrdad Dianati, Chen Feng, Siheng Chen, and Yanfeng Wang. 2023. Robust Collaborative 3D Object Detection in Presence of Pose Errors. In 2023 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, London,UK, 4812–4818. [29] Donghao Qiao and Farhana Zulkernine. 2023. CoBEVFusion: Cooperative Percep-tion with LiDAR-Camera Bird’s-Eye View Fusion .[30] Sanbao Su, Yiming Li, Sihong He, Songyang Han, Chen Feng, Caiwen Ding, and Fei Miao. 2022. Uncertainty quantification of collaborative detection for self-driving .[31] Alexander Toshev, Ben Taskar, and Kostas Daniilidis. 2010. Object detection via boundary structure segmentation. In 2010 IEEE Computer Society Conference on Computer Vision and Pattern Recognition . IEEE, San Francisco, USA, 950–957. [32] Jinlong Wang, Xun Huang, Qiming Xia, Shijia Zhao, and Chenglu Wen. 2026. C2E: Boosting Ego-Only 3D Object Detection via Multi-Teacher Contrastive Knowledge Distillation .[33] Naibang Wang, Deyong Shang, Yan Gong, Xiaoxi Hu, Ziying Song, Lei Yang, Yuhan Huang, Xiaoyu Wang, and Jianli Lu. 2025. Collaborative Perception Datasets for Autonomous Driving: A Review .[34] Tianqi Wang, Sukmin Kim, Wenxuan Ji, Enze Xie, Chongjian Ge, Junsong Chen, Zhenguo Li, and Ping Luo. 2023. Deepaccident: A motion and accident prediction benchmark for v2x autonomous driving .[35] Chao Xiang, Chen Feng, Xiaopo Xie, Botian Shi, Hao Lu, Yisheng Lv, Mingchuan Yang, and Zhendong Niu. 2023. Multi-sensor fusion and cooperative percep-tion for autonomous driving: A review. IEEE Intelligent Transportation Systems Magazine 15, 5 (2023), 36–58. [36] Enze Xie, Zhiding Yu, Daquan Zhou, Jonah Philion, Anima Anandkumar, Sanja Fidler, Ping Luo, and Jose M Alvarez. 2022. M2BEV: Multi-camera joint 3D detection and segmentation with unified birds-eye view representation .[37] Junhao Xu, Yanan Zhang, Zhi Cai, and Di Huang. 2025. CoSDH: Communication-Efficient Collaborative Perception via Supply-Demand Aware-ness and Intermediate-Late Hybridization. In Proceedings of the Computer Vision and Pattern Recognition Conference . IEEE, Nashville,TN, USA, 6834–6843. [38] Runsheng Xu, Weizhe Chen, Hao Xiang, Lantao Liu, and Jiaqi Ma. 2022. Model-agnostic multi-agent perception framework .[39] Runsheng Xu, Zhengzhong Tu, Hao Xiang, Wei Shao, Bolei Zhou, and Jiaqi Ma. 2022. CoBEVT: Cooperative bird’s eye view semantic segmentation with sparse transformers .[40] Runsheng Xu, Xin Xia, Jinlong Li, Hanzhao Li, Shuo Zhang, Zhengzhong Tu, Zonglin Meng, Hao Xiang, Xiaoyu Dong, Rui Song, et al. 2023. V2v4real: A real-world large-scale dataset for vehicle-to-vehicle cooperative perception. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition .IEEE, Vancouver , Canada, 13712–13722. [41] Runsheng Xu, Hao Xiang, Zhengzhong Tu, Xin Xia, Ming-Hsuan Yang, and Jiaqi Ma. 2022. V2X-ViT: Vehicle-to-everything cooperative perception with vision transformer. In European conference on computer vision . Springer, Tel-Aviv, Israel, 107–124. [42] Runsheng Xu, Hao Xiang, Xin Xia, Xu Han, Jinlong Li, and Jiaqi Ma. 2021. Opv2v: An open benchmark dataset and fusion pipeline for perception with vehicle-to-vehicle communication .[43] Fuwu Yan, Bo Tao, Ningyu Zheng, Linzhen Nie, Qian Li, and Zhishuai Yin. 2025. Multi-task collaborative perception for vehicle-to-everything considering impaired communication. IEEE Transactions on Instrumentation and Measurement 
+
+74 (2025). [44] Kang Yang, Peng Wang, Lantao Li, Tianci Bu, Chen Sun, Deying Li, and Yongcai Wang. 2026. EIMC: Efficient Instance-aware Multi-modal Collaborative Perception .[45] Jingyu Zhang, Yilei Wang, Lang Qian, Peng Sun, Zengwen Li, Sudong Jiang, Maolin Liu, and Liang Song. 2024. DSRC: Learning Density-insensitive and MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. Jinlong Wang, Yuang Jia, Junhong Lin, Nannan Li, and Wei Gao 
+
+Semantic-aware Collaborative Representation against Corruptions .[46] Jingyu Zhang, Kun Yang, Yilei Wang, Hanqi Wang, Peng Sun, and Liang Song. 2024. Ermvp: Communication-efficient and collaboration-robust multi-vehicle perception in challenging environments. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition . IEEE, Seattle WA, USA, 12575–12584. [47] Yunpeng Zhang, Zheng Zhu, Wenzhao Zheng, Junjie Huang, Guan Huang, Jie Zhou, and Jiwen Lu. 2022. Beverse: Unified perception and prediction in birds-eye-view for vision-centric autonomous driving .[48] Binyu Zhao, Wei Zhang, and Zhaonian Zou. 2023. Bm2cp: Efficient collaborative perception with lidar-camera modalities .[49] Liang Zhao and Limin Wang. 2022. Task-specific inconsistency alignment for domain adaptive object detection. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition . IEEE, New Orleans, USA, 14217–14226. [50] Xiao Zhao, Xukun Zhang, Dingkang Yang, Mingyang Sun, Mingcheng Li, Shunli Wang, and Lihua Zhang. 2024. MaskBEV: Towards A Unified Framework for BEV Detection and Map Segmentation .
