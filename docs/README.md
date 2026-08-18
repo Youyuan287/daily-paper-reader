@@ -6,52 +6,65 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-17
-- 运行时间：2026-08-17 20:03:44 UTC
+- 最新运行日期：2026-08-18
+- 运行时间：2026-08-18 20:09:01 UTC
 - 运行状态：成功
-- 本次总论文数：10
-- 精读区：1
-- 速读区：9
+- 本次总论文数：14
+- 精读区：6
+- 速读区：8
 
 ### 今日简报（AI）
-今日聚焦开放词汇语言引导导航，精读高分论文《OpenBelief-Nav》并速读三篇相关新作。  
-最值得关注：OpenBelief-Nav以“证据保留对象记忆”提升导航可靠性与可解释性，是当前亮点。  
-下一步可留意其与协同感知、目标像素导航规划的结合潜力，拓展多场景应用。
-- 详情：[/202608/17/README](/202608/17/README)
+- 今日共生成 14 篇推荐（精读 6 篇，速读 8 篇）
+- 精读：《CrossView: Can Vision-Language Models Reason Across Cameras?》（9.0/10）, 《Beyond Similarity Matching: Structured Reasoning for Open-Vocabulary Referring Segmentation in 3DGS》（9.0/10）
+- 速读：《Emergent 3D Instance Segmentation from Self-Supervised Point Transformers》（8.0/10）, 《GaussianDWM++: Language-Grounded 3D Gaussian Driving World Model for Unified Scene Understanding, Editing, and Multi-Modal Generation》（8.0/10）, 《GhostPoint: Self-Supervised Representation Learning by Hallucinating Occluded LiDAR Structure》（7.0/10）
+- 这些结果覆盖了当下较热的方向，建议先看精读区论文的关键问题与方法。
+- 详情：[/202608/18/README](/202608/18/README)
 
 ### 精读区论文标签
-1. [OpenBelief-Nav: Evidence-Preserving Object Memory for Open-Vocabulary Language-Guided Navigation](/202608/17/2608.13923v1-openbelief-nav-evidence-preserving-object-memory-for-open-vocabulary-language-guided-navigation)  
+1. [CrossView: Can Vision-Language Models Reason Across Cameras?](/202608/18/2608.15539v1-crossview-can-vision-language-models-reason-across-cameras)  
    标签：评分：9.0/10、query:open-vocab-d
-   evidence：保留观测级短语与帧掩码来源的开放词汇三维场景图记忆，直接服务三维场景理解
+   evidence：多摄像头推理、解决遮挡问题、跨视角证据整合
+2. [Beyond Similarity Matching: Structured Reasoning for Open-Vocabulary Referring Segmentation in 3DGS](/202608/18/2608.16103v1-beyond-similarity-matching-structured-reasoning-for-open-vocabulary-referring-segmentation-in-3dgs)  
+   标签：评分：9.0/10、query:open-vocab-d
+   evidence：3D高斯点云中的开放词汇指代分割与结构化推理
+3. [ProjFormer: Point Cloud Completion via Geometric-Projective Transformer and Cross-Modal Semantic Constraints](/202608/18/2608.15104v1-projformer-point-cloud-completion-via-geometric-projective-transformer-and-cross-modal-semantic-constraints)  
+   标签：评分：8.0/10、query:open-vocab-d
+   evidence：基于显式投影的自适应多视图2D-3D特征融合用于点云补全
+4. [FloodReasonBench: Benchmarking VLM Reasoning Segmentation for Embodied Flood Response at the Edge](/202608/18/2608.15410v1-floodreasonbench-benchmarking-vlm-reasoning-segmentation-for-embodied-flood-response-at-the-edge)  
+   标签：评分：8.0/10、query:open-vocab-d
+   evidence：VLM推理分割，从语言请求到像素级视觉接地
+5. [ArtLang: Structured Language-to-Kinematics Grounding for Articulated 3D Actuation](/202608/18/2608.15419v1-artlang-structured-language-to-kinematics-grounding-for-articulated-3d-actuation)  
+   标签：评分：8.0/10、query:open-vocab-d
+   evidence：语义-运动学铰接图，将开放词汇提案绑定到三维部件
+6. [ES3D: Embedding Semantics into 3D Space for Component-Aware Editing](/202608/18/2608.15749v1-es3d-embedding-semantics-into-3d-space-for-component-aware-editing)  
+   标签：评分：8.0/10、query:open-vocab-d
+   evidence：将语义嵌入3D空间，组件感知编辑，基于局部参考图像和文本
 
 ### 速读区论文标签
-1. [CoDS: Robust Collaborative Perception via Expert-driven Detection and BEV Segmentation](/202608/17/2608.14085v1-cods-robust-collaborative-perception-via-expert-driven-detection-and-bev-segmentation)  
+1. [Emergent 3D Instance Segmentation from Self-Supervised Point Transformers](/202608/18/2608.15796v1-emergent-3d-instance-segmentation-from-self-supervised-point-transformers)  
+   标签：评分：8.0/10、query:open-vocab-d
+   evidence：利用自监督点云Transformer的表示进行无需手工先验的3D实例分割
+2. [GaussianDWM++: Language-Grounded 3D Gaussian Driving World Model for Unified Scene Understanding, Editing, and Multi-Modal Generation](/202608/18/2608.16234v1-gaussiandwm-language-grounded-3d-gaussian-driving-world-model-for-unified-scene-understanding-editing-and-multi-modal-generation)  
+   标签：评分：8.0/10、query:open-vocab-d
+   evidence：语言接地的三维高斯世界模型、统一场景理解、文本与三维结构细粒度对齐
+3. [GhostPoint: Self-Supervised Representation Learning by Hallucinating Occluded LiDAR Structure](/202608/18/2608.14428v1-ghostpoint-self-supervised-representation-learning-by-hallucinating-occluded-lidar-structure)  
    标签：评分：7.0/10、query:open-vocab-d
-   evidence：协同感知中基于可靠性图的不确定性感知融合
-2. [OccPlanner: Goal-Aware Occupancy-Conditioned Diffusion Planner for Pixel-Goal Navigation](/202608/17/2608.14160v1-occplanner-goal-aware-occupancy-conditioned-diffusion-planner-for-pixel-goal-navigation)  
+   evidence：显式处理LiDAR中被遮挡与未观测区域，提升3D表示的遮蔽鲁棒性，符合遮挡感知聚合需求
+4. [Audio-Visual Segmentation via Depth-Guided Collaborative Modeling](/202608/18/2608.16285v1-audio-visual-segmentation-via-depth-guided-collaborative-modeling)  
    标签：评分：7.0/10、query:open-vocab-d
-   evidence：基于射线的可见性推理将RGB视频转为局部3D占用，用于机器人中可见性感知的3D表示学习
-3. [Contrastive Mask Fidelity: Reference-Free Auditing of Ground-Truth Masks in Remote Sensing Semantic Segmentation](/202608/17/2608.09101v1-contrastive-mask-fidelity-reference-free-auditing-of-ground-truth-masks-in-remote-sensing-semantic-segmentation)  
+   evidence：深度引导建模遮挡与距离，用于视频跨模态分割
+5. [RISE: Roadside Infrastructure Sequence Understanding across 3D Tracking and Structured Vision-Language Reasoning](/202608/18/2608.16480v1-rise-roadside-infrastructure-sequence-understanding-across-3d-tracking-and-structured-vision-language-reasoning)  
+   标签：评分：7.0/10、query:open-vocab-d
+   evidence：标定引导的多视角身份关联3D跟踪及结构化视觉-语言推理
+6. [OccamView: Object-Conditioned View Selection for Frame-Budgeted Active 3D Gaussian Reconstruction](/202608/18/2608.16499v1-occamview-object-conditioned-view-selection-for-frame-budgeted-active-3d-gaussian-reconstruction)  
+   标签：评分：7.0/10、query:open-vocab-d
+   evidence：对象条件视角选择、隐蔽区域、主动三维高斯重建
+7. [SplatGuide: Geometric Priors from 3D Gaussians for Pose-Free Novel View Synthesis](/202608/18/2608.16863v1-splatguide-geometric-priors-from-3d-gaussians-for-pose-free-novel-view-synthesis)  
+   标签：评分：7.0/10、query:open-vocab-d
+   evidence：利用逐高斯可见性指导遮挡感知参考视图选择，用于多视图扩散
+8. [Surfsvr: 2D Surface Priors as 3D Geometric Regularizers for Sparse Voxel Reconstruction](/202608/18/2608.11938v1-surfsvr-2d-surface-priors-as-3d-geometric-regularizers-for-sparse-voxel-reconstruction)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：基于掩码级视觉语言判别类别证据的集中性，可用于细粒度开放词汇分割
-4. [View-Adaptive Renderer for View-Consistent 2D-to-3D Generation](/202608/17/2608.09110v1-view-adaptive-renderer-for-view-consistent-2d-to-3d-generation)  
-   标签：评分：6.0/10、query:open-vocab-d
-   evidence：通过视角自适应渲染应对合成视图间的不一致，可迁移到多视角一致性融合
-5. [GeoUniPR: A Geometry-Consistent Unified Framework for Cross-Modal Place Recognition](/202608/17/2608.11263v1-geounipr-a-geometry-consistent-unified-framework-for-cross-modal-place-recognition)  
-   标签：评分：6.0/10、query:open-vocab-d
-   evidence：几何一致的深度图像视图对齐RGB-LiDAR表示，用于机器人与SLAM中一致性感知的跨模态地点识别
-6. [Multi-Agent Target-Existence Verification and Learned Mask Geometry Refinement: Winning Report of the MeViS-Text Track at the 8th LSVOS Challenge 2026](/202608/17/2608.11458v1-multi-agent-target-existence-verification-and-learned-mask-geometry-refinement-winning-report-of-the-mevis-text-track-at-the-8th-lsvos-challenge-2026)  
-   标签：评分：6.0/10、query:open-vocab-d
-   evidence：基于MLLM和SAM的掩码级视觉-语言对齐用于指代视频分割，可迁移至3D开放词汇分割
-7. [PPOM: Marginalizing Patch-Grid Phase for CLIP-Based Generalizable Vision-Language Prompt Tuning](/202608/17/2608.13969v1-ppom-marginalizing-patch-grid-phase-for-clip-based-generalizable-vision-language-prompt-tuning)  
-   标签：评分：6.0/10、query:open-vocab-d
-   evidence：通过平移边际化提升CLIP特征空间一致性，利于区域级视觉语言对齐
-8. [FIRM: Fine-Grained Intra-Token Representation of Masks for Remote Sensing Reasoning Segmentation](/202608/17/2608.13980v1-firm-fine-grained-intra-token-representation-of-masks-for-remote-sensing-reasoning-segmentation)  
-   标签：评分：6.0/10、query:open-vocab-d
-   evidence：面向MLLM推理分割的标记内掩码细粒度表示
-9. [SPARGen: Unifying Spatial Perception and Reasoning through Native Multimodal Generation](/202608/17/2608.14138v1-spargen-unifying-spatial-perception-and-reasoning-through-native-multimodal-generation)  
-   标签：评分：6.0/10、query:open-vocab-d
-   evidence：将3D重建、稠密对应与空间推理统一为指令条件生成，连接多模态语言与3D表示
+   evidence：利用可见性感知的图像表面区域正则化3D体素几何，展示2D区域先验向3D的提升
 
 
 <div class="dpr-home-promo-card">

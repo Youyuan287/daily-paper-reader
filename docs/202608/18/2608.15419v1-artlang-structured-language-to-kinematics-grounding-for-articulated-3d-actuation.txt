@@ -1,0 +1,2192 @@
+ArtLang: Structured Language-to-Kinematics Grounding
+for Articulated 3D Actuation
+Sylvia Yuan1,*, Dan Wang1,*, Ravi Ramamoorthi1, Xinrui Cui2,†
+1University of California San Diego
+2University of North Texas
+*Equal Contribution
+†Corresponding Author
+Email:
+xinrui.cui@unt.edu
+Abstract
+Articulated-object reconstructions recover explicit geome-
+try and kinematics, but their parts often remain semanti-
+cally anonymous and must be controlled through part in-
+dices and numerical joint parameters. We present ArtLang,
+a framework for open-vocabulary language control of per-
+sistent reconstructed articulated assets. ArtLang represents
+an asset as a semantic-kinematic articulation graph and
+augments its surface with language features and graph-
+constrained motion. Open-vocabulary proposals are bound
+to reconstructed parts while allowing uncertain parts to re-
+main unnamed. A typed parser converts a command into
+a directive graph containing referring expressions, actions,
+magnitudes, reference frames, and relations. We then solve
+a global graph-to-graph grounding problem that jointly
+reasons about semantic, spatial, relational, and kinematic
+compatibility, with support for null assignments and absten-
+tion under ambiguity.
+Accepted directives are converted
+into continuous joint targets within the observed motion
+range and executed through forward kinematics. Experi-
+ments on synthetic reconstructions, mesh-based assets, and
+real captures demonstrate reliable language grounding and
+continuous articulated control across repeated parts, spa-
+tial references, relational commands, and ambiguous in-
+structions.
+1. Introduction
+Many objects in robotic manipulation, simulation, and dig-
+ital twins are kinematic systems rather than rigid shapes:
+cabinets contain repeated doors, laptops rotate about hinges,
+and tools couple parts through joints. Recent methods re-
+construct such objects as part-aware assets with explicit ge-
+ometry and kinematics [24, 31, 44, 58]. Yet their parts re-
+main semantically anonymous: users must address them by
+Figure 1. Motivation. Reconstructed articulated assets lack a
+language-addressable interface. ArtLang resolves semantic, spa-
+tial, and motion ambiguities to map commands to persistent parts
+and executable joint coordinates.
+index and control numerical joint parameters. A reconstruc-
+tion may know how part 3 moves, but not that it is the right
+door or should be all the way open (Figure 1). This gap
+limits open-vocabulary inspection, editing, and control of
+reconstructed assets.
+Open-vocabulary 3D language fields attach language
+features to spatial primitives, enabling text retrieval in static
+scenes [21, 39]. Semantic localization alone does not pro-
+vide articulation control: localizing door does not iden-
+tify the intended instance, resolve whether right is camera-,
+user-, or object-relative, or map open to a valid joint coordi-
+nate. Existing language-driven articulation methods mainly
+generate or infer articulated models rather than bind com-
+mands to reconstructed parts and continuous coordinates
+[8, 47]. The missing capability is structured binding from
+language to an asset’s semantic and kinematic structure,
+mapping commands such as open the right door to a posed
+3D object (Figure 1).
+This binding is difficult because semantic, spatial, and
+kinematic ambiguities are coupled.
+Repeated parts may
+share appearance and semantics; spatial descriptions are
+frame-dependent and may include reference-only entities,
+as in open the left door below the drawer; and multiple
+arXiv:2608.15419v1  [cs.CV]  15 Aug 2026
+
+
+directives must be resolved jointly to satisfy relations and
+avoid conflicts. Motion expressions such as halfway open,
+open by 20◦, and open to 20◦also differ and depend on
+joint type, current state, and observed motion. Because re-
+construction, vision-language proposals, and commands are
+uncertain, a reliable system should expose ambiguity rather
+than silently choose a part or alter the action.
+We present ArtLang, which (i) identifies the referred
+persistent part, (ii) selects its executable joint, (iii) infers
+the requested joint coordinate, (iv) executes the resulting
+kinematic state, given a reconstructed articulated asset and a
+compositional natural-language command. ArtLang jointly
+formulates language-conditioned actuation and articulation
+control as structured grounding graph-to-graph reason-
+ing and inference. The reconstructed asset is an articu-
+lation graph A = (V, E) whose nodes are rigid parts and
+whose edges store recovered one-degree-of-freedom mo-
+tion. A typed parser converts the command into a directive
+graph D = (VD, ED) containing referring expressions, ac-
+tions, magnitudes, temporal stages, reference frames, and
+pairwise relations; nodes may be actionable or reference-
+only.
+Rather than resolving phrases independently, ArtLang
+jointly assigns directive nodes to part or private null nodes
+using semantic, spatial, relational, and action-joint compat-
+ibility. This preserves shared landmarks, prevents conflict-
+ing actions, and permits abstention when the selected inter-
+pretation is not better than competing global assignments.
+The graph formulation is coupled to a factorized
+semantic-kinematic field on the canonical surface. The
+factorized field Φ(x) = (π(x), fθ(x), P(π(x))), where
+π(x) encodes part identity, fθ(x) provides language fea-
+tures, and P(π(x)) represents graph-constrained motion,
+records each point’s persistent part, dense open-vocabulary
+feature, and kinematic path. During open-vocabulary part
+binding, we distill multi-view language features onto the
+surface and bind vision-language proposals to reconstructed
+parts. Private dummy matches allow unnamed parts, avoid-
+ing the assumption of one correct proposal per part while
+preserving repeated noun instances.
+At the directive graph and structured grounding dur-
+ing query time, each referring-expression embedding is
+compared with fθ(x) across the surface; the resulting ev-
+idence is aggregated per part and combined with explicit-
+frame geometry, pairwise relations, and action-joint com-
+patibility in global grounding.
+For each accepted action, a typed operator converts the
+verb and magnitude into a selected-joint coordinate.
+It
+distinguishes endpoint requests, absolute and relative frac-
+tions, and angular or translational changes. Accepted tar-
+gets are composed by forward kinematics, yielding a consis-
+tent configuration or motion clip rather than an appearance-
+only edit.
+The system binds dense language features to persis-
+tent parts, resolves relations globally, and maps accepted
+actions to executable joint coordinates with explicit fail-
+ure.
+We evaluate on synthetic multi-view reconstruction
+with Articulate-100, a given-mesh setting isolating lan-
+guage grounding from geometry recovery, and real SplArt
+captures.
+Our contributions are:
+• We formulate language-conditioned control of a recon-
+structed articulated asset as structured grounding from a
+directive graph to a persistent semantic-kinematic articu-
+lation graph, with explicit part, relation, joint, and uncer-
+tainty variables.
+• We introduce robust semantic-geometric binding that
+combines a dense geometry language field and per-view
+semantic-geometric partial matching, without assuming
+one correct proposal per part.
+• We develop a globally consistent grounding and actua-
+tion method that combines semantic, explicit-frame spa-
+tial, relational, and action-joint compatibility, then maps
+accepted directives to typed continuous targets inside the
+observation-supported joint interval with calibrated ab-
+stention.
+• An evaluation protocol with metrics that score the se-
+mantic, spatial, and motion axes independently, together
+with experiments across synthetic multi-view reconstruc-
+tion on Articulate-100, a mesh-input setting where the ge-
+ometry is given, and real captures on SplArt.
+2. Related Work
+Reconstructing articulated objects. NeRF- and SDF-based
+methods [5, 28, 34, 36, 46, 49, 52] recover implicit fields
+that require surface extraction. Gaussian methods [13, 20,
+27, 31, 44, 53, 56] attach rigid or screw motion to point
+primitives without connectivity. Mesh-based differentiable
+rendering and splat-to-surface methods [11, 12, 15–17, 59]
+culminate in ArtMesh [58], which reconstructs connected
+part-aware meshes with rigid trajectories. We use ArtMesh
+as the reconstruction backbone and focus on language-
+based part selection and actuation.
+Estimating and generating articulation. Feedforward
+methods estimate part masks, motion parameters, or kine-
+matic structure from images and priors [4, 7, 9, 19, 33,
+45, 50, 51, 57].
+Generative methods synthesize articu-
+lated assets [1, 2, 6, 10, 29, 30, 32] or articulate existing
+meshes [40]. Language and vision-language models gener-
+ate URDFs [24, 26, 48], predict affordances [18, 25], create
+articulated geometry from text [8], and personalize motion
+[47]. These methods construct or infer articulation rather
+than provide a runtime language interface to a persistent re-
+construction.
+Language grounding in 3D scenes. Language features
+have been distilled into radiance fields [21, 23], Gaussian
+
+
+primitives [39, 61], scene representations [38, 43], and hi-
+erarchical groups [22]; instruction-driven methods edit ap-
+pearance [3, 14]. These systems localize concepts or mod-
+ify surfaces in static scenes but do not disambiguate re-
+peated articulated parts or map verbs to joint motion. Art-
+Lang adds explicit spatial disambiguation and executable
+articulation trajectories.
+Language-driven control of articulated objects. Prior
+language-based methods typically operate during asset cre-
+ation, after which parts are controlled by joint indices. Af-
+fordance systems [18, 25, 35] instead ground instructions
+to interaction points for manipulation policies, not recov-
+ered joints. In contrast, ArtLang uses free-form runtime
+language to select a persistent part, resolve its spatial in-
+stance, and actuate it along its recovered joint.
+3. Method
+Overview. ArtLang grounds a compositional command in
+the persistent structure of a reconstructed articulation as-
+set. ArtLang couples three components: an asset graph of
+reconstructed parts and their recovered joints, a language
+field that attaches open-vocabulary features to the asset’s
+surface, and a directive graph holding the entities, actions,
+magnitudes, frames, and relations of a command. We pro-
+pose a graph-to-graph binding from language to an artic-
+ulated object’s semantic and kinematic structure. We bind
+visual-language proposals to part nodes by partial matching,
+then solve a global directive-to-part assignment under se-
+mantic, spatial, relational, and action constraints. Accepted
+action nodes are converted into continuous joint coordinates
+within the observation-supported motion interval. This for-
+mulation addresses repeated parts, frame-dependent lan-
+guage, multi-directive consistency, kinematic calibration,
+and ambiguous commands in one structured model.
+3.1. Semantic-Kinematic Asset Representation
+Articulation graph. This stage corresponds to panel (A) of
+Figure 2. The input is either multi-view observations at two
+articulation states or a rest-state mesh with observations of
+a second state. Previously, articulated reconstruction works
+such as ArtGS, GaussianArt, and ArtMesh[31, 44, 58] re-
+turn motion parameters and reconstructed representation.
+Instead, we construct an articulation graph. We adopt a part-
+aware reconstruction backend ArtMesh [58], returns
+A =
+ V, E, { ¯Gk}K−1
+k=0 , {ze}e∈E
+
+,
+ze = (ce, ξe, J(0)
+e , q(0)
+e , q(1)
+e , qcur
+e
+).
+(1)
+Here, node k is a rigid part with local geometry ¯Gk, and
+edge e = (p(k), k) is a revolute, prismatic, or fixed joint.
+The unit twist ξe ∈R6 is expressed in the parent frame,
+J(0)
+e
+is the parent-to-child transform at the first observed
+state, and q(0)
+e , q(1)
+e
+are the recovered normalized (q(0)
+e =0
+at the first observed state, q(1)
+e =1 at the second) coordinates
+of the two observations, so that Ie = [0, 1]; the physical
+joint magnitude, the full swing angle or translation of each
+part, is recovered alongside and used to map metric requests
+such as an explicit angle onto this normalized interval. They
+define the supported interval
+Ie = [min(q(0)
+e , q(1)
+e ), max(q(0)
+e , q(1)
+e )].
+(2)
+We do not interpret Ie as the object’s complete mechanical
+range. When the reconstruction backend does not estimate a
+hierarchy, A is a star graph rooted at the static base. Using
+the matrix representation bξe ∈se(3), the parent-to-child
+transform at coordinate qe is
+Je(qe) = exp
+
+(qe −q(0)
+e )bξe
+
+J(0)
+e .
+(3)
+For a revolute joint with unit axis u through point p, we use
+the spatial-twist convention ξ = (−u×p, u); for a prismatic
+joint, ξ = (u, 0). The world transform of part k and the
+posed asset are
+T0(q) = I,
+Tk(q) = Tp(k)(q)J(p(k),k)(q(p(k),k)),
+G(q) =
+[
+k
+Tk(q) ¯Gk.
+(4)
+The per-part motion is recovered from the two observed
+states: with multi-view input we adopt the ArtMesh artic-
+ulation optimization, while with mesh input, where both
+states are provided as meshes, each joint is recovered by
+a correspondence-free registration of the two states.
+Factorized semantic-kinematic field.
+Let q0 denote
+the canonical configuration and Gk = Tk(q0) ¯Gk. On the
+canonical surface Ω= S
+k Gk, let π : Ω→V assign each
+point to its reconstructed part. We learn a dense language
+feature f : Ω→Rd and bind each point to the joints on
+the kinematic path of its part. For a canonical point x ∈Gk,
+define its kinematic map
+P(π(x)) = Tk(q)Tk(q0)−1˜x,
+k = π(x),
+(5)
+where ˜x is the homogeneous coordinate of x. The represen-
+tation is the articulation-structured language field
+Φ(x) =
+ π(x), fθ(x), P(π(x))
+
+,
+x ∈Ω,
+(6)
+Geometry is the domain Ω; the three returned attributes en-
+code part identity, language features, and graph-constrained
+motion. Eq. (6) attaches the semantic and executable kine-
+matic attributes needed for language control.
+3.2. Open-Vocabulary Part Binding
+A reconstructed graph provides stable part instances but
+no natural-language labels. A vision–language model pro-
+vides image semantics but does not automatically attach
+
+
+Figure 2. Overview of ArtLang. (A) A part-aware reconstruction is represented by an articulation graph and factorized semantic-
+kinematic field. (B) Open-vocabulary features and proposals are bound to persistent parts by semantic-geometric partial matching. (C)
+A directive graph is globally grounded using semantic, spatial, relational, and action compatibility. (D) Accepted directives are converted
+to joint targets and executed by forward kinematics. The resulting graph-to-graph pipeline converts compositional language into globally
+consistent and executable articulation.
+each proposal to a persistent 3D part. This stage transfers
+image-language understanding to the reconstructed surface,
+then binds proposal instances to graph nodes. Every recon-
+structed part should carry a noun. A VLM will propose
+nouns, but it does not propose exactly one correct noun per
+part. It invents unreconstructed parts, misses others, and re-
+peats itself across identical siblings. Binding must therefore
+be partial. Panel (B) of Figure 2 illustrates this stage.
+Dense feature distillation. For view c, a frozen vision-
+language encoder produces a dense feature map Fc(u) ∈
+Rd. Rendering the field gives
+bFc(u) = norm
+
+
+X
+x∈R(c,u)
+wcuxfθ(x)
+
+,
+Lfield =
+1
+|O|
+X
+(c,u)∈O
+
+1 −⟨bFc(u), Fc(u)⟩
+
+,
+(7)
+where wcux are differentiable rendering weights. The loss
+is a cosine distance over a sampled set O of (view, pixel)
+pairs.
+Dense features are useful for point-level localization but
+can be noisy on occluded or weakly observed surface re-
+gions.
+We therefore aggregate the dense feature into a
+visibility- and area-weighted part prototype
+¯fk = norm
+ R
+Gk w(x)fθ(x) dA
+R
+Gk w(x) dA + ϵ
+!
+.
+(8)
+The dense field supports point-level localization, while ¯fk
+provides a stable node-level descriptor.
+Semantic-geometric proposal matching.
+A vision-
+language model proposes for the object a set of open-
+vocabulary part candidates {pj = (nj, Bj)}M
+j=1, each a part
+phrase nj and an image box Bj, in a single reference view.
+We project every reconstructed part k into that view and
+take its image-space centroid qk; let bj be the center of box
+Bj. Because the model already semantically localizes the
+candidates, we bind parts to candidates by projected geom-
+etry,
+Ckj = ∥qk −bj∥2
+2
+d2
+,
+(9)
+where d is the image diagonal. The static base is pinned
+to the model’s base candidate, and the remaining parts are
+assigned by a Hungarian solve; appending a private dummy
+candidate to each part relaxes the assignment so a part may
+remain unnamed when no candidate is compatible,
+X∗= arg min
+X∈U
+X
+k∈V
+M+|V|
+X
+j=1
+Xkj Ckj.
+(10)
+A matched part adopts its candidate phrase ˆnk = nj and
+takes the semantic anchor
+ak = ψ(ˆnk),
+(11)
+the FG-CLIP2 [55] text embedding of the assigned noun,
+with spatial qualifiers folded in at query time; an unmatched
+part keeps a generic label rather than a wrong noun. The
+binding is semantic through the open-vocabulary candidates
+it commits to parts and geometric through the projected
+match.
+
+
+3.3. Directive Graph and Structured Grounding
+This stage converts a natural-language command into a
+globally consistent correspondence between linguistic en-
+tities and persistent parts of the reconstructed articulation
+graph. It infers (i) a possibly null directive-to-part assign-
+ment and (ii) a valid target coordinate for each accepted
+joint.
+Panel (C) of Figure 2 depicts the directive graph and its
+global assignment to the articulation graph.
+Language-conditioned control graph. A typed parser
+converts command u into D = (VD, ED). Each entity node
+is
+di = (ri, vi, mi, Fi, si, ηi),
+(12)
+where ri is the referring expression, vi the action, mi its
+typed magnitude, Fi an explicit camera-, user-, or object-
+centric reference frame, si ∈{1, 2, . . .} the temporal ex-
+ecuted stage, and ηi ∈{0, 1} indicates whether the en-
+tity is actionable. Reference-only nodes ηi = 0 support
+commands like open the drawer below the left door: the
+door constrains the drawer but is not actuated. Each edge
+(i, j, r) ∈ED specifies a relation r, such as left of, above,
+below, nearest, or attached to.
+Semantic compatibility. Let normalized text embed-
+ding ti = ψ(ri) and let Ak be the surface area of part k. Se-
+mantic compatibility combines the stable part anchor with
+query-dependent dense evidence:
+ssem
+ik
+= β⟨ti, ak⟩
++ (1 −β)τf log
+ 1
+Ak
+Z
+Gk
+exp
+⟨ti, fθ(x)⟩
+τf
+
+dA
+
+.
+(13)
+The first term provides stable part-level semantics, while the
+log-sum-exp term preserves localized dense-field evidence.
+Spatial compatibility. Suppose ri contains a directional
+modifier, e.g., left, right, above, below, front, or back. The
+parser maps the modifier to a signed unit vector dFi
+i
+∈R3 in
+the frame Fi under a common right-handed convention. We
+transform the canonical part centroid of part k into frame Fi
+as µF
+k and define a soft semantic candidate distribution and
+its semantic center
+ωik = softmaxk(ssem
+ik /τs),
+¯µFi
+i
+=
+X
+k
+ωikµFi
+k .
+(14)
+Spatial compatibility normalizes the signed displacement of
+part k from center ¯µFi
+i
+over all candidate parts,
+ssp
+ik =
+(dFi
+i )⊤(µFi
+k −¯µFi
+i )
+maxℓ|(dFi
+i )⊤(µFi
+ℓ−¯µFi
+i )| + ϵ
+.
+(15)
+For directives without a directional modifier, we set ssp
+ik =
+0. Otherwise, Eq. (15) evaluates the modifier over a soft
+semantic candidate set rather than committing to a noun be-
+fore spatial reasoning.
+Pairwise relational compatibility. For relation r be-
+tween directives i and j, we form the frame-conditioned
+geometric feature
+ρF
+kℓ=
+h
+(µF
+k −µF
+ℓ)/dobj,
+logsize(BF
+k )
+size(BF
+ℓ), IoU(BF
+k , BF
+ℓ), dA(k, ℓ)
+i
+,
+Pij,kℓ= gr(ρFij
+kℓ),
+(16)
+where gr is a relation-specific scorer, dobj normalizes object
+scale, and dA is articulation-graph distance.
+Action compatibility. Let jk contain the incident joint
+type, axis, and observed motion span. Action compatibility
+is
+sact
+ik =
+
+
+
+
+
+0,
+ηi = 0,
+gact
+ ψ(vi), jk
+
+,
+ηi = 1, χ(vi, ce(k)) = 1,
+−∞,
+ηi = 1, χ(vi, ce(k)) = 0,
+(17)
+where the hard mask χ rejects fixed parts and unit–joint or
+verb–joint mismatches. For the root node, we set ce(0) =
+fixed. Uik is the unary term of the assignment objective in
+Eq. (19); the pairwise term adds relations. The complete
+unary score is
+Uik = λsemssem
+ik
++ λspssp
+ik + λactsact
+ik .
+(18)
+Each directive has a private null node. Its score depends
+on parser confidence and semantic-score entropy, providing
+an explicit outcome for unsupported or under-specified lan-
+guage.
+Global assignment. Let Yik ∈{0, 1} assign directive i
+to real part k or to its private null node ∅i. We solve
+Y∗= arg max
+Y∈Y
+X
+i
+X
+k∈V∪{∅i}
+YikUik
++ λR
+X
+(i,j,r)∈ED
+X
+k,ℓ∈V
+YikYjℓPij,kℓ,
+(19)
+subject to
+X
+k∈V∪{∅i}
+Yik = 1
+∀i,
+X
+i:si=s
+ηiYik ≤1
+∀k, s.
+(20)
+The first constraint gives each entity a real or null interpre-
+tation. The second prevents simultaneous actions from pro-
+ducing conflicting targets on the same part, while allowing
+reference-only entities to share a landmark. Because artic-
+ulated assets and commands have few nodes, the quadratic
+assignment can be solved exactly as a mixed-integer linear
+program after standard product linearization.
+
+
+Structured confidence and abstention. For an accepted
+match k∗
+i , let the best valid global interpretation that forbids
+this match define the structured margin
+∆i = E(Y∗) −
+max
+Y∈Y: Yik∗
+i =0 E(Y).
+(21)
+A directive is executed only when it is assigned to a real
+part and ∆i ≥γ, where γ is calibrated on validation data.
+Otherwise, the system returns competing candidates or re-
+quests a qualifier rather than resolving ambiguity by part
+index. Abstention produces no motion for that directive and
+returns either competing candidates or a request for a qual-
+ifier. It never falls back to a default part or silently clips
+magnitude.
+3.4. Calibrated Language-to-Joint Actuation
+This stage is shown in panel (D) of Figure 2, where accepted
+directives become typed joint targets that are posed by for-
+ward kinematics.
+Endpoint semantics.
+The order of the two observations
+does not determine which state is open. When endpoint la-
+bels are unavailable, a two-way classifier uses part-centric
+renders I(0)
+e , I(1)
+e
+and the part anchor to estimate
+popen
+e
+(s) = softmaxs∈{0,1} gend
+ ϕI(I(s)
+e ), ak
+
+.
+(22)
+The selected state defines qopen
+e
+and the other state defines
+qclosed
+e
+. Open/close commands abstain when the probability
+margin is below a validation threshold. These values are
+observed semantic anchors, not claims about the complete
+mechanical range.
+Typed target conversion.
+The parser distinguishes end-
+point, absolute-fraction, relative-fraction, absolute-metric,
+and relative-metric requests.
+For selected edge e, let qt
+be the endpoint named by vi, qo the opposite endpoint,
+qc = qcur
+e
+, ϕi ∈[0, 1] a fraction, and δ′
+i a metric amount
+converted to radians or meters. With sv = sign(qt −qo),
+the requested target is
+eq∗
+e =
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+qt,
+endpoint,
+(1 −ϕi)qo + ϕiqt,
+absolute fraction,
+qc + ϕi(qt −qc),
+relative fraction,
+qo + svδ′
+i,
+absolute metric,
+qc + svδ′
+i,
+relative metric.
+(23)
+This explicitly distinguishes halfway open, open halfway
+from the current state, open by 20◦, and open to 20◦. A
+target is accepted only if its unit is compatible with the se-
+lected joint and eq∗
+e ∈Ie. Otherwise, the directive is rejected
+rather than silently clipped to a different action.
+For an accepted target q∗
+e = eq∗
+e, a rendered clip eases
+from the current configuration to the target with the cubic
+timing curve h(t) = 3t2 −2t3, h(0) = 0, h(1) = 1:
+qe(t) = qcur
+e
++ h(t) (q∗
+e −qcur
+e
+),
+t ∈[0, 1],
+(24)
+with unselected joints held fixed. Here t is normalised time:
+h only shapes the velocity profile of the animation, is mono-
+tonic on [0, 1], and is never evaluated outside it. When the
+accepted target is the opposite endpoint and the current con-
+figuration is the rest state, this clip coincides with the ob-
+served state 0→1 actuation; for a fractional or metric target
+it instead eases to the requested intermediate configuration,
+so current-to-target is the full 0 →1 actuation only in that
+endpoint case. Substituting q(t) into Eq. (4) produces a
+graph-consistent motion clip.
+Extrapolation past the observed states is a separate con-
+struction and does not reuse the timing curve. Because the
+joint axis and pivot are recovered geometrically rather than
+clipped to the two observed states, we can scale the recov-
+ered state-to-state transform by a signed factor s about the
+rest state,
+qe(s) = q(0)
+e
++ s
+ q(1)
+e
+−q(0)
+e
+
+,
+s ∈[−1, 1],
+(25)
+where q(0)
+e
+is the observed rest state (state 0, the recon-
+structed pose) and q(1)
+e
+the second observed state, in obser-
+vation order and with no open/closed semantics attached.
+Thus s = 0 reproduces state 0, s = 1 reproduces state 1,
+s ∈[0, 1] interpolates between the two observed states, and
+s < 0 continues the motion linearly in reverse past the rest
+state; each joint coordinate (a revolute angle or a prismatic
+offset) is scaled linearly by s. This is the variable swept for
+the L-M metric and the actuation figures, and it is distinct
+from the animation timing t: the two share only the values
+at the observed states. Unlike a commanded target, which
+is accepted only when eq∗
+e ∈Ie, this sweep is deliberately
+not clipped to the recovered interval Ie: for s < 0 the co-
+ordinate qe(s) = 2q(0)
+e
+−q(1)
+e
+at s = −1 can lie outside Ie,
+and we intend it to, because the negative-s poses probe the
+learned transform continued past the observed range rather
+than a feasible actuation. Joint-limit feasibility (whether
+qe(s) ∈Ie) is thus not asserted for the sweep, and it is sepa-
+rate from collision and contact feasibility, which are down-
+stream planning constraints and are likewise not implied by
+kinematic validity.
+3.5. Learning and Inference
+The feature field is optimized separately for each asset using
+Eq. (7). The command resolver is trained across assets from
+ground-truth directive-part assignments, relations, null ex-
+amples, and endpoint labels. With structured energy Eθ(Y)
+from Eq. (19), the directive, relation, and null assignments
+
+
+are supervised by the structured max-margin loss
+Lstr = max
+Y∈Y
+
+Eθ(Y) + ℓ(Y, Ygt)
+
+−Eθ(Ygt),
+(26)
+where ℓpenalizes incorrect real, null, and relation assign-
+ments. The endpoint classifier is trained separately with a
+two-way cross-entropy over the endpoint labels of the two
+observed states.
+Training includes repeated parts, miss-
+ing and spurious proposals, paraphrases, ambiguous com-
+mands, and incompatible actions; object and composition
+splits are disjoint.
+At inference, ArtLang builds (A, Φ) offline, performs
+per-view proposal binding, parses the command, solves
+Eq. (19), rejects uncertain or infeasible assignments, and
+executes the remaining targets through the typed target con-
+version in Eq. (23) and the forward-kinematics Eq. (4).
+3.6. Training Details
+We describe the full training setup. The feature field is op-
+timized separately for each asset. The cross-asset resolver
+is trained with two objectives: the structured max-margin
+loss above for the directive, relation, and null assignments,
+and a two-way cross-entropy on the endpoint labels for its
+endpoint classifier. The articulation graph itself is produced
+by the reconstruction backend and is not learned by us.
+Feature field.
+For each reconstructed asset we distill a
+dense open-vocabulary feature field onto the canonical sur-
+face using Eq. (7). Multi-view frames are encoded by a
+frozen FG-CLIP2 [55] vision-language encoder, and the
+field is rendered through the same differentiable rasterizer
+that produces the geometry so that the rendered features
+match the encoder features under the cosine objective. The
+field is a per-point head on the reconstructed surface, opti-
+mized with Adam at a learning rate of 1 × 10−3 until the
+distillation loss plateaus, typically a few thousand iterations
+per asset. The visibility- and area-weighted part prototypes
+are then aggregated in a single forward pass over the sur-
+face and cached, so that at query time only the lightweight
+part-level descriptor and the retained dense field are needed.
+Command resolver.
+The structured resolver that pro-
+duces the directive-to-part assignment is trained once across
+assets, not per object.
+Supervision comes from ground-
+truth directive-part assignments, relation labels, explicit ref-
+erence frames, and null examples. We optimize the struc-
+tured max-margin objective of Eq. (26), where the loss-
+augmented inference is solved exactly as a small mixed-
+integer program because each asset and command contains
+few nodes. The relation scorers and the unary semantic,
+spatial, and action heads are trained jointly. Training com-
+mands are generated procedurally to include repeated parts,
+missing and spurious proposals, paraphrases of the same
+instruction, reference-only entities, ambiguous commands
+with more than one valid target, and actions that are incom-
+patible with the selected joint, so that the null node and the
+abstention margin receive gradient. Object and composition
+splits are disjoint between training and evaluation.
+Endpoint classifier.
+The two-way endpoint classifier that
+decides which observed state is open is trained from part-
+centric renders of the two states together with the part an-
+chor, using the endpoint labels available in the synthetic
+data. Open/close commands abstain when its probability
+margin |popen(0) −popen(1)| falls below a fixed threshold
+of 0.1, chosen on held-out validation assets.
+Implementation.
+The reconstruction backend is instanti-
+ated with ArtMesh [58]. Text embeddings for anchors and
+queries use the FG-CLIP2 text encoder that matches the dis-
+tilled image features. The two abstention thresholds, the
+structured margin γ = 0.005 and the endpoint margin 0.1,
+are selected on validation data and held fixed across every
+experiment. Exact per-stage iteration counts and the hard-
+ware configuration are reported in the released configura-
+tion files.
+3.7. Hyperparameters, Abstention Gate, and Solver
+The semantic score of directive i against part k mixes
+an anchor cosine with an area-weighted soft-max pool-
+ing of the dense distilled field, ssem
+ik
+= β⟨ti, ak⟩+ (1 −
+β)τf log( 1
+Ak
+R
+Gk e⟨ti,fθ(x)⟩/τf dA), and the unary energy is
+Uik = λsemssem
+ik + λspssp
+ik + λactsact
+ik , with an incompatible
+action forcing Uik = −∞. The null score is νi = bnull +
+wentH(softmax(ssem
+i
+/τs))+wconf(1−ci), where ci ∈[0, 1]
+is the parser confidence for directive i; an under-specified
+directive whose semantic scores are diffuse is thus drawn
+toward its null node, a directive executes only when the
+structured margin satisfies ∆i ≥γ, and otherwise abstains.
+The pairwise relation term is a linear scorer gr over an ori-
+ented 6-D geometric feature, where the orientation signs the
+geometry per relation so that “relation satisfied” is always
+the positive direction, letting one shared weight generalise
+across polarity. The global assignment is an exact product-
+linearised MILP solved with PuLP’s CBC backend at its
+default optimality tolerance, with one binary per (directive,
+part) plus a private null node, an exactly-one constraint per
+directive, a per-part per-stage capacity constraint for action-
+able directives, and a McCormick linearisation of each rela-
+tion edge. Table 1 lists the fixed scoring, abstention, and
+binding hyperparameters; the energy weights are trained
+on the reported dataset, giving λ = (1.63, 0.23, 0.53),
+λR = 1.0, gr = (0.08, 0.52, 0, 0, 0, 0), bnull = 0.43, with
+the calibrated abstention margin γ = 0.005.
+
+
+Symbol
+Value
+β (anchor / dense-field mix)
+0.6
+τf (dense-field pooling temp.)
+0.1
+τs (semantic soft-max temp.)
+0.1
+went (null-score entropy weight)
+0.25
+wconf (null-score parser-confidence weight)
+1.0
+τdummy (private-dummy cost)
+0.5
+Table 1. Fixed scoring, abstention, and binding hyperparameters.
+The learned energy weights (λ, gr, bnull) and the calibrated absten-
+tion margin (γ) are reported in the text.
+Table 2. Mesh-input ablation. Each variant removes one lan-
+guage competency while geometry is fixed. Best, Second.
+Ours
+NaiveCLIP NoSpatial
+NaiveWarp
+Axis Ang ↓
+23.79
+–
+–
+26.06
+Axis Pos ↓
+0.08
+–
+–
+1.03
+Part Motion ↓
+6.24
+–
+–
+13.76
+CD-m ↓
+26.78
+–
+–
+89.42
+L-M Alignment ↓
+70.42
+392.52
+89.32
+127.38
+L-Sem Alignment ↑
+0.78
+0.33
+–
+0.71
+L-Spat Alignment ↑
+0.61
+0.08
+0.03
+0.50
+3.8. Action-Joint Compatibility
+The action channel applies a compatibility mask: a directive
+verb is admissible on a part only if the part is movable and
+its joint type matches the verb’s allowed set, and a fixed part
+or a verb/type mismatch sets sact = −∞, so an incompat-
+ible pairing is pruned before the assignment. Every action
+verb the grammar emits reduces to open or close, which are
+admissible on both revolute and prismatic joints, and a di-
+rective whose verb names no endpoint or whose target is
+infeasible is rejected at target conversion (Eq. (23)) rather
+than actuated.
+4. Experiments
+We evaluate ArtLang on Articulate-100, built from PartNet-
+Mobility[54], in two settings: reconstruction from multi-
+view observations and mesh input, which removes geome-
+try recovery. We first verify articulation quality, then eval-
+uate semantic, spatial, and motion grounding through con-
+tinuous actuation and controlled ablations. We also test on
+real SplArt captures.
+4.1. Protocol
+Axis Ang and Axis Pos measure joint-axis error, Part Mo-
+tion measures articulated end-state error, and CD-s and CD-
+m are Chamfer distances for the static, movable, and com-
+plete object. Language performance is measured by L-Sem
+for noun-to-part grounding, L-Spat for spatial disambigua-
+tion, and L-M for commanded motion trajectories. Kine-
+Command: "close bottom right door, bottom left door, top right drawer, top left drawer"
+State 1
+Command: "close bottom drawer, top drawer, right door, left door"
+State 1
+GT
+Ours
+NaiveCLIP
+NoSpatial
+NaiveWarp
+Figure 3. Language grounding ablation. NaiveCLIP [41] weak-
+ens semantic assignment, NoSpatial removes spatial disambigua-
+tion, and NaiveWarp replaces per-part articulated motion with a
+centroid-based warp. Same-colored movable parts indicate those
+selected by each method for the command.
+matic, Chamfer, and motion metrics are errors, so lower is
+better; L-Sem and L-Spat are overlaps, so higher is better.
+We
+compare
+with
+OPD
+[19]
+and
+Articulate-
+Anything [24] for articulation,
+and ArtGS [31] and
+GaussianArt [44] for reconstruction.
+NaiveCLIP as-
+signs part names using raw CLIP similarity without
+projection-based assignment or explicit spatial grounding.
+4.2. Language-Alignment Metrics
+We report three complementary language-alignment met-
+rics, each computed per object and then macro-averaged
+over the evaluation set. L-SEM (LSE-A) and L-SPAT (LSP-
+A) are name-bucket mask intersection-over-union scores:
+every predicted part is coloured by the noun it was bound
+to and every ground-truth part by its annotated noun, each
+name is split into a noun key and a spatial-modifier key
+(any token in a fixed spatial-word list of left, right,
+top, bottom, upper, lower, front, back, middle,
+center, inner, outer, the superlative -most forms,
+ordinals, and digit indices is a modifier, and every remain-
+ing token is the noun), and for each held-out view we ren-
+der the predicted part segmentation, assign each pixel to
+the arg max per-part coverage field (pixels with total cov-
+erage ≤0.5 are left unassigned), and group both predicted
+and ground-truth masks into buckets. L-SEM is the mean
+IoU over all (view, ground-truth noun-bucket) pairs and L-
+SPAT the mean IoU over the ground-truth spatial-modifier
+buckets, both in [0, 1] and higher-is-better, so they measure
+whether the noun words and the directional words respec-
+tively land on the same regions; the buckets are keyed by
+name rather than by part index, a ground-truth key absent
+from the prediction is scored against an empty predicted
+mask (IoU 0), and predicted keys absent from the ground
+truth are ignored. L-M (LM-A) is the language motion-
+alignment metric: it measures whether the motion produced
+by a language-grounded command traces the correct trajec-
+tory. Ground-truth joints are paired to predicted parts by
+
+
+a Hungarian assignment on name agreement (exact match
+preferred, shared head word next, disjoint names last), and
+the paired parts are scored by trajectory Chamfer; nam-
+ing quality itself is measured by L-SEM and L-SPAT. The
+paired parts are swept linearly along their joints at five frac-
+tions s ∈{−1, −0.5, 0, 0.5, 1} of the recovered state-to-
+state transform (each joint coordinate scaled linearly by s,
+Eq. (25)), and at each fraction 10,000 surface samples per
+part give a symmetric Chamfer distance, where dA→B is the
+mean nearest-neighbour Euclidean distance (not squared)
+from points of A to B,
+CD(A, B) = 1
+2
+ dA→B + dB→A
+
+×
+ 103 mm/m
+
+. (27)
+L-M is the mean of these per-fraction Chamfer distances in
+millimetres, lower-is-better; a value such as L-M = 70.42
+denotes a 70.42 mm average surface deviation of the mov-
+ing part across its swept trajectory.
+A geometry-paired
+counterpart, which matches joints to parts by geometry in-
+stead of names, provides a name-independent motion score.
+All three metrics are averaged within an object then macro-
+averaged across objects. A ground-truth bucket with no pre-
+dicted pixels receives an IoU of 0; a part left unnamed at
+binding time otherwise removes its pixels from the corre-
+sponding predicted bucket, generally reducing but not nec-
+essarily zeroing that bucket’s IoU when same-name sib-
+lings remain, so abstentions are penalised rather than ex-
+cluded. The directive-level abstention protocol (accuracy
+with and without abstention on an ambiguity stress subset)
+is reported separately in the supplementary material.
+4.3. Language Grounding Ablation
+Table 2 and Figure 3 are our main evaluations of language-
+conditioned control. One component is removed at a time,
+isolating semantic grounding, spatial disambiguation, and
+motion execution from reconstruction quality.
+Semantic grounding. NaiveCLIP replaces projection-
+based semantic-geometric assignment with raw CLIP simi-
+larity. L-Sem drops substantially, showing that dense simi-
+larity alone is insufficient for binding language to persistent
+parts. L-Spat also decreases because spatial reasoning can-
+not recover the intended instance after selecting the wrong
+semantic candidate.
+Spatial disambiguation. NoSpatial removes explicit-
+frame spatial evidence while retaining semantic naming.L-
+Spat drops sharply for repeated parts such as doors and
+drawers. This shows that modifiers including left, right, top,
+and below require an explicit spatial grounding component.
+Motion grounding. NaiveWarp preserves semantic and
+spatial selection but replaces per-part joints with a single
+warp about the object centroid. L-Sem and L-Spat remain
+comparatively stable, while joint error, Part Motion, and L-
+M degrade substantially. Correct part identification must
+therefore be paired with a rigid, executable part trajectory.
+Table 3. Reconstruction on Articulate-100. ArtLang matches
+ArtMesh in joint and geometry accuracy, and both outperform
+Gaussian baselines. Lower is better.
+ArtMesh
+Ours
+ArtGS
+GaussianArt
+Axis Ang ↓
+3.48
+3.62
+10.53
+34.45
+Axis Pos ↓
+0.03
+0.01
+0.11
+0.33
+Part Motion ↓
+3.63
+1.69
+3.50
+16.48
+CD-s ↓
+18.98
+19.24
+23.56
+24.63
+CD-m ↓
+15.01
+16.62 151.41
+38.43
+Table 4.
+Mesh-input results on Articulate-100.
+We com-
+pare three ArtLang input regimes with OPD and Articulate-
+Anything. Errors are lower-is-better; semantic and spatial overlaps
+are higher-is-better.
+OPD
+Art-Anything
+Ours-Mesh Ours-MV Ours-SV
+Axis Ang ↓
+34.88
+26.57
+6.98
+11.29
+23.79
+Axis Pos ↓
+4.53
+2.08
+0.08
+0.09
+0.08
+Part Motion ↓
+25.61
+17.81
+4.25
+4.89
+6.24
+CD-m ↓
+240.77
+114.92
+10.26
+14.69
+26.78
+L-M Alignment ↓
+–
+–
+50.71
+57.52
+70.42
+L-Sem Alignment ↑
+–
+–
+0.86
+0.81
+0.78
+L-Spat Alignment ↑
+–
+–
+0.71
+0.63
+0.61
+Each ablation primarily harms the axis it removes, sup-
+porting the decomposition of ArtLang into semantic iden-
+tification, explicit-frame spatial resolution, and articulated
+motion execution. Reporting these axes separately exposes
+failures that a single aggregate score would hide.
+4.4. Language-Driven Continuous Actuation
+A grounded directive selects a persistent part and places it
+at a continuous coordinate of its recovered joint. Figure 4
+sweeps the actuation parameter t while keeping all other
+parts fixed: t = 0 is the rest state, t = 1 is the learned
+end state, intermediate values produce unseen poses, and
+negative values extrapolate in the opposite direction.
+The same coordinate supports modifiers such as halfway
+and explicit angular or translational targets. Because the
+sweep follows the recovered joint rather than a ground-truth
+trajectory, it also reveals errors in the estimated axis and
+motion range.
+4.5. Articulation Quality
+Reconstruction.
+Table 3 and Figure 5 evaluates the complete reconstruc-
+tion pipeline. ArtLang matches the ArtMesh backbone in
+geometry and joint recovery, showing that the language
+field does not reduce reconstruction quality. Both outper-
+form the Gaussian baselines on geometry and joint estima-
+tion.
+Mesh input.
+
+
+open
+close
+top right drawer
+Figure 4. Continuous language-driven actuation. The grounded part moves along its recovered joint as t varies from −1 to 1, while all
+other parts remain fixed.
+GT
+Ours
+ArtGS
+GaussianArt
+State 1
+Figure 5. Reconstruction on Articulate-100. Each row shows the
+ground truth, our reconstruction, and the baselines, together with
+part segmentation and recovered motion. Full two-state results are
+provided in Figure 14.
+State 1
+State 1
+GT
+Ours (mesh)
+Ours (MV)
+Ours (SV)
+Articulate-Anything
+OPD
+Figure 6. Mesh-input articulation results. Columns show the
+ground truth, our three motion-observation settings, Articulate-
+Anything, and OPD.
+Table 4 and Figure 6 evaluates articulation when the
+canonical mesh is given. OPD receives up to eight RGB-D
+views and aggregates per-view detections, while Articulate-
+Anything receives a part-segmented mesh rendered at sev-
+eral actuated states for joint inference by its vision-language
+model.
+Our variants recover substantially more accurate artic-
+ulation than both baselines, with performance degrading
+gradually as motion evidence decreases from the full end
+mesh to multi-view and single-view observations. These
+results establish that the recovered joints are sufficiently ac-
+curate for language-driven actuation.
+State 1
+State 1
+GT
+Ours
+ArtGS
+GaussianArt
+Figure 7. Real SplArt captures. The language handle grounds
+and actuates parts despite noisy geometry and ambiguous bound-
+aries. SplArt provides neither ground-truth meshes nor the original
+capture lighting, so rendered appearance may differ from the ref-
+erence images.
+4.6. Real Captures
+Figure 7 applies the same pipeline to real SplArt [27] ob-
+jects.
+Despite noisier geometry and less distinct bound-
+aries, semantic and spatial grounding identify the intended
+part, which is then actuated along its recovered joint. Users
+can therefore control captured objects through descriptions
+rather than part indices or numerical joint parameters.
+5. Conclusion
+We presented ArtLang, which makes reconstructed articu-
+lated objects language-addressable by grounding semantic
+parts, spatial instances, and motion commands to persistent
+parts and recovered joints. Experiments on Articulate-100,
+mesh input, and real SplArt captures show effective seman-
+tic, spatial, and motion control while preserving articulation
+quality.
+Several limitations remain.
+The current pipeline re-
+quires two observed articulation states, assumes a meaning-
+ful canonical frame for directional language, and supports
+a limited motion vocabulary without contact reasoning. Fu-
+ture work could extend the language handle to single-state
+reconstruction, richer spatial frames, contact-aware manip-
+ulation, physical constraints, and a broader range of actions.
+The factorized semantic, spatial, and motion structure pro-
+vides a natural foundation for these extensions.
+
+
+References
+[1] Chuhao Chen, Isabella Liu, Xinyue Wei, Hao Su, and
+Minghua Liu.
+Freeart3d: Training-free articulated object
+generation using 3d diffusion. In Proceedings of the SIG-
+GRAPH Asia 2025 Conference Papers, pages 1–13, 2025. 2
+[2] Honghua Chen, Yushi Lan, Yongwei Chen, and Xingang
+Pan. Artilatent: Realistic articulated 3d object generation
+via structured latents. In Proceedings of the SIGGRAPH Asia
+2025 Conference Papers, pages 1–11, 2025. 2
+[3] Yiwen Chen, Zilong Chen, Chi Zhang, Feng Wang, Xiaofeng
+Yang, Yikai Wang, Zhongang Cai, Lei Yang, Huaping Liu,
+and Guosheng Lin. Gaussianeditor: Swift and controllable
+3d editing with gaussian splatting, 2023. 3
+[4] Zoey Chen, Aaron Walsman, Marius Memmel, Kaichun Mo,
+Alex Fang, Karthikeya Vemuri, Alan Wu, Dieter Fox, and
+Abhishek Gupta.
+Urdformer: A pipeline for constructing
+articulated simulation environments from real-world images,
+2024. 2
+[5] Jianning Deng, Kartic Subr, and Hakan Bilen.
+Articulate
+your nerf: Unsupervised articulated object modeling via con-
+ditional view synthesis. arXiv preprint arXiv:2406.16623,
+2024. 2
+[6] Daoyi Gao, Yawar Siddiqui, Lei Li, and Angela Dai. Me-
+shart: Generating articulated meshes with structure-guided
+transformers. In Proceedings of the Computer Vision and
+Pattern Recognition Conference, pages 618–627, 2025. 2
+[7] Mingju Gao, Yike Pan, Huan ang Gao, Zongzheng Zhang,
+Wenyi Li, Hao Dong, Hao Tang, Li Yi, and Hao Zhao.
+Partrm: Modeling part-level dynamics with large cross-state
+reconstruction model, 2025. 2
+[8] Yipeng Gao, Yunhao Ge, Peilin Cai, Daniel Seita, and Lau-
+rent Itti. Lam: Language articulated object modelers. In
+Proceedings of the IEEE/CVF Conference on Computer Vi-
+sion and Pattern Recognition, pages 16010–16020, 2026. 1,
+2
+[9] Haoran Geng, Songlin Wei, Congyue Deng, Bokui Shen, He
+Wang, and Leonidas Guibas. Sage: Bridging semantic and
+actionable parts for generalizable articulated-object manipu-
+lation under language instructions, 2023. 2
+[10] Pradyumn Goyal, Dmitry Petrov, Sheldon Andrews, Yizhak
+Ben-Shabat, Hsueh-Ti Derek Liu, and Evangelos Kaloger-
+akis. Geopard: Geometric pretraining for articulation pre-
+diction in 3d shapes. In Proceedings of the IEEE/CVF Inter-
+national Conference on Computer Vision, pages 9332–9341,
+2025. 2
+[11] Antoine Gu´edon and Vincent Lepetit.
+Sugar:
+Surface-
+aligned gaussian splatting for efficient 3d mesh reconstruc-
+tion and high-quality mesh rendering. CVPR, 2024. 2
+[12] Antoine Gu´edon, Diego Gomez, Nissim Maruani, Bingchen
+Gong, George Drettakis, and Maks Ovsjanikov. Milo: Mesh-
+in-the-loop gaussian splatting for detailed and efficient sur-
+face reconstruction. ACM Transactions on Graphics, 2025.
+2
+[13] Junfu Guo, Yu Xin, Gaoyi Liu, Kai Xu, Ligang Liu, and
+Ruizhen Hu.
+Articulatedgs: Self-supervised digital twin
+modeling of articulated objects using 3d gaussian splatting.
+arXiv preprint arXiv:2503.08135, 2025. 2
+[14] Ayaan Haque, Matthew Tancik, Alexei A. Efros, Aleksander
+Holynski, and Angjoo Kanazawa. Instruct-nerf2nerf: Edit-
+ing 3d scenes with instructions, 2023. 3
+[15] Jan Held, Sanghyun Son, Renaud Vandeghen, Daniel Re-
+bain, Matheus Gadelha, Yi Zhou, Anthony Cioppa, Ming C.
+Lin, Marc Van Droogenbroeck, and Andrea Tagliasac-
+chi.
+Meshsplatting: Differentiable rendering with opaque
+meshes, 2025. 2
+[16] Jan Held, Renaud Vandeghen, Adrien Deliege, Abdullah
+Hamdi, Silvio Giancola, Anthony Cioppa, Andrea Vedaldi,
+Bernard Ghanem, Andrea Tagliasacchi, and Marc Van
+Droogenbroeck.
+Triangle splatting for real-time radiance
+field rendering, 2025.
+[17] Binbin Huang, Zehao Yu, Anpei Chen, Andreas Geiger, and
+Shenghua Gao. 2d gaussian splatting for geometrically accu-
+rate radiance fields. In SIGGRAPH 2024 Conference Papers.
+Association for Computing Machinery, 2024. 2
+[18] Siyuan Huang, Haonan Chang, Yuhan Liu, Yimeng Zhu,
+Hao Dong, Peng Gao, Abdeslam Boularias, and Hongsheng
+Li. A3vlm: Actionable articulation-aware vision language
+model. arXiv preprint arXiv:2406.07549, 2024. 2, 3
+[19] Hanxiao Jiang, Yongsen Mao, Manolis Savva, and Angel X
+Chang. Opd: Single-view 3d openable part detection. In
+Computer Vision–ECCV 2022: 17th European Conference,
+Tel Aviv, Israel, October 23–27, 2022, Proceedings, Part
+XXXIX, pages 410–426. Springer, 2022. 2, 8, 22
+[20] Bernhard Kerbl, Georgios Kopanas, Thomas Leimk¨uhler,
+and George Drettakis.
+3d gaussian splatting for real-time
+radiance field rendering, 2023. 2
+[21] Justin Kerr, Chung Min Kim, Ken Goldberg, Angjoo
+Kanazawa, and Matthew Tancik. Lerf: Language embedded
+radiance fields, 2023. 1, 2
+[22] Chung Min Kim, Mingxuan Wu, Justin Kerr, Ken Goldberg,
+Matthew Tancik, and Angjoo Kanazawa. Garfield: Group
+anything with radiance fields, 2024. 3
+[23] Sosuke Kobayashi, Eiichi Matsumoto, and Vincent Sitz-
+mann. Decomposing nerf for editing via feature field dis-
+tillation, 2022. 2
+[24] Long Le, Jason Xie, William Liang, Hung-Ju Wang, Yue
+Yang, Yecheng Jason Ma, Kyle Vedder, Arjun Krishna, Di-
+nesh Jayaraman, and Eric Eaton. Articulate-anything: Auto-
+matic modeling of articulated objects via a vision-language
+foundation model. arXiv preprint arXiv:2410.13882, 2024.
+1, 2, 8, 22
+[25] Xiaoqi Li, Mingxu Zhang, Yiran Geng, Haoran Geng, Yux-
+ing Long, Yan Shen, Renrui Zhang, Jiaming Liu, and Hao
+Dong.
+Manipllm: Embodied multimodal large language
+model for object-centric robotic manipulation, 2023. 2, 3
+[26] Zhe Li, Xiang Bai, Jieyu Zhang, Zhuangzhe Wu, Che Xu,
+Ying Li, Chengkai Hou, and Shanghang Zhang.
+Urdf-
+anything: Constructing articulated objects with 3d multi-
+modal language model, 2025. 2
+[27] Shengjie Lin, Jiading Fang, Muhammad Zubair Irshad, Vi-
+tor Campagnolo Guizilini, Rares Andrei Ambrus, Greg
+Shakhnarovich, and Matthew R. Walter. Splart: Articula-
+tion estimation and part-level reconstruction with 3d gaus-
+sian splatting, 2025. 2, 10
+
+
+[28] Jiayi Liu, Ali Mahdavi-Amiri, and Manolis Savva. Paris:
+Part-level reconstruction and motion analysis for articulated
+objects. In Proceedings of the IEEE/CVF International Con-
+ference on Computer Vision, pages 352–363, 2023. 2
+[29] Jiayi Liu, Denys Iliash, Angel X Chang, Manolis Savva, and
+Ali Mahdavi-Amiri.
+SINGAPO: Single image controlled
+generation of articulated parts in object.
+arXiv preprint
+arXiv:2410.16499, 2024. 2
+[30] Jiayi Liu, Hou In Ivan Tam, Ali Mahdavi-Amiri, and Manolis
+Savva. Cage: Controllable articulation generation. In Pro-
+ceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition, pages 17880–17889, 2024. 2
+[31] Yu Liu, Baoxiong Jia, Ruijie Lu, Junfeng Ni, Song-Chun
+Zhu, and Siyuan Huang. Building interactable replicas of
+complex articulated objects via gaussian splatting. In The
+Thirteenth International Conference on Learning Represen-
+tations, 2025. 1, 2, 3, 8
+[32] Ruijie Lu, Yu Liu, Jiaxiang Tang, Junfeng Ni, Yuxiang
+Wang, Diwen Wan, Gang Zeng, Yixin Chen, and Siyuan
+Huang. Dreamart: Generating interactable articulated ob-
+jects from a single image, 2025. 2
+[33] Zhao Mandi, Yijia Weng, Dominik Bauer, and Shuran Song.
+Real2code: Reconstruct articulated objects via code genera-
+tion, 2024. 2
+[34] Ben Mildenhall, Pratul P. Srinivasan, Matthew Tancik,
+Jonathan T. Barron, Ravi Ramamoorthi, and Ren Ng. Nerf:
+Representing scenes as neural radiance fields for view syn-
+thesis. In ECCV, 2020. 2
+[35] Kaichun Mo, Leonidas Guibas, Mustafa Mukadam, Abhinav
+Gupta, and Shubham Tulsiani. Where2act: From pixels to
+actions for articulated 3d objects. In International Confer-
+ence on Computer Vision (ICCV), 2021. 3
+[36] Jiteng Mu, Weichao Qiu, Adam Kortylewski, Alan L. Yuille,
+Nuno Vasconcelos, and Xiaolong Wang. A-SDF: learning
+disentangled signed distance functions for articulated shape
+representation. pages 12981–12991, 2021. 2
+[37] OpenAI.
+GPT-4o
+system
+card.
+arXiv
+preprint
+arXiv:2410.21276, 2024. 16
+[38] Songyou Peng, Kyle Genova, Chiyu ”Max” Jiang, An-
+drea Tagliasacchi, Marc Pollefeys, and Thomas Funkhouser.
+Openscene: 3d scene understanding with open vocabularies,
+2023. 3
+[39] Minghan Qin, Wanhua Li, Jiawei Zhou, Haoqian Wang, and
+Hanspeter Pfister. Langsplat: 3d language gaussian splatting,
+2024. 1, 3
+[40] Xiaowen Qiu, Jincheng Yang, Yian Wang, Zhehuan Chen,
+Yufei Wang, Tsun-Hsuan Wang, Zhou Xian, and Chuang
+Gan. Articulate anymesh: Open-vocabulary 3d articulated
+objects modeling. arXiv preprint arXiv:2502.02590, 2025. 2
+[41] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya
+Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry,
+Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen
+Krueger, and Ilya Sutskever.
+Learning transferable visual
+models from natural language supervision, 2021. 8
+[42] Tianhe Ren, Shilong Liu, Ailing Zeng, Jing Lin, Kun-
+chang Li, He Cao, Jiayu Chen, Xinyu Huang, Yukang Chen,
+Feng Yan, Zhaoyang Zeng, Hao Zhang, Feng Li, Jie Yang,
+Hongyang Li, Qing Jiang, and Lei Zhang. Grounded sam:
+Assembling open-world models for diverse visual tasks,
+2024. 16
+[43] Nur Muhammad Mahi Shafiullah, Chris Paxton, Lerrel
+Pinto, Soumith Chintala, and Arthur Szlam.
+Clip-fields:
+Weakly supervised semantic fields for robotic memory. In
+Robotics: Science and Systems XIX. Robotics: Science and
+Systems Foundation, 2023. 3
+[44] Licheng Shen, Saining Zhang, Honghan Li, Peilin Yang, Zi-
+hao Huang, Zongzheng Zhang, and Hao Zhao. Gaussianart:
+Unified modeling of geometry and motion for articulated ob-
+jects, 2025. 1, 2, 3, 8
+[45] Xiaohao Sun, Hanxiao Jiang, Manolis Savva, and An-
+gel Xuan Chang.
+Opdmulti: Openable part detection for
+multiple objects.
+arXiv preprint arXiv:2303.14087, 2023.
+2
+[46] Wei-Cheng Tseng, Hung-Ju Liao, Yen-Chen Lin, and Min
+Sun.
+Cla-nerf: Category-level articulated neural radiance
+field. In ICRA, 2022. 2
+[47] Aditya Vora, Sauradip Nag, Kai Wang, and Hao Zhang. Ar-
+ticulate that object part (atop): 3d part articulation from
+text and via motion personalization. ACM Transactions on
+Graphics, 2025. 1, 2
+[48] Jiawei Wang, Dingyou Wang, Jiaming Hu, Qixuan Zhang,
+Jingyi Yu, and Lan Xu.
+Kinematify:
+Open-vocabulary
+synthesis of high-dof articulated objects.
+arXiv preprint
+arXiv:2511.01294, 2025. 2
+[49] Peng Wang, Lingjie Liu, Yuan Liu, Christian Theobalt, Taku
+Komura, and Wenping Wang. Neus: Learning neural implicit
+surfaces by volume rendering for multi-view reconstruction.
+arXiv preprint arXiv:2106.10689, 2021. 2
+[50] Xiaogang Wang, Bin Zhou, Yahao Shi, Xiaowu Chen, Qin-
+ping Zhao, and Kai Xu. Shape2motion: Joint analysis of
+motion parts and attributes from 3d shapes, 2019. 2
+[51] Yijia Weng, He Wang, Qiang Zhou, Yuzhe Qin, Yueqi Duan,
+Qingnan Fan, Baoquan Chen, Hao Su, and Leonidas J.
+Guibas. Captra: Category-level pose tracking for rigid and
+articulated objects from point clouds. In Proceedings of the
+IEEE International Conference on Computer Vision (ICCV),
+pages 13209–13218, 2021. 2
+[52] Yijia Weng, Bowen Wen, Jonathan Tremblay, Valts Blukis,
+Dieter Fox, Leonidas Guibas, and Stan Birchfield. Neural
+implicit representation for building digital twins of unknown
+articulated objects. In CVPR, 2024. 2
+[53] Di Wu, Liu Liu, Zhou Linli, Anran Huang, Liangtu Song,
+Qiaojun Yu, Qi Wu, and Cewu Lu. Reartgs: Reconstruct-
+ing and generating articulated objects via 3d gaussian splat-
+ting with geometric and motion constraints. arXiv preprint
+arXiv:2503.06677, 2025. 2
+[54] Fanbo Xiang, Yuzhe Qin, Kaichun Mo, Yikuan Xia, Hao
+Zhu, Fangchen Liu, Minghua Liu, Hanxiao Jiang, Yifu Yuan,
+He Wang, Li Yi, Angel X. Chang, Leonidas J. Guibas, and
+Hao Su. SAPIEN: A simulated part-based interactive envi-
+ronment. In The IEEE Conference on Computer Vision and
+Pattern Recognition (CVPR), 2020. 8
+[55] Chunyu Xie, Bin Wang, Fanjing Kong, Jincheng Li, Dawei
+Liang, Ji Ao, Dawei Leng, and Yuhui Yin. Fg-clip 2: A bilin-
+
+
+gual fine-grained vision-language alignment model, 2026. 4,
+7
+[56] Tianjiao Yu, Vedant Shah, Muntasir Wahed, Ying Shen,
+Kiet A. Nguyen, and Ismini Lourentzou. Part2gs: Part-aware
+modeling of articulated objects using 3d gaussian splatting,
+2026. 2
+[57] Sylvia Yuan, Ruoxi Shi, Xinyue Wei, Xiaoshuai Zhang, Hao
+Su, and Minghua Liu. Larm: A large articulated-object re-
+construction model. arXiv preprint arXiv:2511.11563, 2025.
+2
+[58] Sylvia Yuan, Dan Wang, Ravi Ramamoorthi, and Xinrui Cui.
+Artmesh: Part-aware articulated mesh fields with motion-
+consistent dynamics.
+arXiv preprint arXiv:2605.16582,
+2026. 1, 2, 3, 7
+[59] Baowen Zhang, Chuan Fang, Rakesh Shrestha, Yixun Liang,
+Xiaoxiao Long, and Ping Tan. Rade-gs: Rasterizing depth in
+gaussian splatting, 2024. 2
+[60] Yiwu Zhong, Jianwei Yang, Pengchuan Zhang, Chun-
+yuan Li, Noel Codella, Liunian Harold Li, Luowei Zhou,
+Xiyang Dai, Lu Yuan, Yin Li, et al. Regionclip: Region-
+based language-image pretraining.
+In Proceedings of the
+IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, pages 16793–16803, 2022. 16
+[61] Shijie Zhou, Haoran Chang, Sicheng Jiang, Zhiwen Fan, Ze-
+hao Zhu, Dejia Xu, Pradyumna Chari, Suya You, Zhangyang
+Wang, and Achuta Kadambi. Feature 3dgs: Supercharging
+3d gaussian splatting to enable distilled feature fields, 2024.
+3
+
+
+A. Additional Experiments
+This section reports the full set of additional experiments.
+Most of the language experiments use a single procedu-
+rally generated command dataset whose statistics are sum-
+marized in Table 5, with objects and compositions split dis-
+jointly between training and evaluation. The few experi-
+ments that use a different set state so explicitly where they
+appear: the oracle-parser comparison is run on a separate,
+larger 100-object generated command set (Table 7), and the
+anchor/field ablation is run on constructed synthetic diag-
+nostic scenes (Table 11).
+Table 5. Command-grounding dataset statistics by split.
+Split
+#Obj #Cmd
+#Nodes
+% null
+% rep-part
+Train
+70
+6576
+10770
+3.9
+64.6
+Val
+15
+1362
+2220
+4.1
+67.2
+Test
+15
+1152
+1836
+4.9
+62.3
+Total
+100
+9090
+14826
+4.0
+64.7
+Structured directive-to-part assignment.
+Table 6 iso-
+lates the global assignment by comparing it against inde-
+pendent per-directive selection and a variant without the re-
+lation term, both on the full command set and on a con-
+trastive subset of sibling-collision and relational-chain com-
+mands constructed so that independent selection is forced
+into an error. The joint assignment improves accuracy on
+every subset, with the largest gains on exactly the collision
+and relational cases the formulation is designed for. Ta-
+ble 7 substitutes oracle directive graphs for the rule-based
+parser: grounding on the two graphs differs by less than the
+run-to-run variation, so on this command distribution the
+parser is not the dominant error source. The three ground-
+ing tables are not directly comparable cell-for-cell: Table 6
+scores every directive of the 15-object data cmd test split,
+Table 7 scores a separate 100-object procedurally generated
+command set, and the entity-to-part row of Table 8 counts
+every directive grounded to a real ground-truth part, includ-
+ing the reference-only anchor entities the resolver must also
+place, and excluding only null and ambiguous directives; its
+denominator therefore exceeds that of the verb row, which
+counts only actionable verb-bearing directives, by exactly
+the reference-only anchors.
+Per-stage accuracy and dispersion.
+Table 8 decomposes
+command grounding into its stages: parse count agreement
+(the parse has the same actionable-directive and relation-
+edge counts as the oracle graph), entity-to-part accuracy,
+verb accuracy, magnitude-type accuracy over four classes
+(endpoint, absolute-metric, relative-metric, and fraction; of
+Table 6. Directive-to-part assignment accuracy: global graph as-
+signment vs. independent argmax and a NoRelation ablation, by
+subset, on the synthetic command dataset.
+Method
+All ↑
+Multi-directive ↑
+Relational ↑Hard ↑
+Global
+0.842
+0.899
+0.827
+0.790
+Independent
+0.783
+0.812
+0.708
+0.543
+NoRelation
+0.789
+0.812
+0.701
+0.530
+Table 7. Grounding accuracy with the rule-based parser vs. oracle
+directive graphs, isolating parser error.
+Parser
+All ↑
+Multi-directive ↑
+Predicted (rule parser) 0.870
+0.909
+Oracle
+0.863
+0.901
+the five request types of the typed target conversion in
+the main paper the absolute- and relative-fraction cases are
+merged into one fraction class, and only the type is scored,
+not the numeric amount), whole-command success where
+every directive in a command must be correct, and correct
+abstention on ambiguous commands. Because the object-
+disjoint test split contains few objects, Table 9 additionally
+reports the per-object macro mean, standard deviation, and
+95% confidence interval for each stage, computed over the
+objects that contain each metric’s instances.
+Abstention and ambiguity.
+Table 10 reports accu-
+racy with and without the abstention mechanism on an
+ambiguity-weighted subset in which should-abstain direc-
+tives are 30% of the total. Holding the global resolver fixed
+and toggling only the null and margin gate, abstention raises
+accuracy from 64.2% to 68.2% (∆= +4.0%). Figure 8
+plots the risk-coverage curve for structured-margin selec-
+tive prediction on the full test distribution, whose area un-
+der the curve is 0.048 (lower is better). The global assign-
+ment solves in sub-second time, a few milliseconds across
+all tested part and directive counts, so solve time is not a
+runtime bottleneck.
+Semantic anchor versus dense field.
+The semantic en-
+ergy combines a discrete anchor term with a dense distilled
+field. Table 11 compares anchor-only, field-only, and the
+combined energy on two synthetic diagnostic probes of 200
+constructed scenes each, one where resolution is decided
+by the anchor and one where it is decided by the field, and
+neither term alone handles both while the combined en-
+ergy does; Figure 9 plots grounding accuracy as the mixing
+weight is swept, where a broad combined region improves
+over either endpoint.
+
+
+Table 8. Per-stage accuracy breakdown of the command pipeline
+on the command dataset (test split, trained resolver θ).
+Parse
+(count agreement): fraction of commands whose rule parse has
+the same actionable-directive and relation-edge counts as the ora-
+cle graph (a necessary condition, not a full labeled-graph match,
+so it upper-bounds true graph recovery). Entity-to-part: fraction of
+every directive grounded to a real ground-truth part (all real-part
+directives, including the reference-only anchor entities the resolver
+must also place; only null and ambiguous directives are excluded)
+that the global resolver grounds correctly (Y ⋆
+i
+= Yi,gt), on the
+oracle parse. Verb: fraction of actionable (verb-bearing) direc-
+tives whose parser-recovered verb (canonicalised to open/close)
+matches ground truth; its n is smaller than the Entity-to-part n by
+exactly the reference-only anchors, which carry a part but no verb.
+Magnitude: fraction of typed-magnitude probes whose recovered
+magnitude type is correct over four classes (endpoint, absolute-
+metric, relative-metric, and fraction; the absolute- and relative-
+fraction requests are merged into one fraction class, and only the
+type is scored, not the numeric amount).
+Complete-command:
+fraction of non-ambiguous commands the end-to-end pipeline
+(predicted parse + grounding) gets entirely right. Correct absten-
+tion: fraction of ambiguous bare-noun directives (Ygt = −2) on
+which the resolver correctly abstains. n is the number of scored
+instances.
+Stage
+Accuracy ↑
+n
+Directive-graph parse
+0.844
+1152
+Entity-to-part
+0.913
+1686
+Verb
+0.889
+1566
+Magnitude
+1.000
+152
+Complete-command
+0.673
+1092
+Correct abstention (ambiguous)
+0.200
+60
+Table 9. Per-object dispersion of the command-pipeline metrics
+across the test objects; because the object-disjoint test split is small
+we quantify uncertainty. We report, for each metric, the macro
+mean ± standard deviation over the per-object accuracies and a
+95% Student’s-t confidence interval, where n is the number of test
+objects that contain that metric’s instances and varies by row; the
+intervals are truncated to [0, 1] for display. Metrics are computed
+exactly as in Table 8.
+Metric
+Mean ↑
+Std
+95% CI
+Directive-graph parse
+0.779
+0.098
+[0.725, 0.834]
+Entity-to-part
+0.958
+0.081
+[0.913, 1.000]
+Verb
+0.805
+0.112 [0.743, 0.867]
+Magnitude
+1.000
+0.000
+[1.000, 1.000]
+Complete-command
+0.554
+0.184 [0.452, 0.656]
+Correct abstention (ambiguous)
+0.222
+0.441
+[0.000, 0.561]
+Part naming and binding.
+Table 12 ablates the part-
+binding cost, comparing the projected-centroid assignment
+used by our method against mask overlap, feature similar-
+ity, and a learned matcher, with the corresponding qualita-
+Table 10. Abstention accuracy on an ambiguity stress subset: ev-
+ery should-abstain directive (ambiguous or absent-referent) plus
+a random, seed-fixed sample of resolvable directives, so should-
+abstain is 30% of the 500 scored directives (the full command dis-
+tribution is only a few percent should-abstain, which bounds the
+achievable gain). The global resolver is held fixed and only the ab-
+stention gate is toggled: Acc (no abstain) forces the global assign-
+ment to always execute, Acc (with abstain) adds the null/margin
+gate, and ∆is the abstention gain.
+Metric
+Value
+Acc (no abstain)
+0.642
+Acc (with abstain)
+0.682
+∆(abstention gain)
+0.040
+Should-abstain fraction
+0.300
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Coverage
+0.000
+0.025
+0.050
+0.075
+0.100
+0.125
+0.150
+Risk (error)
+Figure 8. Risk-coverage curve for structured-margin abstention.
+Abstaining on the lowest-margin directives lowers coverage and
+reduces selective risk.
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Mixture weight ¯ (1 = anchor-only, 0 = field-only)
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+Grounding accuracy
+Figure 9. Grounding accuracy as the semantic energy is mixed be-
+tween field-only (β=0) and anchor-only (β=1); a broad combined
+region improves over either endpoint.
+tive recolorings in Figure 10. Figure 11 stresses the nam-
+ing pipeline by perturbing the vision-language proposals
+and re-deriving names over a fixed object subsample, plot-
+ting the language metrics against noise; the overall trend
+is downward, though the first perturbation levels can rise
+
+
+Table 11. Anchor / field / anchor+field ablation of the semantic
+score. Anchor-only (β=1) cannot separate same-noun siblings;
+field-only (β=0) is misled by a distractor part whose dense field
+spuriously matches the query; a broad range of mixtures around
+the default (β=0.6) handles both, so the distilled dense field earns
+its place. These are diagnostic probes over constructed anchor-
+and field-decisive cases, not the full metric set.
+Semantic score
+Anchor-decisive ↑Field-decisive ↑
+All ↑
+Anchor-only (β=1)
+1.000
+0.520
+0.760
+Field-only (β=0)
+0.000
+1.000
+0.500
+Both (β=0.6)
+1.000
+1.000
+1.000
+before falling rather than decreasing monotonically, and
+the zero-noise point reflects that subsample rather than the
+full-test binding numbers of Table 12. Qualitative exam-
+ples are in Figure 12. Table 13 compares the alignment
+metrics against region-CLIP [60] and Grounded-SAM [42],
+with qualitative comparisons in Figure 13. We also probe
+a directly prompted vision-language model: GPT-4o [37],
+shown the rendered object with a numbered legend of its
+parts and asked to name the part each command acts on,
+grounds correctly on only 27.3% of the 282 answered com-
+mands. These 282 are the basic single-referent commands,
+one close the ⟨part⟩command per movable part, not the
+relational or compound directives grounded elsewhere, so
+even on the easiest slice of the task a prompted model trails
+the structured resolver by a wide margin.
+Table 12.
+Part-binding cost ablation: language metrics under
+centroid, mask-IoU, feature-similarity, and learned (fusion-head)
+matching. The underlying geometry and joint trajectories are fixed
+across namers, so pure reconstruction metrics are omitted; L-M is
+retained because naming changes the correspondence used by the
+language-motion metric.
+Namer
+L-Sem ↑L-Spat ↑
+L-M ↓
+Centroid
+0.775
+0.607
+70.42
+IoU
+0.797
+0.547
+86.32
+Feat
+0.784
+0.095
+326.32
+Fusion
+0.725
+0.413
+209.00
+Table 13. Language-grounding baselines vs. ArtLang on the se-
+mantic and spatial alignment axes.
+Method
+L-Sem ↑L-Spat ↑
+Region-CLIP
+0.335
+0.084
+Grounded-SAM
+0.538
+0.180
+ArtLang (Ours)
+0.775
+0.607
+Intent preservation under paraphrase.
+The metrics
+above charge the templated parser for recovering the exact
+surface noun, which understates how the interface behaves
+in use, where a referent is grounded to a part by embedding
+rather than by string. Table 14 instead measures whether
+a language-model paraphrase of each command, introduc-
+ing reordering, anaphora, and out-of-template vocabulary,
+still yields the intended action and referent: the referent is
+counted correct when it preserves every spatial qualifier and
+names the same part by string or embedding synonymy, as
+the semantic anchor grounds it. The parser preserves the
+intended action-and-referent on the large majority of para-
+phrases, so the templated interface degrades gracefully to
+free-form phrasing without any change to the grounding
+stage. This probe uses a local command sample rather than
+the pod command split, so its absolute rates are not directly
+comparable cell-for-cell with the grounding tables.
+Table 14. Intent preservation on free-form paraphrases. Language-
+model paraphrases of the templated commands (with reordering,
+anaphora, and out-of-template vocabulary) are read by the typed
+parser and scored against the intent of the original command by
+whether the resulting directive would drive the same part the same
+way: Action is the verb class, Referent requires every spatial qual-
+ifier to be preserved and the head noun to match the intended part
+by string or embedding synonymy (as the semantic anchor grounds
+it), Magnitude is the request type, and Intent is Action and Refer-
+ent together. n is the number of paraphrases scored.
+Field
+Accuracy ↑
+Action (verb class)
+0.864
+Referent (part + qualifier)
+0.947
+Magnitude type
+0.959
+Intent (action + referent)
+0.835
+Online runtime and endpoint equivariance.
+Table 15
+reports the online per-stage query latency of the language-
+to-actuation pipeline; the offline per-asset reconstruction
+and feature-field distillation are excluded and dominate the
+total cost. Table 16 verifies that the endpoint classifier is
+permutation-equivariant: swapping the observed state or-
+dering flips the predicted index on every scored part (a flip
+rate of 1.0; an order-driven predictor that always picked a
+fixed slot would give 0), confirming that which state is open
+is decided from appearance rather than from observation or-
+der, as in the endpoint classifier of the main paper.
+A.1. Failure Mode Analysis
+The most common failure mode of the full pipeline is not in
+the grounding or actuation stages but upstream, in the open-
+vocabulary proposals themselves. Our part binding com-
+mits a part to the phrase supplied by the vision-language
+
+
+Command: "close bottom drawer, third drawer, second drawer, top drawer"
+State 0
+State 1
+Command: "close right leaf, drawer, left leaf"
+State 0
+State 1
+Command: "close bottom drawer, top drawer, right door, left door"
+State 0
+State 1
+GT
+Centroid
+IoU
+Feat
+Fusion
+Figure 10. Part-binding cost ablation, qualitatively. The same geometry is recolored by the centroid, mask-IoU, feature-similarity, and
+learned namers, with per-part correctness marks.
+
+
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Proposal-noise level
+0.5
+0.6
+0.7
+0.8
+Alignment
+L-Sem
+L-Spat
+Figure 11. Naming metrics as the vision-language proposals are
+perturbed with increasing noise.
+Table 15. Per-stage runtime of the language-to-actuation pipeline,
+mean over commands (parser, structured grounding, actuation;
+CPU). Reconstruction and per-asset feature distillation are one-
+time offline costs incurred before any command is issued and are
+excluded from this online timing.
+Stage
+Time (ms)
+Parse
+0.044
+Ground
+3.979
+Actuate
+0.009
+Table 16.
+Endpoint (open/closed) classifier permutation-
+equivariance. Protocol: the identity of the physical open state is
+held fixed while its slot changes under the swap, so its correct in-
+dex flips; the two observed reconstructed states are exchanged and
+the reported quantity is the prediction flip rate, the fraction of parts
+whose returned open-state index changes, not an accuracy. A high
+forward accuracy together with a flip rate of 1.0 is the intended re-
+sult: the classifier is permutation-equivariant, returning the index
+of the same appearance-based choice under either input ordering
+(a genuinely order-driven predictor that always picks a fixed slot
+would instead have a flip rate of 0). This is an architectural consis-
+tency check, not evidence of learned open/closed semantics. The
+margin is invariant to the swap.
+Metric
+Value
+Original-order accuracy ↑
+1.000
+Prediction flip rate (states swapped)
+1.000
+Mean margin (swap-invariant)
+0.462
+model, and when that model mislabels a part the wrong
+noun propagates into the semantic anchor. A representa-
+tive case is a cabinet whose left panel is a hinged door
+but is proposed by the model as a drawer: the geometry,
+segmentation, and recovered revolute joint are all correct,
+yet the part is named drawer, so a command that asks to
+open the door may bind to the wrong part or abstain. The
+partial-matching stage and the private dummy nodes limit
+the damage, because a part can remain unnamed rather than
+accept an incompatible proposal. When the model returns a
+confident, geometrically plausible wrong noun, the discrete
+bound name remains incorrect and no downstream stage
+can repair the stored name. Command grounding itself can
+still be rescued in some cases, because the semantic energy
+also carries a dense distilled field alongside the discrete an-
+chor, together with the spatial and action terms, and the an-
+chor/field ablation in the supplementary material shows the
+combined score can succeed where either the anchor or the
+field alone fails; but these terms cannot reliably correct the
+naming error, and they do not always recover the intended
+part.
+This dependence is a strength as much as a limitation.
+The semantic quality of ArtLang is bounded by the qual-
+ity of the vision-language proposals, and that component
+is frozen and external: as stronger open-vocabulary mod-
+els replace the current one, the naming errors shrink with-
+out any change to our grounding, actuation, or reconstruc-
+tion. In this sense ArtLang inherits improvements in vision-
+language models for free, and the failures reported here are
+expected to diminish as those models improve.
+A.2. Additional Qualitative Results
+The figures in the preceding sections show the articulated
+end state to save space. Here we provide two-state compar-
+isons for a representative subset of objects, with both the
+rest state and the articulated state side by side, and the per-
+part actuation sweep.
+
+
+Command: "close left door, bottom door, right door"
+State 0
+State 1
+Command: "close right drawer, middle drawer, left drawer"
+State 0
+State 1
+Command: "close right door, left door"
+State 0
+State 1
+GT
+Ours
+Noise 0.5
+Noise 1.0
+Figure 12. Part naming under proposal noise, qualitatively, at increasing perturbation levels.
+
+
+Command: "close bottom drawer, middle drawer, top drawer"
+State 0
+State 1
+Command: "close right door, left door"
+State 0
+State 1
+Command: "close right drawer, left drawer"
+State 0
+State 1
+GT
+Ours
+GPT-4o
+Grounded-SAM
+Region-CLIP
+Figure 13. Language-grounding baselines, qualitatively. The same geometry is recolored by each baseline’s predicted naming, with per-
+part correctness marks.
+
+
+GT
+Ours
+ArtGS
+GaussianArt
+GT
+Ours
+ArtGS
+GaussianArt
+State 0
+State 1
+Figure 14. Reconstruction comparison on Articulate-100, both states, for a representative subset of objects. Each row is an object; the
+two state blocks show the rest and articulated states, with columns for the ground truth, our reconstruction, and the Gaussian baselines,
+including the per-part segmentation and the joint motion overlay.
+
+
+State 0
+State 1
+State 0
+State 1
+State 0
+State 1
+State 0
+State 1
+GT
+Ours (mesh)
+Ours (MV)
+Ours (SV)
+Articulate-Anything
+OPD
+Figure 15. Mesh-input comparison on Articulate-100, both states, for a representative subset of objects. Columns show the ground truth
+and our mesh-input, multi-view, and single-view variants next to Articulate-Anything [24] and OPD [19], rendered with texture in both the
+rest and articulated states.
+
+
+Command: "close bottom right door, bottom left door, top right drawer, top left drawer"
+State 0
+State 1
+Command: "close bottom drawer, top drawer, right door, left door"
+State 0
+State 1
+Command: "close right leaf, drawer, left leaf"
+State 0
+State 1
+Command: "close top door, bottom door"
+State 0
+State 1
+GT
+Ours
+NaiveCLIP
+NoSpatial
+NaiveWarp
+Figure 16. Ablation comparison, both states, for a representative subset of objects. Columns show the ground truth, our model, and the
+NaiveCLIP, NoSpatial, and NaiveWarp ablations on the same given mesh, in the rest and articulated states.
+
+
+open
+close
+top right drawer
+bottom left door
+bottom right door
+top left drawer
+Figure 17. Full continuous actuation sweep. Every movable part of the object is driven along its learned trajectory in turn, one row per part,
+while the remaining parts are held at rest, sweeping the signed linear factor s of Eq. (25) from −1 to 1: s ∈[0, 1] reproduces the observed
+state 0 →1 configurations (for this displayed example state 0 happens to be the more-open pose, so left-to-right reads as open-to-close;
+the endpoint classifier does not assume or use this ordering and decides which state is open from appearance), and s < 0 extrapolates the
+learned joint past the observed rest state. The one-row version in Figure 4 shows a single part of this figure.

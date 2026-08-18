@@ -1,0 +1,1749 @@
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+1
+Audio-Visual Segmentation via Depth-Guided Collaborative Modeling
+Zhaojin Fu, Yuyang Hong, Qi Yang, Zili Wang, Kun Ding, Shiming Xiang, and Bin Fan*
+Abstract—Audio-Visual Segmentation (AVS) is a fundamental
+task in multimodal perception that performs pixel-level segmen-
+tation of sounding objects in videos by leveraging both visual
+and audio cues. It has broad applications in video understanding,
+human–computer interaction, and autonomous driving. However,
+most existing AVS methods do not explicitly model geometric cues
+such as relative distance and occlusion, thereby limiting the ro-
+bustness of cross-modal alignment. In human perception, spatial
+structure is naturally integrated with audio-visual evidence to
+accurately localize sounding objects. Motivated by this, we in-
+corporate estimated depth as a spatial structural cue for AVS and
+propose DGCM-AVS, a tri-modal framework that jointly models
+audio, visual, and depth information. Specifically, we design a
+Depth-Aware Dynamic Modulator to improve the separation of
+adjacent objects while preserving intra-object feature consistency.
+Furthermore, we propose Depth-Guided Progressive Fusion,
+which uses depth as an intermediate bridge to progressively align
+audio cues with visual features. Compared to state-of-the-art
+methods, DGCM-AVS achieves relative improvements of 10.2%
+in MJ and 8.7% in MF on the AVSS dataset. We believe our
+study highlights depth as a promising yet underexplored modality
+for AVS and may encourage further research in this direction.
+Index Terms—Audio-Visual Segmentation, Depth, Multi-modal
+Vision, Collaboration.
+I. INTRODUCTION
+W
+ITH auditory cues, humans can focus visual atten-
+tion on sounding objects. This cross-modal percep-
+tual mechanism is crucial for understanding complex scenes.
+As applications such as human-computer interaction and au-
+tonomous driving continue to expand, it becomes increasingly
+important to endow machines with similar cross-modal per-
+ceptual capabilities. Accordingly, Audio-Visual Segmentation
+(AVS) [1]–[3] has attracted increasing attention in recent
+years. In its general form, AVS leverages both audio and
+visual cues to localize sounding objects and segment them
+at the pixel level. Depending on the setting, AVS can be
+formulated as binary foreground-background segmentation, or
+as a semantic task that additionally predicts category labels
+for the segmented sounding objects.
+Existing AVS methods can be broadly viewed as improving
+either cross-modal semantic alignment or mask boundary
+quality, although many designs combine these ingredients in
+different forms. One representative line focuses on semantic
+alignment [2], [4], [5], as shown in Fig. 1(a), where audio is
+This work was supported by the National Natural Science Foundation of
+China (Grant Nos. U24A20218 and 62306310).
+Zhaojin Fu and Bin Fan are with the School of Intelligent Science and
+Technology, University of Science and Technology Beijing, Beijing 100083,
+China (e-mail: d202410395@xs.ustb.edu.cn; bin.fan@ieee.org).
+Yuyang Hong, Qi Yang, Zili Wang, Kun Ding, and Shiming Xiang are
+with the Institute of Automation, Chinese Academy of Sciences, Beijing
+100190, China. (e-mail: hongyuyang2023@ia.ac.cn; yangqi2021@ia.ac.cn;
+ziliwang2022@ia.ac.cn; kun.ding@ia.ac.cn; smxiang@nlpr.ia.ac.cn)
+*Corresponding author: Bin Fan (e-mail: bin.fan@ieee.org).
+Audio
+Depth
+Frames
+Audio
+Frames
+Audio
+Depth
+Visual
+Class
+Class
+Class
+Class
+Shape
+Shape
+Shape
+Shape
+(b) Human perception of audio-visual events
+(c) Depth-Guided AVS Method (Ours)
+(a) Representative AVS Methods
+Alignment
+Collaboration & Alignment
+Select
+Near
+Far
+Near
+Far
+Fig. 1. (a) Representative AVS methods that align audio and visual features.
+(b) Illustrates that humans exploit depth cues together with audio evidence
+to disambiguate sounding objects. (c) Presents our core idea, which aims to
+perform the AVS task in a human-like way.
+used to modulate semantic visual features through cross-modal
+interaction. However, semantic cues alone are often insufficient
+for precise localization and boundary delineation, especially
+when multiple candidates have similar appearances or the
+sounding object is partially occluded. Another line leverages
+strong visual priors from large-scale vision models to refine
+segmentation masks [6], [7]. With visual prompting, these
+methods can produce sharper boundaries and improved region
+separation. Nonetheless, excessive prompt-induced partition-
+ing can over-segment spatially adjacent regions, undermining
+object integrity and causing fragmented masks or semantic in-
+consistency. Despite their progress, the lack of explicit spatial-
+structure constraints can makes cross-modal correspondence
+less robust. As a result, segmentation can become unstable in
+complex scenes, often exhibiting attention drift to salient but
+silent regions and boundary leakage.
+Inspired by human spatial perception, we suggest that
+explicitly introducing scene spatial structure into AVS can
+constrain cross-modal correspondence, thereby improving the
+stability and robustness of segmentation. In particular, when
+multiple candidate objects have similar appearances or are
+partially occluded, spatial cues such as depth ordering and
+occlusion relationships can help determine which visible entity
+is more likely to correspond to the audio signal. This reduces
+attention drift and boundary leakage, as illustrated in Fig. 1(b).
+Recently, researchers have increasingly recognized that spatial
+information is crucial for human-like multimodal perception
+and have begun exploring its integration into sound source
+localization [8] and multimodal learning [9]. However, these
+efforts do not explicitly model the pixel-level localization and
+fine boundary delineation required by AVS, and therefore can-
+arXiv:2608.16285v1  [cs.CV]  17 Aug 2026
+
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+2
+not directly satisfy the requirements for accurate segmentation.
+Therefore, a more systematic approach is needed to endow
+AVS models with spatial awareness, enabling more robust
+cross-modal alignment.
+We propose the Depth-Guided Collaborative Modeling for
+Audio-Visual Segmentation (DGCM-AVS) to foster more
+effective collaboration among the audio, visual, and depth
+modalities. Since depth provides a direct cue to scene spatial
+structure, we incorporate it into our model design, as shown
+in Fig. 1(c), to equip the model with two capabilities: (1)
+improve the discrimination of objects at different distances and
+positions while preserving structural integrity. (2) using depth
+as a bridge to align audio and visual features more effectively.
+For capability (1), we propose the Depth-Aware Dynamic
+Modulator (DADM), which adopts a scale-based approxima-
+tion of frequency separation. Specifically, it uses neighborhood
+aggregation to form a stable, region-level low-frequency visual
+representation, and leverages a depth residual to highlight
+boundary-sensitive high-frequency structural cues. By fus-
+ing these complementary cues, DADM improves inter-object
+discrimination while preserving intra-object consistency. For
+capability (2), we propose Depth-Guided Progressive Fusion
+module (DGPF), which uses depth information as a bridge to
+align audio and visual features in two stages. In the first stage,
+Audio Depth Symbiotic, audio features are projected into
+the geometric space to establish the correspondence between
+sound and scene structure. In the second stage, Target Search,
+audio and visual semantics are aligned in the spatial domain
+to produce accurate segmentation masks.
+In this paper, our main contributions are as follows:
+• To the best of our knowledge, DGCM-AVS is the first to
+explore the potential of using depth information in AVS.
+It introduces a collaborative modeling framework across
+audio, visual, and depth information. This method offers
+new insights for advancing the AVS field and achieves
+state-of-the-art performance on both the AVSBench-
+Object and AVSBench-Semantic.
+• We propose the Depth-Aware Dynamic Modulator mod-
+ule to embed depth information into image features. This
+design enhances intra-object consistency and strengthens
+inter-object discrimination.
+• We propose the Depth-Guided Progressive Fusion module
+for gradual interaction across audio, visual, and depth
+cues. Depth information serves as a bridge to improve
+alignment between audio and visual features.
+II. RELATED WORK
+A. Audio-Visual Segmentation
+AVS aims to segment sounding objects at the pixel level
+by jointly leveraging audio and visual cues in complex
+scenes. AVSBench [4] introduced two benchmark datasets,
+AVSBench-Object and AVSBench-Semantic, and proposed a
+baseline that embeds audio features into visual representations
+for sounding-object localization. Specifically, AVSBench-
+Object focuses on binary foreground–background segmenta-
+tion. AVSBench-Semantic defines a more challenging set-
+ting where models are required to segment sounding objects
+and predict their semantic categories. Following this, several
+studies [1], [10]–[15] approached the task from the perspec-
+tive of semantic alignment, using audio cues as queries to
+retrieve visual targets and enhance cross-modal representa-
+tions. ECMVAE [15] formulates audio-visual segmentation
+as a conditional multimodal variational autoencoding prob-
+lem. It disentangles modality-shared and modality-specific
+latent codes, and optimizes them with orthogonality con-
+straints and cross-modal mutual-information regularization to
+better capture sounding objects. While effective in establish-
+ing semantic-level correspondence, semantic-alignment-based
+methods generally lack explicit spatial constraints and thus
+struggle with precise localization in complex scenes. An-
+other line of work [6], [7] explored boundary enhancement
+with large vision models, for example using SAM [16] to
+provide visual prompts. These approaches improved bound-
+ary sharpness but often over-emphasized local edges, which
+compromised object integrity. Other studies [17], [18] intro-
+duced textual descriptions to support audio-visual alignment.
+Although textual guidance enriches cross-modal connections,
+it can be unreliable for target localization under distractors,
+occlusions, or cluttered scenes. In summary, existing methods
+have explored semantic alignment, boundary enhancement,
+and semantic description, but none explicitly model the spatial
+structure of scenes. To address this limitation, we propose
+DGCM-AVS, which introduces depth as explicit geometric
+cue to strengthen cross-modal correspondence and improve
+the consistency and robustness of AVS predictions.
+B. Depth estimation
+Depth estimation predicts a pixel-wise depth map from a
+monocular or stereo image to describe the 3D geometry of
+a scene. Recently, some methods learn depth with explicit
+geometric constraints and aim for metric-consistent structure
+[19]–[21]. Other methods [22]–[24] emphasize large-scale
+pretraining to learn transferable depth representations and
+achieve strong generalization. Although their designs differ,
+they often provide reliable cues about relative layout, depth
+gradients, and depth discontinuities in practice.
+In computer vision [25]–[31], depth maps are commonly
+adopted as transferable geometric priors, and they are par-
+ticularly useful under appearance degradation such as low
+illumination, blur, and occlusion, where RGB features are
+more affected by texture and lighting changes. In deblurring,
+DAVIDE [25] injects depth features into the network across
+multiple stages and uses depth-aware fusion. The gains are
+larger when the temporal context is short, suggesting that depth
+helps stabilize structure recovery when appearance evidence is
+weak. In semantic segmentation, Texture-Diffusion [26] shows
+that depth provides reliable layout and boundary discontinuity
+cues. It uses cross-modal diffusion and structural consistency
+constraints to reduce information loss caused by modality
+gaps, which improves robustness. For low-light segmenta-
+tion, DPSAM [30] introduces depth into feature refinement
+via cross-modal attention. This reduces failures caused by
+degraded RGB features and texture confusion, and it im-
+proves prediction stability and boundary quality. For occluded
+overlapped text segmentation, MOTS [31] uses depth-guided
+
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+3
+Input Audio
+Class
+GAP
+Input Depth
+Input Frames
+Depth Generator
+(a) Depth-Aware Dynamic Modulator (DADM)
+(b) Depth-Guided Progressive Fusion (DGPF)
+Transformer 
+Decoder
+Transformer 
+Decoder
+MLP
+(c) Feature Calibrator
+​Context Aggregation 
+Kernel 
+GAP
+Mask
+MLP
+Unfold
+Unfold
+...
+...
+...
+...
+...
+...
+...
+...
+Stage1
+Feature 
+Calibrator
+Feature 
+Calibrator
+Feature 
+Calibrator
+Feature 
+Calibrator
+A-D 
+Symbiotic
+A-D 
+Symbiotic
+Target
+Search
+Target
+Search
+Channel split
+Conv Set
+Pool Set
+Channel split
+Multi-scale Deformable 
+Attention
+Multi-scale Deformable 
+Attention
+Stage2
+Perceptual Element Encoding
+ addition
+element-wise multiplication
+R Reshape
+R Reshape
+R
+R
+Unfold
+Unfold
+subtraction
+subtraction
+​Context Aggregation 
+Kernel 
+Fig. 2. Overview of the proposed DGCM-AVS. (a) DADM extracts different frequency components from image and depth features to improve intra-object
+consistency and enhance inter-object distinction. (b) DGPF uses depth information as a bridge to progressively complete the Audio Depth Symbiotic stage (A-D
+Symbiotic) and Target Search stages, achieving cross-modal feature alignment. (c) Feature Calibrator further strengthens the target-related feature responses.
+decoding and cross-attention to model occlusion hierarchies,
+which improves boundary localization in overlapped scenes.
+Overall, these studies show that depth information often
+provides a more stable global layout and scale structure,
+which supports region-level localization. It also offers clearer
+boundary discontinuities and occlusion breaks, which im-
+proves boundary adherence and detail recovery. Since these
+geometric cues are usually more robust than RGB texture
+and illumination, depth can provide structural constraints for
+cross-modal representation learning and can improve cross-
+modal alignment to some extent [8], [9]. These insights also
+match key challenges in audio-visual segmentation. Audio
+cues are often coarse and region-level, and occlusion can more
+easily cause candidate confusion and boundary drift. Based
+on this, we introduce estimated depth into DGCM-AVS as an
+auxiliary geometric prior. We focus on boundary and occlusion
+discontinuities and global layout cues. During feature fusion,
+these cues provide more stable structural constraints for audio-
+guided localization and further refine segmentation boundaries,
+which improves audio-visual alignment and final segmentation
+performance in occluded scenes.
+III. METHOD
+A. Overall Architecture
+The DGCM-AVS framework is shown in Fig. 2. The Percep-
+tual Element Encoding first builds perceptual representations
+from video, depth, and audio. The Depth-Aware Dynamic
+Modulator injects depth-derived structural cues into visual fea-
+tures via a dynamic low-/high-frequency fusion scheme. This
+enhances the model’s ability to discriminate adjacent objects,
+Algorithm 1 DGCM-AVS for AVSS
+Input: Train dataset D, mask label M, class label C
+Output: Mout, Cout
+1: The total loss L = λbceLbce + λdiceLdice + λceLce, with
+λbce = 5, λdice = 5, λce = 2
+2: for xv, xmel ∈D do
+3:
+Fv = f T
+v (xv), Fv = {Fi
+v}4
+i=1
+4:
+Depth information: xd = Depth Generator(xv)
+5:
+Fd = f T
+d (xd), Fd = {Fi
+d}4
+i=1
+6:
+Fa = f T
+a (xmel)
+7:
+Depth-Aware Dynamic Modulator fDADM(·):
+8:
+for i in 4 do
+9:
+Fi
+o = f i
+DADM(Fi
+v, Fi
+d)
+10:
+end for
+11:
+Multi-scale Deformabl Attention fMSDA(·):
+12:
+Fo = fMSDA(Fo)
+13:
+Depth-Guided Progressive Fusion fDGP F (·):
+14:
+F1′
+v , F
+′′
+a = fDGP F (Fa, Fd, Fo)
+15:
+Transformer Decoder fDeocder(·):
+16:
+Mout, Cout = fDeocder( F
+′′
+a , F1′
+v , Fo)
+17:
+Loss = L((Cout, C), (Mout, M))
+18: end for
+19: return Loss
+improving inter-object separability. Subsequently, to capture
+object details across different scales, we apply Multi-Scale
+Deformable Attention, inspired by Deformable DETR [32],
+enabling effective multi-scale feature interaction. The Depth-
+Guided Progressive Fusion is built upon depth information and
+adopts a two-stage strategy to progressively integrate audio
+
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+4
+and visual features for audio-visual alignment. This design is
+inspired by how humans identify sounding objects in complex
+environments. Finally, we adopt the Transformer decoder [33]
+to reconstruct the final segmentation masks. To further explain
+the proposed DGCM-AVS, we present its algorithmic process
+in Algorithm 1. The algorithm shows the complete pipeline
+from multi-modal feature extraction to semantic segmentation.
+B. Perceptual Element Encoding
+Given an input video xv ∈RT ×3×H×W , we first extract
+visual features using a visual encoder f T
+v (·), producing multi-
+scale features Fv = {Fi
+v}4
+i=1, where Fi
+v ∈RT ×Ci×
+H
+2i+1 ×
+W
+2i+1 .
+Since current AVS benchmarks do not include depth infor-
+mation, we use Depth Anything V2 [24] to estimate depth
+information xd, which is converted to RGB format to match
+the visual input. A separate depth encoder f T
+d (·) is used to
+extract multi-scale depth features Fd = {Fi
+d}4
+i=1, with Fi
+d ∈
+RT ×Ci×
+H
+2i+1 ×
+W
+2i+1 . For both the visual encoder f T
+v (·) and
+the depth encoder f T
+d (·), we experiment with two backbone
+networks: ResNet-50 [34] and PVT-v2 [35]. For audio, the raw
+waveform is first resampled to a 16 kHz mono signal. We then
+compute the Mel-spectrogram xmel ∈RT ×96×64 using Short-
+Time Fourier Transform. A pretrained VGGish f T
+a (·) [36] is
+used to extract frame-level audio features Fa ∈RT ×D, where
+D = 128 and T is the number of video frames.
+C. Depth-Aware Dynamic Modulator
+Visual features contain both low- and high-frequency com-
+ponents. The low-frequency part mainly describes global
+structure and semantic layout, providing stable and robust
+cues for coarse localization. In contrast, the high-frequency
+part contains richer fine textures, but it is more sensitive
+to noise and occlusion, and it often struggles to distinguish
+visually similar objects, which may confuse the model. Depth
+provides complementary benefits. In the spatial domain, depth
+corresponds more directly to geometry and discontinuities,
+so it can produce cleaner local changes around boundaries
+and occlusions. For AVS, audio often provides region-level
+cues related to the sounding object. Therefore, we need stable
+semantics and layout to support audio-visual alignment, and
+we also need reliable boundary cues to refine the mask.
+As shown in Fig. 3, we visualize the RGB frame and its
+depth map in the frequency domain. Both spectra show strong
+energy near the center, which suggests that the two modalities
+share global structural information. However, their behaviors
+differ in the high-frequency region. The RGB spectrum is
+more scattered and is easily affected by textures and lighting
+changes. These appearance-driven components can introduce
+sound-irrelevant distractions in AVS and reduce the stability of
+audio-visual alignment. In contrast, the depth spectrum is more
+concentrated along contours and shows clearer structure with
+less interference. The reconstructed high-frequency edges are
+also more continuous and align better with object boundaries.
+Based on these observations, we use low-frequency visual cues
+as a stable semantic basis for audio-guided coarse localization.
+We use high-frequency depth cues to tighten and refine the
+boundaries.
+Frames/Depth
+Spectrum
+HF (red box) LF(blue box)
+HF Edge
+Fig. 3. Frequency-domain comparison of RGB and depth. The figure shows
+log power spectra, zoomed views of low/high-frequency regions, and edge
+responses reconstructed from the mid-to-high frequency band.
+Motivated by the above observations, we propose the Depth-
+Aware Dynamic Modulator (DADM) in Fig. 2 (a). To provide
+an explicit and reproducible definition of high- and low-
+frequency components, we adopt a scale-based approximation
+for frequency separation in the spatial domain. Neighborhood
+aggregation is treated as a low-pass operator, since aggregat-
+ing features over a larger receptive field performs stronger
+local averaging, suppresses rapid spatial variations, and yields
+a low-frequency representation. Under this formulation, the
+low-frequency component is the aggregated feature, whereas
+the high-frequency component is the residual between the
+original feature and the aggregated feature, HighFreq(F) =
+F −LowFreq(F). This residual emphasizes fast-changing
+structural cues in depth, including boundary discontinuities
+and occlusion-induced breaks. Following this design, the low-
+frequency branch uses a larger window kl = 5 to integrate
+wider context and produce a stable semantic basis that aligns
+with region-level audio guidance and preserves global layout
+consistency. The high-frequency branch uses a smaller win-
+dow kh = 3 to retain finer local variations, which enables
+the residual signal to capture depth discontinuities at object
+boundaries more effectively.
+Formally, the visual features Fv and depth features Fd are
+first processed with channel attention to generate importance
+weights Av and Ad, which emphasize feature channels related
+to sounding objects. Then, dynamic perception kernels are
+constructed along high- and low-frequency paths.
+For the high-frequency path, we first obtain compressed
+features ˜Fd = Conv1×1 (Fd) ∈RT ×c×h×w, and we then
+process it within a kh = 3 window to focus on local depth
+variations. A kernel normalization operation generates a local
+perception kernel KH:
+KH = T
+
+ϕ
+
+HConv
+
+˜Fd
+
+∈RT ×1×k2
+h×h×w,
+(1)
+The perception kernel is constructed based on the input
+features, allowing it to adapt dynamically to different inputs
+and enabling input-dependent feature perception. Here, T (·)
+represents the kernel normalization operation Pk2
+h
+p=1 K(p)
+H = 1,
+ϕ (·) represents a feature reshaping function into format
+T × 1 × k2
+h × h × w, and HConv (·) denotes a convolutional
+operator with kernel size 3 × 3.
+Moreover, the feature ˜Fd is padded using reflection padding
+to obtain
+˜F′
+d ∈RT ×c×(h+2p)×(w+2p), p = ⌊kh/2⌋, k ∈
+
+1, ..., k2
+h
+	
+represents the linear index of a pixel within the
+kh×kh neighborhood. For each spatial location (i, j), a kh×kh
+
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+5
+receptive window is centered to extract neighboring features.
+These are then unfolded and reshaped to obtain the aggregated
+neighborhood feature Ud:
+Ud = Unfold( ˜F′
+d) ∈RT ×c×k2
+h×h×w,
+(2)
+This design allows the model to capture relative spatial rela-
+tionships among neighboring pixels while maintaining spatial
+sensitivity during subsequent high-frequency kernel compu-
+tations. Similarly, in the low-frequency perception branch, a
+kl = 5 receptive window is applied to compute the low-
+frequency kernel KL ∈RT ×1×kl
+2×h×w and the corresponding
+aggregated neighborhood feature Uv ∈RT ×c×kl
+2×h×w.
+Finally, Ud and Uv are convolved with their respective
+perception kernels KH and KL. Channel attention and residual
+fusion are applied to jointly leverage region-level semantics
+and boundary-sensitive depth cues. This process can be for-
+mulated as:
+F′
+d =
+k2
+h
+X
+k=1
+(Ud [:, :, k, :, :] ⊙KH [:, 0, k, :, :]),
+(3)
+F′
+v =
+k2
+l
+X
+k=1
+(Uv [:, :, k, :, :] ⊙KL [:, 0, k, :, :]),
+(4)
+FH
+d = (Fd −F′
+d) ⊙Ad + Fd, FL
+v = F′
+v ⊙Av + Fv,
+(5)
+Fo = Conv3×3
+ FH
+d + FL
+v
+
+,
+(6)
+where ⊙represents element-wise multiplication, Fo
+∈
+
+Fi
+o
+	4
+i=1, Fi
+o ∈RT ×Ci×
+H
+2i+1 ×
+W
+2i+1 . F′
+d can be interpreted as
+a locally aggregated approximation of the depth feature that
+suppresses rapid spatial variations. The high-frequency depth
+cue is explicitly represented by the residual Fd −F′
+d, which
+exhibits strong responses at depth discontinuities and object
+boundaries. This residual is then reweighted by Ad and added
+back to Fd to enhance boundary sensitivity. Meanwhile, F′
+v
+provides a smoother, low-frequency visual representation that
+is less affected by texture noise, supporting stable AVS.
+As shown in Fig. 4, we visualize the two branches of DADM
+and their fused feature. The low-frequency branch output F′
+v
+mainly shows region-level responses. It can stably cover the
+main area of the sounding object and reflects strong semantic
+consistency. However, its responses are often smooth, which
+may lead to blurred boundaries or slight over-expansion. In
+contrast, the high-frequency branch Fd−F′
+d, constructed from
+depth residuals, responds more strongly to depth discontinu-
+ities. It highlights object contours and local structural changes,
+providing cleaner geometric cues for boundary refinement. The
+fused feature Fo effectively combines these complementary
+cues. It preserves the integrity of the object region while
+enhancing contour clarity and suppressing background inter-
+ference. Accordingly, the predictions on the MS3 and AVSS
+benchmarks match the GT more closely, especially along
+boundaries and in local details, which further verifies the
+effectiveness of DADM.
+Frames 
+Depth
+MS3 out
+AVSS out
+MS3 GT
+AVSS GT
+Fig. 4.
+Visualization of Intermediate Features in DADM. We visualize
+the intermediate features from the low-frequency branch F′
+v, the high-
+frequency branch Fd −F′
+d, and the final fused feature Fo. We also show
+the model predictions on the MS3 and AVSS benchmarks, together with the
+corresponding GT.
+D. Depth-Guided Progressive Fusion
+Motivated by the observation that depth provides explicit
+spatial cues, we incorporate it into the model to enhance audio-
+visual alignment. To this end, we propose the Depth-Guided
+Progressive Fusion (DGPF) (Fig. 2(b)), which leverages depth
+as a bridge to progressively establish semantic correspondence
+between audio and sounding objects. It consists of two stages:
+in Audio Depth Symbiotic, audio features are projected into
+the spatial domain to highlight candidate sounding regions;
+in Target Search, depth guidance together with audio-visual
+semantics enables precise localization and segmentation. A
+Depth Bridge is designed for both stages to enable effective
+fusion, as in Fig. 5. Unlike conventional fusion strategies,
+DGPF explicitly exploits depth as a progressive bridge, en-
+suring geometric alignment and semantic consistency.
+In the Audio Depth Symbiotic stage, the depth feature F1
+d is
+first encoded with sine-based positional encoding to generate
+the query vector Qd = F1p
+d WQ. In parallel, the value vector
+Vd = F1
+dW d
+V is obtained directly from F1
+d through a linear
+transformation. Then, the Feature Calibrator performs multi-
+scale processing on Vd, applies query-guided weighting, and
+incorporates the result into Qd, yielding the updated query Q′
+d.
+The audio value vector is computed as Va = FaW a
+V , and the
+key is obtained by adding learnable positional encoding to the
+audio features, resulting in Ka = Fp
+aWK. By sharing Q′
+d and
+Ka, the model projects audio features into the spatial domain
+and highlights candidate sounding regions more effectively.
+This design follows a common practice in Transformer [37]
+and DETR [32]. Injecting positional information into the
+query Q and the key K is sufficient to make the attention
+weights spatially aware, while the value V mainly preserves
+the semantic content to be aggregated. This process can be
+formulated as:
+F1′
+d = Softmax
+Q′
+dKT
+a
+√
+d
+
+Va + F1
+d,
+(7)
+Fad = Softmax
+ Q′
+dKT
+a
+√
+d
+T !
+Vd + Fa.
+(8)
+We propose the Feature Calibrator (Fig. 2(c)), which
+adopts a dual-branch design. One branch applies multi-scale
+
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+6
+Softmax.T
+Softmax.T
+Softmax
+Softmax
+Feature 
+Calibrator
+MLP
+MLP
+MLP
+MLP
+pos embed
+pos embed
+T×1×d
+T×hw×d
+Depth
+Audio
+T×D
+T×c×h×w
+matrix multiplication
+addition
+Fig. 5. Depth Bridge for DGPF. Serving as a structural cue, depth embeds
+features in A–D symbiosis and facilitates audio–visual alignment during
+Target Search.
+depthwise separable convolutions Ck(·) to capture bound-
+ary textures, while the other uses adaptive pooling Ps(·)
+followed by bilinear interpolation Is(·) to model global
+spatial layout. The query Qd modulates the texture fea-
+tures to suppress irrelevant noise, and the spatial layout
+features provide a stable structure for alignment, thereby
+enhancing intra-object consistency. The updated query is
+computed as ∆Q
+=
+Qd ⊙Concat (Ck(Vd))k={3,5,7} +
+Concat (Is(Ps(Vd)))s={1,2,3,6}, and the final query becomes
+Q′
+d = Qd+∆Q. The Feature Calibrator enhances the discrim-
+inability of target-related features beyond conventional query-
+modulation strategies.
+Next, we perform modality-level aggregation: F1
+v = F1′
+d +
+F1
+o , F′
+a = Fad + Fa. Here, the depth feature F1′
+d
+already
+contains audio information, while the visual feature F1
+o , fused
+by DADM, is rich in semantic content and encodes scene ge-
+ometry. Similarly, the updated audio feature F′
+a also contains
+depth information.
+Finally, in the Target Search stage, we apply Depth Bridge
+to F1
+v and F′
+a, using depth information as a bridge to improve
+alignment between the audio and visual modalities. Unlike the
+first stage, which focuses on candidate region enhancement,
+Target Search refines the correspondence by jointly leveraging
+audio, visual, and depth semantics for precise localization and
+segmentation. The computation follows Equations (7) and (8),
+resulting in the updated features F1′
+v and F
+′′
+a .
+IV. EXPERIMENTS
+A. Dataset
+AVSBench-Object [43] consists of two subsets: Single
+Sound Source Segmentation (S4) and Multiple Sound Source
+Segmentation (MS3). The S4 subset includes 4,932 five-
+second video clips, each containing a single sounding object.
+Only the first frame of each five-frame sequence is anno-
+tated, yielding a semi-supervised setting. The dataset uses a
+70/15/15 train/val/test split. The MS3 subset contains 424 fully
+annotated videos with multiple simultaneous sound sources,
+reflecting more complex auditory scenes.
+AVSBench-Semantic (AVSS) [4] extends AVSBench-Object
+to the audio-visual semantic segmentation task. It follows
+the same train/val/test split as S4. The dataset includes all
+AVSBench-Object samples and adds semantic labels to them.
+It also adds new 10-second videos with frame-level semantic
+masks, bringing the total to 11,356 videos. This extension
+increases task complexity and makes semantic modeling and
+generalization more challenging.
+B. Implementation Details
+Training settings. All experiments are conducted on NVIDIA
+RTX 4090 GPU with input resolution fixed at 224 × 224. We
+use Adam with an initial learning rate of 10−4, weight decay
+of 0.05, and a batch size of 6. The model is trained for 90K
+iterations on S4 and AVSS, and 20K on MS3.
+Metrics. Following the standard protocol [4], [5], we use
+the Jaccard index [44] (MJ ) and the F-score (MF) as
+evaluation metrics. The Jaccard index is defined as MJ =
+|P ∩G|
+|P ∪G|, where P and G denote the predicted and ground-
+truth masks, and |·| denotes the number of pixels. The F-
+score is defined as MF = (1+β2)×P recision×Recall
+β2×P recision+Recall
+, where β2
+is set to 0.3. Precision measures how accurate the predicted
+foreground pixels are, and Recall measures how completely
+the true foreground pixels are detected. MJ measures the
+region-level intersection-over-union between the predicted and
+ground-truth masks, and reflects how well the overall shape
+and coverage of the foreground region are matched. MF
+depends on both Precision and Recall, and focuses more on the
+quality of the segmentation boundaries, being sensitive to false
+positives and false negatives along object edges. These two
+metrics evaluate the audio-visual segmentation results from the
+complementary perspectives of boundary accuracy and region
+similarity, and thus provide a more comprehensive assessment
+of the model performance.
+Loss. The total loss includes classification and segmentation
+terms, defined as L = λbceLbce + λdiceLdice + λceLce, where
+Lce is the cross-entropy loss for class prediction, and Lbce and
+Ldice are the binary cross-entropy loss and Dice loss used for
+mask supervision. Following prior works [1], [7], [18], the
+weights are set to λbce = 5, λdice = 5, and λce = 2.
+C. Main Results
+Quantitative Analysis. Tab. I summarizes the quantitative
+performance of DGCM-AVS on the S4, MS3, and AVSS
+benchmarks, compared with representative methods. On the
+S4 benchmark, DGCM-AVS-R50 outperforms prior methods
+by 1.6 MJ and 1.2 MF, while DGCM-AVS-PVT achieves
+gains of 0.5 MJ and 0.5 MF. On MS3, DGCM-AVS-R50
+achieves substantial improvements of 1.6 MJ and 7.8 MF,
+and DGCM-AVS-PVT improves by 1.2 MJ and 2.5 MF. On
+AVSS, our model also attains the best performance: DGCM-
+AVS-R50 improves by 6.3 MJ and 6.2 MF, and DGCM-
+AVS-PVT achieves 4.3 MJ and 4.1 MF.
+Overall, DGCM-AVS consistently surpasses prior methods
+across all benchmarks, with particularly notable improvements
+on the more complex MS3 and AVSS datasets. While the gain
+on S4 is relatively small, this can be attributed to its simple
+scenes and limited interference, where most methods already
+
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+7
+TABLE I
+QUANTITATIVE RESULTS ON THE SINGLE SOUND SOURCE SEGMENTATION (S4) AND MULTIPLE SOUND SOURCE SEGMENTATION (MS3), AND
+AVSBENCH-SEMANTIC (AVSS). BOLD INDICATES THE BEST RESULT, AND UNDERLINE INDICATES THE SECOND BEST.
+S4
+MS3
+AVSS
+Method
+Backbone
+MJ
+MF
+MJ
+MF
+MJ
+MF
+AVSBench [4]
+ResNet-50
+72.8
+84.8
+47.9
+57.8
+20.2
+25.2
+AVS-BiGen [38]
+ResNet-50
+74.1
+85.4
+45.0
+56.8
+-
+-
+BAVS [39]
+ResNet-50
+78.0
+85.3
+50.2
+62.4
+24.7
+29.6
+AVSegFormer [5]
+ResNet-50
+76.4
+86.7
+53.8
+65.6
+26.6
+31.5
+SelM [13]
+ResNet-50
+76.6
+86.2
+54.5
+65.6
+31.9
+37.2
+UFE [40]
+ResNet-50
+79.0
+87.5
+55.9
+64.5
+-
+-
+QDFormer [41]
+ResNet-50
+77.6
+86.0
+59.6
+63.5
+-
+-
+COMBO [7]
+ResNet-50
+81.7
+90.1
+54.5
+66.6
+33.3
+37.3
+DiffusionAVS [42]
+ResNet-50
+75.8
+86.9
+49.8
+62.1
+-
+-
+DGCM-AVS (Ours)
+ResNet-50
+83.3
+91.3
+61.2
+74.4
+39.6
+43.5
+AVSBench [4]
+PVT-v2
+78.7
+87.9
+54.0
+64.5
+29.8
+35.3
+AVS-BiGen [38]
+PVT-v2
+81.7
+90.4
+55.1
+66.8
+-
+-
+BAVS [39]
+PVT-v2
+82.0
+88.6
+58.6
+65.5
+32.6
+36.4
+AVSegFormer [5]
+PVT-v2
+83.1
+90.5
+61.3
+73.0
+37.3
+42.8
+SelM [13]
+PVT-v2
+83.5
+91.2
+60.3
+71.3
+41.3
+46.9
+UFE [40]
+PVT-v2
+83.2
+90.4
+62.0
+70.9
+-
+-
+QDFormer [41]
+Swin-Tiny
+79.5
+88.2
+61.9
+66.1
+-
+-
+COMBO [7]
+PVT-v2
+84.7
+91.9
+59.2
+71.2
+42.1
+46.1
+DiffusionAVS [42]
+PVT-v2
+81.5
+90.3
+59.6
+71.2
+38.1
+43.0
+DGCM-AVS (Ours)
+PVT-v2
+85.2
+92.4
+63.2
+75.5
+46.4
+51.0
+perform strongly. In contrast, the significant improvements
+on MS3 and AVSS highlight that depth cues are especially
+beneficial in challenging scenarios involving multiple sound
+sources, occlusion, or cluttered backgrounds. These results
+support that depth can act as an effective bridge for cross-
+modal alignment and provide complementary structural infor-
+mation that is difficult to obtain from audio-visual cues alone.
+Qualitative Analysis on S4. Fig. 6 presents additional qualita-
+tive comparisons on the S4. In the first set of examples, the red
+tail of the helicopter closely resembles the background factory
+in color and texture, making boundary segmentation highly
+challenging. Methods such as AVSBench and AVSegFormer,
+which do not incorporate explicit spatial cues, struggle to
+separate the object from the background, while COMBO
+provides only limited improvement due to imperfect visual
+prompts. In contrast, DGCM-AVS leverages depth cues via
+the DADM to produce sharper boundaries and maintain intra-
+object consistency. Furthermore, DGPF treats depth as a bridg-
+ing modality and employs a two-stage strategy to facilitate
+more explicit alignment between audio cues and visual targets.
+In the second set of examples, the sounding object is
+partially occluded by tree branches, and its tail shares textures
+with the surroundings. All baseline methods degrade no-
+ticeably under occlusion, whereas DGCM-AVS demonstrates
+more stable segmentation, even though minor edge inaccu-
+racies remain. In the third set of examples, AVSBench and
+AVSegFormer show obvious target recognition errors, while
+DGCM-AVS effectively leverages geometric cues from depth
+information to preserve the structural integrity of the object
+and achieve higher segmentation accuracy than COMBO.
+On the S4, although the scenes often involve challenges
+such as color similarity, texture confusion, or partial occlusion,
+DGCM-AVS effectively integrates audio-visual features with
+spatial structural cues to preserve object integrity and sharpen
+boundaries, thereby achieving higher segmentation accuracy
+than existing methods.
+Qualitative Analysis on MS3. Fig. 7 shows more comparison
+results on MS3. In the first set of examples, AVSBench
+and AVSegFormer struggle to capture the boundaries of the
+instrument accurately. This is mainly because the sounding
+objects are surrounded by high-frequency visual patterns,
+which interfere with the true contours and lead to incorrect
+predictions. COMBO shows instability, mistakenly identifying
+the person in the scene as a sound source in some frames.
+The second set of examples includes more semantically
+similar distractors in the background. Under this challenging
+condition, our method produces results that are most aligned
+with the ground truth and successfully identifies all sounding
+objects. In contrast, AVSBench and AVSegFormer are clearly
+affected by background noise and mistakenly include silent
+regions in their predictions. COMBO fails to segment the
+“man” object, mainly because it relies on prompt information
+from SAM. Such prompts may break the integrity of the target
+object, leading to incomplete predictions. In the third set of
+examples, the video contains different sounding objects at dif-
+ferent times, resulting in temporal discontinuity of the targets.
+In this case, our method shows more stable performance than
+the baselines and accurately segments each sounding object.
+These results on MS3 suggest that depth, as a carrier of spa-
+tial structure, enhances the model’s understanding of complex
+scenes and helps distinguish object boundaries more effec-
+tively. Moreover, aligning audio and visual features through
+depth promotes more effective cross-modal interaction, guid-
+ing the model toward potential sounding regions and improv-
+
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+8
+(c)
+(d)
+(e)
+(f)
+(b)
+(a)
+(g)
+helicopter
+helicopter
+helicopter
+helicopter
+helicopter
+bird_singing
+bird_singing
+bird_singing
+bird_singing
+bird_singing
+playing_piano playing_piano playing_piano playing_piano playing_piano
+Fig. 6. Qualitative comparisons on S4. (a) audio, (b) frames, (c) AVSBench [4], (d) AVSegFormer [5], (e) COMBO [7], (f) DGCM-AVS (Ours), (g) GT. The
+green denotes missed regions and red indicates over-segmented areas relative to GT.
+(c)
+(d)
+(e)
+(f)
+(b)
+(a)
+(g)
+ukulele_guitar ukulele_guitar ukulele_guitar ukulele_guitar ukulele_guitar
+man_guitar
+man_guitar
+man_guitar
+man_guitar
+man_guitar
+tabla_guitar
+tabla_guitar
+tabla_guitar
+tabla_guitar
+tabla_guitar
+Fig. 7. Qualitative comparisons on MS3. (a) audio, (b) frames, (c) AVSBench [4], (d) AVSegFormer [5], (e) COMBO [7], (f) DGCM-AVS (Ours), (g) GT.
+The green denotes missed regions and red indicates over-segmented areas relative to GT.
+ing segmentation quality.
+Qualitative Analysis on AVSS. The AVSS dataset features
+higher sample complexity and longer video sequences. To
+illustrate the model’s performance under such challenging
+conditions, we present qualitative results on a representative
+10-frame sample, as shown in Fig. 8. In terms of segmentation
+completeness, AVSBench and AVSegFormer produce coarse
+boundary delineation for sounding objects, leading to reduced
+structural integrity. For target identification, COMBO exhibits
+missing sounding objects and misclassification errors, and its
+predictions show temporal inconsistency across frames. In
+contrast, our method achieves the best semantic segmentation
+results. This advantage comes from two main aspects. First,
+depth information provides a clearer structure of the scene.
+Our proposed DADM module fully leverages this geometric
+information to help maintain feature consistency within ob-
+jects. Second, DGPF maps audio and visual features into a
+feature space guided by depth, which enhances the alignment
+between modalities. These results validate the effectiveness
+and feasibility of using depth information in AVS.
+Efficiency and Performance Comparison. Tab. II compares
+AVSBench, AVSegFormer, and our DGCM-AVS on the S4
+benchmark. For a fair comparison, all three methods use
+VGGish as the audio backbone and ResNet-50 as the visual
+backbone. In terms of performance, DGCM-AVS achieves the
+best results, with MJ of 83.3 and MF of 91.3, significantly
+outperforming the two representative methods. This gain
+mainly stems from our proposed depth-guided collaborative
+
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+9
+(c)
+(d)
+(e)
+(f)
+(b)
+(a)
+(g)
+saxophone
+guitar
+saxophone
+guitar
+saxophone
+guitar
+saxophone
+guitar
+saxophone
+guitar
+saxophone
+guitar
+saxophone
+guitar
+saxophone
+guitar
+saxophone
+guitar
+saxophone
+guitar
+Fig. 8. Qualitative comparisons on AVSS. We provide a full visualization of the semantic segmentation performed on 10-frame sequences. The letter labels
+represent, in order: (a) audio, (b) frames, (c) AVSBench [4], (d) AVSegFormer [5], (e) COMBO [7], (f) DGCM-AVS (Ours), (g) GT.
+TABLE II
+EFFICIENCY AND PERFORMANCE COMPARISON ON S4. BOLD INDICATES THE BEST RESULT.
+Method
+Audio Backbone
+Backbone
+MJ (S4)
+MF (S4)
+Params
+FLOPs
+Inference Time
+AVSBench [4]
+VGGish
+ResNet-50
+72.8
+84.8
+90.7M
+166.6G
+17.7ms
+AVSegFormer [5]
+VGGish
+ResNet-50
+76.4
+86.7
+150.9M
+210.1G
+176.5ms
+DGCM-AVS (Ours)
+VGGish
+ResNet-50
+83.3
+91.3
+224.3M
+183.4G
+60.7ms
+modeling mechanism, which enables the model to more stably
+constrain cross-modal correspondence under candidate confu-
+sion, occlusions, and cluttered backgrounds, thereby reducing
+attention drift and boundary leakage and improving both lo-
+calization and boundary quality. In contrast, AVSBench adopts
+a lightweight convolution-based modeling paradigm and thus
+runs faster, but its cross-modal interaction and structural
+constraints are relatively limited in complex scenes, leading to
+inferior accuracy. AVSegFormer benefits from stronger global
+modeling and achieves improved accuracy, but it also intro-
+duces higher computational overhead, resulting in the slowest
+inference. From the perspective of computational complexity,
+DGCM-AVS requires 183.4G FLOPs, which is notably lower
+than AVSegFormer (210.1G), indicating that our performance
+improvement is not simply obtained by substantially increasing
+computation. Regarding inference time, DGCM-AVS runs at
+60.7ms, falling between AVSBench and AVSegFormer, and
+is considerably faster than AVSegFormer. Although DGCM-
+AVS incorporates depth information and thus has a larger
+parameter scale, it still follows a single forward-pass pipeline
+without additional iterative refinement, maintaining a rea-
+sonable inference cost while achieving higher accuracy. In
+practical deployments, parameter storage is typically cheaper
+than sustained computation, and parameters mainly affect the
+static memory footprint rather than per-inference computation.
+Considering the advantages in both accuracy and efficiency,
+DGCM-AVS demonstrates a clear competitive edge.
+Failure
+Case
+Analysis. Although DGCM-AVS achieves
+strong performance on the three benchmarks, it still shows
+limitations in a few complex audio-visual scenes. Fig. 9
+presents three representative challenging cases from S4, MS3,
+and AVSS. In the first case, only the ambulance is sounding,
+but in the second frame the ambulance almost moves out of
+view and a police motorbike appears. Because the two sirens
+sound very similar, the model wrongly localizes the motorbike
+as the sounding object. In the second case, the baby makes
+sound only in the first frame and is correctly segmented there,
+but in the fully silent second frame the model still follows the
+previous prediction and labels the baby as sounding. The third
+case shows a similar error when the ukulele becomes silent but
+is still predicted as a sounding region.
+These results indicate that DGCM-AVS, while stable in
+capturing object contours with the help of depth, is not
+robust enough when the scene contains multiple similar sound
+sources, sources moving out of view, or rapid changes in the
+sounding state. We believe there are two main reasons. First,
+such complex patterns are very rare in current benchmarks,
+so the training data under-represents these cases. Second,
+the continuous and aligned audio–video inputs cause strong
+temporal dependence, or even entanglement, in the audio
+features, which makes the model biased toward historical
+objects on silent frames or frames with source switching.
+
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+10
+(c)
+(d)
+(b)
+(a)
+ambulance_siren ambulance_siren
+baby
+no voice
+woman_ukulele
+woman
+Fig. 9. Failure cases of DGCM-AVS on S4, MS3, and AVSS (left to right).
+For each example, we show (a) audio, (b) frames, (c) DGCM-AVS (ours),
+and (d) GT.
+TABLE III
+VALIDATION OF DADM AND WEIGHTS ON RESNET-50.
+Method
+S4
+AVSS
+MJ
+MF
+MJ
+MF
+shared encoder
+82.9
+91.0
+39.4
+43.3
+w/o depth
+81.1
+90.0
+37.0
+40.9
+w/o DADM
+83.2
+90.9
+38.7
+42.4
+DGCM-AVS
+83.3
+91.3
+39.6
+43.5
+D. Ablation Study
+Validation of DADM and Backbone Weights. As shown
+in Tab. III, shared encoder refers to using the same encoder
+for both visual and depth information. DGCM-AVS uses in-
+dependent encoders for each modality. w/o depth indicates
+that depth information is excluded from the model, and both
+branches in DADM operate solely on visual features. w/o
+DADM removes the entire module, and depth and visual
+features are fused by direct addition. The results show that
+using independent encoders helps the model better capture
+modality-specific structures, leading to improved performance.
+Introducing depth information helps the model better localize
+and segment sounding objects by providing additional spatial
+cues. Adding the DADM enables complementary fusion of
+low-frequency visual features and high-frequency depth cues,
+improving edge sensitivity and robustness to noise, which
+leads to more accurate segmentation.
+Validation the Window Size of DADM. As shown in Tab. IV,
+we evaluate different window sizes (kl, kh) used in the low-
+frequency aggregation branch and the high-frequency residual
+branch of DADM. The best performance is achieved with
+(kl = 5, kh = 3). Specifically, kl = 5 provides sufficient
+context to produce a smoother and more stable aggregated
+representation, which helps preserve region-level semantic
+consistency and supports robust alignment with audio cues.
+In contrast, a smaller local window kh = 3 better captures
+rapid spatial changes around object boundaries, making the
+explicitly modeled residual cue Fd−F′
+d more concentrated and
+thus improving boundary sensitivity. Larger window settings
+kl = 7 lead to over-smoothing and neighborhood mixing,
+which blur fine boundary details and increase computational
+cost. Overall, we adopt (kl = 5, kh = 3) as it achieves the
+TABLE IV
+VALIDATION THE kh AND kl WINDOW SIZE OF DADM.
+Method
+S4
+AVSS
+MJ
+MF
+MJ
+MF
+DADMkl=7,kh=5
+83.1
+91.1
+39.2
+43.1
+DADMkl=7,kh=3
+82.7
+90.8
+38.9
+42.6
+DADMkl=5,kh=3
+83.3
+91.3
+39.6
+43.5
+TABLE V
+VALIDATION OF DGPF STRUCTURES ON RESNET-50.
+Method
+S4
+AVSS
+MJ
+MF
+MJ
+MF
+only AV
+82.9
+90.9
+38.7
+42.4
+w/o audio
+82.4
+91.1
+38.0
+41.8
+w/o FC
+82.9
+91.2
+39.2
+43.0
+DGCM-AVS
+83.3
+91.3
+39.6
+43.5
+best performance while preserving stable region responses and
+clear boundaries.
+Validation of DGPF. As shown in Tab. V, only AV refers to
+directly performing the Target Search stage for audio-visual
+alignment, without involving depth as an intermediate bridge.
+w/o audio removes the audio modality completely, keeping
+only the direct fusion of visual and depth information. w/o
+FC removes the Feature Calibrator, which reduces the model’s
+focus on potential target regions. Compared to these variants,
+the full DGPF model demonstrates the effectiveness of each
+component and the benefit of their integration. The Feature
+Calibrator enhances the model’s attention to potential targets
+within visual and depth features, resulting in more pronounced
+improvements on the AVSS dataset. Audio features further
+serve as guidance, enabling the model to locate sounding
+objects based on auditory cues. Built upon these cues, DGPF
+adopts a two-stage strategy in which depth acts as a bridge
+between modalities, progressively aligning audio and visual
+features to support accurate segmentation.
+Visualization for Ablation Studies. Fig. 10 illustrates the
+visual impact of different ablation settings. It can be ob-
+served that removing any key component leads to distinct
+degradations. Without audio guidance, (a) the model loses
+the constraint of sounding cues, and the attention is more
+easily attracted by visually salient regions and diffuses into
+the background, resulting in evident false positives. Without
+depth information, (b) the lack of geometric structure and
+boundary cues weakens the model’s ability to characterize
+object shape, making predictions prone to adhesion to adjacent
+regions and exhibiting both false positives and false negatives.
+Furthermore, removing DADM (Fig. 10(c)) noticeably reduces
+the model’s perception of scene structural information, while
+intra-object features become less continuous and eventually
+cause false detections, indicating that DADM helps maintain
+intra-object consistency and improves boundary sensitivity
+between adjacent objects. Removing FC (Fig. 10(d)) makes
+the fusion and calibration process less stable, with weaker and
+less complete attention responses, which tends to introduce
+noisy regions and miss thin structures. When only audio-visual
+
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+11
+Frame / GT
+(c) w/o DADM
+(d) w/o FC
+(a) w/o audio
+(f) DGCM-AVS
+(b) w/o depth
+(e) only AV
+Fig. 10. Visualization of the ablation study to show the efficacy of each proposed component.
+TABLE VI
+THE IMPACT OF DIFFERENT DEPTH INFORMATION.
+Method
+S4
+AVSS
+MJ
+MF
+MJ
+MF
++ DP
+82.0
+90.5
+37.7
+41.7
++ DA
+83.2
+90.9
+37.6
+41.7
++ DA-V2
+83.3
+91.3
+39.6
+43.5
+(c)
+(d)
+(e)
+(b)
+(a)
+Fig. 11. The impact of depth information. (a) frames, (b) DP results, (c) AVS
+results based on DP , (d) DA-V2 results, (e) AVS results based on DA-V2.
+fusion is retained (Fig. 10(e)), although the attention can still
+fall near the sounding objects, the absence of structural con-
+straints makes the focus more likely to drift, leading to coarse
+boundaries and unstable object recognition. In contrast, the full
+DGCM-AVS model (Fig. 10(f)) can more stably focus on the
+sounding objects, producing predictions with region coverage
+more consistent with the GT and clearer objects contours.
+These results suggest that audio provides a semantic anchor
+for sounding objects, depth offers geometric and boundary
+constraints, and DADM and DGPF work complementarily to
+achieve more robust and accurate audio-guided segmentation.
+Validation of the Impact of Different Depth Information.
+As shown in Tab. VI, we compare three recent models used
+as depth generators to study how different types of depth
+information can help align audio and visual modalities. Due
+to the high resource demands of the three depth generators
+with their best pretrained weights, we adopt a two-stage
+pipeline: depth information is first extracted, followed by
+the AVS task. Depth Pro (DP) [19] is based on geometry-
+aware modeling, while Depth Anything (DA) [23] and Depth
+Anything v2 (DA-V2) [24] rely on vision-centric pretraining.
+Among them, DA-V2 achieves clearly better results than the
+others. As in Fig. 11, we compare the robustness of DP and
+DA-V2 in generating depth information under different scenes.
+DA-V2 produces more stable and accurate depth information
+than DP, especially in complex environments. The results
+show that although high-quality depth information can further
+improve performance, it still requires the proposed DGCM-
+AVS framework to effectively exploit such spatial cues in
+order to realize their full potential. Fortunately, with the recent
+advances in depth estimation, it is now possible to obtain
+more reliable depth, which provides strong support for further
+research in audio-visual segmentation.
+V. CONCLUSION
+In this work, we propose DGCM-AVS, a depth-guided
+framework for audio-visual segmentation. To the best of our
+knowledge, this is the first AVS framework that explicitly uses
+depth as a bridging cue to guide alignment between audio
+and visual modalities. The Depth-Aware Dynamic Modulator
+effectively leverages boundary-sensitive high-frequency cues
+from depth maps and semantically informative low-frequency
+cues from visual features. It improves intra-object feature
+consistency while enhancing inter-object discrimination. The
+Depth-Guided Progressive Fusion adopts a two-stage design
+that uses depth as a bridge to progressively align audio
+cues with visual features. DGCM-AVS achieves promising
+results on both AVSBench-Object and AVSBench-Semantic
+benchmarks. These results suggest that incorporating depth
+cues is a promising direction for improving robustness in AVS.
+VI. FUTURE WORK
+Future work could address the observed failure modes from
+both data and methodological perspectives. On the data side,
+it would be beneficial to incorporate more training videos
+with complex audio-visual scenes to improve generalization
+to long-tail cases. On the methodological side, it would be
+useful to explore explicit temporal decoupling and contrastive
+learning strategies that encourage models to focus on sound
+cues synchronized with the current frame and suppress residual
+signals from previous frames. In addition, it would be inter-
+esting to study AVS in embodied settings, where segmentation
+can be tightly coupled with perception–action loops to support
+more reliable scene understanding and interaction in real-
+world environments.
+REFERENCES
+[1] C. Liu, L. Yang, P. Li, D. Wang, L. Li, and X. Yu, “Dynamic
+derivation and elimination: Audio visual segmentation with enhanced
+audio semantics,” in Proceedings of the Computer Vision and Pattern
+Recognition Conference (CVPR), 2025, pp. 3131–3141.
+
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+12
+[2] S. Huang, R. Ling, T. Hui, H. Li, X. Zhou, S. Zhang, S. Liu, R. Hong,
+and M. Wang, “Revisiting audio-visual segmentation with vision-centric
+transformer,” in Proceedings of the Computer Vision and Pattern Recog-
+nition Conference (CVPR), 2025, pp. 8352–8361.
+[3] C. Liu, P. Li, L. Yang, D. Wang, L. Li, and X. Yu, “Robust audio-
+visual segmentation via audio-guided visual convergent alignment,” in
+Proceedings of the Computer Vision and Pattern Recognition Conference
+(CVPR), 2025, pp. 28 922–28 931.
+[4] J. Zhou, X. Shen, J. Wang, J. Zhang, W. Sun, J. Zhang, S. Birchfield,
+D. Guo, L. Kong, M. Wang et al., “Audio-visual segmentation with
+semantics,” International Journal of Computer Vision (IJCV), 2024.
+[5] S. Gao, Z. Chen, G. Chen, W. Wang, and T. Lu, “Avsegformer: Audio-
+visual segmentation with transformer,” in Proceedings of the AAAI
+Conference on Artificial Intelligence (AAAI), vol. 38, 2024.
+[6] Y. Wang, H. Xu, Y. Liu, J. Li, and Y. Tang, “Sam2-love: Segment
+anything model 2 in language-aided audio-visual scenes,” in Proceedings
+of the Computer Vision and Pattern Recognition Conference (CVPR),
+2025, pp. 28 932–28 941.
+[7] Q. Yang, X. Nie, T. Li, P. Gao, Y. Guo, C. Zhen, P. Yan, and S. Xiang,
+“Cooperation does matter: Exploring multi-order bilateral relations for
+audio-visual segmentation,” in Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition (CVPR), 2024.
+[8] D. Berghi and P. J. Jackson, “Leveraging reverberation and visual depth
+cues for sound event localization and detection with distance estimation,”
+arXiv preprint arXiv:2410.22271, 2024.
+[9] B. Zhu, B. Lin, M. Ning, Y. Yan, J. Cui, W. HongFa, Y. Pang,
+W. Jiang, J. Zhang, Z. Li et al., “Languagebind: Extending video-
+language pretraining to n-modality by language-based semantic align-
+ment,” in International Conference on Learning Representations (ICLR),
+vol. 2024, 2024, pp. 9588–9608.
+[10] K. Li, Z. Yang, L. Chen, Y. Yang, and J. Xiao, “Catr: Combinatorial-
+dependence audio-queried transformer for audio-visual video segmen-
+tation,” in Proceedings of the 31st ACM International Conference on
+Multimedia (ACM MM), 2023, pp. 1485–1494.
+[11] S. Bhosale, H. Yang, D. Kanojia, J. Deng, and X. Zhu, “Unsupervised
+audio-visual segmentation with modality alignment,” in Proceedings of
+the AAAI Conference on Artificial Intelligence (AAAI), vol. 39, 2025.
+[12] S. Gong, Y. Zhuge, L. Zhang, Y. Wang, P. Zhang, L. Wang, and H. Lu,
+“Avs-mamba: Exploring temporal and multi-modal mamba for audio-
+visual segmentation,” IEEE Transactions on Multimedia (IEEE TMM),
+2025.
+[13] J. Li, S. Yu, Y. Wang, L. Wang, and H. Lu, “Selm: Selective mechanism
+based audio-visual segmentation,” in Proceedings of the 32nd ACM
+International Conference on Multimedia (ACM MM), 2024.
+[14] J. Ma, P. Sun, Y. Wang, and D. Hu, “Stepping stones: a progressive
+training strategy for audio-visual semantic segmentation,” in European
+Conference on Computer Vision (ECCV). Springer, 2024, pp. 311–327.
+[15] Y. Mao, J. Zhang, M. Xiang, Y. Zhong, and Y. Dai, “Multimodal vari-
+ational auto-encoder based audio-visual segmentation,” in Proceedings
+of the IEEE/CVF International Conference on Computer Vision (ICCV),
+2023, pp. 954–965.
+[16] A. Kirillov, E. Mintun, N. Ravi, H. Mao, C. Rolland, L. Gustafson,
+T. Xiao, S. Whitehead, A. C. Berg, W.-Y. Lo et al., “Segment anything,”
+in Proceedings of the IEEE/CVF International Conference on Computer
+Vision (ICCV), 2023, pp. 4015–4026.
+[17] R. Guo, L. Qu, D. Niu, Y. Qi, W. Yue, J. Shi, B. Xing, and X. Ying,
+“Open-vocabulary audio-visual semantic segmentation,” in Proceedings
+of the 32nd ACM International Conference on Multimedia (ACM MM),
+2024, pp. 7533–7541.
+[18] Y. Wang, P. Sun, D. Zhou, G. Li, H. Zhang, and D. Hu, “Ref-avs: Refer
+and segment objects in audio-visual scenes,” in European Conference
+on Computer Vision (ECCV).
+Springer, 2024, pp. 196–213.
+[19] A. Bochkovskiy, A. Delaunoy, H. Germain, M. Santos, Y. Zhou,
+S. Richter, and V. Koltun, “Depth pro: Sharp monocular metric depth
+in less than a second,” in International Conference on Learning Repre-
+sentations (ICLR), vol. 2025, 2025, pp. 75 602–75 637.
+[20] M. Hu, W. Yin, C. Zhang, Z. Cai, X. Long, H. Chen, K. Wang,
+G. Yu, C. Shen, and S. Shen, “Metric3d v2: A versatile monocular
+geometric foundation model for zero-shot metric depth and surface
+normal estimation,” IEEE Transactions on Pattern Analysis and Machine
+Intelligence (IEEE T-PAMI), 2024.
+[21] L. Piccinelli, Y.-H. Yang, C. Sakaridis, M. Segu, S. Li, L. Van Gool,
+and F. Yu, “Unidepth: Universal monocular metric depth estimation,”
+in Proceedings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition (CVPR), 2024, pp. 10 106–10 116.
+[22] S. Chen, H. Guo, S. Zhu, F. Zhang, Z. Huang, J. Feng, and B. Kang,
+“Video depth anything: Consistent depth estimation for super-long
+videos,” in Proceedings of the Computer Vision and Pattern Recognition
+Conference (CVPR), 2025, pp. 22 831–22 840.
+[23] L. Yang, B. Kang, Z. Huang, X. Xu, J. Feng, and H. Zhao, “Depth
+anything: Unleashing the power of large-scale unlabeled data,” in
+Proceedings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition (CVPR), 2024, pp. 10 371–10 381.
+[24] L. Yang, B. Kang, Z. Huang, Z. Zhao, X. Xu, J. Feng, and H. Zhao,
+“Depth anything v2,” Advances in Neural Information Processing Sys-
+tems (NeurIPS), vol. 37, pp. 21 875–21 911, 2024.
+[25] G. F. Torres, J. Kalliola, S. Tripathy, E. Acar, and J.-K. K¨am¨ar¨ainen,
+“Davide: Depth-aware video deblurring,” in European Conference on
+Computer Vision (ECCV).
+Springer, 2024, pp. 161–179.
+[26] W. Sun, Y. Li, Q. Ye, J. Jiao, and Y. Zhou, “Depth-guided texture
+diffusion for image semantic segmentation,” IEEE Transactions on
+Circuits and Systems for Video Technology (IEEE TCSVT), 2024.
+[27] X. Cheng, Z. Fu, and J. Yang, “Zero-shot image super-resolution with
+depth guided internal degradation learning,” in European Conference on
+Computer Vision (ECCV).
+Springer, 2020, pp. 265–280.
+[28] Y. Guo, M. Xu, L. Jiang, X. Deng, Y. Zhang, and Y. Liu, “Compressed
+image super-resolution based on invertible degradation and restoration,”
+Pattern Recognition, p. 112532, 2025.
+[29] T. Guo, B. Lu, F. Wang, and Z. Lu, “Depth-aware super-resolution
+via distance-adaptive variational formulation,” Journal of Electronic
+Imaging, vol. 34, no. 5, pp. 053 018–053 018, 2025.
+[30] P. Liu, J. Deng, L. Duan, W. Li, and F. Lv, “Segmenting anything in
+the dark via depth perception,” IEEE Transactions on Multimedia (IEEE
+TMM), 2025.
+[31] Y. Liu, X. Xie, Y. Liu, and X. Bai, “Multi-scenario overlapping text
+segmentation with depth awareness,” in Proceedings of the IEEE/CVF
+International Conference on Computer Vision (ICCV), 2025, pp. 17 454–
+17 463.
+[32] X. Zhu, W. Su, L. Lu, B. Li, X. Wang, and J. Dai, “Deformable detr:
+Deformable transformers for end-to-end object detection,” arXiv preprint
+arXiv:2010.04159, 2020.
+[33] B. Cheng, I. Misra, A. G. Schwing, A. Kirillov, and R. Girdhar,
+“Masked-attention mask transformer for universal image segmentation,”
+in Proceedings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition (CVPR), 2022, pp. 1290–1299.
+[34] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image
+recognition,” in Proceedings of the IEEE Conference on Computer Vision
+and Pattern Recognition (CVPR), 2016, pp. 770–778.
+[35] W. Wang, E. Xie, X. Li, D.-P. Fan, K. Song, D. Liang, T. Lu, P. Luo,
+and L. Shao, “Pyramid vision transformer: A versatile backbone for
+dense prediction without convolutions,” in Proceedings of the IEEE/CVF
+International Conference on Computer Vision (ICCV), 2021.
+[36] S. Hershey, S. Chaudhuri, D. P. Ellis, J. F. Gemmeke, A. Jansen,
+R. C. Moore, M. Plakal, D. Platt, R. A. Saurous, B. Seybold et al.,
+“Cnn architectures for large-scale audio classification,” in 2017 IEEE
+International Conference on Acoustics, Speech and Signal Processing
+(ICASSP).
+IEEE, 2017, pp. 131–135.
+[37] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez,
+Ł. Kaiser, and I. Polosukhin, “Attention is all you need,” Advances in
+Neural Information Processing Systems (NeurIPS), vol. 30, 2017.
+[38] D. Hao, Y. Mao, B. He, X. Han, Y. Dai, and Y. Zhong, “Improving
+audio-visual segmentation with bidirectional generation,” in Proceedings
+of the AAAI Conference on Artificial Intelligence (AAAI), vol. 38, 2024,
+pp. 2067–2075.
+[39] C. Liu, P. Li, H. Zhang, L. Li, Z. Huang, D. Wang, and X. Yu,
+“Bavs: Bootstrapping audio-visual segmentation by integrating founda-
+tion knowledge,” IEEE Transactions on Multimedia (IEEE TMM), 2024.
+[40] J. Liu, Y. Liu, F. Zhang, C. Ju, Y. Zhang, and Y. Wang, “Audio-visual
+segmentation via unlabeled frame exploitation,” in Proceedings of the
+IEEE/CVF Conference on Computer Vision and Pattern Recognition
+(CVPR), 2024, pp. 26 328–26 339.
+[41] X. Li, J. Wang, X. Xu, X. Peng, R. Singh, Y. Lu, and B. Raj, “Qdformer:
+Towards robust audiovisual segmentation in complex environments
+with quantization-based semantic decomposition,” in Proceedings of the
+IEEE/CVF Conference on Computer Vision and Pattern Recognition
+(CVPR), 2024, pp. 3402–3413.
+[42] Y. Mao, J. Zhang, M. Xiang, Y. Lv, D. Li, Y. Zhong, and Y. Dai,
+“Contrastive conditional latent diffusion for audio-visual segmentation,”
+IEEE Transactions on Image Processing (IEEE TIP), 2025.
+[43] J. Zhou, J. Wang, J. Zhang, W. Sun, J. Zhang, S. Birchfield, D. Guo,
+L. Kong, M. Wang, and Y. Zhong, “Audio–visual segmentation,” in
+European Conference on Computer Vision (ECCV).
+Springer, 2022.
+
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+13
+[44] M. Everingham, L. Van Gool, C. K. Williams, J. Winn, and A. Zisser-
+man, “The pascal visual object classes (voc) challenge,” International
+journal of computer vision (IJCV), vol. 88, no. 2, pp. 303–338, 2010.
