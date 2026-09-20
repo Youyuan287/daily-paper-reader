@@ -1,0 +1,396 @@
+Title: CoRef-GS: Cooperative Referring Gaussian Splatting for Multi-Agent Scene Understanding
+
+URL Source: https://arxiv.org/pdf/2609.20586v1
+
+Published Time: Fri, 18 Sep 2026 01:46:08 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# CoRef-GS: Cooperative Referring Gaussian Splatting for Multi-Agent Scene Understanding 
+
+Zhikun Zhou 1, Kunyu Peng 2,3,†, Runyi Yang 3, Junhao Cai 1, Di Wen 2, Ruiping Liu 2,Danda Pani Paudel 3, Yi Zhou 1, Luc Van Gool 3, and Kailun Yang 1,†
+
+Fig. 1: Overview of CoRef-GS. (a) Multiple quadruped agents independently build local open-vocabulary semantic Gaussian maps from complementary observations. CoRef-GS aligns the local maps with image-assisted coarse-to-fine Sim(3) 
+
+registration and directly fuses them without retraining. (b) Given a robot-centered referring query, CoRef-GS renders the fused map from the querying view and performs relation-aware grounding, enabling segmentation of targets that are unobserved or ambiguous in a single-agent map. (c) Representative CoQuad-Ref examples from real-world and simulated scenes. 
+
+Abstract — Referring scene understanding for embodied robots requires grounding object- and relation-centric language queries from a designated viewpoint. While a local semantic Gaussian map can support such grounding within one agent’s observations, cooperative settings require this ability to remain effective after independently reconstructed maps are aligned and fused. In this setting, the referred target or its contextual landmark may come from another agent’s observations, while spatial relations must still be interpreted from the querying robot’s viewpoint. We formulate this problem as cooperative referring Gaussian grounding over fused maps, which requires geometric alignability, instance-level semantic comparability, and view-conditioned relation reasoning. Existing language-aware Gaussian methods mainly focus on single-map querying, whereas Gaussian registration methods optimize geometric or photometric alignment without preserving language-grounding-oriented semantic compatibility. We propose CoRef-GS, acooperative referring Gaussian splatting framework. CoRef-GS constructs local open-vocabulary instance-aware Gaussian 
+
+This work was supported in part by the National Natural Science Foun-dation of China (Grant No. 62473139, No. 62673195, and No. 62388101), in part by the Hunan Provincial Research and Development Project (Grant No. 2025QK3019), in part by the State Key Laboratory of Autonomous Intelligent Unmanned Systems (the opening project number ZZKF2025-2-10), and in part by the Deutsche Forschungsgemeinschaft (DFG, German Research Foundation) – SFB-1574 – 471687386. 
+
+> 1
+
+The authors are with the School of Artificial Intelligence and Robotics and the National Engineering Research Center of Robot Vi-sual Perception and Control Technology, Hunan University, China (email: kailun.yang@hnu.edu.cn). 
+
+> 2
+
+The authors are with the Institute for Anthropomatics and Robotics, Karlsruhe Institute of Technology, Germany (email: kunyu.peng@kit.edu). 
+
+> 3
+
+The authors are with INSAIT, Sofia University “St. Kliment Ohridski”, Bulgaria. 
+
+> †
+
+Corresponding authors: Kailun Yang and Kunyu Peng. 
+
+maps, then aligns partially overlapping maps with a cross-agent alignment module by geometric and semantic consistency, and grounds queries using a view-conditioned mask relation graph. We further introduce CoQuad-Ref, a dual-quadruped benchmark spanning both real-world and simulated indoor scenes. Experiments show that, on simulated scenes, CoRef-GS reduces the rotation error from 2.58 ◦ after coarse initialization to 0.15 ◦ after refinement, and improves real-world referring mIoU over ReferSplat from 52 .6% to 68 .8% . The established benchmark and source code will be publicly released at https: //github.com/ruojiruoli17/CoRef-GS.git .
+
+I. I NTRODUCTION 
+
+Language-grounded embodied scene understanding is cru-cial for robots operating in realistic indoor environments [1], [2], [3], [4]. Beyond single-view perception, such robots need persistent 3D scene representations that accumulate multi-view observations, preserve object-level memory, and sup-port natural-language grounding under occlusion and partial observability. Recent embodied systems have increasingly explored multi-robot and multi-agent collaboration, including long-horizon quadruped manipulation [5], language-guided navigation with 3D perception [6], and cooperative decision-making through dialogue, perception, or task planning [7], [8], [9]. These efforts suggest extending language-grounded scene understanding from individual robots to cooperative robot teams. However, they mainly focus on task execu-tion, communication, or policy-level coordination, leaving open how cooperative agents should maintain persistent spatial understanding for language grounding. This raises a representation-level challenge: each robot should build arXiv:2609.20586v1 [cs.RO] 17 Sep 2026 a local 3D map that is language-queryable on its own, while cross-agent alignment and fusion should preserve this grounding ability in a shared representation. The represen-tation must therefore be not only geometrically alignable but also semantically compatible across independently re-constructed local maps. Since language-queryable 3D maps require the underlying scene representation to encode language-aligned semantics, language-aware Gaussian representations provide a natural starting point for building such maps. One line of work attaches CLIP [10] aligned language features to Gaussian fields, enabling open-vocabulary querying in reconstructed scenes [11], [12]. However, such field-level language features often struggle to distinguish fine-grained instances or support spatial-relation expressions. Another line of work improves object-level 3D language understanding through instance-aware features, direct language embedding registration, or object-level semantic aggregation [13], [14], [15]. These methods provide stronger object-centric semantics, but they are still mainly designed for object-level or category-level querying within a single reconstructed map. Referring Gaus-sian methods [16] further improve fine-grained language grounding by learning scene-specific referring features. How-ever, these features are optimized within independently ini-tialized feature spaces and are not anchored to a shared semantic basis across different local maps. More critically, scene-specific referring features learned independently for different local maps do not share a common query space. Consequently, geometric alignment alone does not make the maps directly query-compatible: a referring model trained for one map cannot reliably interpret semantic features reconstructed in another. Meanwhile, Gaussian registration methods [17], [18], [19] mainly focus on geometric or pho-tometric consistency, without explicitly considering whether the aligned maps remain semantically compatible for down-stream language grounding. In this paper, we study cooperative referring scene un-derstanding, where local Gaussian maps independently re-constructed by multiple agents are aligned and fused into a shared 3D representation for grounding natural-language re-ferring expressions from the viewpoint of a designated query-ing agent. We consider a cooperative multi-robot scenario in which two agents observe the same static indoor scene from different regions, resulting in partial overlap, large viewpoint changes, and complementary local observations. As illustrated in Fig. 1, the aligned representation enables the querying agent to resolve referring expressions whose target object or contextual landmark is ambiguous or absent in its own local map. This setting differs from conventional single-agent referring segmentation because the target object or its contextual landmark may be reconstructed from another robot’s observations, while the final grounding decision must still be interpreted relative to the querying robot’s viewpoint. To address these challenges, we propose CoRef-GS , a cooperative referring scene understanding framework for embodied multi-agent systems based on Gaussian maps. Each agent reconstructs an instance-aware local semantic Gaussian map, where Gaussian primitives are associated with CLIP-aligned semantic anchors and instance-level grouping information. We then align independently reconstructed local maps through an image-assisted coarse-to-fine registration pipeline and merge matched local instances into a shared global representation. At query time, rather than relying on scene-specific re-ferring features, we render visible instance masks from the aligned Gaussian map and perform view-conditioned relation reasoning from the querying robot’s perspective. This supports agent-centric relations while retaining view-invariant object-centric ones such as above , on , and beneath ,preserving open-vocabulary and relation-aware grounding after fusion without jointly training scene-specific referring features across agents. To facilitate evaluation and future research on this prob-lem, we establish a dual-quadruped robot dataset comprising both real-world and simulated indoor scenes. In each scene, two robots observe the same environment from different regions and reconstruct partially overlapping local maps. Unlike common Gaussian reconstruction or registration set-tings [17], [19], [18], which often assume continuous tra-jectories or substantial view overlap, our dataset captures cross-agent observations with partial overlap, large view-point changes, and complementary scene coverage, provid-ing a challenging testbed for map alignment, fusion, and language-grounded referring understanding. On this bench-mark, CoRef-GS demonstrates effectiveness in both cross-agent map alignment and language-grounded referring un-derstanding. CoRef-GS reduces the simulated-scene rotation error from 2.58 ◦ after coarse initialization to 0.15 ◦ after refinement, and improves real-world referring mIoU over ReferSplat from 52 .6% to 68 .8% . Our contributions are summarized as follows:  
+
+> •
+
+We formulate cooperative referring scene understand-ing for embodied multi-agent Gaussian maps, identifying cross-agent mergeability and referability after fusion as joint requirements prior work satisfies only individually.  
+
+> •
+
+We propose CoRef-GS , a cooperative referring Gaus-sian splatting framework that decouples semantic map construction from query-time spatial referring reason-ing via image-assisted coarse-to-fine Sim(3) registration, geometry-semantic instance fusion, and view-conditioned relational grounding over rendered instance masks.  
+
+> •
+
+We release CoQuad-Ref , a benchmark targeting coop-erative referring segmentation in dual-quadruped settings with paired real-world and simulated scenes, partial cross-agent overlap, large viewpoint changes, and viewpoint-conditioned referring expressions. II. R ELATED WORK 
+
+Open-Vocabulary 3D Scene Understanding. Open-vocabulary 3D scene understanding builds on neural and explicit scene representations, from NeRF-style radiance fields [20] and efficient neural graphics primitives [21] to real-time 3D Gaussian Splatting [22]. With foundation mod-els such as CLIP [10], DINO [23], SAM [24], and language-Fig. 2: The framework of CoRef-GS. Agents build local instance-aware semantic Gaussian maps, which CoRef-GS aligns via image-assisted coarse-to-fine Sim(3) registration, fuses and reasons over for local or fused referring segmentation. driven segmentation [25], early NeRF-based methods such as LERF [26] and Open-NeRF [27] distill language or mask features into 3D fields for text-driven querying and object-level decomposition. LangSplat [11] and OpenGaus-sian [13] augment Gaussian primitives with language or instance-aware features. Follow-up works improve practi-cality through efficient feature grids [28], global-codebook feature splatting [12], compact feature encoding [29], voxel-aware semantic fusion [30], and Hough-voting-based local-ization [31]. However, most methods remain driven by fea-ture distillation or embedding-space matching, which limits complex referential, compositional, spatial, and relational reasoning. ReferSplat [16] and ReLaGS [32] address this direction through 3D referential segmentation and scene-graph-based relational reasoning, but they operate within a single reconstructed scene; whether semantic or referring representations remain consistent after independently built maps are aligned remains unexplored. 
+
+Multi-Agent 3D Gaussian Registration. Recent embod-ied multi-agent studies motivate shared scene understand-ing across robots, covering long-horizon quadruped ex-ploration [5], heterogeneous collaborative navigation [33], multi-drone perception and reasoning [8], and LLM-based robot coordination [9]. These works highlight the importance of shared scene understanding in embodied robot teams, but they mainly operate at the level of navigation, perception, dialogue, or task planning. A parallel line of work studies 3DGS as a shared representation for cross-agent mapping, but its main objective is usually geometric rather than se-mantic consistency. Pairwise Gaussian registration methods align independently reconstructed Gaussian models using geometry-based coarse-to-fine registration [19], scale-aware photometric refinement [18], or distributional Gaussian align-ment combined with photometric and depth constraints [17]. Multi-agent Gaussian SLAM systems extend single-agent Gaussian mapping to collaborative reconstruction, using intra-agent and inter-agent Gaussian consensus [34], local submap optimization with loop closure [35], or Gaussian map merging for global consistency [36]. More recent se-mantic multi-robot Gaussian systems incorporate language-aware or semantic cues for metric-semantic mapping and initialization-free registration [37], [38]. Beyond multi-agent mapping, related Gaussian methods address sparse-view re-construction with large-model priors [39], sparse-view lan-guage Gaussian splatting [40], feed-forward language Gaus-sian reconstruction from sparse unposed images [41], and embodied exploration and reasoning [42]. Together, these works demonstrate that Gaussian maps can be registered, fused, and queried across robotic settings. However, they do not explicitly target the post-fusion referability problem stud-ied here: whether independently constructed semantic Gaus-sian maps remain cross-agent instance-consistent, natural-language queryable, and suitable for view-conditioned com-positional and relational grounding after fusion. III. M ETHODOLOGY 
+
+A. Overview 
+
+As shown in Fig. 2, we consider two agents a ∈ { A, B }
+
+that independently observe complementary regions of the same indoor scene and reconstruct local semantic Gaussian maps GA and GB . At inference, each query consists of a single agent observation (Iv , π v ) and a single referring expression q. Here, Iv denotes the RGB image observed by the querying agent, and πv is the camera viewpoint. The query is applied to either the corresponding local map or the fused cooperative map. Each query is applied to either a local map or the aligned cooperative maps. Map alignment is query-independent, while cross-agent candidate association is performed at query time; the querying pose is transformed to the common frame for cooperative grounding. CoRef-GS consists of three components. (i) Instance-aware Local Semantic Mapping independently constructs Gaussian maps with CLIP-aligned semantics and instance grouping. (ii) View-conditioned Relation Reasoning parses the referring expression and grounds it over instance masks rendered from the querying viewpoint. (iii) Cross-Agent Alignment and Instance Fusion aligns the local maps through image-assisted coarse-to-fine Sim(3) registration and associates duplicate cross-agent candidates on the aligned maps based on geometric and semantic consistency. The same grounding module operates on either a local or aligned cooperative map, without joint map reconstruction or semantic retraining. 
+
+B. Instance-aware Local Semantic Map 
+
+For each agent a, we take its RGB image sequence Ia
+
+as input and independently reconstruct an instance-aware semantic Gaussian map Ga following OpenGaussian [13], where camera poses are estimated as part of the reconstruc-tion pipeline. Each Gaussian primitive is represented as 
+
+gai = ( θai , ψ ai ), ψai = ( f ai , z ai , eazai ), (1) where θai denotes the standard Gaussian parameters[22]. Here, f ai denotes the instance feature, zai is the codebook assignment, and eazai is the CLIP-aligned semantic embed-ding. Non-empty codebook groups define local leaf instances 
+
+Ia, which support open-vocabulary grounding and relation reasoning on both local and aligned maps. Since semantic embeddings from all agents are anchored to the same CLIP space, independently reconstructed maps remain semanti-cally comparable without cross-agent joint training or post-alignment feature adaptation. This shared semantic space is essential for preserving open-vocabulary queryability after map alignment and fusion. 
+
+C. View-conditioned Relation Reasoning 
+
+Given a selected semantic Gaussian map Gm and its leaf-instance set Im, derived from the instance-aware local se-mantic maps constructed in Sec. III-B, where m ∈ { A, B, F }
+
+denotes Agent A, Agent B, or their fused cooperative map, we ground a referring expression q from a querying ob-servation (Iv , π v ). We first retrieve semantically plausible target and landmark candidates, and then resolve their spatial relation over instance masks rendered from the querying viewpoint πv . The same grounding procedure is applied to both local and fused maps. 
+
+Query Parsing and Candidate Retrieval. We parse q into a spatial triplet (T, R, O ) using a lightweight DistilBERT-based [43] spatial-role parser trained on SpRL-2012 [44], where T , R, and O denote the target, relation, and land-mark, respectively. For each entity phrase t ∈ {T, O },we evaluate CLIP text similarity against the semantics of leaf instances in Im, relative to the canonical negative set {object , things , stuff , texture } following LangSplat [11]. High-confidence leaf instances are then aggregated into object-level candidates according to instance-feature affinity. For the fused map, candidate groups sharing the same cross-map global identity are merged into a single candidate, yielding CT and CO .
+
+View-conditioned Mask Relation Graph (VMRG). For each candidate Ci ∈ C T ∪ C O , we render its instance-specific Gaussian subset GmCi from the querying viewpoint πv to obtain a pixel-wise opacity map αvi and depth map Dvi :
+
+(αvi , D vi ) = Rα,D (GmCi , π v ), M vi = 1[αvi > τ α]. (2) Here, M vi is the binary mask of candidate Ci in the querying view, obtained by thresholding the rendered opacity map with τα, while Dvi is the per-pixel rendered depth map of candidate Ci measured from the querying viewpoint πv .Candidates with non-empty masks form the visible target and landmark sets CvT and CvO , respectively. We organize them into a directed target–landmark relation graph Hv =(Vv , Ev ), where 
+
+Vv = CvT ∪ C vO , Ev = {(i, j ) | i ∈ C vT , j ∈ C vO }. (3) Thus, each directed edge represents a candidate spatial relation from a target instance to a landmark instance. Each node combines the CLIP embedding of its masked RGB crop with 
+
+gvi = [ cxi , c yi , ¯di, x min  
+
+> i
+
+, y min  
+
+> i
+
+, x max  
+
+> i
+
+, y max  
+
+> i
+
+]. (4) which encodes its normalized mask centroid, mean depth, and bounding box. The concatenated feature is projected to 
+
+hvi by a lightweight MLP. To encode the relative spatial geometry between target and landmark candidates, each directed edge (i, j ) ∈ E v is assigned a relation feature rvij :
+
+rvij = [∆ xij , ∆yij , d ij , ∆ ¯dij , IoU ij ,ηi→j , η j→i, sin θij , cos θij , ρ mask  
+
+> ij
+
+, ρ bbox  
+
+> ij
+
+]. (5) Here, η denotes directional mask coverage and ρ relative mask/bounding-box area; the remaining terms encode rela-tive centroid position, depth, overlap, and image-plane di-rection. Because these features are computed after rendering from πv , view-dependent relations are represented in the querying robot’s view rather than a fixed global frame. 
+
+Relation Reasoning and Offline Supervision. Following ReLaGS [32], we use an edge-aware GNN to jointly reason over candidate appearance and relative geometry. For rela-tional queries, each directed target–landmark edge (i, j ) ∈Ev is evaluated against the queried relation. Let ϕR =Norm(Φ text (R)) . Each edge is encoded and ranked by 
+
+zij = Norm  GNN θ (hvi , hvj , rvij ) ,
+
+(i∗, j ∗) = arg max 
+
+> (i,j )∈E v
+
+z⊤ 
+
+> ij
+
+ϕR. (6) If the highest score is below τR, the match is rejected; otherwise, M ∗ 
+
+> i
+
+is returned. For non-relational queries, we return the top-scoring visible target by open-vocabulary relevance. The relation reasoner is trained offline on scene-disjoint Replica RGB-D scenes using 21 spatial predicates adapted from SGFormer [45], including viewpoint-dependent rela-tions such as left of and right of . Qwen3-VL [46] assigns one or more predicates to each visible directed instance pair from RGB, depth, and masks; it is used only for offline supervision and is not invoked at inference. The relation embeddings are aligned with the corresponding CLIP predicate embeddings using a multi-positive contrastive objective. 
+
+D. Cross Agent Alignment (CAA) 
+
+Since the two local Gaussian maps are reconstructed [47] independently, GA and GB lie in different local similarity frames. For cooperative referring, CAA aligns the source map GB to the target frame of GA by estimating a cross-agent Sim(3) transformation 
+
+TB→A = ( sBA , RBA , tBA ) ∈ Sim(3) ,
+
+TB→A(xB ) = sBA RBA xB + tBA . (7) where sBA ∈ R+, RBA ∈ SO (3) , and tBA ∈ R3. We estimate it with a coarse-to-fine registration pipeline. 
+
+Coarse Cross-agent Registration. We first retrieve potentially overlapping cross-agent image pairs using NetVLAD [48], extract SuperPoint features [49], and estab-lish correspondences with LightGlue [50]. The matches are geometrically verified using fundamental-matrix RANSAC. For each verified pair k, we recover the relative rotation ˆRk
+
+and translation direction ˆdk from the essential matrix. Given the local camera poses, a candidate transform T induces a relative rotation Rk(T ) and a normalized translation direc-tion dk(T ). We obtain the coarse initialization by 
+
+T 0 
+
+> B→A
+
+= arg min  
+
+> T∈Sim(3)
+
+X
+
+> k
+
+wk ρ
+
+
+
+Log( ˆR⊤ 
+
+> k
+
+Rk(T )) 22 + λt dk(T ) − ˆdk
+
+> 22
+
+
+
+.
+
+(8) where wk weights each image pair by its pose-inlier support and ρ(·) is a robust loss. Across multiple verified cross-agent pairs, the induced translation directions depend jointly on the similarity scale and translation, allowing the inter-map Sim(3) parameters to be estimated without metric cross-map correspondences. 
+
+Visibility-aware Rendering Refinement. The coarse esti-mate provides global alignment but may retain residual scale, rotation, and translation errors. Starting from T 0
+
+> B→A
+
+, we fix both local maps and optimize only the cross-agent similarity transform. Inspired by [18], for each selected target view πAT ,we render RGB, depth, and opacity from the target map GA
+
+and the transformed source map T (GB ). We denote these renderings as ( ˆIAA , ˆDAA , ˆαAA) and ( ˆIBB (T ), ˆDBB (T ), ˆαBB (T )) ,respectively. This enables rendering refinement without re-optimizing either local Gaussian map. To suppress non-overlapping regions, we define the common-visibility weight at pixel p as wTτ (p) =ˆαAτ (p)ˆ αBτ (T, p ) and optimize 
+
+LCAA (T ) = 1
+
+P 
+
+> τ,p
+
+wTτ (p) + ϵ
+
+X
+
+> τ,p
+
+wTτ (p)
+
+h
+
+λrgb ˆIBτ (T, p ) − ˆIAτ (p) 1
+
++ λd ˆDBτ (T, p ) − ˆDAτ (p)
+
+i
+
+.
+
+(9) Optimizing Eq. (9) yields the refined transformation T ∗
+
+> B→A
+
+.This stage establishes a common geometric frame but does not by itself resolve duplicate cross-map instance identities. 
+
+Cross-map Instance Association. After geometric align-ment, the same physical object may still appear as two independent local instances, which can introduce duplicate candidates during retrieval and relation reasoning. For each local instance, we summarize its Gaussian support by a semantic descriptor ei, a 3D centroid ci, and an axis-aligned bounding box Bi. For an instance i ∈ I A and a transformed source instance j ∈ T ∗
+
+> B→A
+
+(IB ), we compute               
+
+> Sij =λscos( ei, e j) + λcexp
+> 
+> − ∥ci−cj∥2
+> σ
+> 
+> +λbIoU 3D(Bi, B j)
+
+(10) We greedily match instances one-to-one by descending Sij ,accepting pairs with Sij ≥ τs and either centroid distance 
+
+≤ τc or 3D box IoU ≥ τb; matched pairs share a global identity and unmatched instances remain independent. The cooperative Gaussian map retains the aligned Gaussian prim-itives from both agents: 
+
+GF = GA ∪ T ∗
+
+> B→A
+
+(GB ). (11) Importantly, instance fusion does not average or relearn semantic embeddings; it only associates matched local in-stances through their global identities. For cooperative re-ferring, the grounding module operates on (GF , IF ). For single-agent referring, it directly operates on (GA, IA) or 
+
+(GB , IB ). If a cooperative query originates from Agent B, its querying camera pose is transformed to the common frame using T ∗ 
+
+> B→A
+
+before view-conditioned rendering. IV. E XPERIMENTS 
+
+A. CoQuad-Ref Dataset. 
+
+We evaluate our method on CoQuad-Ref , a dual-quadruped benchmark for cooperative referring scene un-derstanding. The benchmark contains 15 indoor scenes, including 8 real-world scenes and 7 simulated scenes. For each scene, two quadruped agents traverse complementary regions of the same environment, producing paired trajec-tories with partial cross-agent overlap and substantial view-point changes. This setting enables controlled evaluation of cross-agent Gaussian-map registration, instance fusion, and viewpoint-conditioned referring segmentation. The real-world split is collected using a Unitree Go2 and a Unitree Go2-W, each equipped with an Intel RealSense D435i camera. RGB images are captured at a resolution of 
+
+960 × 540 pixels and a frame rate of 30Hz . An external motion-capture system tracks rigid marker clusters attached to the cameras at 100Hz to provide reference poses for reg-istration evaluation. The real-world data-collection platform is shown in Fig. 3a, and the data-collection setup is shown in Fig. 3b. The simulated split contains one Replica and six HM3D scenes collected in Habitat-Sim using the same paired-trajectory protocol, with reference poses obtained directly from the simulator. 
+
+Real-world Calibration and Synchronization. Reference camera poses are obtained from an external MoCap sys-tem after spatial and temporal calibration. We estimate the camera-MoCap extrinsic using a marker-equipped checker-board by combining PnP camera-to-board poses with the corresponding MoCap poses and robustly refining the trans-formation. The resulting translation/rotation residuals are 
+
+12 .84 mm/ 0.904 ◦ for Go2 and 9.37 mm/ 0.821 ◦ for Go2-W. Temporal offsets between the D435i and MoCap clocks are estimated by cross-correlating their angular-velocity tra-jectories, after which MoCap poses are interpolated at the motion capture room mocap-tracked camera mocap-tracked checkboard (a) Real-world data-collection setup. Calibration Overview       
+
+> Per-frame Extrinsic Estimate
+> Extrinsic Calibration
+> Calibration Setup
+> camera rigid body + marker checkerboard
+> Synchronized Observations
+> Mocap: and
+> RGB: checkerboard corners
+> PnP Pose Estimation
+> Estimate from image corners
+> Per-frame Extrinsic Estimation Multi-frame Robust Optimization
+> Temporal Synchronization
+> D435i Gyroscope Candidate Synchronization Signals Frame Transformation
+> transfom IMU signaligid-body trame M
+> MoCap Trajectory
+> rigid-body orientation
+> Angular Velocity Derivation Coarse-to-fine Temporal Alignment
+> Estimated for each robot and each trajectory
+> Reference Camera Pose Generation
+> Fixed Extrinsic Corrected RGB Timestamps Time Offset
+> ∆t r
+> Interpolate MoCap trajectory at corrected timestamps
+
+(b) Reference-pose generation pipeline. 
+
+Fig. 3: Real-world data acquisition and reference-pose generation. 
+
+Method Simulation Real-world Rot. ↓ T-dir ↓ ATE ↓ Rot. ↓ T-dir ↓ ATE ↓
+
+PhotoReg [18] 40.721 67.874 2.394 85.734 97.642 1.609 RegGS (ID) [17] 80.832 71.056 2.377 74.585 75.783 1.651 RegGS (CI) [17] 2.580 2.718 0.083 3.702 9.992 0.114 Ours 0.146 0.176 0.029 3.385 3.085 0.091 
+
+TABLE 1: Gaussian map registration. RegGS (CI): our coarse Sim(3) initialization; RegGS (ID): identity initializa-tion. corrected RGB timestamps. A shared visual trigger verifies a residual synchronization error below 33 ms. 
+
+Evaluation Metrics. Since reconstructed 3DGS maps may differ from ground truth by a similarity transform, we report scale-robust rotation error, translation-direction error, and aligned ATE RMSE. For language grounding, following OpenGaussian [13], we report mIoU and mAcc between predicted and ground-truth target masks. 
+
+Implementation Details. All experiments are conducted on a single NVIDIA RTX 4090 GPU. Local mapping follows OpenGaussian [13]. The parser is trained for 60 epochs (batch size 8, LR 3 × 10 −5), and the relation reasoner uses a scene-disjoint 13/4 Replica split ( τ = 0.07 , 32 negatives/edge). For CAA, we retrieve 10 NetVLAD pairs and retain SuperPoint–LightGlue pairs with ≥ 30 RANSAC inliers and ≥ 0.25 inlier ratio. Sim(3) refinement uses Adam for 500 iterations (LR 10 −2, λrgb = 1 , λd = 0 .2). We use τrel = 0 .4, τinst = 0 .9, τα = 0 .4, and τR = 0 .05 .For cross-agent candidate association, we set (λs, λ c, λ b) = (0 .45 , 0.30 , 0.15) , σ = 0 .5, τs = 0 .45 , τc = 0 .75 , and 
+
+τb = 0 .01 .
+
+(a) Experimental results of simulated scenes. 
+
+Method Metric S1 S2 S3 S4 S5 S6 S7 Mean 
+
+OpenGaussian [13] mIoU ↑
+
+21.6 20.6 10.6 6.0 12.4 21.4 3.2 13.7 LangSplat [11] 29.4 19.8 40.6 30.1 15.7 29.0 13.3 25.4 ReasonGrounder [51] 15.8 19.7 24.3 52.2 24.8 31.7 11.0 25.6 ReferSplat [16] 34.1 29.3 31.2 34.9 45.6 27.5 46.4 35.6 ReLaGS [32] 18.96 19.41 17.81 16.62 23.00 19.09 15.04 18.56 LangSplatV2 [12] 32.6 26.1 49.0 48.0 32.1 45.0 32.6 37.9 Ours(SigLIP2 [52]) 40.7 39.2 35.3 32.1 39.1 35.0 33.4 36.4 Ours 49.4 39.9 50.0 34.3 59.8 45.8 43.1 46.0 OpenGaussian [13] mAcc ↑
+
+23.3 24.7 12.1 6.9 16.3 22.8 3.2 15.6 LangSplat [11] 59.8 57.6 58.9 52.9 65.9 57.3 41.1 56.2 ReasonGrounder [51] 18.5 21.4 28.6 52.6 30.4 34.8 15.8 28.9 ReferSplat [16] 70.2 69.3 65.7 75.5 83.1 72.4 79.6 73.7 ReLaGS [32] 41.28 49.80 23.14 35.89 39.45 44.71 28.66 37.56 LangSplatV2 [12] 75.4 73.9 78.7 82.5 71.5 79.1 63.4 74.9 Ours (SigLIP2 [52]) 62.9 45.6 35.0 46.8 69.2 56.2 41.0 51.0 Ours 73.2 62.1 69.0 48.2 77.2 68.7 50.1 64.1 
+
+(b) Experimental results of real-world scenes. 
+
+Method Metric S1 S2 S3 S4 S5 S6 S7 S8 Mean 
+
+OpenGaussian [13] mIoU ↑
+
+36.6 29.1 63.0 34.2 8.7 23.7 40.8 13.0 31.1 LangSplat [11] 20.8 30.4 11.0 4.4 0.8 0.4 10.3 3.8 10.2 ReasonGrounder [51] 8.3 0.2 0.0 19.8 25.6 8.7 0.1 28.8 11.4 ReferSplat [16] 35.0 79.5 75.9 60.0 46.5 39.4 33.3 51.1 52.6 ReLaGS [32] 22.04 21.22 33.47 27.76 47.04 12.17 18.94 21.55 25.52 LangSplatV2 [12] 32.8 36.5 56.1 30.2 22.7 26.2 35.9 53.0 36.7 Ours (SigLIP2 [52]) 47.3 59.4 63.1 65.7 58.5 43.1 69.4 56.6 57.9 Ours 70.1 73.3 76.7 62.4 67.4 61.1 79.8 59.9 68.8 OpenGaussian [13] mAcc ↑
+
+41.6 29.6 71.5 37.3 9.7 27.2 46.0 20.3 35.4 LangSplat [11] 36.1 33.9 49.6 21.5 10.8 9.7 38.2 39.3 29.9 ReasonGrounder [51] 20.6 1.4 0.0 21.9 37.6 18.0 2.0 45.3 18.3 ReferSplat [16] 68.5 96.1 96.4 82.0 74.6 82.5 72.9 86.5 82.4 ReLaGS [32] 48.18 69.39 78.12 73.86 86.92 26.14 62.78 58.20 62.95 LangSplatV2 [12] 80.1 57.8 91.9 56.5 72.4 63.9 67.2 77.0 70.9 Ours (SigLIP2 [52]) 65.2 99.0 76.5 84.4 79.4 75.2 93.5 75.7 81.1 Ours 87.3 91.4 97.0 90.7 91.0 85.1 92.0 77.1 89.0 
+
+TABLE 2: Quantitative evaluation of instance-level spatial perception on our CoQuad-Ref dataset. (a) Simulated scenes with seven scenes. (b) Real-world scenes with eight scenes. 
+
+(a) Map-alignment compatibility. 
+
+Method B B→A Change A net B net (coordinate only) ∆full ∆coord .
+
+ReferSplat [16] 38.99 18.88 38.19 -51.58% -2.05% 
+
+Ours 40.96 40.96 40.96 0.00% 0.00% 
+
+(b) Local maps vs. cooperative aligned map. 
+
+Setting Map Source Performance Gain Agent A Agent B mIoU ↑ mAcc ↑
+
+Agent A Local Map ✓ – 41.91% 58.58% –Agent B Local Map – ✓ 36.37% 49.26% –Cooperative Aligned Map ✓ ✓ 47.54% 74.73% +13.4% / +27.6% 
+
+TABLE 3: Analysis of map-alignment compatibility and cooperative view complementarity. (a) Open-vocabulary seg-mentation under different map-alignment settings (mIoU, % 
+
+↑). (b) Comparison between individual local maps and the cooperative aligned map. 
+
+B. Main Results and Ablations 
+
+Results of 3D Gaussian Registration. As shown in Tab. 1, CoRef-GS achieves the lowest registration errors on both simulated and real-world scenes. Despite large viewpoint gaps and limited cross-agent overlap, our coarse Sim(3) Scene 1 RGB Ours Scene 2 
+
+"The pink doll on the left." "The pink doll on the right." 
+
+> Scene 3
+
+"The rectangular cardboard box next to the transparent water bottle." 
+
+> Scene 4
+> Scene 5
+
+"The wooden rocking chair in front of the white cabinet." 
+
+"The chair behind the wooden door."   
+
+> LangSplat ReferSplat OpenGaussian ReasonGrounder
+
+Fig. 4: Qualitative comparison of referring segmentation results. The first three rows show real-world scenes, while the last two rows show simulated scenes. initialization substantially improves RegGS, while the full method further reduces the simulated errors to 0.146 ◦ rota-tion, 0.176 ◦ translation direction, and 0.029 ATE RMSE. 
+
+Results of Open-vocabulary Querying. CoRef-GS achieves the best referring-segmentation performance on both real and simulated scenes (Tab. 2 and Fig. 4), demonstrating the benefit of reasoning over view-conditioned target-landmark relations rather than semantic similarity alone. Replacing the image encoder with SigLIP2 [52] requires no architectural changes; its stronger background responses introduce more false positives and slightly reduce accuracy, while confirming that CoRef-GS is not tied to a specific VLM backbone. We further present cooperative multi-agent referring seg-mentation results in Fig. 5, where aligned observations enable agents to ground queries beyond the coverage of a single robot. As analyzed in Tab. 3b, cooperative fusion improves referring segmentation by integrating complemen-tary observations from different agents. Finally, we evaluate whether open-vocabulary queryability is preserved when in-dependently reconstructed maps are brought into a common frame. As shown in Tab. 3a, ReferSplat [16] decreases from 
+
+38 .99% to 18 .88% mIoU when the aligned map is queried under the other map’s referring space, corresponding to a 
+
+51 .58% relative drop, whereas CoRef-GS preserves 40 .96% 
+
+mIoU without retraining. To isolate the effect of coordinate transformation itself, we additionally transform ReferSplat’s map and query cameras while retaining its original querying network. Its mIoU remains at 38 .19% , only 2.05% below the Agent B view Agent A view Querying view (Agent B view)       
+
+> (c) "The brown sofa in the back"
+> Agent B view Agent A view Quering view (Agent B view)
+> (a) "The pink doll on the left" (b) "The white desk on the right" Target in Agent A view (d) "There is a white chair on the right" Target in Agent B view
+
+Fig. 5: Visualization of cooperative multi-agent referring segmentation. (a) Photometric optimization.            
+
+> Method Rot. ( ◦)↓Trans. ( ◦)↓ATE RMSE ↓
+> w/o PO 0.205 0.194 0.056
+> w/ PO 0.146 0.176 0.050
+
+(b) Instance fusion.         
+
+> Variant mIoU (%) mAcc (%) Gain (pp)
+> w/o Fusion 39.06 70.09 –
+> Full 47.54 74.73 +8.48/+4.64
+
+TABLE 4: Ablation studies on key components. (a) Ef-fect of photometric optimization on map alignment on the simulation split. (b) Effect of instance fusion on cooperative referring segmentation. original result. This control confirms that the large cross-map degradation is not caused by the coordinate transformation it-self, but primarily by incompatibility between independently learned semantic query spaces. In contrast, our shared CLIP-aligned representation remains directly comparable across independently reconstructed maps. 
+
+Ablation Studies. Photometric refinement consistently im-proves coarse Sim(3) estimate on simulated scenes (Tab. 4a), reducing residual rotation, translation-direction, and trajec-tory errors after correspondence-based initialization. This indicates that sparse feature correspondences provide reli-able global initialization, while visibility-aware RGB-depth consistency enables fine alignment. For cooperative referring, the fused map reaches 47 .54% 
+
+mIoU and 74 .73% mAcc, outperforming either local map (Tab. 3b). Removing cross-map instance association while retaining registration, CLIP semantics, and relation reasoning reduces mIoU from 47 .54% to 39 .06% (Tab. 4b). This confirms that geometric alignment alone is insuffi-cient: duplicate local identities produce redundant target and landmark candidates, whereas instance association enables consistent object-level relational grounding. V. C ONCLUSION 
+
+We introduced CoRef-GS , a cooperative referring Gaus-sian splatting framework for multi-robot language-grounded scene understanding. CoRef-GS supports referring segmen-tation over local and aligned Gaussian maps by combin-ing instance-aware semantic mapping, cross-agent registra-tion, instance fusion, and view-conditioned spatial relational reasoning. We also presented CoQuad-Ref , a cooperative quadruped referring benchmark covering both simulated and real-world indoor scenes. Experiments demonstrate improved cross-agent alignment and more reliable grounding under complementary robot observations. REFERENCES [1] P. Anderson et al. , “Vision-and-language navigation: Interpreting visually-grounded navigation instructions in real environments,” in 
+
+CVPR , 2018. [2] J. Krantz et al. , “Beyond the nav-graph: Vision-and-language naviga-tion in continuous environments,” in ECCV , 2020. [3] M. Shridhar et al. , “ALFRED: A benchmark for interpreting grounded instructions for everyday tasks,” in CVPR , 2020. [4] D. Z. Chen et al. , “ScanRefer: 3D object localization in RGB-D scans using natural language,” in ECCV , 2020. [5] K. Wang et al. , “ODYSSEY: Open-world quadrupeds exploration and manipulation for long-horizon tasks,” in AAAI , 2026. [6] Z. Liu et al. , “OmniVLN: Omnidirectional 3D perception and token-efficient LLM reasoning for visual-language navigation across air and ground platforms,” arXiv:2603.17351 , 2026. [7] S. Zhou et al. , “DeCoNav: Dialog enhanced long-horizon collaborative vision-language navigation,” arXiv:2604.12486 , 2026. [8] J. Zha et al. , “AirCopBench: A benchmark for multi-drone collabora-tive embodied perception and reasoning,” in AAAI , 2026. [9] K. Liu et al. , “COHERENT: Collaboration of heterogeneous multi-robot system with large language models,” in ICRA , 2025. [10] A. Radford et al. , “Learning transferable visual models from natural language supervision,” in ICML , 2021. [11] M. Qin et al. , “LangSplat: 3D language gaussian splatting,” in CVPR ,2024. [12] W. Li et al. , “LangSplatV2: High-dimensional 3D language gaussian splatting with 450+ FPS,” in NeurIPS , 2025. [13] Y. Wu et al. , “OpenGaussian: Towards point-level 3D gaussian-based open vocabulary understanding,” in NeurIPS , 2024. [14] K. Jun-Seong et al. , “Dr. Splat: Directly referring 3D gaussian splatting via direct language embedding registration,” in CVPR , 2025. [15] J. Cen et al. , “Tackling view-dependent semantics in 3D language gaussian splatting,” in ICML , 2025. [16] S. He et al. , “ReferSplat: Referring segmentation in 3D gaussian splatting,” in ICML , 2025. [17] C. Cheng et al. , “RegGS: Unposed sparse views gaussian splatting with 3DGS registration,” in ICCV , 2025. [18] Z. Yuan et al. , “PhotoReg: Photometrically registering 3D gaussian splatting models,” arXiv:2410.05044 , 2024. [19] J. Chang et al. , “GaussReg: Fast 3D registration with gaussian splat-ting,” in ECCV , 2024. [20] B. Mildenhall et al. , “NeRF: representing scenes as neural radiance fields for view synthesis,” Communications of the ACM , 2021. [21] T. Müller et al. , “Instant neural graphics primitives with a multireso-lution hash encoding,” TOG , 2022. [22] B. Kerbl et al. , “3D gaussian splatting for real-time radiance field rendering,” TOG , 2023. [23] M. Caron et al. , “Emerging properties in self-supervised vision trans-formers,” in ICCV , 2021. [24] A. Kirillov et al. , “Segment anything,” in ICCV , 2023. [25] B. Li et al. , “Language-driven semantic segmentation,” in ICLR , 2022. [26] J. Kerr et al. , “LERF: Language embedded radiance fields,” in ICCV ,2023. [27] H. Zhang et al. , “Open-NeRF: Towards open vocabulary NeRF de-composition,” in WACV , 2024. [28] Y. Ji et al. , “FastLGS: Speeding up language embedded gaussians with feature grid mapping,” in AAAI , 2025. [29] H. Jegou et al. , “Product quantization for nearest neighbor search,” 
+
+TPAMI , 2011. [30] C. Li et al. , “VaF-LangSplat: Voxel-aware fusion language gaussian splatting,” in MM , 2025. [31] M. Jiang et al. , “VoteSplat: Hough voting gaussian splatting for 3D scene understanding,” in ICCV , 2025. [32] Y. Xie et al. , “ReLaGS: Relational language gaussian splatting,” in 
+
+CVPR , 2026. [33] Y. Wang et al. , “Can a robot walk the robotic dog: Triple-zero collaborative navigation for heterogeneous multi-agent systems,” 
+
+arXiv:2603.21723 , 2026. [34] X. Xu et al. , “MAC-Ego3D: Multi-agent gaussian consensus for real-time collaborative ego-motion and photorealistic 3D reconstruction,” in CVPR , 2025. [35] A. Thomas et al. , “GRAND-SLAM: Local optimization for globally consistent large-scale multi-agent gaussian SLAM,” RA-L , 2025. [36] V. Yugay et al. , “MAGiC-SLAM: Multi-agent gaussian globally con-sistent SLAM,” in CVPR , 2025. [37] J. Yu et al. , “HAMMER: Heterogeneous, multi-robot semantic gaus-sian splatting,” RA-L , 2025. [38] O. Shorinwa et al. , “SIREN: Semantic, initialization-free registration of multi-robot gaussian splatting maps,” in CoRL , 2025. [39] H. Yu et al. , “LM-Gaussian: Boost sparse-view 3D gaussian splatting with large model priors,” arXiv:2409.03456 , 2024. [40] K. Chen et al. , “SLGaussian: Fast language gaussian splatting in sparse views,” in MM , 2025. [41] Y. Liu et al. , “LangFlash: Feed-forward 3D language gaussian splatting from sparse unposed images,” in CVPRF , 2026. [42] K. Yu-Ji et al. , “GaussExplorer: 3D gaussian splatting for embodied exploration and reasoning,” arXiv:2601.13132 , 2026. [43] V. Sanh et al. , “DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter,” arXiv:1910.01108 , 2019. [44] P. Kordjamshidi et al. , “SemEval-2012 task 3: Spatial role labeling,” in SemEval@NAACL-HLT , 2012. [45] C. Lv et al. , “SGFormer: Semantic graph transformer for point cloud-based 3D scene graph generation,” in AAAI , 2024. [46] S. Bai et al. , “Qwen3-VL technical report,” arXiv:2511.21631 , 2025. [47] M. Adorjan, “OpenSfM: A collaborative structure-from-motion sys-tem,” Ph.D. dissertation, Technische Universität Wien, 2016. [48] R. Arandjelovic et al. , “NetVLAD: CNN architecture for weakly supervised place recognition,” in CVPR , 2016. [49] D. DeTone et al. , “SuperPoint: Self-supervised interest point detection and description,” in CVPRW , 2018. [50] P. Lindenberger et al. , “LightGlue: Local feature matching at light speed,” in ICCV , 2023. [51] Z. Liu et al. , “ReasonGrounder: LVLM-guided hierarchical feature splatting for open-vocabulary 3D visual grounding and reasoning,” in 
+
+CVPR , 2025. [52] M. Tschannen et al. , “SigLIP 2: Multilingual vision-language encoders with improved semantic understanding, localization, and dense fea-tures,” arXiv:2502.14786 , 2025.

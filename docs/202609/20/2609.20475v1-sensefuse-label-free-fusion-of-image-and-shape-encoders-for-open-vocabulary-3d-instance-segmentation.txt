@@ -1,0 +1,551 @@
+Title: SenseFuse: Label-Free Fusion of Image and Shape Encoders for Open-Vocabulary 3D Instance Segmentation
+
+URL Source: https://arxiv.org/pdf/2609.20475v1
+
+Published Time: Fri, 18 Sep 2026 01:25:02 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# SenseFuse: Label-Free Fusion of Image and Shape Encoders for Open-Vocabulary 3D Instance Segmentation 
+
+Euiseok Han 1, Tri Ton 1, Hwanhee Kim 1, Seungyeon Ryu 1, and Chang D. Yoo 1
+
+Abstract — Open-vocabulary scene understanding is funda-mental for robotics, laying the groundwork for spatial reasoning and object manipulation. While closed-vocabulary 3D instance segmentation heavily leverages 3D shape information, state-of-the-art open-vocabulary methods remain predominantly re-stricted to 2D image features or image-distilled representations during mask labeling. In this paper, we propose SenseFuse, a label-free fusion method that balances 2D image and 3D shape encoders for robust open-vocabulary 3D instance segmentation, refining only the mask-labeling stage of existing pipelines. We reveal that 2D image and 3D shape encoders exhibit largely disjoint failure patterns and rarely share identical wrong labels, whereas two 2D image encoders frequently repeat the same errors. This distinct behavior makes the 2D and 3D pair inherently complementary. We introduce an adaptive mechanism that selects a scene-level fusion weight to maximize a label-free sensitivity measure, estimated directly from a single scene’s unlabeled proposals in milliseconds. SenseFuse improves labeling accuracy in every evaluated setting across ScanNet200, Replica, and ScanNet++, recovering 67–100% (median 93%) of the gain achievable with an oracle weight, and it raises instance AP in 21 of 22 reported settings. Code is available at https://github.com/hanes1207/SenseFuse .
+
+I. I NTRODUCTION 
+
+In robotics, scene understanding is a pivotal problem and a prerequisite for most downstream tasks. Both object manipulation [1] and spatial reasoning [2] rely on identifying target objects in a scene, driving rapid progress in 3D Instance Segmentation (3DIS) [3] on benchmarks such as ScanNetv2 [4]. Closed-vocabulary 3DIS methods inherently exploit explicit 3D shape information [3], [5]–[8]. However, their fixed category sets fail on novel classes, motivating open-vocabulary 3DIS [9], [10] in both training-based [10]– [12] and training-free [13], [14] forms. Yet most open-vocabulary pipelines label masks from 2D image encoders or image-distilled representations [15], leaving 3D shape ev-idence unused during label assignment. As Fig. 1 illustrates, 2D image encoders fail in predictable ways: a chair occluded by a table is misidentified as a table in most 2D views — and the 3D head [16] errs too, yet differently, which is precisely what fusion can exploit. How to effectively leverage point clouds for 3D shape evidence at the label-assignment stage of open-vocabulary 3DIS remains an open problem. The primary difficulty is achieving zero-shot generaliza-tion without class bias, because training 3D networks on 2D pseudo-labels heavily skews them toward seen cate-gories [10]. We instead propose SenseFuse, a label-free 
+
+Korea Advanced Institute of Science and Technology (KAIST). (email: hanes1207@kaist.ac.kr; tritth@kaist.ac.kr; khhandrea@kaist.ac.kr; sylucyryu@kaist.ac.kr; cd yoo@kaist.ac.kr) view 2 view 5 view 12 
+
+> “table” 0.163
+> chair 0.123
+> “table” 0.151
+> chair 0.137
+> “table” 0.081
+> chair 0.079
+> 3D shape
+> “folded chair” 0.126
+> chair 0.117
+> 2D, all views pooled
+> 0.132 chair
+> 0.158 table
+> 0.069 folded chair
+> 0.126 seat
+> 3D shape
+> 0.117 chair
+> 0.009 table
+> 0.126 folded chair
+> 0.082 seat
+> 2D + 3D fusion (ours)
+> 0.125 chair
+> 0.087 table
+> 0.096 folded chair
+> 0.105 seat
+
+Fig. 1. SenseFuse improves instance labeling by linearly fusing 2D image and 3D shape scores at a label-free estimated weight. We show a failure case of Open-YOLO3D: multi-view crops, per-class scores of both heads (centered cosine scores, Eq. (1)), and the fused verdict (solid bars: ground truth classes). The 2D and 3D heads misread the chair as “table” and “folded chair”, respectively — yet their errors disagree. Fusing the two score vectors recovers “chair”. 
+
+fusion module that balances a frozen 2D image encoder against a frozen 3D shape encoder at the scene level. Because it operates directly on candidate mask proposals, a robot entering an unseen environment can recalibrate its instance labels without additional supervision or retraining. Our starting point is empirical. The two modalities err on largely disjoint instances and rarely share identical wrong labels, whereas two 2D image encoders repeat each other’s mistakes far more often than not. We quantify each head’s reliability by its sensitivity — how far it lifts the correct class above its own background noise — and fuse the two heads with the single scene-level weight that maxi-mizes the combined sensitivity, computable in closed form from the first two score moments alone. Under Gaussian scores, this rule exactly matches the Bayes decision rule. Integrated with Open-YOLO3D [17], OpenMask3D [13], and Open3DIS [14] on ScanNet200 [18], Replica [19], and ScanNet++ [20], fusing with Uni3D [16] at our predicted weights recovers the vast majority of the oracle gain, with weight estimation averaging 3.5 ms per scene. Our contributions can be summarized as follows:  
+
+> •
+
+We show that a 3D shape encoder and a 2D image arXiv:2609.20475v1 [cs.CV] 17 Sep 2026 multi-view images colored point cloud                                             
+
+> 3DIS pipeline
+> Open-YOLO3D OpenMask3D Open3DIS
+> masks Mq
+> image crops masked points q
+> s2, c= ⟨ z2,t2, c⟩
+> s3, c= ⟨ z3,t3, c⟩
+> Sc(w) = (1− w)S2, c+wS 3, c
+> Sh,c=sh,c−1
+> KΣc′sh,c′̂
+> Y= arg max
+> cSc(̂ w)
+> 2D image encoder text encoder 3D shape encoder text encoder
+> = {“chair”, …}
+> z2
+> t2, c
+> z3
+> t3, c
+> soft labels P̂
+> μh,̂ σh
+> weight wFig. 2. Overview of the SenseFuse pipeline. A frozen 3DIS pipeline (Open-YOLO3D, OpenMask3D, or Open3DIS) provides mask proposals Mq, image crops, and masked point clouds Pq. The 2D image and 3D shape encoders then compute class scores as cosine similarities between these representations and each head’s text anchors. The two score spaces are row-centered and linearly fused with a single scalar weight w. Soft responsibilities computed from the fused scores yield per-head reliability moments (ˆ μh,ˆσh), which update wuntil convergence at ˆw— one scalar per scene, estimated from unlabeled masks alone — and the final label is the arg max . No component is trained, and the mask geometry is untouched.
+
+encoder fail on largely disjoint instances and rarely share identical wrong labels, whereas two 2D image encoders repeat each other’s errors. This makes the 2D– 3D pair, rather than a second 2D image encoder, the profitable fusion target.  
+
+> •
+
+We derive a closed-form, scene-level fusion weight from label-free sensitivity estimates in a centered cosine-score space. This calibrates on a single scene’s unla-beled proposals in milliseconds, requiring no training and no ground-truth labels.  
+
+> •
+
+Across three benchmarks and three baseline pipelines, SenseFuse improves labeling accuracy in every setting (median +7 .1 points), recovering a median 93% (67 –
+
+100% ) of the gain available at an oracle weight. II. R ELATED WORK 
+
+A. Open-Vocabulary 2D Scene Understanding 
+
+Large-scale image–text pretraining, most notably CLIP [15] and ALIGN [21], enables recognition beyond a fixed taxonomy by aligning visual features with ashared vision–language embedding space. Building on this alignment, open-vocabulary detection and semantic segmentation ground region features to text embeddings [22]–[30], instance segmentation predicts per-instance masks via cross-modal pseudo-labeling [31], and class-agnostic segmenters such as SAM [32] supply masks for a vision–language model to classify. These models generalize remarkably to novel classes, but the appearance cues they rely on are precisely what degrade under the viewpoint shifts, occlusions, and scale ambiguities of real 3D environments. Our method therefore treats 2D predictions not as the sole labeling signal but as one of two complementary evidence sources. 
+
+B. Closed-Vocabulary 3D Scene Understanding 
+
+Fully-supervised 3DIS methods predict masks and la-bels from a predefined category set, inherently exploit-ing 3D shape and geometry—whether by bottom-up point grouping [6], [7], proposal-based dynamic kernels [8], or transformer architectures that refine instance queries [5], unify segmentation tasks [33], or revisit vanilla attention for 3D [3]. Additionally, ODIN [34] explicitly fuses 2D and 3D features within a single model. Despite strong geometric sen-sitivity on benchmarks such as ScanNetv2, their fixed label set prevents generalization to novel categories. SenseFuse retains this geometric awareness through a 3D shape encoder while removing the closed-set constraint entirely. 
+
+C. Open-Vocabulary 3D Scene Understanding 
+
+Open-vocabulary 3D methods follow two scene-level paradigms—training-based distillation and training-free instance-level segmentation. A parallel line of research de-velops text-aligned 3D shape encoders. Training-based ap-proaches project 2D vision–language features onto points [9], or they align 3D features with text captions at the point [10], [11] or instance level [12]. These methods train dedicated 3D backbones to produce proposals and labels end-to-end. How-ever, their reported degradation on unseen categories [10] motivates our training-free approach. Training-free instance-level methods instead label class-agnostic proposals with frozen 2D models. OpenMask3D [13] utilizes multi-scale CLIP crop embeddings, and Open3DIS [14] merges su-perpoints under multi-view 2D masks to boost recall on small objects. Alternatively, Open-YOLO3D [17] replaces heavy feature lifting with a fast open-vocabulary 2D detector, while OVIR-3D [35] back-projects 2D instance masks onto the point cloud. Across their diverse proposal strategies, these pipelines assign labels almost exclusively from 2D image encoders or image-distilled representations. Native 3D shape evidence is left completely unused at the label-assignment stage, causing critical failures precisely where depth or occlusion dominate. In parallel, text-aligned 3D shape encoders have matured independently. ULIP [36], [37] aligns point cloud, image, and text encoders in ashared space. OpenShape [38] and Uni3D [16] scale this recipe for strong zero-shot shape recognition, scoring point clouds directly against class names without 2D projection. Yet, because they are trained on object-centric shapes, they underperform 2D image encoders in cluttered scenes on their own (Sec. IV). SenseFuse bridges these two lines of work. It neither generates proposals nor trains a backbone. Instead, it re-evaluates the class assignments from an existing pipeline, rebalancing 2D appearance against a native 3D shape encoder through a label-free fusion calibrated per scene. III. M ETHOD 
+
+To exploit 3D shape information, we balance two scoring heads–a 2D image encoder and a 3D shape encoder–with a single scalar weight per scene, chosen without any ground-truth labels. In open-vocabulary 3DIS, class scores are cosine similarities between a mask embedding and text anchor embeddings [15], [16]. Rather than relying on initial label predictions, our method leverages the mask proposals and 2D image embeddings from existing state-of-the-art pipelines [13], [14], [17] and complements them with a frozen 3D shape encoder. We quantify each head’s reliability by its sensitivity: how far it lifts the correct-class score above background noise, in units of its own background standard deviation. To maximize the sensitivity of the fused predic-tion, we derive an optimal weight that depends solely on the first two moments of the score distributions. The resulting rule coincides with the Bayes decision rule when the scores are Gaussian, and remains effective in practice when they deviate from it (Sec. IV). Fig. 2 illustrates the pipeline. Sec. III-B introduces the fusion rule. Sec. III-C details the label-free weight estimation. 
+
+A. Problem Formulation 
+
+Let P = {Pn}Nn=1 ∈ RN ×6 be an RGB-colored point cloud of a reconstructed indoor scene, where each Pn
+
+concatenates position and color. Open-vocabulary 3DIS seg-ments Q binary instance masks {Mq }Qq=1 , Mq ∈ { 0, 1}N ,and assigns each a class label Y q ∈ V from a text vocabulary 
+
+V = {c1, . . . , c K }, with K set by the benchmark [18]–[20]. We inherit the masks Mq and their 2D image embeddings 
+
+zq 
+
+> 2
+
+∈ Rd2 from existing pipelines [13], [14], [17], and add a 3D shape embedding zq 
+
+> 3
+
+∈ Rd3 by passing the masked points Pq = {Pn ∈ P | Mqn = 1 } through a frozen 3D shape encoder [16], [38]; the two are indexed by h ∈ { 2, 3}
+
+for the 2D and 3D head. Since |P q | varies per mask while the encoder takes a fixed input budget, each subset is resampled to N0 = 10 4 points, centered, and scaled by its farthest point into the unit sphere, following the encoder’s pretraining convention [16]. Both heads score against the same class names, each embedded by its own text encoder into anchors 
+
+th,c ∈ Rdh ; all embeddings are ℓ2-normalized. Our goal is to predict the class label ˆY q for each mask by balancing the two heads according to their per-scene reliability (Sec. III-B), without relying on ground-truth labels. 
+
+B. SenseFuse 
+
+Our fusion builds on the observation that 2D and 3D heads exhibit disjoint failure patterns, rarely sharing identical wrong labels compared to 2D-only pairs (Table III). For a given mask q and head h ∈ { 2, 3}, the raw cosine score for class c ∈ V is sqh,c = zqh, t h,c . Because the two encoders project features into distinct text-alignment spaces, 2D image head, u2                                      
+
+> 3D shape head,  u3
+> √d′22+d′32= 3.93 = max
+> wd′
+> w
+> wrong classes correct class Alg. 1: w0→̂ w(light → dark)
+> w0= 0.5̂
+> w= 0.35 (d′2,d′3)sensitivity
+> Gaussian fi t -- solid: wrong classes, dashed: correct
+> d′2= 3.51
+> d′3= 1.76
+> Fig. 3. Visualization of weight estimation. Scores (u2, u 3)(uh=
+> Sh/σ h) for all matched mask–class pairs on Open-YOLO3D (EVA + Uni3D, ScanNet200), with marginal histograms and Gaussian fits; correct-class scores in color, wrong-class (background) scores in gray. The back-ground ellipses show the measured noise correlation — the tilt Eq. (5) deliberately ignores. The black dot marks the label-derived sensitivity
+> (d′
+> 2, d ′
+> 3), reached from the background mean. The label-free iteration of Alg. 1 (light to dark purple) converges to ˆw= 0 .35 , matching this direction.
+
+these raw scores carry head-specific baselines and are not directly comparable. We therefore center each mask’s K
+
+scores at their mean: 
+
+Sqh,c = sqh,c − 1
+
+K
+
+X
+
+> c′∈V
+
+sqh,c ′ . (1) After centering, each head is characterized by the first two statistical moments: the mean elevation μh of the correct-class score above the background, and the standard deviation 
+
+σh of background (incorrect-class) scores. We approximate both as shared across classes and masks within a scene. This yields one scene-level reliability estimate per head, rather than a claim that category statistics are strictly identical. The head’s sensitivity is defined by the discriminability index of signal detection theory [39], 
+
+d′ 
+
+> h
+
+= μh/σ h (h ∈ { 2, 3}), (2) which measures how far head h lifts the correct class above its own background noise. We fuse the heads linearly with a single scalar w:
+
+Sqc (w) = (1 −w)Sq 
+
+> 2,c
+
++wS q
+
+> 3,c
+
+, ˆY q = arg max  
+
+> c∈V
+
+Sqc (w). (3) Treating the two heads’ background scores as uncorrelated (a design choice we justify below), the fused score exhibits an elevation of (1 − w)μ2 + wμ 3 and a background variance of (1 − w)2σ22 + w2σ23 , yielding a combined sensitivity of: 
+
+d′ 
+
+> w
+
+= (1 − w)μ2 + wμ 3
+
+p(1 − w)2σ22 + w2σ23
+
+. (4) Maximizing this sensitivity by setting ∂d ′
+
+> w
+
+/∂w = 0 provides the closed-form optimal weight 
+
+wlaw = μ3/σ 23
+
+μ2/σ 22 + μ3/σ 23
+
+(5) which indicates that the optimal weight for separating the correct class from the background depends only on these empirical per-head moments. Defining πh = μh/σ 2
+
+> h
+
+, this weighting rule simplifies to wlaw = π3/(π2 + π3), which naturally lies in [0 , 1] whenever μh ≥ 0.Under a Gaussian score model with a correct-class lo-cation shift μh and shared diagonal covariance, Eq. (5) coincides with Linear Discriminant Analysis (LDA) [40], [41] and is Bayes-optimal under a uniform prior. Fig. 3 depicts these approximate Gaussian marginals. Regardless, the deployed rule relies purely on the empirical moments and requires no strict distribution assumptions. Although background scores correlate in practice ( ˆρ ∈ [0 .14 , 0.26] ), explicitly correcting for this fails to improve accuracy and can produce inadmissible weights (Table IV). We therefore deploy Eq. (5) as written, treating cross-modal correlation strictly as a diagnostic metric. 
+
+C. Label-free Estimation 
+
+The optimal weight in Eq. (5) relies only on the moments 
+
+(μh, σ h). However, measuring the correct-class elevation μh
+
+requires knowing each mask’s true label, which is exactly what is unknown in an open-vocabulary setting. We therefore substitute soft responsibilities computed from the current fused scores for the missing labels, and iterate. Hard arg max 
+
+pseudo-labels and hard confidence thresholds would make this iteration fragile, since discrete mask selections change discontinuously with w. Following the soft responsibilities of Expectation–Maximization [42], we soften both. Alg. 1 summarizes the complete procedure. For a given weight w, let νq = std c
+
+ Sqc (w) be the spread of mask q’s fused scores, and ˜mq = ( mq −med( m)) /std( m)
+
+its top-1 to top-2 margin mq standardized across the scene. The soft class responsibility P qc , the background distribution 
+
+Γqc , and the mask subset weight gq are: 
+
+P qc = softmax c
+
+ Sqc (w)/(τ0 νq ), Γqc = 1 − P qc
+
+K − 1 ,gq ∝ 1 + e−β ˜mq −1, P 
+
+> q
+
+gq = 1 . (6) Here, P q is a soft correct-class assignment, and Γq relaxes the uniform background distribution by allocating the non-correct probability mass across the remaining K − 1 classes. The term gq provides a smooth relaxation for subset se-lection, where mask participation decays continuously as a function of the scene-median margin rather than through a step function. The empirical moments are then responsibility-weighted averages across masks: 
+
+ˆμh = X
+
+> q
+
+gq X 
+
+> c
+
+P qc Sqh,c − X
+
+> c
+
+Γqc Sqh,c 
+
+
+
+,
+
+ˆσh = X
+
+> q
+
+gq hX 
+
+> c
+
+Γqc
+
+
+
+Sqh,c − X
+
+> c′
+
+Γqc′ Sqh,c ′
+
+2i1/2
+
+. (7) Both hyperparameters are dimensionless, with τ0 scaling the row spread νq and β scaling the standardized margin. As a result, they are insensitive to the absolute score scale, allowing us to use the same default settings ( τ0 = 0 .25 ,
+
+Algorithm 1 Label-free sensitivity-weighted fusion 
+
+Require: raw scores s2, s 3 ∈ RQ×K ; init w ← w0 = 0 .5;temperature τ0 = 0 .25 ; sharpness β = 8 ; max iters 
+
+Rmax = 12 ; tolerance ε = 10 −3; guard δ = 10 −12  
+
+> 1:
+
+Center rows: Sh ← sh − 1
+
+> K
+
+P 
+
+> c
+
+sh,c ▷ Eq. (1)  
+
+> 2:
+
+for r = 1 to Rmax do  
+
+> 3:
+
+F ← (1 −w) S2 + w S 3 ▷ F ≡ S(w), Eq. (3)  
+
+> 4:
+
+νq ← std c(F qc ) ▷ row spread  
+
+> 5:
+
+P qc ← softmax c
+
+ F qc /(τ0(νq +δ))  
+
+> 6:
+
+Γqc ← 1−P qc 
+
+> K−1
+
+▷ Eq. (6)  
+
+> 7:
+
+mq ← F q 
+
+> (1)
+
+− F q 
+
+> (2)
+
+▷ top-1/top-2 margin  
+
+> 8:
+
+˜mq ←  mq − med( m)/(std( m) + δ) 
+
+> 9:
+
+gq ∝ 1 + e−β ˜mq −1, P 
+
+> q
+
+gq = 1 ▷ Eq. (6)  
+
+> 10:
+
+(ˆ μh, ˆσh) ← PLUG IN(Sh, P, Γ, g ) ▷ Eq. (7)  
+
+> 11:
+
+ˆπh ← max(ˆ μh/ˆσ2
+
+> h
+
+, 0) , h ∈ { 2, 3} 
+
+> 12:
+
+w′ ← ˆπ3/(ˆ π2 + ˆ π3 + δ) ▷ Eq. (5)  
+
+> 13:
+
+if |w′ − w| < ε then w ← w′; break ▷ converged  
+
+> 14:
+
+w ← w′ 
+
+> 15:
+
+end for  
+
+> 16:
+
+ˆw ← w ▷ final scene weight  
+
+> 17:
+
+ˆY q ← arg max c
+
+(1 − ˆw)S2 + ˆ wS 3
+
+qc ▷ hard labels  
+
+> 18:
+
+return ˆw, { ˆY q }
+
+β = 8 ) for every dataset and pipeline. In the limit τ0 → 0
+
+and β → ∞ , P q converges to a one-hot arg max vector and 
+
+gq reduces to a hard median-margin indicator, confirming that Eq. (7) represents a continuous relaxation of the hard pseudo-label estimator. Eq. (6)–(7) formulate a mapping where a scene-level weight w induces soft assignments and subset weights, which in turn update the moments (ˆ μh, ˆσh). Recalculating the fu-sion weight via Eq. (5) completes the iterative cycle. Because the softened update is continuous in w and maps [0 , 1] into itself (lines 11–12 of Alg. 1), a fixed point exists by the Inter-mediate Value Theorem. More importantly, within Rmax =12 iterations, the process converges to the same dataset-level weight from every initialization w0 ∈ { 0, 0.25 , 0.5, 0.75 , 1}
+
+in all tested settings, and to within 0.01 on 302 of the 312 ScanNet200 scenes (Sec. IV). Fig. 3 illustrates how the fusion weight converges to the fixed point ( ˆw = 0 .35 ) from the default initialization w0 = 0 .5. Initialization sensitivity at the per-scene level and the rationale for setting the default to 
+
+w0 = 0 .5 are analyzed in Sec. IV. Once converged, Alg. 1 returns the final scene weight ˆw and hard labels ˆY q . For mAP evaluation, the final instance confidence for each mask is assigned a fixed value of 1.0 following the convention of existing open-vocabulary pipelines [13], [14], [17] (Sec. IV). IV. E XPERIMENTS 
+
+A. Setup 
+
+We evaluate on three open-vocabulary 3D instance seg-mentation benchmarks: the official validation sets of Scan-Net200 [18] (312 scenes, 198 instance classes) and Scan-Net++ [20] (50 scenes, 84 instance classes), alongside the standard 8-scene evaluation split of Replica [19] (8 scenes, TABLE I 
+
+SenseFuse accuracy (%) on three validation sets, each scored with its benchmark’s official class list. ˆw: label-free dataset-level weight (Alg. 1), with sd of per-scene weights ˆwi in parentheses. w⋆: oracle weight — the accuracy-maximizing per-dataset scalar, found on a 0.01 grid with ground-truth labels. 2D: standalone pipeline accuracy ( w=0 ). @ ˆw / @ ˆwi: accuracy under the dataset-level (bold, deployed) and per-scene weights — the two are on par. rec: fraction of the oracle gain recovered by ˆw. †: Open3DIS recomputed from raw cosines. OpenMask3D has no ScanNet++ proposals. ScanNet200 Replica ScanNet++ Method ˆw (sd ˆ wi) w⋆ 2D @ ˆw / @ ˆwi rec ˆw (sd ˆ wi) w⋆ 2D @ ˆw / @ ˆwi rec ˆw (sd ˆ wi) w⋆ 2D @ ˆw / @ ˆwi rec OY (EVA) 0.352 (0.09) 0.35 48.4 53.0 / 52.9 99% 0.467 (0.08) 0.31 61.2 71.2 / 69.1 93% 0.472 (0.08) 0.57 44.2 69.3 / 70.1 91% OY (CLIP) 0.231 (0.10) 0.24 41.1 48.0 / 48.0 97% 0.352 (0.07) 0.18 65.5 71.2 / 72.7 67% 0.352 (0.13) 0.44 50.2 70.5 / 70.5 93% OpenMask3D 0.219 (0.09) 0.30 29.4 33.9 / 33.9 81% 0.376 (0.07) 0.16 60.4 67.6 / 69.1 67% — — — — —Open3DIS 0.236 † (0.09) 0.21 † 37.5 † 44.6 † / 43.5 † 100% † 0.163 (0.05) 0.15 51.1 58.4 / 58.2 97% 0.085 (0.04) 0.12 68.0 71.8 / 71.6 96% 2D only: 7 of 13 correct 3D only: 5 of 13 correct SenseFuse at ̂ wi = 0.47: 10 of 13 correct 
+
+Fig. 4. Qualitative results on a single scene. Instance labeling on ScanNet200 scene0578 00 by Open-YOLO3D (EVA, 2D only), Uni3D (3D only), and SenseFuse (green: correct, red: incorrect; labeled instances keep their color, while the rest of the room is shown in gray). While the 2D and 3D heads fail on 6 and 8 instances respectively, SenseFuse ( ˆwi = 0 .47 ) correctly predicts 10 of 13 masks without degrading any existing correct labels. 
+
+48 instance classes) established by OpenMask3D [13]. To isolate the impact of label assignment from spatial pro-posal quality, we adopt binary mask proposals and the per-mask 2D evidence (mask embeddings or image crops) of three state-of-the-art pipelines, Open-YOLO3D [17], Open-Mask3D [13], and Open3DIS [14]. SenseFuse replaces only their final class assignments. Consequently, each pipeline’s native labeling serves as the controlled baseline, ensuring that our evaluation of labeling accuracy is not confounded by spatial proposal recall. The 2D head uses CLIP ViT-L/14 [15] (CLIP) mask embeddings for OpenMask3D and mask-pooled CLIP point features for Open3DIS. For Open-YOLO3D, which scores image crops directly, we report results using both EVA02-CLIP-E/14+ [43] (EVA) and CLIP. The 3D head utilizes Uni3D-giant [16] (Uni3D) as the default 3D shape encoder, with OpenShape PointBERT-ViT-g/14 [38] (OS) evaluated in our modality-pairing study (Table III). All experiments are conducted on NVIDIA TITAN V GPUs (12 GB), with every model fitting on a single GPU. We observe that standard Average Precision (AP) is heav-ily influenced by submission rules and confidence scoring strategies rather than pure classification accuracy. For ex-ample, with identical class scores, binary masks, and fixed confidence of 1.0, evaluating only the top-1 prediction per proposal [13], [14] versus retaining the top-600 entries from the flattened proposal–class matrix [17] yields 23 .9 versus 
+
+28 .3 mAP, respectively (Open-YOLO3D on ScanNet200, Table II). Since SenseFuse modifies only proposal labels while leaving masks and confidences unchanged, its AP −20 0 20 40 60 
+
+per-class accuracy change at ̂ w (pp)      
+
+> tissue box -22
+> paper towel dispenser -21
+> toilet paper -21
+> bar -18
+> lamp -18
+> curtain +21
+> jacket +23
+> armchair +29
+> shower wall +30
+> bathroom stall door +62
+
+Fig. 5. Top-5 most improved and degraded classes. Per-class accuracy change (percentage points) at the deployed ˆw for Open-YOLO3D (EVA + Uni3D) on ScanNet200, over classes with ≥ 10 matched masks. Every degraded class has a median point count under 1,000 .
+
+gains are also bounded by mask proposal recall. Therefore, we adopt labeling accuracy as our primary metric: Acc =
+
+> 1
+> |Q 0.5|
+
+P 
+
+> q∈Q 0.5
+
+I( ˆY q = Y q ), matching each proposal to its highest-overlap ground-truth instance (IoU ≥ 0.5; 6,534 
+
+masks for Open-YOLO3D/OpenMask3D and 28 ,224 masks for Open3DIS on ScanNet200). We additionally report AP under both submission rules for comparability (Table II). Because published baselines use inconsistent evaluation protocols, we re-evaluate all methods under this unified pro-tocol. Open3DIS releases only post-softmax, mask-filtered probabilities; thus, we re-run its official codebase to extract pre-softmax cosine scores on unfiltered proposals and eval-uate them in the centered space of Eq. (1) (marked with †). TABLE II              
+
+> SenseFuse AP performance under two standard submission rules: top-1prediction per proposal (top-1) vs. top-600 entries of the flattened proposal–class matrix (flat); all proposals carry fixed confidence 1.0. Bold: improvement over 2D only. †: Open3DIS from our re-run raw cosines.
+
+ScanNet200 Replica ScanNet++ Method Setting top-1 flat top-1 flat top-1 flat OY (EVA) 2D only 23.9 28.3 17.5 18.3 6.1 6.9 
+
++Uni3D 24.1 28.2 19.1 18.4 7.0 7.5 
+
+OY (CLIP) 2D only 19.5 27.1 15.9 17.9 6.3 6.8 
+
++Uni3D 20.3 27.5 16.2 18.4 7.4 7.3 
+
+OM3D 2D only 15.5 24.4 15.8 18.0 — —
+
++Uni3D 17.1 25.8 16.3 18.5 — —O3DIS 2D only 15.3 † 22.4 † 11.6 † 10.0 † 11.2 10.5 †
+
++Uni3D 16.6 † 23.6 † 14.3 † 14.5 † 12.0 12.4 †
+
+B. Main Results 
+
+Table I reports labeling accuracy across eleven (pipeline, dataset) settings. SenseFuse improves accuracy in every setting by a median of 7.1 points (ranging from +3 .8 to 
+
++25 .1 points). The label-free weight recovers a median 93% 
+
+(minimum 67% ) of the performance gain available at the oracle weight w⋆. This oracle is the single per-dataset weight that maximizes accuracy, selected on a 0.01 -spaced grid using ground-truth labels. The dataset-level estimated weight ˆw lands on an accuracy plateau close to that of the oracle, and it deviates from the mean of the per-scene weights ˆwi by at most 0.04 .We formally define oracle recovery as rec =  Acc( ˆ w) −
+
+Acc 0
+
+/ Acc( w⋆) − Acc 0
+
+, where Acc 0 is the 2D-only accu-racy at w=0 . A bootstrap over scenes puts every ScanNet200 and ScanNet++ gain above zero, while Replica’s eight scenes resolve only one of four. To align with standard conventions, we also evaluate SenseFuse using the AP metric (Table II). Although AP scores vary depending on submission rules even within identical pipelines, SenseFuse improves performance in 21 of 22 settings, achieving gains up to +4 .5 mAP. Fig. 5 shows class-wise accuracy changes. Geometry-distinctive classes (e.g., bathroom stall doors, shower walls) gain up to +62 percentage points, while small objects defined primarily by texture or context (e.g., tissue boxes, paper towel dispensers) degrade. This degradation is concentrated in sparse masks: on ScanNet200, only the lowest point-count quartile degrades ( −2.1 pp in the 1st quartile, +8 .4
+
+pp in the 3rd). Small masks ( < 1,000 points) constitute 28% 
+
+of ScanNet200 but only 0.7% of ScanNet++, aligning with ScanNet++’s superior overall gain ( +25 .1 vs. +4 .5 pp). 
+
+C. Why 2D–3D Fusion Works 
+
+Table III summarizes the performance of all four heads across every 2D/3D combination on ScanNet200. Although CLIP is a stronger standalone 2D head than Uni3D (CLIP 
+
+41 .1, Uni3D 16 .1), its fusion with EVA yields only a +1 .2
+
+point gain, whereas Uni3D achieves a +4 .5 point improve-ment. Moreover, both heads exhibit a comparable rescue rate                                                                                      
+
+> TABLE III
+> Pair complementarity on Open-YOLO3D (ScanNet200, 6,534 masks). Acc 1, Acc 2: each head’s standalone accuracy. ρ: mean per-mask Spearman rank correlation between the two heads’ class score predictions. Ident. fraction of identical wrong labels. Resc. rescue rate (first head wrong, second right). Acc: fused accuracy. Pair Modality Acc 1Acc 2ρIdent. Resc. Acc EVA +CLIP 2D +2D 48.4 41.1 0.677 41.4% 7.8% 49 .6
+> Uni3D +OS 3D +3D 16.1 3.6 0.394 4.4% 2.5% 12 .4
+> EVA +Uni3D 2D +3D 48.4 16.1 0.226 5.9% 7.5% 53 .0
+> CLIP +Uni3D 2D +3D 41.1 16.1 0.124 6.0% 9.0% 48 .0
+> EVA +OS 2D +3D 48.4 3.6 0.209 2.4% 1.6% 49 .3
+> CLIP +OS 2D +3D 41.1 3.6 0.079 2.2% 2.2% 42 .8
+> TABLE IV
+> Ablation on cross-modal independence of the correlation-corrected weight
+> wρ=σ2(d′
+> 3−ρd ′
+> 2)/σ3(d′
+> 2−ρd ′
+> 3) + σ2(d′
+> 3−ρd ′
+> 2)against Eq. (5) on ScanNet200. ˆρ: background score residual Pearson correlation estimated label-free via Alg. 1 (distinct from the rank correlation ρin Table III). Acc (∆): accuracy under wρ(and change relative to ˆw). Inad. fraction of scenes yielding inadmissible weights ( wρ/∈[0 ,1] ).
+
+Setting ˆρ Acc ( ∆) Inad. OY (EVA) 0.26 50 .1 (−2.8) 20% OY (CLIP) 0.17 45 .5 (−2.4) 9% OpenMask3D 0.18 32 .1 (−1.8) 11% Open3DIS 0.14 † 43 .7† (−0.9†) 3% †
+
+(CLIP 7.8% , Uni3D 7.5% ). Regarding error patterns, the two 2D image encoders share 41 .4% of identical incorrect labels among joint errors, whereas the 2D–3D pair shares only 5.9% . This disparity aligns with the rank correlation of the two heads’ class scores, with ρ = 0.677 for the 2D pair compared to ρ ∈ [0 .079 , 0.226] for the 2D–3D pairs. Likewise, cross-modal pairing ensures the background noise correlation remains small enough ( ˆρ ∈ [0 .14 , 0.26] ,Table IV) to support the zero cross-covariance approximation in Eq. (5). As demonstrated in Table IV, attempting to explicitly correct for the residual correlation fails to improve accuracy and can even yield inadmissible fusion weights. However, each encoder’s accuracy is also important. For instance, OpenShape is the least correlated partner, but its low performance limits gains to +0 .9 and +1 .6.Qualitatively, Fig. 4 demonstrates how the two encoders complement each other to improve overall labeling accuracy. The 2D head struggles with adjacency, misclassifying two chairs near the table as “table” and one next to a backpack as “backpack”. The 3D head corrects the first two, while fusion successfully recovers the third (mislabeled in 3D as “folded chair”). Conversely, the 3D head misidentifies “door” as “curtain”, “chair” as “folded chair”, “whiteboard” as “window”, “backpack” as “broom”, and “monitor” as “cushion”. These categories share coarse 3D geometries and require 2D texture or contextual cues for disambiguation, allowing fusion to correctly preserve the 2D predictions. For the four masks that both encoders miss, their predicted wrong labels never coincide, perfectly aligning with our low shared-error rate. Finally, two of the three errors surviving fusion are near-synonyms (“bin” for “trash can”, “desk” for “table”) that lie beyond either head’s resolution. 0.0 0.2 0.4 0.6 0.8 1.0         
+
+> fusion weight w
+> 010 20 30 40 50 60 70 80
+> labeling accuracy (%)
+> ScanNet200 Replica ScanNet++ Fig. 6. Labeling accuracy across fusion weights for Open-YOLO3D (EVA + Uni3D) across three datasets. Filled circles: oracle weight w⋆; open circles: deployed weight ˆw(near-coincide on ScanNet200); shaded bands: region within 1 pp of peak accuracy.
+
+D. Weight Estimation and Ablation 
+
+To evaluate the iteration’s robustness to initialization, we sweep w0 ∈ {0, 0.25 , 0.5, 0.75 , 1.0}. With a naive hard 
+
+arg max pseudo-label update, the estimated weights differ by more than 0.01 across initializations on 69 of the 312 
+
+ScanNet200 scenes (Open-YOLO3D, EVA). The softmax relaxation in SenseFuse suppresses the variation to only 10 
+
+scenes while keeping labeling accuracy within 0.3 points. Sweeping τ0 (20 × range) and β (64 × range) yields median accuracy spans of only 0.7 and 0.2 points (worst 2.2 and 
+
+0.7), supporting a universal default across all settings. Although the softened update guarantees the existence of a fixed point, Fig. 6 illustrates that the exact location is not critical. The estimated weight ˆw consistently falls close to a broad accuracy plateau, where the region within 1 point of the peak performance spans 0.06 –0.27 across configurations. Even where ˆw lands outside that region, as on ScanNet++, it still recovers 91% of the oracle gain. Nevertheless, this broad plateau is not shared across pipelines and datasets ( ˆw
+
+spans 0.085 –0.472 ). A single constant weight tuned jointly on all three validation sets recovers a mean 81% of the oracle gain against 89% for ˆw; in fact, a fixed w=0 .30 drives ScanNet++/Open3DIS below its 2D-only accuracy. Finally, Table V compares alternative fusion rules. The best score-level alternative (PoE) performs within 0.2 points of our linear rule, while decision-level routing loses 1.2 to 
+
+1.6 points, proving that fusing scores before the arg max op-eration is essential. Furthermore, Open-YOLO3D’s original sparse detection counts fall outside our continuous cosine model. This discrete space limits the 3D head to a minor Dirichlet prior ( +1 .0), which is why our main evaluation relies on its dense cosine variants. 
+
+E. Runtime Overhead 
+
+We measured the per-scene runtime of the 3D shape en-coder on Open-YOLO3D (EVA and Uni3D on ScanNet200), timing each stage individually on an NVIDIA TITAN V GPU (12 GB) averaged over the entire 312 -scene validation set. The baseline pipeline spends 0.9 s on proposal generation   
+
+> TABLE V
+> Ablation on the fusion rules on Open-YOLO3D (EVA + Uni3D, Scan-Net200). Acc ( ∆): fused labeling accuracy and gain over the corresponding baseline row. Each cosine-space rule is evaluated label-free at its own estimated weight ˆw.
+
+Rule Formulation Acc ( ∆)
+
+Score level (Centered cosine) Baseline 2D only (EVA) 48 .4
+
+Linear ( ours ) weighted sum, Eq. (3) 53 .0 (+4.5)PoE log-linear pool of softmaxes 52 .8 (+4 .3)MaxPool max( s2, s 3) per class 48 .4 (+0 .0)Rank Borda count 32 .0 (−16 .4)
+
+Decision level (after the arg max )
+
+Router larger standardized margin wins 46 .9 (−1.6)Veto 3D vetoes 2D by rank 47 .2 (−1.2)
+
+Vote space (Open-YOLO3D’s own label scores) Baseline Open-YOLO3D original labels 48 .6
+
+Dirichlet 3D shape as prior, α0=1 49 .6 (+1 .0)
+
+and 24 .6 s on 2D labeling ( 25 .4 s total). SenseFuse adds 
+
+4.7 s for 3D encoding and 3.5 ms (maximum 11 ms) for weight estimation (Alg. 1). Because 3D encoding depends solely on mask proposals, it can run concurrently with 2D labeling when a second GPU is available (EVA 9.4 GB, Uni3D 3.9 GB), expanding the critical path by only 3.5 ms. Even under strict single-GPU serial execution, it adds merely 
+
+4.7 s ( 18% ), confirming the practical efficiency of SenseFuse. V. C ONCLUSION 
+
+In this work, we propose SenseFuse, a training-free frame-work that incorporates native 3D shape information into the labeling stage of open-vocabulary 3D instance segmentation without distillation. Motivated by the disjoint failure patterns of 2D images and 3D shape encoders, SenseFuse selects the scene-level fusion weight that maximizes a label-free sensitivity measure to balance the two heads. Across three pipelines and three benchmarks, SenseFuse consistently im-proves labeling accuracy. It recovers the vast majority of the oracle fusion gain at a per-scene estimation cost of just milliseconds. SenseFuse currently fits one weight per scene and can-not account for instance-specific differences in modality reliability. This limitation naturally motivates future work on instance-level adaptation. Moreover, performance gains remain bounded by the weaker head, meaning that integrating stronger 3D shape encoders will directly raise the accuracy ceiling. Finally, extending this closed-form rule beyond two heads serves as a promising direction for future research. REFERENCES [1] P. Liu, Y. Orru, J. Vakil, C. Paxton, N. M. M. Shafiullah, and L. Pinto, “Demonstrating OK-Robot: What really matters in integrating open-knowledge models for robotics,” in Robotics: Science and Systems (RSS) , 2024. [2] A.-C. Cheng, H. Yin, Y. Fu, Q. Guo, R. Yang, J. Kautz, X. Wang, and S. Liu, “SpatialRGPT: Grounded spatial reasoning in vision-language models,” in Advances in Neural Information Processing Systems (NeurIPS) , 2024. [3] K. Yilmaz, A. Kruse, T. H¨ ofer, D. de Geus, and B. Leibe, “Volume Transformer: Revisiting vanilla transformers for 3D scene understand-ing,” in European Conference on Computer Vision (ECCV) , 2026. [4] A. Dai, A. X. Chang, M. Savva, M. Halber, T. Funkhouser, and M. Nießner, “ScanNet: Richly-annotated 3D reconstructions of indoor scenes,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2017. [5] J. Schult, F. Engelmann, A. Hermans, O. Litany, S. Tang, and B. Leibe, “Mask3D: Mask transformer for 3D semantic instance segmentation,” in IEEE International Conference on Robotics and Automation (ICRA) ,2023. [6] L. Jiang, H. Zhao, S. Shi, S. Liu, C.-W. Fu, and J. Jia, “PointGroup: Dual-set point grouping for 3D instance segmentation,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) ,2020. [7] T. Vu, K. Kim, T. M. Luu, X. T. Nguyen, and C. D. Yoo, “SoftGroup for 3D instance segmentation on 3D point clouds,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) ,2022. [8] T. D. Ngo, B.-S. Hua, and K. Nguyen, “ISBNet: A 3D point cloud instance segmentation network with instance-aware sampling and box-aware dynamic convolution,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2023. [9] S. Peng, K. Genova, C. M. Jiang, A. Tagliasacchi, M. Pollefeys, and T. Funkhouser, “OpenScene: 3D scene understanding with open vocabularies,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2023. [10] R. Ding, J. Yang, C. Xue, W. Zhang, S. Bai, and X. Qi, “PLA: Language-driven open-vocabulary 3D scene understanding,” in 
+
+IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2023. [11] J. Yang, R. Ding, W. Deng, Z. Wang, and X. Qi, “RegionPLC: Regional point-language contrastive learning for open-world 3D scene understanding,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024. [12] R. Ding, J. Yang, C. Xue, W. Zhang, S. Bai, and X. Qi, “Lowis3D: Language-driven open-world instance-level 3D scene understanding,” 
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence ,vol. 46, no. 12, pp. 8517–8533, 2024. [13] A. Takmaz, E. Fedele, R. W. Sumner, M. Pollefeys, F. Tombari, and F. Engelmann, “OpenMask3D: Open-vocabulary 3D instance segmentation,” in Advances in Neural Information Processing Systems (NeurIPS) , 2023. [14] P. Nguyen, T. D. Ngo, E. Kalogerakis, C. Gan, A. Tran, C. Pham, and K. Nguyen, “Open3DIS: Open-vocabulary 3D instance segmentation with 2D mask guidance,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024. [15] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark et al. , “Learning transferable visual models from natural language supervision,” in International Conference on Machine Learning (ICML) , 2021. [16] J. Zhou, J. Wang, B. Ma, Y.-S. Liu, T. Huang, and X. Wang, “Uni3D: Exploring unified 3D representation at scale,” in International Conference on Learning Representations (ICLR) , 2024. [17] M. E. A. Boudjoghra, A. Dai, J. Lahoud, H. Cholakkal, R. M. Anwer, S. Khan, and F. S. Khan, “Open-YOLO 3D: Towards fast and accurate open-vocabulary 3D instance segmentation,” in International Conference on Learning Representations (ICLR) , 2025. [18] D. Rozenberszki, O. Litany, and A. Dai, “Language-grounded indoor 3D semantic segmentation in the wild,” in European Conference on Computer Vision (ECCV) , 2022. [19] J. Straub, T. Whelan, L. Ma, Y. Chen, E. Wijmans, S. Green, J. J. Engel, R. Mur-Artal, C. Ren, S. Verma et al. , “The Replica dataset: A digital replica of indoor spaces,” arXiv preprint arXiv:1906.05797 ,2019. [20] C. Yeshwanth, Y.-C. Liu, M. Nießner, and A. Dai, “ScanNet++: A high-fidelity dataset of 3D indoor scenes,” in IEEE/CVF International Conference on Computer Vision (ICCV) , 2023, pp. 12–22. [21] C. Jia, Y. Yang, Y. Xia, Y.-T. Chen, Z. Parekh, H. Pham, Q. V. Le, Y.-H. Sung, Z. Li, and T. Duerig, “Scaling up visual and vision-language representation learning with noisy text supervision,” in International Conference on Machine Learning (ICML) , 2021. [22] Y. Zhong, J. Yang, P. Zhang, C. Li, N. Codella, L. H. Li, L. Zhou, X. Dai, L. Yuan, Y. Li et al. , “RegionCLIP: Region-based language-image pretraining,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2022. [23] X. Zhou, R. Girdhar, A. Joulin, P. Kr¨ ahenb¨ uhl, and I. Misra, “Detecting twenty-thousand classes using image-level supervision,” in European Conference on Computer Vision (ECCV) , 2022. [24] S. Liu, Z. Zeng, T. Ren, F. Li, H. Zhang, J. Yang, Q. Jiang, C. Li, J. Yang, H. Su et al. , “Grounding DINO: Marrying DINO with grounded pre-training for open-set object detection,” in European Conference on Computer Vision (ECCV) , 2024, pp. 38–55. [25] T. Cheng, L. Song, Y. Ge, W. Liu, X. Wang, and Y. Shan, “YOLO-World: Real-time open-vocabulary object detection,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) ,2024. [26] B. Li, K. Q. Weinberger, S. Belongie, V. Koltun, and R. Ranftl, “Language-driven semantic segmentation,” in International Confer-ence on Learning Representations (ICLR) , 2022. [27] G. Ghiasi, X. Gu, Y. Cui, and T.-Y. Lin, “Scaling open-vocabulary image segmentation with image-level labels,” in European Conference on Computer Vision (ECCV) , 2022. [28] F. Liang, B. Wu, X. Dai, K. Li, Y. Zhao, H. Zhang, P. Zhang, P. Vajda, and D. Marculescu, “Open-vocabulary semantic segmentation with mask-adapted CLIP,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2023. [29] J. Xu, S. De Mello, S. Liu, W. Byeon, T. Breuel, J. Kautz, and X. Wang, “GroupViT: Semantic segmentation emerges from text su-pervision,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2022. [30] J. Xu, S. Liu, A. Vahdat, W. Byeon, X. Wang, and S. De Mello, “Open-vocabulary panoptic segmentation with text-to-image diffusion models,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2023. [31] D. Huynh, J. Kuen, Z. Lin, J. Gu, and E. Elhamifar, “Open-vocabulary instance segmentation via robust cross-modal pseudo-labeling,” in 
+
+IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2022. [32] A. Kirillov, E. Mintun, N. Ravi, H. Mao, C. Rolland, L. Gustafson, T. Xiao, S. Whitehead, A. C. Berg, W.-Y. Lo, P. Doll´ ar, and R. Gir-shick, “Segment anything,” in IEEE/CVF International Conference on Computer Vision (ICCV) , 2023. [33] M. Kolodiazhnyi, A. Vorontsova, A. Konushin, and D. Rukhovich, “OneFormer3D: One transformer for unified point cloud segmen-tation,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024. [34] A. Jain, P. Katara, N. Gkanatsios, A. W. Harley, G. Sarch, K. Aggar-wal, V. Chaudhary, and K. Fragkiadaki, “ODIN: A single model for 2D and 3D perception,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024. [35] S. Lu, H. Chang, E. P. Jing, A. Boularias, and K. Bekris, “OVIR-3D: Open-vocabulary 3D instance retrieval without training on 3D data,” in Conference on Robot Learning (CoRL) , 2023. [36] L. Xue, M. Gao, C. Xing, R. Mart´ ın-Mart´ ın, J. Wu, C. Xiong, R. Xu, J. C. Niebles, and S. Savarese, “ULIP: Learning a unified representa-tion of language, images, and point clouds for 3D understanding,” in 
+
+IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2023. [37] L. Xue, N. Yu, S. Zhang, A. Panagopoulou, J. Li, R. Mart´ ın-Mart´ ın, J. Wu, C. Xiong, R. Xu, J. C. Niebles et al. , “ULIP-2: Towards scalable multimodal pre-training for 3D understanding,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) ,2024. [38] M. Liu, R. Shi, K. Kuang, Y. Zhu, X. Li, S. Han, H. Cai, F. Porikli, and H. Su, “OpenShape: Scaling up 3D shape representation towards open-world understanding,” in Advances in Neural Information Processing Systems (NeurIPS) , 2023. [39] D. M. Green and J. A. Swets, Signal detection theory and psy-chophysics . Wiley, 1966, vol. 1. [40] R. A. Fisher, “The use of multiple measurements in taxonomic problems,” Annals of Eugenics , vol. 7, no. 2, pp. 179–188, 1936. [41] T. Hastie, R. Tibshirani, and J. H. Friedman, The elements of statistical learning: data mining, inference, and prediction , 2nd ed. Springer, 2009. [42] A. P. Dempster, N. M. Laird, and D. B. Rubin, “Maximum likelihood from incomplete data via the EM algorithm,” Journal of the Royal Statistical Society. Series B (Methodological) , vol. 39, no. 1, pp. 1– 38, 1977. [43] Q. Sun, Y. Fang, L. Wu, X. Wang, and Y. Cao, “EVA-CLIP: Improved training techniques for CLIP at scale,” arXiv preprint arXiv:2303.15389 , 2023.

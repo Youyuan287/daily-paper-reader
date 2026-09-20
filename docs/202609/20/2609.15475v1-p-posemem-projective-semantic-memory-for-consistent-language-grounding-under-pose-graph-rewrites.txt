@@ -1,0 +1,316 @@
+Title: P-POSEMEM: Projective Semantic Memory for Consistent Language Grounding under Pose-Graph Rewrites
+
+URL Source: https://arxiv.org/pdf/2609.15475v1
+
+Published Time: Tue, 15 Sep 2026 02:26:27 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# P-P OSE MEM : Projective Semantic Memory for Consistent Language Grounding under Pose-Graph Rewrites 
+
+Ha Sier 1 , Ali Salmasi 1 , Mengya Xu 1, Haizhou Zhang 1 , Jie Lu 2,Zhuo Zou 2 , Xianjia Yu 1 and Tomi Westerlund 1
+
+Fig. 1: P-PoseMem on one 502 s drive of the mixed loop. Centre: LiDAR map with the drifted odometry chain (grey), the loop-closed chain (black, closures in red) and events (orange). Around it, four objects seen once (top) and revisited after loop closure (bottom): the memory never re-measures the object, yet its projected posterior lands on it; the grey cross is the odometry-only prediction. 
+
+Abstract — A robot following language instructions needs its semantic memory to keep naming the same physical object while the SLAM pose graph underneath is optimized, loop-closed and compressed. Maps committing each detection to a world coordinate cannot: a closure moves the anchor it was measured from, or the solver marginalizes that anchor, and the query then selects a different object although both graphs rep-resent the same posterior. P-P OSE MEM stores each observation as an immutable event at its birth keyframe, retains the Bayes-tree elimination conditional of every marginalized keyframe, and integrates the semantic likelihood over the reconstructed joint posterior of poses, anchors and identities. Dproj , the total-variation defect between the language-goal distributions of inference-equivalent full and marginalized graphs, measures this directly. Over 40 HM3DSem scenes and 112 000 queries 
+
+This research is supported by the Research Council of Finland’s Digital Waters (DIWA) flagship (Grant No. 359247) and the DIWA Doctoral Training Pilot project funded by the Ministry of Education and Culture (Finland). Corresponding authors: Ha Sier and Xianjia Yu. 
+
+> 1
+
+Turku Intelligent Embedded and Robotic Systems (TIERS) Lab, Uni-versity of Turku, Turku, Finland. {sierha, asalmas, mengya.xu, hazhan, xianjia.yu, tovewe}@utu.fi 
+
+> 2
+
+School of Information Science and Technology, Fudan University, Shanghai, China. jlu24@m.fudan.edu.cn, zhuo@fudan.edu.cn 
+
+P-P OSE MEM reproduces the full-graph oracle ( Dproj = 0 ) and reduces goal flips against every memory-reducing baseline. On an eight-run campaign whose 761 closures rewrote the map by up to 47 m , Dproj stays below 10 −13 with 0/288 goal flips when elimination follows the closures, where every ablation and a coordinate committed at insertion flip goals it does not; under a live bounded solver the same memory flips 23 /288 
+
+against 53 for that frozen coordinate. A pre-registered negative control is detected by Dproj while leaving calibration error and navigation success unchanged, indicating that these measures capture distinct failure modes. Retrieval is held fixed by a shared frozen detector, isolating the gain to memory consistency. Code and data: https://anonymous.4open.science/r/ posemem-2328/ .
+
+I. I NTRODUCTION 
+
+A robot told to go to the fire extinguisher must resolve that phrase against a semantic memory built while it was mapping, and that memory is not static: the pose graph underneath it is optimized on every keyframe, rewritten whenever a loop closure is accepted, and compressed when-ever the solver marginalizes a keyframe. The same phrase arXiv:2609.15475v1 [cs.RO] 14 Sep 2026 must select the same physical object before and after each of them, because the person giving it sees none of them. Maps that commit each detection to a world coordinate cannot offer that guarantee. A detection’s world position depends on the pose of the keyframe that measured it, and loop closure moves that pose: on the campaign of Section IV, 761 closures moved keyframes by a median of 2–11 m ,and a coordinate frozen at birth ends a median 2.75 m 
+
+from its object, over a metre for 86 % of 1667 re-detected objects. Marginalization is worse: it removes the anchor, and a memory that kept only a marginal covariance has lost how the removed anchor depended on the poses that survive. Both are routine solver operations, and both can silently change which object a query returns. The components exist and are not joined: open-vocabulary mapping gives queryable semantic memories [1], [2], prob-abilistic grounding gives language likelihoods with uncer-tainty [3], [4], and factor-graph solvers expose the elimina-tion structure that says how a removed variable depended on those left behind [5]. Missing is a representation in which that structure reaches the query: language-addressable maps commit geometry at fusion time, scene graphs corrected un-der loop closure move a point estimate [6], and uncertainty-aware grounding carries a covariance, not the algebra that rebuilds an eliminated anchor. P-P OSE MEM (Projective PoseMem) makes each semantic observation an immutable event : a local 3D measurement with covariance, a frozen vision–language embedding and an explicit association hypothesis, in its birth keyframe’s frame and never rewritten. The Gaussian conditional the solver produces when it eliminates a keyframe is captured verbatim and linked to the events born there, so a query can draw the retained poses jointly, draw each removed anchor from its stored conditional, and integrate the semantic likelihood over the resulting posterior. A graph update edits posterior and links, never the evidence. The property is testable, and we test it directly: Dproj 
+
+is the total-variation distance between the language-goal distributions of inference-equivalent full and marginalized graphs under coupled draws, with the rate at which the arg-max object changes. Storing more numbers will not drive it to zero; transporting the posterior will, in simulation and on an eight-run robot campaign alike, where every ablation and a negative control of the same construction flip goals the memory does not. Our contributions: 1) An open-vocabulary object memory whose observations are immutable events anchored to birth keyframes: graph updates change posterior and links, never the evidence. 2) A memory interface that retains Bayes-tree elimination conditionals and rebuilds marginalized anchors at query time, with correlations a per-variable covariance discards. 3) Dproj , a graph-rewrite consistency measure on the language-goal distribution, not the pose estimate, with ab-lations and a negative control that make it discriminative. II. R ELATED WORK 
+
+Open-vocabulary mapping makes a map queryable by text: VLMaps and CLIP-Fields fuse vision–language features into a world-frame grid or field [1], [7], multimodal spatial lan-guage maps extend the fusion across modalities [8], IVLMap adds per-instance addressing [9], and ConceptGraphs and HOV-SG lift the map to object nodes of a scene graph [2], [10]; all commit each entry’s geometry at fusion time, as a function of that moment’s pose estimate. Uncertainty-aware grounding represents where a referent might be rather than where it is [3], [4], but the uncertainty stops before the graph: it is not propagated through loop closure, keyframe elimina-tion and competing associations, nor integrated over a joint posterior of poses, eliminated anchors and identities. Object-SLAM places semantic landmarks in the graph, which moves them correctly by construction, with probabilistic data as-sociation keeping identity soft [11] or discrete–continuous smoothing solving assignment and geometry together [12]; but every open-vocabulary detection as a landmark ties the graph to the detector’s output, and the solver returns one assignment. P-P OSE MEM keeps a pose graph and the association mixture as a distribution integrated at query time; none of the above defines a language-goal probability that survives loop closure and marginalization. That a closure must move the map is well handled geomet-rically: Voxgraph anchors submaps to pose-graph nodes [13], Hydra corrects a 3D scene graph under loop closure through a deformation graph [6], [14], Khronos carries that into a spatio-temporal map [15], and Clio compresses an open-set scene graph to what a task needs [16]. Our immutable event is the Voxgraph decision at the granularity of one detection; these systems transport a point estimate and do not model elimination, P-P OSE MEM transports a distribution 
+
+and guarantees the language-goal posterior. Clio, closest to our compression premise, has no equivalence test between the two maps; Dproj is that test. Marginalization, sparsifica-tion and keyframe culling are standard for bounded-memory SLAM [17], [18], [19]; those that resparsify the result trade exactness for a KL-optimal approximation, while elimination itself is exact for the pose estimate: eliminating a variable under a linear-Gaussian model yields a conditional that, re-tained, reproduces the joint, and the Bayes tree exposes it [5], [20]. We build on that theory; our contribution is to make the conditional structure it produces a first-class part of the semantic memory, so that language grounding downstream stays invariant to graph reduction: the conditional is retained, linked to the events born at the eliminated keyframe, and required to keep the query distribution equivalent, not the pose estimate. III. M ETHOD 
+
+P-P OSE MEM has three parts: an event memory that holds semantic observations in the frame they were measured from (Section III-A), a conditional record of what the solver knows about each keyframe it removes (Section III-B), and a projective query that reconstructs the joint posterior from the two and integrates the language likelihood over it loop-closure factor                   
+
+> h3(x3|x2,x6)
+> h4(x4|x2,x6)
+> h5(x5|x2,x6)h7(x7|x6,x9)
+> h8(x8|x6,x9)h10 (x10 |x9,x11 )
+> keyframe pose odometry factor semantic event, in its keyframe's frame retained stored conditional
+> x1x2x3x4x5x6x7x8x9x10 x11
+
+Fig. 2: What the memory keeps of the graph: five of eleven keyframes retained (filled), each removed pose xk leaving its conditional hk (xk | xSk ) on the survivors, with the events born at xk pointing at that record. 
+
+(Section III-C); Section III-D the measure. Figure 3 shows the three at work on one lap of the campaign, Figure 2 the graph they leave behind. 
+
+A. Immutable events at their birth keyframe 
+
+Each detection produces one append-only event: a local position zi with covariance Ri, backprojected from RGB-D into the frame of the keyframe xk(i) that measured it; a unit-normalized embedding ei of the masked crop from a frozen vision–language encoder [21]; an association hypoth-esis ai against the current object set; and the birth keyframe, timestamp and encoder version. The three factorize, 
+
+p(zi, e i, a i | xk(i), o ai ) = p(zi | xk(i), o ai ) p(ei | oai ) p(ai),
+
+(1) so geometry, semantics and identity are each revised by their own evidence. Identity is a distribution over gated candidates. An object survives the gate if the observation is inside its 99 % three-degree-of-freedom Mahalanobis el-lipsoid and the embeddings agree above a cosine floor frozen on development scenes; a surviving candidate carries 
+
+log πa − 12 d2 
+
+> a
+
++ κ cos a, and the always-present new _object 
+
+branch carries log πnew + κ, its cosine being 1 against its own embedding. The H = 32 highest-weighted candidates 
+
+per observation are kept and softmax-normalized, at most one observation per object per keyframe. Local geometry is what makes a later loop closure a change of posterior rather than of evidence : a graph update may add versioned links from an event to a keyframe, never edit a field. 
+
+B. Retaining the elimination conditional 
+
+Poses, odometry and accepted closures form a factor graph solved incrementally by iSAM2 in GTSAM [5], [20], whose Bayes tree is retained. When a keyframe xk is removed, the solver produces a Gaussian conditional on its separator Sk,the surviving poses it shared factors with, 
+
+hk(xk | xSk ) = N (xk; AkxSk + bk, Σk) , (2) captured verbatim with its separator keys, linearization points, elimination index and graph revision, and linked by a typed edge to every event born at xk; a separator eliminated later appends its own conditional to the chain. Unlike a marginal covariance, the conditional keeps how the removed anchor depends on the survivors, which decides whether two events correlated before the removal stay correlated after it. 
+
+C. Projective reconstruction and the language goal 
+
+A query collects every eliminated anchor and surviving separator its candidate events depend on and processes them in reverse elimination order: the retained poses are drawn 
+
+jointly from the current Bayes tree, then each removed keyframe from its stored conditional, one joint draw reused for every event so that shared uncertainty stays correlated. The retained conditionals turn the reduced posterior into 
+
+p(o, a, x R, x E | Z, G ′) = p(o, a, x R | Z, G ′) Y
+
+> k∈E
+
+hk(xk | xSk ) ,
+
+(3) with Z the measurements, G′ the reduced graph, o the object set, a the joint assignment of events to objects, 
+
+E the eliminated anchors and R the retained ones. The text query is encoded by the same frozen encoder; each object aggregates its events as eg = norm( P 
+
+> i
+
+wiei), wi
+
+proportional to detector confidence and inverse to tr( Ri);and the goal posterior 
+
+p(g | q, Z, G ′) ∝ X
+
+> a
+
+Z
+
+exp( τ sim( eq , e g )) p(g, a, x | Z, G ′) dx 
+
+(4) is evaluated for the goal g ∈ o with τ fitted once on held-out labelled queries. The sum over a is not enumerated: each pose draw fixes every observation’s world position and covariance and every object’s reliability-weighted state, hence which candidates pass the gate and how the mixture splits, and the per-observation weights are accumulated into a per-object mass that is averaged over the draws. Pose draws enter Equation (4) through a and eg alone, deciding which events a draw lets share an object and so what it looks like; the semantic term itself is independent of x.
+
+D. Measuring graph-rewrite consistency 
+
+The quantity that must stay invariant is the distribution the robot acts on, so we compare the goal distributions of 
+
+inference-equivalent graphs, the same factors and lineariza-tion with and without elimination, on the union of their object IDs under coupled draws, the same standard-normal residual per variable key on both sides, 
+
+Dproj = 12
+
+X
+
+> g
+
+|pfull (g | q) − pmarg (g | q)| , (5) and record whether the arg-max object changes, a goal flip .The full-graph side is a verification mirror; the robot carries only the reduced memory. Dproj = 0 for P-P OSE MEM is exact by construction when both graphs share one lineariza-tion, i.e. when elimination follows the closures; a solver that eliminates while closures keep arriving relinearizes after the conditional was captured, and the reconstruction inherits that gap (Section VI). Exactness gives a controlled verification of the representation; utility is measured separately, by the ab-lations of Section V-E and the bounded-solver experiments. IV. E XPERIMENTAL SETUP 
+
+A. Perception, simulation and baselines 
+
+Detection and segmentation use a YOLOE open-vocabulary detector [22]; crops are encoded by a frozen Fig. 3: The pipeline on three objects of one keyframe x809 : detections, the crops the encoder embedded (events εi, stored in x809 ’s frame and never edited), their squares on the map, and the 64-draw clouds once x809 is eliminated and put back from h809 under one joint draw of the retained ones. 
+
+MobileCLIP-S1 image encoder [23] under a fixed crop rule, with τ = 60 fitted on one half of a hand-audited object set and reported on the other. Every method reads the same frozen, hashed perception cache, and each query is checked to carry the same configuration, graph revision and candidate set across methods, so differences between methods are differences of representation. Simulation scenes come from HM3DSem [24], [25] rendered in Habitat [26], thresholds frozen on development scenes before the test set was opened: 40 scenes × 16 conditions, 112 000 queries answered through each of the six backends, with injectors for odometry drift, delayed loop closure, keyframe elimination at 
+
+25 /50 /75 % and association difficulty. Baselines are memory reductions of the same pipeline (B0: a world coordinate committed at fusion time, as VLMaps and CLIP-Fields; B1: the point estimate re-anchored to the current keyframe pose, as Hydra; B2: a per-variable marginal covariance, as uncertainty-aware grounding; B3: the pre-closure snapshot), and B4 is a full-graph oracle that never eliminates, the reference for Dproj . The memory needs a back end that exposes elimination conditionals: GTSAM’s Bayes tree does, g2o and Ceres stacks do not. 
+
+B. Robot campaign, public data and reference 
+
+The robot is a Clearpath Husky A200 with a ZED 2i stereo camera (the odometry source) and a Livox MID-360 LiDAR; perception, memory and retrieval run on board on an NVIDIA Jetson AGX Thor. Loop closures are detected , not asserted: RTAB-Map [27] proposes them over the recorded stream and accepted ones enter the graph as translation-only constraints, the proposals’ rotations being 7.8◦ off the reference at the median. Every campaign graph also carries a legacy last-to-first odometry factor; removing it moves the B0/B1/B3 flips of Table II from 52 /22 /44 to 47 /26 /28 of 
+
+288 and leaves P-P OSE MEM at zero, and we report the graphs as run. Four geometries: two compact loops of about 
+
+50 × 40 m driven three times each, one crossing between indoors and outdoors; a 184 m corridor out and back ( 757 m ); and an open 150 × 85 m area ( 864 m ); 24 632 events over 8274 objects. OpenLORIS-Scene [28] adds a wheeled robot driving the same market and corridor repeatedly with laser-SLAM ground truth; a scene’s sessions are concatenated, each starting at its ground-truth pose and drifting freely, closures vetted at 1 m . The reference, LiDAR odometry (FAST-LIO2 [29]), closes a 99 .18 m indoor loop to 0.10 % 
+
+against the stereo VIO’s 20 .07 % and vets every accepted closure; a relative reference, which is what an evaluation of graph correction rather than of absolute localization requires. 
+
+C. Queries and navigation 
+
+Consistency is measured on a fixed vocabulary of 36 campaign words against every run’s memory ( 288 queries). Retrieval accuracy, which needs a hand-labelled target, is scored on twenty audited targets per run on the six compact-loop runs ( 120 decisions) across difficulty bands by how many objects share the category (unique; few, 2–5; many, 
+
+> 5); instance correctness asks for the exact object, category 
+
+correctness for the right kind. Planning trials snap each goal to the nearest traversable cell of a LiDAR occupancy map and call the Nav2 planner [30] at the platform’s own footprint radius and at a conservative one (path efficiency: straight line over path length). Execution trials drove the robot on the compact loop to goals from its own memory for five objects tape-surveyed from the LiDAR, VIO having drifted 
+
+0.2–2.8 m by each first sighting. Identity is fixed by the survey: the memory object nearest each surveyed position with the most goal-posterior mass for the category supplies two goals, its P-P OSE MEM coordinate and its coordinate frozen at insertion (B0); a goal inside an inflated obstacle is moved to the nearest standable point and the move charged to the memory; the score is the final LiDAR pose against the surveyed object, and arrival (within 2 m , object in reach) was scored at the stop by the operator, unblinded and after the fact. 
+
+a) Reproducibility: Every number and figure is regen-erated by the scripts in the repository, which also pins the software versions; queries use 64 draws from seed 0. V. R ESULTS 
+
+A. Simulation: the oracle and the baselines 
+
+On the analytic gate (a three-pose chain, a ten-pose loop, random sparse graphs) reconstructed joint means match the TABLE I: Graph rewrites and query consistency on the campaign and on OpenLORIS-Scene: closures applied and vetted, keyframe correction under closure, and Dmax proj and goal flips over each row’s n queries, with four ablations and the negative control on the same draws, from the replay. correction [m] goal flips under ablation path keyfr. events objects applied med. max Dmax proj flips n −Assoc −Reliab neg. ctrl −Cond −Corr 
+
+our campaign, four route geometries 
+
+compact, mixed 421 3809 12 117 3395 305 3.1 14.0 5.4×10 −16 0 108 8 19 20 65 65 compact, outdoor 315 2820 7379 2458 295 2.1 9.9 6.6×10 −16 0 108 10 34 14 48 54 corridor 757 2147 2290 1036 65 10.7 47.3 9.4×10 −14 0 36 3 12 10 23 23 open area 864 2459 2846 1385 96 8.1 25.2 0 0 36 2 4 1 23 23 
+
+OpenLORIS-Scene, cross-session, sessions initialized at their ground-truth start pose 
+
+corridor 1–2 — 1105 2985 763 16 8.3 36.8 9.1×10 −16 0 25 1 2 4 12 11 market 1–2 — 1066 6886 2286 0 — — 0 0 32 10 8 5 28 28 market 1–3 — 1527 9764 3537 30 7.9 25.2 0 0 32 2 4 6 29 29 
+
+total 14 933 44 267 14 860 807 — 0 377 36 83 60 228 233 TABLE II: Every backend and ablation on the campaign, from the offline rebuild of each run’s graph (goal-flip rate with run-clustered 95 % CI and Dproj against B4, ECE, MB per 1000 keyframes beyond the shared event store; †0.08 reduced graph + 6 .12 archive, 
+
+1.6 under a fill-reducing order we did not run) and on the simulation grid’s clean condition (median latency, mean Dproj , flip rate over 
+
+8000 queries per backend); a 0 count is ≤ 1.0 % at 95 % .                                                                                    
+
+> campaign (robot) simulation flips % [CI] Dproj ECE MB ms Dproj flips B0 world point 18 [11, 26] 0.071 0.103 0.13 1.2 0.157 0.263 B1 anchor 8 [4, 11] 0.026 0.117 0.13 1.2 0.157 0.263 B2 marginals 58 [53, 62] 0.373 0.121 0.42 1013 0.070 0.096 B3 snapshot 15 [10, 19] 0.050 0.104 0.13 0.9 0.157 0.263 B4 full graph 0 [0, 0] 0.000 0.109 0.67 162 0.000 0.000 P-P OSE MEM 0 [0, 0] 0.000 0.109 6.20 †188 0.000 0.000
+> −Association 8 [6, 11] 0.045 0.116 ————
+> −Reliability 23 [17, 29] 0.074 0.122 ————negative control 15 [9, 20] 0.077 0.110 ————
+> −Conditional 56 [49, 62] 0.363 0.137 ————
+> −Correlation (=B2) 58 [53, 62] 0.373 0.121 ————
+
+TABLE III: Where the memory puts an object it saw once: ground-plane error at the revisit, predicted along the raw odometry (odom. ), from the birth coordinate ( frozen , B0) and from the birth measurement re-anchored on the loop-closed chain, which is P-POSE MEM ’s point prediction and B1’s coordinate alike ( P = B1 ), against the LiDAR trajectory; medians over objects, and the fraction landing inside the detector’s box at the revisit.                                                                                  
+
+> error [m] in box run objects pairs odom. frozen P = B1 odom. frozen P = B1 compact, mixed 1 262 12875 2.25 2.41 1.09 0.07 0.00 0.11
+> compact, mixed 2 256 14806 2.63 3.42 1.14 0.09 0.03 0.18
+> compact, mixed 3 277 16869 1.55 1.72 1.00 0.07 0.09 0.12
+> compact, outdoor 1 127 9311 3.49 1.80 0.80 0.00 0.00 0.27
+> compact, outdoor 2 136 6931 1.81 1.26 0.62 0.01 0.02 0.37
+> compact, outdoor 3 121 5585 3.17 1.66 0.83 0.13 0.07 0.24
+> corridor, 757 m 243 9642 8.30 15.49 3.25 0.04 0.00 0.14
+> open area, 864 m 245 4845 5.38 9.77 1.71 0.05 0.01 0.05 all 1667 80864 2.85 2.75 1.11 0.06 0.03 0.16
+
+full graph to better than 10 −8 and covariances to 10 −6, with 
+
+Dproj = 0 under common draws; a control that drops the cross-covariance between eliminated and retained variables fails the same gate at 6 × 10 −4. On the 40-scene grid, across every condition including 25 /50 /75 % elimination, drift and delayed closure, P-P OSE MEM ’s maximum Dproj 
+
+against the oracle B4 is 0.000 with no goal flips, the two agreeing byte-for-byte on all 32 non-key columns of 0 2 4 6 8 10 12       
+
+> horizontal error at revisit [m]
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> fraction of objects compact loops (1179 objects)
+> odometry only frozen coordinate (B0) P-PoseMem mean = B1 anchor
+> 0246810 12
+> horizontal error at revisit [m] long routes (488 objects)
+
+Fig. 4: Ground-plane error at revisit on the compact loops and the long routes (per run: Table III). The gap between frozen and P is the representation alone, and it widens with the length of the route. 
+
+the 112 000 paired rows, one per query. This certifies the implementation (Section III-D); the comparisons that follow carry the information. On the separate ablation grid the four removals order by how much structure each discards, mean 
+
+Dproj 0.010 < 0.022 < 0.043 < 0.086 for −Conditional, 
+
+−Association, −Reliability and −Correlation. Under a scene-clustered bootstrap with 10 4 resamples and Holm correction over the four baseline contrasts [31], P-POSE MEM reduces the goal-flip rate against the oracle for every baseline: −0.261 [ −0.328 , −0.196] vs. B1, −0.112 [−0.145 , −0.082] vs. B2, −0.255 [ −0.321 , −0.192] vs. B3 and vs. B0, all at Holm-corrected p ≤ 4×10 −4, the resolution floor of the resampling (the contrasts are scene-weighted bootstrap means, so they differ from the pooled rates of Table II by up to 0.02 ). Dproj itself is lower than every baseline’s, from −0.085 [ −0.092 , −0.077] (B2) to −0.159 [−0.190 , −0.133] (B1). 
+
+B. The robot campaign 
+
+Table I reports the eight runs over the four geometries of Section IV. 761 loop closures were detected, accepted and vetted against the LiDAR reference, rewriting the graph by a median of 2–11 m and up to 47 m on the corridor; 95 % 
+
+of keyframes were eliminated, 64 retained per run. Under that rewrite P-P OSE MEM ’s Dproj stays below 10 −13 and the arg-max never changes: 0 flips of 288 queries. The same queries from the same events with one part removed flip between 23 and 165 times (Table I per ablation, Table II for the run-clustered rates, Section V-E for what each removal isolates). Those are the replay’s counts; the offline rebuild of the same graphs, the source of every baseline number below, reproduces them within three flips per ablation. Answering the same queries through B0–B4 on that re-build, a coordinate frozen at insertion (B0) returns a different object from the oracle on 18 % of the 288 queries, the pre-closure snapshot (B3) on 15 % , the current optimum without uncertainty (B1) on 8 % : the motivating failure is on the robot, at the scale of the closures. The larger harm is decorrelation: independent per-variable draws (B2, also the 
+
+−Correlation ablation) flip 58 % . A distribution of the wrong shape moves the arg-max more often than a misplaced point. Calibration surprised us: the goal posterior is overconfi-dent for every backend alike (mean confidence 0.17 against an instance top-1 of 0.07 , ECE 0.10 –0.14 ), dominated by the retrieval floor of Section V-D, and the negative control is caught by Dproj and by no other measure (Section V-E). Elimination bounds the live solver, not the archive. With 64 retained poses the reduced graph is 0.08 MB per 1000 keyframes against 0.67 MB for the full linearized graph, while the retained conditionals, which are the eliminated part of its Bayes tree, cost 6.1 MB under the index order the campaign ran and 1.6 MB under a constrained COLAMD order we did not run. P-P OSE MEM trades that storage for a closure applied in 6–8 ms instead of 46 –165 ms across the four geometries. The archive-free alternative, every object a landmark variable with a bearing–range factor per event and never eliminated, is exact under pose elimination by construction and fixes identity at insertion (the −Association defect), but keeps every object in the live solver: on three compact loops ( 848 –1184 objects) a closure then costs 88 –
+
+210 ms over 3270 –4014 live dimensions against 5–6 ms over 
+
+462 –726 on those same three runs, slower than the full pose graph ( 17 –27 ms ). 
+
+a) The bounded regime, measured: Every number above is for one elimination after the last closure. We also replayed each run through the bounded solver itself (64 poses, closures re-attached to the nearest live keyframe), reconstructed every eliminated keyframe from its conditional in that conditional’s own tangent space, and compared the goal distributions with the same factor set solved without elimination ( twin ). P-P OSE MEM reads a mean Dproj of 
+
+0.034 [0 .024 , 0.046] against the twin and 0.047 [0 .032 , 0.063] 
+
+against the batch graph, with 23 and 26 flips of 288 ; the two references disagree with each other by 0.027 [0 .017 , 0.038] 
+
+and 17 flips, an interval overlapping the first: in the live bounded regime the remaining discrepancy is on the same scale as the disagreement between the un-eliminated twin and the batch optimum. A frozen coordinate on the same graph flips 53 , a reconstruction blind to the relinearization 104 .Geometry pays more: the retained poses sit 0.7–28 m (per-run medians) from the twin’s optimum and the reconstructed anchors 5–26 m , because the marginal factors kept for the eliminated chains are linear at the point of capture; re-solving those chains changes nothing, nor does a four times larger budget. Periodic re-elimination repairs it: once a retained pose has moved 2 m from its last elimination linearization, the solver re-solves the full graph from its current estimate, re-linearizes and eliminates every archived keyframe again. It triggers on two closures in five, each costing what one full-graph closure costs, and brings Dproj to 0.007 [0 .006 , 0.009] 
+
+with 6 flips, now below the references’ own disagreement, and the anchors to within the twin’s distance from the batch optimum. The goal distribution survives without the repair because poses reach it through association alone (Section III-C); a navigation goal read off the anchor needs it. Table I repeats the measurement on OpenLORIS-Scene, whose cross-session compositions rewrite the graph by a median of 8 m (maximum 37 ), like the campaign’s long routes: 46 vetted closures, Dproj at machine precision, 0 flips of 89 , and the ablations in the campaign’s order at larger size (dropping the conditional or the joint draw flips 69 and 68 
+
+of 89 ; mean Dproj 0.53 –0.65 against 0.31 –0.32 ). On market 1–2, where the vet refused both closures and the graph was never corrected, −Association flips 10 of 32 ; market 1–3 carries 3537 objects through a 25 m rewrite unchanged. 
+
+C. Where the memory puts an object it saw once 
+
+Figure 1 shows single objects; Table III and Figure 4 report all of them: 1667 objects seen on one pass and re-detected at least 60 s and one closure later (80 864 pairs). Against the LiDAR reference, the birth measurement trans-ported on the loop-closed chain lands a median 1.11 m 
+
+from the object; a coordinate committed at birth 2.75 m ,the raw odometry chain 2.85 m . That transported point is P-P OSE MEM ’s point prediction for a once-seen object and, identically, B1’s re-anchored coordinate: every geometric number here is re-anchoring’s gain over freezing, which B1 shares; what P-P OSE MEM adds over B1 is the distribution around the point (its coverage, below) and the arg-max consistency of Table II, where B1 flips 8 % and P-P OSE MEM 
+
+none. Run-clustered, the frozen median is [1 .89 , 7.31] and P-P OSE MEM ’s [0 .90 , 1.40] m , the paired difference 1.61 [0 .77 , 4.20] . The ordering holds on every run and widens with the route, twofold on the compact loops and fivefold on the corridor and the open area (Table III). P-P OSE MEM also lands inside the re-detection box more often, though there the odometry chain overtakes the frozen coordinate (Table III); the residual is the graph’s ( 3–5◦ of yaw, 7–10 ◦ of pitch, closures constraining translation only) and stereo ranging’s, about one object at 5–10 m .Calibration of that distribution remains limited by the upstream graph noise model: the nominal 95 % ellipsoid covers 33 % of the pairs ( 21 % mixed, 63 % open area), the graph’s noise model carrying a median pose spread of 
+
+0.36 m against a 1.1 m error. The two properties separate: rebuilding every graph with its sigmas scaled by k leaves the optimum in place to the millimetre and raises coverage to 0.60 , 0.79 , 0.89 and 0.98 for k = 2 , 3, 4, 8, the reduced graph still reconstructing the full graph’s draws to 10 −12 .P-P OSE MEM preserves the represented belief under graph reduction; the calibration of that belief stays determined by the upstream sensing and graph noise models, here about four times too narrow. D. Retrieval and navigation 
+
+Across 120 language decisions, instance top-1 is 6.7 % ,top-5 22 .5 % and category top-1 57 .5 % . The evaluation spans the difficulty bands and most targets fall in the hardest: 
+
+78 of 120 lie in the many band with a median of 55 same-category objects, queried by a bare noun. The bound is the shared front end. A human audit of 200 language–target pairs ( 183 judged definitely) found 28 % of the definite ones resting on a mislabelled detection (clean rate 0.721 [0 .638 , 0.800] scene-clustered, re-audit κ = 0 .775 ), and it concentrates by detector confidence and by word. Instance top-1 across backends is 5.8–8.3 % and top-5 20 .8–24 .2 % 
+
+at n = 120 , where the comparison could resolve a difference of 9 points: retrieval is statistically indistinguishable across backends, as their shared frozen front end predicts, and at that floor most flips do not alter correctness: 58 of −Conditional’s 
+
+66 audited flips exchange one wrong object for another. With retrieval held at that floor, navigation tests the coordi-nate. Of 12 planning trials 11 are reachable at the platform’s radius and 8 at the conservative one (path efficiency 0.91 and 
+
+0.96 ; over the ten drives, success weighted by path length is 
+
+0.88 for the memory against 0.86 for the frozen coordinate). In the execution trials (Section IV; the P-P OSE MEM goal is the draw mean, i.e. B1’s coordinate) all ten drives reached their goal to 0.07 –0.33 m ; the final pose was 0.27 –1.43 m 
+
+from the object under P-P OSE MEM (median 0.55 ) against 
+
+0.35 –2.44 m under the frozen coordinate (median 0.98 ). Dis-tance is not arrival: at one extinguisher the frozen coordinate, off 0.9 m on the far side of its partition, left the object out of reach, the memory’s, off 1.0 m on the near side, in reach. By the operator’s criterion the memory arrives at five of five objects and the frozen coordinate at three (the bicycle at 
+
+2.44 m is its other miss); the memory’s coordinate is closer on four of five, by 0.06 –0.55 m .
+
+E. Ablations and controls 
+
+The exactness test verifies posterior reconstruction; the ablations then identify which retained structures the equiva-lence depends on. Each ablation removes one part, leaves the perception cache, queries, graph, closures and draws untouched, and is evaluated on the same 288 robot queries. 
+
+−Conditional replaces the removed anchor by its marginal, the reduction most systems make by keeping per-keyframe covariances. −Correlation replaces joint draws by indepen-dent per-variable draws, the largest effect and one a better per-object covariance cannot repair, the missing quantity lying between objects. −Reliability flattens event weights. 
+
+−Association collapses identity to its arg-max at insertion, the smallest effect because few detections on these routes are identity-ambiguous. Table II gives each one’s rate and 
+
+Dproj . The negative control permutes stored conditionals between elimination events of equal separator dimension, so the memory keeps as many numbers of exactly the right shapes, and the wrong ones; without it Dproj = 0 could mean an insensitive metric. The floor is the draw noise: P-P OSE MEM or B4 against itself under another seed reads 0 500 1000 1500 2000 2500 3000 3500 events held in the session memory 10 2 
+
+> 10 3
+> 10 4
+> language query [ms]  context rebuild after a memory change (median, IQR) repeat on an unchanged memory (39 ms)
+> Fig. 5: Language-query cost against session-memory size, on the campaign replayed on the robot (log scale). A context rebuild after a memory change grows with the events held; every further query reuses it at 39 ms .
+
+Dproj 0.001 , 1–2 flips of 288 , forty times below the smallest ablation. 
+
+a) The pre-registered rule: P-P OSE MEM satisfies the first two pre-registered clauses, matching B4 in Dproj under common draws and lowering the goal-flip rate of B1–B3 after elimination (Section V-B, Table II). The negative control satisfies the third for Dproj alone, leaving 15-bin calibration error and simulated navigation success unchanged at 0.944 .That is consistent with the control perturbing the joint distribution rather than its mean, which is what Dproj was defined to detect and what a bin-averaged calibration error or a success rate over mean waypoints cannot. 
+
+F. Runtime and the cost of consistency 
+
+Table II (right) prices the property on the simulation grid: the three millisecond baselines carry a point estimate and flip 26 % of goals after elimination; B2 brings that to 10 % 
+
+for 1.0 s per query; P-P OSE MEM reproduces the oracle at 
+
+188 ms median, the oracle’s own order ( 162 ), five times cheaper than B2, the cost being the joint draw and the conditional walk over 64 retained and 850 –2395 eliminated keyframes. Replayed at sensor rate on the Jetson Thor (Figure 5; seven traced runs), the memory update costs 28 ms me-dian per keyframe over 5559 keyframes ( p95 106 ) against a ∼ 420 ms budget at 2.4 keyframes per second, and a closure 152 ms median over 243 . A query splits in two: the query-independent context is rebuilt whenever the memory changed, linear in the events held ( 0.4 s below 500 events, 
+
+4.5 s at 2000 –3500 ; 1.9 s median over 195 rebuilds), and every further query on a settled memory costs 39 ms (28 –
+
+52 ); under a query every 10 s replay throughput drops 16 % .Perception takes 83 –88 ms per keyframe, 36 with TensorRT. VI. D ISCUSSION 
+
+A. The association layer is the binding constraint 
+
+The campaign placed three fire extinguishers as known-count objects; the memory held 18 and 11 fragments of them, all near where the detector saw them. The layer fails to merge, not to place, and the reason corrected a documented belief: not the χ2 gate, which changes nothing when widened, but the new-object branch of the mixture, whose implicit cosine of 1 wins inside the median separation of same-label fragments. Correcting that prior merges a third of them and then saturates, the residual being stereo range error that no association rule crosses, so effort belongs there. 
+
+B. Scope of the guarantee 
+
+Retrieval is held fixed by the shared frozen front end, so the measured gain is consistency under graph rewrites rather than perception. The ten navigation trials are a system-level feasibility check, the memory reaching five objects of five and the frozen coordinate three; statistical evidence for the representation comes from the simulation and the campaign replay, and the negative control was not driven. A goal flip measures rewrite-induced disagreement, not task error, and 
+
+Dproj deliberately isolates that effect by comparing inference over the same factors: it is therefore silent on whether a closure was correct and on spatial-language reasoning, which Equation (4) does not model. B0–B3 are likewise controlled reductions of one pipeline, isolating memory representation from front-end differences. The formulation targets static-object memories, with no event retirement or reassociation for moving objects, and it bounds the live solver rather than the historical archive, which costs six times the Bayes tree it replaces (Table II). Exact equivalence holds under the shared linearization the campaign obtains by eliminating once after every closure; online relinearization introduces the approximation quanti-fied in Section V-B and reduced by periodic re-elimination, at a full-graph solve on two closures in five. Position calibration stays determined by the upstream sensing and graph noise models and is route-dependent (Section V-C). Campaign intervals are run-clustered over eight runs and resolve rates to about ±5 points, the larger-scale evidence being the 40-scene simulation. VII. C ONCLUSION 
+
+P-P OSE MEM keeps semantic observations as immutable events at their birth keyframes, retains the elimination con-ditional of every marginalized keyframe, and answers a language query over the reconstructed joint posterior rather than over committed points, Dproj measuring the consistency that results. It reproduces a full-graph oracle in simulation and on a robot campaign, elimination following the closures, where every ablation, the negative control and a frozen coordinate flip goals it does not. Under a live bounded solver it flips 23 of 288 against 53 for a coordinate committed at insertion, and 6 once the conditionals are periodically re-eliminated. The results separate graph-rewrite consistency from perception quality and quantify the approximation that online relinearization leaves behind. REFERENCES [1] C. Huang et al. , “Visual language maps for robot navigation,” in Proc. IEEE Int. Conf. Robot. Autom. (ICRA) , 2023, pp. 10 608–10 615. [2] Q. Gu et al. , “ConceptGraphs: Open-vocabulary 3D scene graphs for perception and planning,” in Proc. IEEE Int. Conf. Robot. Autom. (ICRA) , 2024, pp. 5021–5028. [3] X. Shao et al. , “More than a point: Capturing uncertainty with adaptive affordance heatmaps for spatial grounding in robotic tasks,” arXiv:2510.10912, 2025. [4] S. Sitdhipol et al. , “Spatial language likelihood grounding network for Bayesian fusion of human–robot observations,” arXiv:2507.19947, 2025, to appear in Proc. IEEE Int. Conf. Syst., Man, Cybern. (SMC). [5] M. Kaess et al. , “iSAM2: Incremental smoothing and mapping using the Bayes tree,” Int. J. Robot. Res. , vol. 31, no. 2, pp. 216–235, 2012. [6] N. Hughes, Y. Chang, and L. Carlone, “Hydra: A real-time spatial perception system for 3D scene graph construction and optimization,” in Proc. Robot.: Sci. Syst. (RSS) , 2022. [7] N. M. M. Shafiullah et al. , “CLIP-Fields: Weakly supervised semantic fields for robotic memory,” in Proc. Robot.: Sci. Syst. (RSS) , 2023. [8] C. Huang et al. , “Multimodal spatial language maps for robot naviga-tion and manipulation,” Int. J. Robot. Res. , 2025. [9] J. Huang et al. , “Instance-aware visual language grounding for con-sumer robot navigation,” IEEE Trans. Consum. Electron. , vol. 71, no. 4, pp. 12 519–12 526, 2025. [10] A. Werby et al. , “Hierarchical open-vocabulary 3D scene graphs for language-grounded robot navigation,” in Proc. Robot.: Sci. Syst. (RSS) ,2024. [11] S. L. Bowman et al. , “Probabilistic data association for semantic SLAM,” in Proc. IEEE Int. Conf. Robot. Autom. (ICRA) , 2017, pp. 1722–1729. [12] K. J. Doherty et al. , “Discrete-continuous smoothing and mapping,” 
+
+IEEE Robot. Autom. Lett. , vol. 7, no. 4, pp. 12 395–12 402, 2022. [13] V. Reijgwart et al. , “Voxgraph: Globally consistent, volumetric map-ping using signed distance function submaps,” IEEE Robot. Autom. Lett. , vol. 5, no. 1, pp. 227–234, 2020. [14] N. Hughes et al. , “Foundations of spatial perception for robotics: Hierarchical representations and real-time systems,” Int. J. Robot. Res. ,vol. 43, no. 10, pp. 1457–1505, 2024. [15] L. Schmid et al. , “Khronos: A unified approach for spatio-temporal metric-semantic SLAM in dynamic environments,” in Proc. Robot.: Sci. Syst. (RSS) , 2024. [16] D. Maggio et al. , “Clio: Real-time task-driven open-set 3D scene graphs,” IEEE Robot. Autom. Lett. , vol. 9, no. 10, pp. 8921–8928, 2024. [17] H. Kretzschmar and C. Stachniss, “Information-theoretic compression of pose graphs for laser-based SLAM,” Int. J. Robot. Res. , vol. 31, no. 11, pp. 1219–1230, 2012. [18] N. Carlevaris-Bianco, M. Kaess, and R. M. Eustice, “Generic node removal for factor-graph SLAM,” IEEE Trans. Robot. , vol. 30, no. 6, pp. 1371–1385, 2014. [19] M. Mazuran et al. , “Nonlinear graph sparsification for SLAM,” in 
+
+Proc. Robot.: Sci. Syst. (RSS) , 2014. [20] F. Dellaert and M. Kaess, “Factor graphs for robot perception,” Found. Trends Robot. , vol. 6, no. 1–2, pp. 1–139, 2017. [21] A. Radford et al. , “Learning transferable visual models from natural language supervision,” in Proc. Int. Conf. Mach. Learn. (ICML) , ser. PMLR, vol. 139, 2021, pp. 8748–8763. [22] A. Wang et al. , “YOLOE: Real-time seeing anything,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2025, pp. 24 591–24 602. [23] P. K. A. Vasu et al. , “MobileCLIP: Fast image-text models through multi-modal reinforced training,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2024, pp. 15 963–15 974. [24] K. Yadav et al. , “Habitat-Matterport 3D semantics dataset,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2023, pp. 4927–4936. [25] S. K. Ramakrishnan et al. , “Habitat-Matterport 3D Dataset (HM3D): 1000 large-scale 3D environments for embodied AI,” in Proc. Neural Inf. Process. Syst. Datasets and Benchmarks Track , 2021. [26] M. Savva et al. , “Habitat: A platform for embodied AI research,” in 
+
+Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2019, pp. 9338–9346. [27] M. Labbé and F. Michaud, “RTAB-Map as an open-source lidar and visual simultaneous localization and mapping library for large-scale and long-term online operation,” J. Field Robot. , vol. 36, no. 2, pp. 416–446, 2019. [28] X. Shi et al. , “Are we ready for service robots? The OpenLORIS-Scene datasets for lifelong SLAM,” in Proc. IEEE Int. Conf. Robot. Autom. (ICRA) , 2020, pp. 3139–3145. [29] W. Xu et al. , “FAST-LIO2: Fast direct LiDAR-inertial odometry,” 
+
+IEEE Trans. Robot. , vol. 38, no. 4, pp. 2053–2073, 2022. [30] S. Macenski et al. , “The Marathon 2: A navigation system,” in Proc. IEEE/RSJ Int. Conf. Intell. Robots Syst. (IROS) , 2020, pp. 2718–2725. [31] S. Holm, “A simple sequentially rejective multiple test procedure,” 
+
+Scand. J. Stat. , vol. 6, no. 2, pp. 65–70, 1979.

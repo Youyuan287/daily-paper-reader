@@ -1,0 +1,256 @@
+Title: PerSeM: Persistent Semantic Memory for Long-Horizon Open-Vocabulary UAV Mapping
+
+URL Source: https://arxiv.org/pdf/2609.19542v1
+
+Published Time: Fri, 18 Sep 2026 00:26:37 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# PerSeM: Persistent Semantic Memory for Long-Horizon Open-Vocabulary UAV Mapping 
+
+## Saurbh Singh Jamwal, Ganesh Ramakrishnan Department of Computer Science and Engineering Indian Institute of Technology Bombay 
+
+## {saurbh,ganesh}@cse.iitb.ac.in 
+
+# Abstract 
+
+Open-vocabulary segmentation enables rich semantic perception for UAVs, but frame-wise predictions can remain temporally inconsistent across repeated observa-tions and changing viewpoints. We present PerSeM, a training-free persistent semantic memory framework for long-horizon open-vocabulary UAV mapping. PerSeM associates frame-wise semantic observations with persis-tent world-space voxels and constructs a majority-based semantic memory, which is conservatively refined through history-preserving spatial refinement, trust-aware replay, and context-guided verification. Experiments on the For-est and UAVScenes benchmarks show that persistent 3D memory provides substantial gains in semantic correct-ness and temporal stability over frame-wise predictions. Beyond this strong persistent-memory baseline, PerSeM provides consistent additional improvements, improving both semantic accuracy and temporal stability across all five evaluated UAVScenes sequences. Analysis us-ing regions identified independently of the final PerSeM predictions further shows that these gains are concen-trated in semantically difficult and temporally unstable regions, where majority-based memory is most likely to remain uncertain. These results demonstrate that persistent 3D aggregation provides a strong foundation for long-horizon semantic mapping, while conservative refinement of uncertain memory states can provide ad-ditional improvements without retraining or additional neural-network inference. 
+
+# 1 Introduction 
+
+Recent advances in open-vocabulary semantic segmen-tation and large-scale vision foundation models have significantly improved semantic understanding in UAV imagery, enabling downstream robotic capabilities such as autonomous navigation, active perception, traversabil-ity reasoning, and obstacle-aware planning. By lever-aging large-scale visual and language priors, modern open-vocabulary models can recognise diverse semantic concepts without task-specific retraining, making them particularly attractive for long-horizon UAV perception in complex environments. Despite these advances, semantic predictions in UAV video streams often remain temporally unstable under viewpoint variation, sparse revisitation, and visually am-biguous scene content. Our analysis reveals that semantic fluctuations are concentrated within a relatively small subset of recurrent scene regions, where frame-wise pre-dictions fail to maintain persistent semantics in world space. Existing approaches for temporal consistency pri-marily operate in the 2D image or video domain through temporal smoothing, feature correspondence, and short-term memory mechanisms. While these methods improve visual coherence between neighboring frames, robotic interaction occurs within persistent 3D environments, where semantic information must be accumulated and maintained across multiple observations and viewpoint changes. A key observation of this work is that persistent world-space aggregation resolves much of this frame-level insta-bility: repeated observations establish reliable semantic assignments for most recurrent regions. The remaining challenge is not global semantic aggregation, but iden-tifying and correcting uncertain memory states without disturbing stable assignments. We introduce PerSeM ,a persistent semantic memory framework designed as a conservative refinement layer over persistent 3D memory. PerSeM associates semantic observations with world-space voxels, establishes a memory from repeated obser-vations, and selectively revisits uncertain states using history-preserving spatial refinement, trust-aware evi-dence replay, and contextual verification. This preserves stable assignments while allowing supported evidence to correct residual errors. Experiments on Forest and UAVScenes confirm that persistent 3D memory provides the dominant improvement over frame-wise predictions, while PerSeM further improves semantic correctness and temporal stability beyond majority memory and alterna-tive persistent fusion strategies. Our main contributions are summarised as: • We introduce PerSeM , a persistent semantic mem-ory framework for open-vocabulary UAV mapping, and identify correction of residual uncertain memory states as a key challenge after persistent world-space aggregation. • We propose a conservative memory refinement strat-egy that preserves accumulated semantic history and combines context-guided verification with trust-aware residual proposals, allowing uncertain assign-ments to be revised while preserving stable memory states. • We evaluate PerSeM on Forest and five UAVScenes 1arXiv:2609.19542v1 [cs.CV] 17 Sep 2026 sequences against frame-wise, image-space temporal, majority-memory, and alternative persistent fusion baselines. We further analyse independently iden-tified difficult regions, component roles, parameter sensitivity, and failure modes to characterise when refinement provides benefits beyond persistent ag-gregation. 
+
+# 2 Related Work 
+
+Open-Vocabulary Semantic Mapping Recent ad-vances in foundation models have significantly expanded open-vocabulary semantic perception across natural and remote sensing imagery. Segment Anything (SAM) [1] enables large-scale promptable segmentation, while SegEarth-OV [2] extends foundation-model capabilities to training-free open-vocabulary semantic segmentation for aerial and remote sensing imagery using vision-language priors. Building upon these semantic observations, several works have explored open-vocabulary spatial represen-tations. OpenScene [3] introduced language-aligned 3D scene representations through spatially consistent seman-tic features, while ConceptFusion [4] demonstrated persis-tent multimodal 3D mapping by integrating foundation-model semantics into scene representations. These works demonstrate the potential of combining open-vocabulary semantics with persistent spatial representations. In con-trast, PerSeM treats open-vocabulary segmentation out-puts as semantic observations and focuses on maintaining temporally consistent semantic memory for long-horizon mapping. 
+
+Temporal Consistency in Video Perception Tem-poral consistency has been studied in video segmentation, where the objective is to maintain semantic predictions across sequences. MaskProp [5], STCN [6], AOT [7], XMem [8], and Video K-Net [9] improve temporal coher-ence through mask propagation, feature correspondence, transformer-based association, and memory mechanisms. While these approaches effectively reduce temporal instability in image sequences, they operate primarily in image space and model short- to medium-term temporal relationships. In contrast, PerSeM formulates temporal consistency as a persistent world-space problem, where semantic observations are accumulated, revisited, and selectively refined within a long-term voxel memory to improve semantic stability over extended UAV trajecto-ries. 
+
+Persistent Semantic Mapping and Spatial Mem-ory Most existing semantic mapping systems empha-size semantic completeness, representation quality, or queryable open-vocabulary scene representations. In con-trast, PerSeM studies the temporal stability of persistent semantic memories over long-horizon UAV observations. Persistent spatial representations have become impor-tant for long-horizon scene understanding and robotic perception. SemanticFusion [10] pioneered dense seman-tic mapping by integrating semantic predictions into per-sistent volumetric maps. Subsequent systems including PanopticFusion [11], Kimera [12], and Hydra [13] demon-strated the value of persistent semantic world models for long-term perception, scene understanding, and robot interaction. More recently, vision-language models have enabled open-vocabulary semantic mapping beyond fixed category sets. VLMaps [14], OpenScene [3], Open-Fusion [15], and ConceptFusion [4] introduced language-grounded spatial representations through dense semantic features, TSDF fusion, and multimodal scene representations. Recent systems have further improved open-vocabulary mapping through probabilistic voxel representations, instance-level reasoning, and hybrid semantic memories. OpenVox [16] performs uncertainty-aware probabilistic voxel fusion for real-time open-vocabulary mapping, OVI-MAP [17] con-structs persistent instance-semantic maps through multi-view instance association, and FUS3DMaps [18] combines dense voxel and instance-level semantic embeddings using dual-layer fusion for scalable open-vocabulary mapping. OVO [19] further integrates persistent object tracking, CLIP-based semantic descriptors, and SLAM for online open-vocabulary semantic mapping. Unlike these approaches, which focus on improving semantic representations through probabilistic fusion, instance reasoning, embedding aggregation, or semantic retrieval, PerSeM targets temporal semantic stability as a first-class objective. Rather than redesigning the semantic representation, PerSeM improves the temporal reliability of persistent voxel memories through history-preserving aggregation, trust-aware replay, and context-guided verification. 
+
+Semantic Perception for UAV Autonomy Seman-tic scene understanding has become important for UAV navigation, active perception, obstacle avoidance, and autonomous decision making. Prior work has incorpo-rated semantic information into perception-aware path planning [20], semantic-aware viewpoint selection [21], obstacle-aware trajectory optimisation [22], and semantic-driven UAV navigation [23]. These studies demonstrate the role of semantic perception in autonomous UAV op-eration. However, most existing UAV systems rely on frame-wise semantic predictions that are susceptible to view-point changes, occlusions, and sparse scene revisitation. PerSeM addresses this limitation by maintaining a persis-tent voxel-level semantic memory that reinforces reliable semantic observations across repeated views and long revisit intervals, improving long-horizon semantic consis-tency while preserving semantic correctness. 
+
+# 3 Methodology 
+
+## 3.1 Overview 
+
+We propose PerSeM, a persistent semantic memory frame-work for temporally consistent open-vocabulary UAV mapping. Given frame-wise semantic predictions, depth estimates, and camera poses, PerSeM associates semantic observations with persistent world-space voxel locations rather than processing images independently. Each voxel 2① Frame-Wise OV Prediction .         
+
+> .
+> .Using SegEarthOV (frozen) .
+> .
+> .RGB Frames (from dataset)
+> Open-Vocabulary Semantic Masks ①
+> ②Persistent Voxel Memory Camera Pose 1 .
+> .
+> .Depth Per-Voxel Observation
+> Histories Majority Memory Voxel
+> Projection Camera Pose 2 Camera Pose n ②③History-Preserving Spatial Refinement
+> Own Voxel History Neighboring Histories ③
+> History Anchor Soft
+> Blend Classes
+> ④Conservative Temporal Refinement
+> Accept Retain
+> Temporal Proposal Yes No
+> Confidence
+> Agreement
+> Replay + Dual
+> Context Support? ④
+> Trust-Aware Replay
+> Volatility
+> Temporal Gap 2D Semantic Reprojection ⑤Per sistent Se mantic Memory ⑤(Evaluation Only)
+
+Figure 1: Overview of the PerSeM framework. Frame-wise semantic observations are associated with persistent world-space voxels and accumulated into observation histories. Starting from majority-based voxel memory, PerSeM constructs a history-preserving spatial anchor and selectively applies trust-aware temporal proposals that satisfy conservative replay and context-guided verification criteria. maintains an observation history across repeated views, enabling semantic evidence to accumulate over time while preserving the temporal structure of observations. Figure 1 illustrates the pipeline. PerSeM first con-structs a majority-based persistent voxel memory, which provides a semantic anchor for stable locations. A history-preserving spatial refinement then combines each voxel’s accumulated semantic distribution with those of its neigh-bors to obtain locally supported corrections without dis-carding its observation history. Trust-aware evidence replay subsequently generates temporal correction pro-posals for recurrent voxels, which are accepted only when they provide sufficient evidence over the majority assign-ment and are supported by the surrounding majority memory and neighboring semantic-history distributions. This conservative design preserves stable memory as-signments while selectively revisiting uncertain semantic states. Dense image-space reprojection is used only for evaluation and visualisation. 
+
+## 3.2 Persistent Voxel Memory 
+
+Given frame-wise semantic predictions, depth estimates, and camera poses, PerSeM backprojects valid semantic observations into world coordinates and associates them with a voxelised 3D representation. Observations from different frames and viewpoints are therefore associated whenever they correspond to the same persistent world-space voxel. To prevent densely sampled image regions from dominating the memory, observations assigned to the same voxel within a frame are aggregated into a single semantic observation using majority voting, with confi-dence given by the corresponding within-voxel semantic agreement. Each voxel v consequently maintains a temporally ordered observation history 
+
+Hv = {(ci, s i, t i)}Nv
+
+> i=1
+
+,
+
+where ci, si, and ti denote the semantic label, confi-dence, and frame index of observation i, respectively, and 
+
+Nv is the number of times the voxel has been observed. The accumulated class evidence is represented by 
+
+hv (c) = 
+
+> Nv
+
+∑
+
+> i=1
+
+si 1[ci = c],
+
+and the initial persistent-memory label is obtained as 
+
+cM (v) = arg max  
+
+> c
+
+hv (c).
+
+This majority-based memory provides the semantic anchor from which PerSeM performs subsequent refine-ment. Voxels with insufficient observation history retain this assignment, while recurrent voxels expose both the accumulated class evidence and ordered observation his-tory to the history-preserving spatial and trust-aware refinement stages described below. 
+
+## 3.3 History-Preserving Spatial Refine-ment 
+
+Majority memory treats each voxel independently and may retain locally inconsistent assignments when its ob-servation history is ambiguous. PerSeM therefore incor-porates neighboring semantic histories while preserving each voxel’s accumulated evidence. We first normalise the accumulated class evidence into probabilities as 
+
+pv (c) = hv (c)
+
+∑ 
+
+> c′
+
+hv (c′) ,
+
+and compute the mean history distribution qv (c) over the spatial neighborhood N (v). The two distributions are softly combined as ˜pv (c) = (1 − η)pv (c) + ηq v (c),qv (c) = 1
+
+|N (v)|
+
+∑ 
+
+> u∈N (v)
+
+pu(c).
+
+where η controls the contribution of neighboring his-tories. The history-preserving anchor is then cH (v) = arg max c ˜pv (c). Unlike hard neighborhood voting, this refinement in-troduces local support without discarding the voxel’s accumulated semantic evidence. Voxels modified at this stage are protected from subsequent trust-based over-writing, such that trust replay acts only as a conservative residual correction to the resulting memory. 33.4 Trust-Aware Evidence Replay 
+
+For recurrent voxels whose history anchor retains the majority-memory assignment, PerSeM uses the ordered observation history to determine whether temporal ev-idence supports an alternative label. Observations are replayed sequentially, with each observation oi assigned a trust weight based on its confidence, class volatility, semantic agreement, and temporal gap: 
+
+wi = si exp( −λv ρ(ci)) exp( −λsgi) exp( −λt∆ti),
+
+where si is the observation confidence, ρ(ci) denotes class volatility, gi indicates disagreement with the current dominant belief, and ∆ ti is the temporal gap from the preceding observation. During replay, the accumulated class evidence is expo-nentially decayed and updated as 
+
+ei = γei−1, ei(ci) ← ei(ci) + wi,
+
+where γ controls evidence decay. After processing the complete history, replay produces the temporal proposal 
+
+cT (v) = arg max  
+
+> c
+
+e(c).
+
+Unlike unrestricted trust-based relabeling, cT (v) is treated only as a correction proposal. A proposal that disagrees with the majority-memory label is considered further only when its replay evidence exceeds that of the majority label by a margin τreplay ; otherwise, the history anchor is retained. Surviving proposals are subsequently subjected to context-guided verification. 
+
+## 3.5 Conservative Context Verification 
+
+Trust proposals that pass the replay-margin criterion are accepted only when they are also supported by the surrounding semantic memory. PerSeM evaluates two complementary forms of spatial evidence: the hard ma-jority labels of neighboring voxels and their accumulated semantic-history distributions. For a candidate label c, hard contextual support from neighboring majority assignments is computed as 
+
+Shard (v, c ) = 1
+
+|N (v)|
+
+∑ 
+
+> u∈N (v)
+
+1[cM (u) = c],
+
+while history-based support is obtained from the neigh-boring distributions as 
+
+Shist (v, c ) = 1
+
+|N (v)|
+
+∑ 
+
+> u∈N (v)
+
+pu(c).
+
+A trust proposal cT (v) replaces the majority assign-ment cM (v) only when both contextual margins provide sufficient support for the proposal, 
+
+Shard (v, c T ) − Shard (v, c M ) > τ context ,Shist (v, c T ) − Shist (v, c M ) > τ context .
+
+Otherwise, the history-preserving anchor cH (v) is re-tained. Together with the replay-margin gate and protec-tion of voxels already modified by spatial refinement, this dual verification restricts trust-based corrections to loca-tions where temporal and spatial evidence agree, yielding a conservative refinement of the persistent memory. 
+
+## 3.6 Dense Semantic Reprojection 
+
+PerSeM operates entirely on the persistent world-space voxel memory. For evaluation and visualisation, the final voxel labels are reprojected into each camera view using the corresponding depth observations, camera intrinsics, and poses. The same voxel quantisation used during memory construction consistently associates image obser-vations with the refined persistent memory labels, produc-ing dense semantic maps for comparison with frame-level ground truth. Reprojection is used only for semantic evaluation, temporal stability analysis, and qualitative visualisation, and does not modify the persistent memory. 
+
+# 4 Experiments 
+
+## 4.1 Experimental Setup 
+
+We evaluate PerSeM on the Forest [24] and 
+
+UAVScenes [25] semantic video benchmarks. Forest evaluates long-term semantic stability in outdoor aerial scenes, while UAVScenes provides frame-level semantic ground truth for quantitative evaluation. Following prior open-vocabulary mapping practice, we additionally re-port grouped-taxonomy results on UAVScenes to reduce dataset–model taxonomy mismatch. We compare PerSeM against frame-wise Raw2D ,image-space exponential moving average smoothing (EMA2D ), and five persistent 3D fusion strategies op-erating on the same observations and voxel representa-tion. Raw3D Majority assigns each voxel its most frequently observed label, while Unweighted Major-ity performs equivalent hard voting without confidence weighting. Recency-Weighted gives greater weight to recent observations, Consensus + Recency addition-ally favors observations agreeing with the current consen-sus, and Pseudo-Probabilistic accumulates confidence-weighted class evidence. PerSeM instead selectively re-fines persistent memory using history-preserving spatial refinement followed by trust-aware evidence replay and context verification; its individual components are evalu-ated separately in the ablation study. The EMA decay parameter was selected using a small validation sweep, with details reported in the supplementary material. Per-formance is evaluated using Pixel Accuracy (PA) ,
+
+mIoU , and Flicker . PA and mIoU measure seman-tic correctness, while Flicker measures the percentage of valid pixels whose semantic label changes between consecutive frames, with lower values indicating greater temporal consistency. All methods use identical seman-tic observations, geometry, voxelisation, and benchmark splits. 
+
+## 4.2 Main Results 
+
+Table 1 compares semantic correctness and temporal sta-bility on Forest and UAVScenes. We include frame-wise predictions (Raw2D), image-space temporal smoothing 4(EMA2D), persistent Raw3D Majority, and alternative semantic-fusion strategies operating on the same obser-vations and voxel representation. Results are macro-averaged across two Forest sequences and five UAVScenes sequences using a single frozen configuration. Across both benchmarks, persistent 3D aggregation provides the largest improvement over frame-wise predic-tions, indicating that repeated world-space observations already resolve much of the semantic instability. The remaining headroom is therefore concentrated in residual uncertain memory states rather than the full persistent map. EMA2D strongly suppresses flicker but can sacrifice semantic accuracy, while alternative 3D fusion strategies remain near Raw3D Majority or improve one metric at the expense of others. PerSeM instead preserves sta-ble majority-memory assignments and selectively revisits uncertain states using historical reliability and context-guided support. This selective refinement consistently improves upon Raw3D Majority. On Forest, PerSeM improves PA from 83.44 to 84.02 and mIoU from 39.66 to 39.84 while reduc-ing flicker from 24.39 to 23.00. Although Consensus + Recency reaches 40.08 mIoU, it incurs substantially lower PA and higher flicker. On UAVScenes, PerSeM improves PA from 81.21 to 81.41 and mIoU from 41.50 to 41.90 while reducing flicker from 7.27 to 6.90. PerSeM is the only evaluated persistent-memory variant that improves all three metrics over Raw3D Majority at the macro level on both benchmarks, with mIoU and flicker im-provements holding across all five UAVScenes sequences. Section 4.5 shows that the improvement is further concen-trated in independently identified ambiguous and tempo-rally unstable regions, consistent with PerSeM’s intended role as a selective refinement mechanism for residual memory uncertainty. 
+
+## 4.3 Stability–Correctness Tradeoff 
+
+Figure 2 visualises the relationship between semantic cor-rectness and temporal stability on UAVScenes. Raw2D exhibits substantial temporal instability, while EMA2D strongly reduces flicker but provides limited semantic improvement. Persistent 3D fusion shifts the operating point toward higher semantic correctness and greater sta-bility, demonstrating the benefit of associating repeated observations in world space. Among persistent-memory methods, alternative vot-ing, recency, consensus, and confidence-weighted fusion strategies remain within a relatively narrow performance region. PerSeM moves beyond this region toward higher mIoU and lower flicker by selectively refining residual uncertain memory states. This separates the primary gain from persistent 3D aggregation from the additional improvement obtained through selective memory refine-ment, without relying on aggressive temporal smoothing that can reduce flicker at the expense of semantic cor-rectness. 
+
+## 4.4 Component Ablation 
+
+To isolate the roles of the refinement components, we evaluate Raw3D Majority, Trust Only, Context Only, 7 8 9 10 11 12 13 14  
+
+> Semantic Flicker (%)
+> 36 37 38 39 40 41 42
+> mIoU  (%)
+> PerSeM
+> Raw2D EMA2D Raw3D Majority Unweighted Majority Recency-Weighted Consensus + Recency Pseudo-Probabilistic PerSeM
+
+Figure 2: Semantic stability–correctness tradeoff on the UAVScenes benchmark. PerSeM achieves the best balance between semantic correctness and temporal sta-bility. History Blend Only, and the full PerSeM pipeline on the UAVScenes grouped benchmark. Trust Only applies reliability-aware temporal evidence replay without contex-tual verification, Context Only performs context-guided refinement without trust replay, and History Blend Only retains accumulated observation history as a soft spatial anchor. PerSeM Full combines history-preserving re-finement, trust-aware replay, and contextual verification. Results are summarised in Table 2. Raw3D Majority provides a strong baseline by aggre-gating repeated observations into persistent voxel as-signments. Trust replay in isolation degrades all three metrics, showing that temporal reliability alone is insuffi-cient to replace an established majority state. In contrast, Context Only improves all three metrics, while History Blend Only provides smaller but consistent gains. These results identify persistent history and contextual support as reliable refinement cues and motivate constraining trust replay rather than allowing it to determine the persistent label. The aggregate ablation, however, does not capture the scene-dependent role of trust replay. We therefore compare Context+History against the complete pipeline on two representative UAVScenes sequences in Table 3 to illustrate this semantic accuracy–stability trade-off more directly. These cases expose when residual tem-poral evidence helps or harms an established persistent state. Adding trust replay improves semantic accuracy on HKisland01, but perturbs an already stable solution on HKairport01. On HKisland01, trust replay recovers +0 .50 PA and +0 .86 mIoU relative to Context+History, although flicker increases by 0 .97 points. Conversely, on HKairport01, adding trust reduces PA and mIoU by 0 .44 and 0 .28 points and increases flicker by 0 .59 points. Trust re-play should therefore not be interpreted as a uniformly beneficial estimator. Instead, it provides a residual re-covery pathway that can recover semantic evidence when the persistent state remains unreliable, while contextual verification limits its influence when that evidence is un-supported by the surrounding persistent memory. This scene-dependent trade-off motivates retaining trust as a 5Table 1: Semantic correctness and temporal stability on Forest and UAVScenes. All persistent-memory methods use identical frame-wise semantic observations, geometry, and voxelisation. UAVScenes results are macro-averaged across five sequences. Forest UAVScenes Method PA ↑ mIoU ↑ Flicker ↓ PA ↑ mIoU ↑ Flicker ↓
+
+Raw2D 75.00 37.31 37.49 77.50 36.32 13.73 EMA2D 80.43 24.45 10.21 78.56 36.29 6.86 
+
+Raw3D Majority 83.44 39.66 24.39 81.21 41.50 7.27 Unweighted Majority 83.31 39.81 24.98 81.21 41.48 7.27 Recency-Weighted 80.85 39.64 29.53 80.07 38.56 8.22 Consensus + Recency 81.15 40.08 29.05 80.03 38.50 8.22 Pseudo-Probabilistic 83.64 39.61 23.73 81.22 41.58 7.25 PerSeM 84.02 39.84 23.00 81.41 41.90 6.90 Table 2: Component ablation on the UAVScenes grouped benchmark across five evaluated sequences. Variant PA ↑ mIoU ↑ Flicker ↓
+
+Raw3D Majority 81.21 41.50 7.27 Trust Only 80.31 38.36 8.27 Context Only 81.47 41.88 6.41 
+
+History Blend Only 81.26 41.59 7.11 PerSeM Full 81.41 41.90 6.90 Table 3: Scene-dependent effect of adding trust replay to Context+History across representative UAVScenes sequences. Scene Variant PA ↑ mIoU ↑ Flicker ↓              
+
+> HKisland01 Context+History 58.55 25.28 5.15
+> Full (+Trust) 59.05 26.14 6.12 HKairport01 Context+History 88.16 48.46 5.78
+> Full (+Trust) 87.72 48.18 6.37
+
+constrained component of the complete pipeline rather than attributing PerSeM’s overall improvement to trust weighting alone. 
+
+## 4.5 Where Does PerSeM Help? 
+
+The gains over Raw3D Majority are modest when aver-aged over the full scene because persistent majority fu-sion already provides stable assignments in many regions. To test whether PerSeM specifically benefits difficult memory states, we define challenging regions indepen-dently of the final PerSeM output. We consider: (i) 
+
+boundary regions , where the local Raw3D neighbor-hood contains multiple semantic labels; (ii) high-switch regions , where frame-wise semantic observations fre-quently change labels over time; and (iii) a difficult core , where at least two of four pre-refinement ambigu-ity cues—high observation entropy, low majority margin, high switch rate, and proximity to a semantic boundary— are present. These regions are identified using only ob-servation histories and Raw3D spatial structure; neither ground truth nor PerSeM predictions are used for their selection. Exact definitions and thresholds are provided Table 4: Performance gains over Raw3D Majority in independently identified difficult regions on UAVScenes. Regions are defined before PerSeM refinement.                     
+
+> Region Pixels (%) ∆PA ∆mIoU ∆Flicker All valid 100.00 +0.20 +0.41 -0.37 Boundary 48.13 +0.38 +0.54 -0.80 Difficult core 38.88 +0.53 +0.52 -0.92 High switch 8.28 +1.22 +0.28 -1.80
+
+in the supplementary material. Table 4 shows that the modest aggregate improvement masks substantially larger gains in regions that are diffi-cult before refinement. At semantic boundaries, the PA gain increases from +0 .20 to +0 .38 points and the flicker reduction from 0 .37 to 0 .80 points, while the difficult core reaches +0 .53 PA and a 0 .92-point flicker reduction. The effect is most pronounced for temporal stability in high-switch regions, which comprise only 8 .28% of evaluated pixels: PerSeM improves PA by 1 .22 points and reduces flicker by 1 .80 points, while retaining a positive +0 .28 mIoU gain. These results support the motivation for selective refinement: majority fusion is already effective over much of the scene, whereas retaining and selectively reconsidering observation history provides greater ben-efit in ambiguous and temporally inconsistent memory states. 
+
+## 4.6 Qualitative Results 
+
+Figure 3 presents representative examples from the Forest and UAVScenes benchmarks. Raw2D predictions exhibit substantial local fragmentation, whereas persistent ma-jority aggregation in Raw3D produces considerably more coherent, temporally stable semantic regions. This vi-sually reinforces our quantitative finding that persistent world-space aggregation accounts for the dominant reduc-tion in frame-level semantic instability across repeated observations. PerSeM operates conservatively on this persistent rep-resentation rather than broadly altering the resulting map. In both examples, the overall semantic structure established by Raw3D is retained, while the differences introduced by PerSeM are concentrated in localized re-6Figure 3: Qualitative semantic mapping results on (a) Forest and (b) UAVScenes. Raw3D majority memory resolves much of the fragmentation present in frame-wise Raw2D predictions. PerSeM subsequently performs localized refinements of residual ambiguous memory states while largely preserving already coherent persistent assignments. Table 5: Runtime and peak memory of PerSeM, averaged across all evaluated benchmark sequences. Reprojection is used only for generating image-space evaluation out-puts. Dataset Voxels History Refinement Reproj. Peak Mem. (s) (s) (s) (GB) Forest 19.4K 114.6 2.82 1748.0 0.93 UAVScenes 291.8K 54.5 39.10 353.2 3.17 gions. The Forest example shows refinement of small residual inconsistencies within otherwise coherent vegeta-tion regions, while the UAVScenes example demonstrates similarly localized changes along heterogeneous surface and structure regions. These examples complement the quantitative analysis in Section 4.5: persistent 3D aggregation provides the dominant first improvement, while PerSeM focuses its re-finement on the smaller set of residual uncertain memory states where accumulated history and local contextual evidence can reliably support a semantic update. 
+
+## 4.7 Runtime and Memory Analysis 
+
+Table 5 reports the computational cost of PerSeM on Forest and UAVScenes. We separate shared voxel-history construction from PerSeM-specific semantic refinement, while excluding the common open-vocabulary segmen-tation inference. Reprojection is reported separately because it is required only to generate dense image-space predictions for quantitative evaluation and is not needed to maintain the persistent voxel memory. PerSeM’s method-specific refinement requires 2.82 s on Forest and 39.10 s on UAVScenes. Compared with Raw3D Majority, the complete pipeline runtime in-creases by only 0.13% (1863.1 →1865.4 s) and 8.4% (412.2 →446.7 s), respectively. Reprojection dominates the measured cost, particularly on Forest, but is required only to produce image-space predictions for evaluation rather than to maintain persistent memory. Detailed comparisons with alternative fusion baselines are pro-vided in the supplementary material. Peak memory usage is 0.93 GB on Forest and 3.17 GB on UAVScenes. PerSeM operates on accumulated voxel-history statistics and requires no additional neural in-ference, retraining, or external semantic model beyond the shared open-vocabulary predictions. These measure-ments use an unoptimised research implementation and therefore characterise conservative refinement overhead rather than fully optimised deployment performance in practice. 
+
+# 5 Limitations and Future Work 
+
+PerSeM is a conservative refinement of persistent majority memory and inherits some of its limitations. Stable but incorrect majority assignments may remain unchanged, while sparse or minority classes can be absorbed by dom-inant observations. History-aware blending provides a softer mechanism for revisiting such assignments by in-corporating neighborhood evidence, but fixed blending can favor dominant local semantics and may not pre-serve rare or spatially small classes. This is relevant for safety-critical categories, motivating future work on adaptive history blending, class-aware preservation, and uncertainty-dependent evidence weighting. PerSeM relies on hand-designed trust and context cues; as indicated by the component analysis, reliability cues are not sufficient in isolation and require contextual constraints to avoid unstable corrections. Sequential trust replay introduces sensitivity to observation ordering and sampling density, motivating future order-robust temporal weighting. The framework further assumes accurate depth and camera poses, while our pose-noise analysis does not capture all effects of long-term localisation drift or correlated geometric errors. Open-vocabulary mapping is further affected by mis-7matches between model predictions and closed-set bench-mark taxonomies, as reflected by the gap between fine-grained and grouped UAVScenes evaluation. Future work will investigate learned uncertainty-aware refine-ment, adaptive history and context aggregation, explicit pose uncertainty, dynamic scenes, and scalable mem-ory representations while preserving PerSeM’s ability to selectively revisit ambiguous semantic states. 
+
+# 6 Conclusion 
+
+We presented PerSeM, a training-free persistent seman-tic memory framework for long-horizon open-vocabulary UAV mapping. PerSeM associates frame-wise semantic observations with persistent world-space voxels across repeated scene observations and conservatively refines majority memory through history-preserving aggrega-tion, trust-aware evidence replay, and context-guided verification. Experiments on Forest and UAVScenes show that per-sistent 3D aggregation provides the primary improvement over frame-wise predictions, while PerSeM provides con-sistent additional gains over the resulting strong memory baseline. Analysis of independently identified difficult regions further shows that these gains increase in se-mantically ambiguous and temporally unstable states, supporting selective refinement rather than global rewrit-ing of persistent memory. These results suggest that a key challenge in long-horizon open-vocabulary mapping is not only aggregating repeated observations, but identifying when an established semantic memory should be recon-sidered. PerSeM provides a lightweight mechanism for doing so without retraining or additional neural-network inference. 
+
+# References 
+
+[1] Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, et al. Segment Anything. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 4015–4026, 2023. [2] Kaiyu Li, Ruixun Liu, Xiangyong Cao, Xueru Bai, Feng Zhou, Deyu Meng, and Zhi Wang. SegEarth-OV: Towards Training-Free Open-Vocabulary Seg-mentation for Remote Sensing Images. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 10545–10556, 2025. [3] Songyou Peng, Kyle Genova, Chiyu Jiang, An-drea Tagliasacchi, Marc Pollefeys, and Thomas Funkhouser. OpenScene: 3D Scene Understand-ing with Open Vocabularies. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 815–824, 2023. [4] Krishna Murthy Jatavallabhula, Alihusein Kuwa-jerwala, Qiao Gu, Mohd Omama, Tao Chen, Alaa Maalouf, Shuang Li, et al. ConceptFusion: Open-Set Multimodal 3D Mapping. arXiv preprint arXiv:2302.07241 , 2023. [5] Gedas Bertasius and Lorenzo Torresani. Classify-ing, Segmenting, and Tracking Object Instances in Video with Mask Propagation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 9739–9748, 2020. [6] Ho Kei Cheng, Yu-Wing Tai, and Chi-Keung Tang. Rethinking Space-Time Networks with Improved Memory Coverage for Efficient Video Object Seg-mentation. Advances in Neural Information Pro-cessing Systems , 34:11781–11794, 2021. [7] Zongxin Yang, Yunchao Wei, and Yi Yang. Associ-ating Objects with Transformers for Video Object Segmentation. Advances in Neural Information Pro-cessing Systems , 34:2491–2502, 2021. [8] Ho Kei Cheng and Alexander G. Schwing. XMem: Long-Term Video Object Segmentation with an Atkinson-Shiffrin Memory Model. In European Conference on Computer Vision , pages 640–658. Springer Nature Switzerland, 2022. [9] Xiangtai Li, Wenwei Zhang, Jiangmiao Pang, Kai Chen, Guangliang Cheng, Yunhai Tong, and Chen Change Loy. Video K-Net: A Simple, Strong, and Unified Baseline for Video Segmentation. In Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 18847–18857, 2022. [10] John McCormac, Ankur Handa, Andrew Davison, and Stefan Leutenegger. SemanticFusion: Dense 3D Semantic Mapping with Convolutional Neural Networks. In 2017 IEEE International Conference on Robotics and Automation (ICRA) , pages 4628– 4635. IEEE, 2017. [11] Gaku Narita, Takamasa Seno, Tomoya Ishikawa, and Yasuyuki Kaji. PanopticFusion: Online Vol-umetric Semantic Mapping at the Level of Stuff and Things. In 2019 IEEE/RSJ International Con-ference on Intelligent Robots and Systems (IROS) ,pages 4205–4212. IEEE, 2019. [12] Antoni Rosinol, Marco Abate, Yun Chang, and Luca Carlone. Kimera: From SLAM to Spatial Perception with 3D Dynamic Scene Graphs. The International Journal of Robotics Research , 40(12-14):1510–1546, 2021. [13] Nathan Hughes, Yun Chang, and Luca Carlone. Hydra: A Real-Time Spatial Perception System for 3D Scene Graph Construction and Optimization. 
+
+arXiv preprint arXiv:2201.13360 , 2022. [14] Chenguang Huang, Oier Mees, Andy Zeng, and Wolfram Burgard. Visual Language Maps for Robot Navigation. In 2023 IEEE International Conference on Robotics and Automation (ICRA) , pages 10608– 10615. IEEE, 2023. 8[15] Kashu Yamazaki, Taisei Hanyu, Khoa Vo, Thang Pham, Minh Tran, Gianfranco Doretto, Anh Nguyen, and Ngan Le. Open-Fusion: Real-Time Open-Vocabulary 3D Mapping and Queryable Scene Representation. In 2024 IEEE International Con-ference on Robotics and Automation (ICRA) , pages 9411–9417. IEEE, 2024. [16] Yinan Deng, Bicheng Yao, Yihang Tang, Tianx-ing Zhou, Yi Yang, and Yufeng Yue. OpenVox: Real-time Instance-level Open-Vocabulary Proba-bilistic Voxel Representation. In Proceedings of the IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pages 1305–1311. IEEE, 2025. [17] Zilong Deng, Federico Tombari, Marc Pollefeys, Jo-hanna Wald, and Daniel Barath. OVI-MAP: Open-Vocabulary Instance-Semantic Mapping. In Proceed-ings of the IEEE/CVF Conference on Computer Vi-sion and Pattern Recognition (CVPR) , pages 12606– 12616, 2026. [18] Timon Homberger, Finn Lukas Busch, Jesús Ger-ardo Ortega Peimbert, Quantao Yang, and Olov Andersson. FUS3DMaps: Scalable and Accurate Open-Vocabulary Semantic Mapping by 3D Fusion of Voxel- and Instance-Level Layers. arXiv preprint arXiv:2605.03669 , 2026. [19] Tomas Berriel Martins, Martin R. Oswald, and Javier Civera. Open-Vocabulary Online Semantic Mapping for SLAM. IEEE Robotics and Automation Letters , 10(11):11745–11752, 2025. [20] Luca Bartolomei, Lucas Teixeira, and Margarita Chli. Perception-Aware Path Planning for UAVs Using Semantic Segmentation. In 2020 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pages 5808–5815. IEEE, 2020. [21] Luca Bartolomei, Lucas Teixeira, and Margarita Chli. Semantic-Aware Active Perception for UAVs Using Deep Reinforcement Learning. In 2021 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pages 3101–3108. IEEE, 2021. [22] Zhefan Xu, Yumeng Xiu, Xiaoyang Zhan, Baihan Chen, and Kenji Shimada. Vision-Aided UAV Nav-igation and Dynamic Obstacle Avoidance Using Gradient-Based B-Spline Trajectory Optimization. 
+
+arXiv preprint arXiv:2209.07003 , 2022. [23] Pengyu Yue, Jing Xin, Youmin Zhang, Yongchang Lu, and Mao Shan. Semantic-Driven Autonomous Visual Navigation for Unmanned Aerial Vehi-cles. IEEE Transactions on Industrial Electronics ,71(11):14853–14863, 2024. [24] Bianca-Cerasela-Zelia Blaga and Sergiu Nedevschi. Forest Inspection Dataset for Aerial Semantic Seg-mentation and Depth Estimation. arXiv preprint arXiv:2403.06621 , 2024. [25] Sijie Wang, Siqi Li, Yawei Zhang, Shangshu Yu, Shenghai Yuan, Rui She, Quanjiang Guo, JinXuan Zheng, Ong Kang Howe, Leonrich Chandra, et al. UAVScenes: A Multi-Modal Dataset for UAVs. In 
+
+Proceedings of the IEEE/CVF International Con-ference on Computer Vision (ICCV) , pages 28946– 28958, 2025. 9

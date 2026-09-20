@@ -1,0 +1,514 @@
+Title: Finder: Agentic Closed-Loop Object Finding for Embodied Grounding
+
+URL Source: https://arxiv.org/pdf/2609.18058v1
+
+Published Time: Thu, 17 Sep 2026 00:30:32 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# Finder: Agentic Closed-Loop Object Finding for Embodied Grounding 
+
+Shixiong Xu Zhiyuan Chen Song Ding Rui Luo Xiaowei Liang Dongxu Miao Zhiying Du Xiaomi Robotics Abstract: Finding the object referred to by language in a partially observed 3D scene is a core capability for embodied agents. Existing approaches either couple object search with online exploration, which can be costly when relevant obser-vations have already been captured, or query pre-built open-vocabulary maps and scene graphs in a static, one-shot fashion. We present Finder , an agentic closed-loop object-finding primitive for embodied grounding. Instead of treating grounding as passive retrieval from a fixed scene representation, Finder main-tains a typed loop state that links query-conditioned planning, scoped evidence gathering, candidate verification, and accept /continue /abort control. When evidence is incomplete or ambiguous, the loop can redirect subsequent percep-tion and comparison rather than simply returning the top retrieved object. On open-vocabulary embodied Object Retrieval in Habitat/HM3D and real-world RGB-D scenes, Finder improves the averaged 1m success rate by 15.75 points over strong baselines. The same primitive also transfers to sequential object grounding and embodied object-centric question answering, improving spatial and tempo-ral localization without changing the inner grounding protocol. Project page: 
+
+https://finder-vln.github.io .
+
+Keywords: Agentic Systems, Object Grounding, Open-Vocabulary Perception 
+
+1 Introduction 
+
+For embodied agents, objects are not just entities in a scene; they are anchors for perception, reasoning, and action. From navigation and manipulation to embodied question answering and long-horizon task execution, many downstream behaviors are organized around identifying, localizing, and revisiting task-relevant objects [1, 2, 3, 4, 5, 6]. Some systems bind object search to online exploration, which can be expensive when the relevant evidence is already present in captured observations. Many open-vocabulary systems instead use a representation-centric pipeline: they first build or maintain a semantic map or scene graph from RGB-D observations, and then treat grounding as one-shot retrieval or reranking over that representation [7, 8, 1, 9, 10, 11, 12, 13]. This paradigm can work well when the target is visually distinctive and the relevant evidence is already present in the stored scene representation. However, many embodied queries expose three recurring limitations of existing pipelines: resolving instance ambiguity , handling support grounding ,and making loop-control decisions explicit. Instance ambiguity arises when multiple same-category objects are present and the top-ranked match is not necessarily the correct instance [14, 15]. Support grounding matters for relational queries, where supporting objects must be used selectively as disambiguating evidence rather than folded into text matching [13, 16]. Implicit loop control arises when the current evidence is insufficient and the system must decide what to verify next, where to search next, and whether another round is worthwhile. In most existing pipelines, these decisions remain implicit, and information from earlier attempts is difficult to carry forward [17]. arXiv:2609.18058v1 [cs.CV] 16 Sep 2026 LLM 
+
+Chair Finder Finder 
+
+Planner Judge Selector Selection Planner Detector 
+
+Grounding With Various Context Finder Outer Harness 
+
+CONTEXT        
+
+> üStep1: go to kitchen
+> üStep2: clean table
+> •Step3: get brown one
+> pStep4: prepare for …
+> pStep5: ….
+> Color-Texture-Relation
+> Text Hint Task History
+> Space Prior Memory
+> RGBD/Poses
+> Mem1: Flower vase Loc1: (7.6,5.0,0.5)… Mem2: Bed Loc2: (-3.9,-6.4,0.7)… Mem3: Pillow Loc3: (-0.2,1.7,0.7) …
+
+Loop State Max Loops= 3
+
+> Frame Selection Filtered Candidate
+
+Loop Feedback Abort Accept 
+
+> Phrases Gen. Candidate Objects Representative Views Support Objects Mask Scores Reasons/Scores Structured Object-centric Info.
+
+## Request Find the chair near the table. Prepare the bedroom. When did you leave the building. 
+
+> Pose/Poses/Time/Text…
+> Answer
+> Instruction
+> Question Type
+> Task Decompose
+> Answer Needed Information
+
+LLM 
+
+> Evidence Collector
+> Outer Planner Outer Solver
+
+Figure 1: Overview of Finder . Object grounding is a core embodied primitive requiring multi-source context. Finder realizes it as a reusable closed-loop inner protocol, wrapped by an outer harness for task- and session-level context injection. Therefore, we argue that embodied systems need a reusable agentic closed-loop primitive for object finding. Such a primitive should not merely score candidates from a fixed scene representation. Instead, it should support an agentic loop that decides what evidence to gather next in task context (Figure 1, left). This abstraction makes grounding both analyzable and reusable, while allowing downstream tasks to inject task- and session-level context without redesigning the inner loop itself. We instantiate this primitive as Finder , shown in the center of Figure 1, which organizes one grounding episode as a five-stage loop: plan → detect → selection plan → select → judge . The planner proposes a primary target, optional supporting objects, and a scoped search budget, so the system can decide what to look for and where to gather evidence next. Candidate-centric context and support-aware verification address instance ambiguity and relational disambiguation, while the final judge determines whether to accept , continue , or abort . In this way, Finder turns object grounding from one-shot retrieval into a query-conditioned loop over evidence inspection, candidate comparison, and explicit accept/continue/abort control. The same loop can be reused through a lightweight outer harness as shown in Figure 1: downstream tasks inject resolved-object history, room hints, or benchmark constraints through the request interface, while the inner protocol remains unchanged. Across Habitat/HM3D [18, 19] and real-world RGB-D retrieval benchmarks, Finder improves averaged 1m success rate by 15.75 points over strong baselines. The same primitive also transfers effectively to sequential object grounding and embodied object-centric question answering [20, 6]. In summary, our contributions are: • Finder, a reusable agentic closed-loop object-finding primitive that makes evidence gathering, candidate comparison, and accept/continue/abort control explicit. • A lightweight outer harness for task- and session-level context management, including resolved-object history, context injection, and optional memory hints, without changing the inner loop. • Extensive experiments demonstrate the effectiveness of Finder on open-vocabulary object retrieval, sequential object grounding, and embodied object-centric question answering. 
+
+2 Related work 
+
+Open-vocabulary 3D scene understanding. Early semantic mapping systems operated over closed-set categories, limiting their applicability to household environments where the space of possi-2ble objects is unbounded [8]. Vision-language models such as CLIP enabled open-vocabulary 3D representations, including OpenScene [7], ConceptGraphs [8], HOV-SG [1], Hydra [21], and Open3DSG [10], with OVO [22], ZING-3D [23], and Clio [11] moving toward online, incremen-tal, or task-driven variants. Yet these methods still require an exhaustive pre-built or continuously maintained scene representation, which becomes harder under dynamic changes. DualMap [9], OpenIN [24], Khronos [25], DovSG [26], DynamicGSG [27], and INHerit-SG [17] address this with locally updatable object layers or spatio-temporal restructuring, but still rely on hand-designed update rules that are hard to generalize across diverse environments. Finder departs from this paradigm by using an agentic loop to decide which query-relevant evidence should be inspected next, rather than passively querying a fixed representation or relying on hand-designed update rules. 
+
+Agentic systems for embodied AI. The integration of large language and vision-language models as decision-making agents has gained traction in embodied AI [28]. SayPlan [2] and LLM-Grounder [13] ground LLMs in 3D scene graphs for task planning and visual grounding respectively. SG-Nav [29] prompts LLMs with online scene graphs for zero-shot object navigation. RoboMemory [30], Re-MEmbR [16], Mem2Ego [31], EmbodiedRAG [14], Affordance-RAG [32], MALLVi [33], and 3DSPMR [5] use memory, retrieval, or multi-agent reasoning to support long-horizon navigation, manipulation, and sequential tasks. These systems are primarily designed for manipulation or naviga-tion, and do not address task-driven open-vocabulary retrieval with closed-loop evidence refinement. Finder instead isolates object finding itself as the reusable unit: an explicit inner loop over planning, evidence gathering, candidate comparison, and accept/continue/abort control that can be wrapped by different downstream tasks. 
+
+Discussion. The works above advance open-vocabulary perception, memory-augmented reasoning, and embodied planning, but most still build or maintain a scene graph first and then consume it passively. Few systems expose target grounding itself as a reusable closed-loop primitive with explicit state, retry logic, and task-conditioned evidence allocation; Finder is designed to close this gap. 
+
+3 Method 
+
+3.1 Problem Setup and Finder Overview Problem formulation. Let V = {(It, D t, P t)}Tt=1 denote a stream of RGB-D observations, where 
+
+It ∈ RH×W ×3 is the color image, Dt ∈ RH×W is the depth map, and Pt ∈ SE (3) is the camera pose at time t. Given a language-conditioned request q, optional injected context m, and a finite perception budget, Finder iteratively proposes grounded object hypotheses and decides whether to accept the current 3D hypothesis, continue gathering evidence, or abort. 
+
+Closed-loop protocol. As shown in Figure 2, Finder executes a five-stage closed loop: plan →
+
+detect → selection plan → select → judge . Here, request and context injection are treated as pre-loop inputs rather than inner-loop stages. Within this five-stage view, plan includes request understanding, primary/support target extraction, phrase generation, scoped routing, and frame-budget allocation, while selection plan includes candidate-context construction and view allocation for verification. Only the final judge stage can terminate the episode or trigger another loop, which makes the stopping boundary explicit and keeps module replacement local. We summarize one loop as 
+
+(pℓ, F ℓ) = Plan( q, m, s ℓ−1, V), (1) 
+
+Cℓ = Detect( Fℓ, p ℓ), (2) 
+
+(uℓ, E ℓ) = SelPlan( Cℓ, p ℓ, s ℓ−1), (3) 
+
+ˆoℓ = Select( uℓ, E ℓ), (4) 
+
+(aℓ, h ℓ) = Judge(ˆ oℓ, E ℓ, s ℓ−1), (5) where pℓ is the loop search plan, Fℓ is the routed frame subset, Cℓ is the set of canonical-ized candidates, uℓ is the selection plan, Eℓ is the candidate-centric evidence context, aℓ ∈{accept , continue , abort } is the loop action, and hℓ denotes the structured hints carried to the 31.Plan               
+
+> Search/Scope plan Primary/Support phrase Hard/Soft scopes
+> 5.Judge
+> Visual check Relation check Context check
+> 4.Select
+> Visual scoring Visual comparison Match judgement
+> 3.Selection Plan
+> Candidate card Support-aware ranking
+> 2.Detect
+> SAM3 detection 3D back-projection Cluster + Dedup
+> Abort Accept
+> FinderRequest Request 𝑞
+> “find the chair near …”
+> Injected Context 𝑚
+> Memory/Room/Task…
+> RGB-D Stream 𝒱 (𝐼 !, 𝐷 !, 𝑃 !)
+> Budget ℬ
+> Finite routed frames LoopState s"#$ Seen Candidates Judge Notes/Hints Explored Regions
+> Carried across loops Short horizon memory Retry priorities Deprioritize next
+> Persistent Protocol State Outer Harness / Pre-loop Inputs
+> Continue with structured hints ℎ!
+> 𝑝 "
+> 𝐹 "
+> 𝐶 "𝑢 "
+> 𝐸 "
+> 1𝑜 "
+> Typed Close-Loop
+
+Figure 2: Core execution protocol of Finder . The reusable unit is a typed closed loop: staged execution produces explicit request, plan, detection, context, selection, decision, hint, and snapshot objects, while only the judge can advance the episode to accept, abort, or another planning round. next round. This protocol makes Finder an iterative evidence-allocation primitive rather than a passive query over a pre-built scene representation. The protocol defines functional stage boundaries rather than fixing a unique implementation; in our current instantiation, planning and loop judgment are LLM/VLM-driven, while detection is performed by SAM3 [34] on the routed frame subset. The default implementation and API-family sensitivity are reported in Appendix Table 7. 
+
+Typed state boundary. Finder is reusable because it preserves a stable protocol-state contract across loops and task wrappers. A FinderRequest stores the query together with injected task/session context and optional memory metadata; a SearchPlan stores the primary/support targets, evidence goals, and scope plan for the current loop; a LoopContext stores candidate evidence and relation summaries for verification; and a LoopState carries seen candidates and judge-produced notes and hints across retries. This state boundary keeps retries inspectable and lets planners, detectors, selectors, judges, and outer wrappers change without rewriting the closed-loop protocol. 
+
+3.2 Query-Conditioned Planning and Scoped Routing 
+
+Finder decouples target planning from search control. A SearchPlan specifies the primary object, optional supporting objects, and compact detection phrases, while a ScopePlan specifies where to search and how to allocate the perception budget. This separation lets Finder use context to choose where to search while keeping object phrases focused on what to detect. The frame router executes the scope plan by prioritizing explicit room/floor priors when available, otherwise balancing likely semantic scopes with a global reserve and previously explored constraints. Supporting targets are also executed adaptively: they can be searched globally, gathered only around primary candidates, or kept as context when active detection would not be useful. Thus, the planner directs perception toward evidence needed for the current query instead of a full mapping pass. Additional implementation details are provided in Appendix A.3. 
+
+3.3 Candidate-Centric Evidence and Verification 
+
+Given the routed frame subset and compact phrases, Finder uses phrase-conditioned SAM3 [34] detection to form 3D object candidates. The key design is to keep the subsequent reasoning candidate-centric: instead of flattening all observations into a scene-level summary, Finder builds evidence cards for primary candidates, including representative views, geometric cues, and support-aware relations. 4A selection planner then ranks the evidence cards, shortlists candidates, and chooses representative views for direct visual verification. The VLM selector is restricted to factual image-grounded assess-ment and match judgments; it does not decide whether the episode should stop. This keeps visual verification separate from loop control, leaving the judge to make the final accept , continue , or 
+
+abort decision. More details on candidate formation and evidence cards are given in Appendix A.3. 
+
+3.4 Loop Judgment and Cross-Loop Feedback 
+
+The loop judge is responsible for stopping control: it determines whether the current evidence is sufficient to accept the selected candidate, whether another loop should be executed, or whether the episode should abort. To do so, it combines four signal families: the selector’s visual facts, support-relation metrics, room-binding facts derived from room geometry and candidate pose, and short-horizon history consistency across recent loops. When the evidence remains insufficient, it emits structured next-loop hints, including candidate follow-up priorities, explored-region constraints, and whether the next loop should favor phrase retargeting or routing changes. This judge-produced feedback is the mechanism that closes the loop: it separates candidate ranking from stopping control and turns retries into structured follow-up rather than blind repetition. 
+
+3.5 Outer Harness for Task-Specific Context Injection 
+
+Beyond the default retrieval setting, Finder is adapted to downstream tasks by an outer harness that writes task-specific context into the request interface. The harness changes the context presented to the loop, but it does not modify the inner loop stages themselves. 
+
+Sequential grounding. For sequential grounding, the harness injects the current step label, previously resolved objects, and optionally future-step context. This lets the same loop ground the next target under task-progress constraints rather than treating each query as an isolated episode. 
+
+Object-centric QA. For object-centric question answering, the harness injects already mentioned entities and question-specific constraints. This lets the same loop retrieve the object evidence needed for answering while preserving the underlying grounding protocol. 
+
+4 Experiments 
+
+4.1 Experimental Setup Evaluation settings. We evaluate Finder in three settings: Object Retrieval , Sequential Grounding ,and Spatio-Temporal QA . The first tests the core closed-loop grounding capability, while the latter two test transfer to downstream object-centric embodied tasks. 
+
+Object Retrieval. We evaluate closed-loop open-vocabulary retrieval on two splits: a simulated split built on Habitat [18] with HM3D [19], covering 9 indoor scenes with RGB-D streams and poses, and a real-world split with 4 cluttered indoor environments from FSR-VLN [35]. Appendices B and C provide dataset construction details, statistics, and split diagnostics. 
+
+Sequential Grounding. We evaluate transfer to task-chain grounding on the published SG3D bench-mark following ASHiTA [20] and DAAAM [6]. This setting tests whether the same inner loop can ground an ordered chain of object-level targets rather than a single isolated query. 
+
+Spatio-Temporal QA. We evaluate transfer to object-centric question answering on OC-NaVQA following DAAAM [6]. This setting tests whether grounded object evidence can support downstream question answering under different temporal constraints. 
+
+Evaluation metrics. We evaluate across the three settings summarized in Table 1. We use ˆx, x⋆ for predicted and ground-truth 3D locations, ˆZ, Z ⋆ for predicted and ground-truth step sequences, and 
+
+ˆa, a ⋆, ˆp, p⋆, ˆt, t ⋆ for predicted and ground-truth QA answers, positions, and times. 5Table 1: Evaluation metrics grouped by task setting.                                               
+
+> Setting Metric Definition Object Retrieval S@0.5 ↑category-correct retrieval rate with ∥ˆx−x⋆∥2<0.5mS@1 ↑category-correct retrieval rate with ∥ˆx−x⋆∥2<1.0mLocErr ↓mean ∥ˆx−x⋆∥2over successful S@1 queries Sequential Grounding s-acc ↑fraction of subtasks with predicted pose inside the GT bbox t-acc ↑fraction of tasks with all subtask poses inside the GT bboxes Spatio-Temporal QA QA Acc. ↑answer match rate, i.e., ˆa=a⋆
+> PosErr ↓(m) mean ∥ˆp−p⋆∥2over questions with spatial supervision TempErr ↓(min) mean |ˆt−t⋆|over questions with temporal supervision
+
+Table 2: Object Retrieval results on simulated and real-world scenes. S@ r denotes category-correct Success@ r meters. Err denotes LocErr. Best in bold , second underlined.                                                
+
+> Simulated Real-world Average Method S@0.5 ↑S@1 ↑Err ↓S@0.5 ↑S@1 ↑Err ↓S@0.5 ↑S@1 ↑Err ↓
+> HOV-SG [1] 33.03 50.90 0.409 31.71 42.68 0.391 32.96 50.49 0.408 DualMap [9] 38.26 51.94 0.340 9.76 19.51 0.494 36.83 50.31 0.348 FSR-VLN [35] 32.65 48.90 0.419 12.20 24.39 0.532 31.62 47.67 0.422 Finder (Ours) 61.23 67.29 0.187 35.37 46.34 0.339 59.93 66.24 0.193
+
+4.2 Main Results Object Retrieval. As shown in Table 2, Finder achieves the best performance in both simulated and real-world settings, and leads on all three averaged Object Retrieval metrics. Compared with the strongest baseline result on each metric among the three baselines, it improves S@0.5 by 23.10 
+
+points, S@1 by 15.75 points, and reduces LocErr by 0.155 m . Performance is consistently higher in simulation than in real-world scenes, which we attribute mainly to real capture artifacts such as motion blur and exposure variation that make these methods less stable. 
+
+Sequential Grounding. The results on the SG3D sequential-grounding benchmark [6, 37] are reported in Table 3, which evaluates whether predicted subtask poses fall inside the corresponding ground-truth target bounding boxes across an ordered chain of object-level targets. Finder achieves the best results on both s-acc and t-acc, improving over DAAAM+GPT [6] by 3.75 and 0.98 percentage points, respectively. This is consistent with Finder’s strength in precise grounding, since a subtask is counted correct only when its predicted pose falls inside the ground-truth bounding box. 
+
+Spatio-Temporal Question Answering. The OC-NaVQA results are reported in Table 4. Finder achieves the best PosErr and TempErr, suggesting that its grounding loop transfers well to spatial and temporal localization questions. Its QA Acc. remains below that of DAAAM because some questions require aggregation over multiple grounded objects, such as counting bicycles, which is outside Finder’s current object-finding focus. 
+
+4.3 Ablation Studies 
+
+We conduct the main ablation on the simulated Object Retrieval split with 1,550 queries; additional implementation ablations are provided in Appendix A.2. 
+
+Main ablation. Table 5 isolates the main closed-loop mechanisms by removing or simplifying individual components and comparing support-object execution scopes; detailed variant definitions are listed in Appendix Table 8. Four trends are shown in Table 5. First, iteration without feed-back is not enough: Single-shot slightly outperforms No Feedback , indicating that later loops need carried notes and targeted follow-up rather than blind repetition. Second, support-aware context 6Table 3: Sequential Grounding results on SG3D [6]. Method s-acc ↑ t-acc ↑
+
+Hydra+GPT [21] 8.18 2.44 Hydra(GT)+GPT [21] 14.2 6.34 HOV-SG [1] 8.98 1.95 ASHiTA [20] 21.7 8.78 DAAAM+GPT [6] 22.16 11.22 Finder 25.91 12.20 
+
+Table 4: Spatio-Temporal QA results on OC-NaVQA [6]. QA Acc. measures answer correctness, while PosErr and TempErr measure localization quality. Method QA Acc. ↑ PosErr ↓ TempErr ↓               
+
+> ReMEmbR-2B [16, 36] 0.432 53.466 2.287 ReMEmbR-8B [16, 36] 0.463 55.894 4.106 ConceptGraphs [8] 0.299 111.29 –DAAAM [6] 0.711 41.75 1.792
+> Finder 0.540 39.04 1.433
+
+Table 5: Main ablation on the simulated split. Metrics are reported for simple, hard, and averaged queries; variant definitions are listed in Appendix Table 8.                                                                                             
+
+> S@0.5 ↑S@1 ↑LocErr ↓
+> Variant Simple Hard Avg Simple Hard Avg Simple Hard Avg Single-shot 60.91 55.35 58.26 66.95 59.81 63.55 0.187 0.168 0.178
+> No Feedback 59.80 55.07 57.55 66.58 59.95 63.42 0.196 0.173 0.186 LLM Sel. Planner 60.79 54.67 57.87 67.32 60.22 63.94 0.192 0.178 0.186 No Support Targets 62.76 53.18 58.19 69.30 59.40 64.58 0.187 0.189 0.188 Rule Selector 58.20 49.80 54.19 65.72 55.89 61.03 0.204 0.195 0.200 Rule Judge 58.57 52.91 55.87 65.60 57.92 61.94 0.197 0.177 0.188 Finder-Global 62.52 58.59 60.65 70.16 65.22 67.81 0.195 0.183 0.189 Finder-Adaptive 64.12 58.05 61.23 70.78 63.46 67.29 0.192 0.182 0.187 Finder-Local 63.13 59.00 61.16 70.41 63.73 67.23 0.196 0.169 0.184
+
+matters: No Support Targets underperforms the complete support-scope variants, and the global/adap-tive/local variants trade off coarse retrieval coverage and fine-grained localization. Third, rule-based visual decision modules degrade performance, with the larger drop from Rule Selector showing that candidate-level visual verification contributes more strongly than the lightweight judge heuristic. Fi-nally, LLM Sel. Planner underperforms the default typed selection planner, suggesting that structured shortlist organization is more stable than free-form LLM planning for this stage. 
+
+Perception budget. The left panel of Figure 3 shows that retrieval improves once the frame budget is large enough to cover relevant views. However, overly sparse sampling degrades performance because candidate comparison and loop judgment still need sufficiently dense visual evidence. This supports Finder’s default budget choice, which balances evidence coverage and efficiency. 
+
+Number of retrieval phrases. The right panel of Figure 3 shows that compact multi-phrase supervision is useful, especially when moving from a single primary phrase to a small phrase set. Phrase diversity stabilizes open-vocabulary detection and verification by avoiding dependence on one canonical object wording. Support phrases provide additional relational evidence, but their gains are less consistent, so the default uses a compact support set rather than maximizing phrase count. 
+
+4.4 Qualitative Analysis Support-aware disambiguation. Figure 4(a) shows an ambiguous query with multiple visually plausible vase-like candidates. Finder recovers the correct instance by using the support relation, the vase on the dark countertop beside the toilet, rather than object category alone, rejecting candidates with missing or mismatched local context. 
+
+Judge-guided refinement. Figure 4(b) shows a query where plausible cabinet candidates are retrieved in Loop 1 but the evidence remains incomplete. Rather than repeating the same search, the judge requests new phrases and frames, shifting Loop 2 toward the sink region and exposing the correct cabinet by filling in evidence missing from the first loop. 750 100 200 300 
+
+Max frames 
+
+> 510 20 30
+> Frame stride
+
+58.1 
+
+> LocErr 0.209
+
+63.3 
+
+> LocErr 0.200
+
+68.3 
+
+> LocErr 0.194
+
+64.6 
+
+> LocErr 0.194
+
+59.5 
+
+> LocErr 0.207
+
+63.5 
+
+> LocErr 0.190
+
+67.3 
+
+> LocErr 0.187
+
+69.4 
+
+> LocErr 0.185
+
+60.8 
+
+> LocErr 0.198
+
+64.6 
+
+> LocErr 0.192
+
+66.1 
+
+> LocErr 0.186
+
+66.3 
+
+> LocErr 0.191
+
+59.4 
+
+> LocErr 0.204
+
+62.8 
+
+> LocErr 0.201
+
+62.9 
+
+> LocErr 0.202
+
+64.5    
+
+> LocErr 0.200
+> default
+> 1234
+
+Support phrases 
+
+> 1234
+> Primary phrases
+
+63.5 
+
+> LocErr 0.195
+
+62.5 
+
+> LocErr 0.190
+
+62.6 
+
+> LocErr 0.186
+
+62.5 
+
+> LocErr 0.197
+
+67.1 
+
+> LocErr 0.191
+
+67.3 
+
+> LocErr 0.187
+
+66.8 
+
+> LocErr 0.185
+
+67.4 
+
+> LocErr 0.192
+
+68.7 
+
+> LocErr 0.192
+
+68.3 
+
+> LocErr 0.190
+
+68.6 
+
+> LocErr 0.194
+
+68.4 
+
+> LocErr 0.193
+
+67.9 
+
+> LocErr 0.187
+
+68.8 
+
+> LocErr 0.189
+
+69.2 
+
+> LocErr 0.195
+
+66.1 
+
+> LocErr 0.198
+> default
+> 60 62 64 66 68
+> Avg S@1
+> 63 64 65 66 67 68 69
+> Avg S@1
+
+Perception Budget Analysis Phrase Budget Analysis Figure 3: Design-space studies for Finder’s default budgets. Left: perception budget. Right: phrase budget. The selected defaults balance performance and efficiency. Query : clear vase with dried flowers on the 
+
+dark countertop beside the toilet   
+
+> Query info:00862-LT9Jq6dN3Ea_hard_0024 Query info: 00862-LT9Jq6dN3Ea_simple_0138
+> The table is right of sofa, but sofa is
+> teal , not brown
+
+(a) Support-aware disambiguation (b) Judge-guided refinement 
+
+Low score candidates 
+
+Clear support Unclear target 
+
+> Clear vase Dried flowers
+
+Clear target 
+
+no support! 
+
+> Dark countertop Toilet
+> Accept
+
+Query : find the white cabinet under the farmhouse sink on floor 2 in the kitchen 
+
+> Accept
+
+LOOP-1 LOOP-2 
+
+> Abort
+
+Retry with different phrases and frames 
+
+(c) Failure cases 
+
+Query : find the orange toiletry bag on the white vanity counter beside the sink 
+
+Query : silver side table to the right of the brown sofa 
+
+Ambiguity limited 
+
+> Query info: 00873-bxsVRursffK_hard_0070
+
+Perception Limited  
+
+> Query info: 00824-Dd4bFSTQ8gi_hard_0047
+> Orange toiletry bag could not be detect by Sam3
+
+Figure 4: Qualitative examples. (a) Support-aware disambiguation. (b) Judge-guided cross-loop refinement. (c) Failure cases: missed target recall and anchor-attribute mismatch. 
+
+Failure cases. Figure 4(c) highlights two loop-structured failure modes. The upper example is perception-limited: although the support object is visible and the search region is reasonable, the orange toiletry bag is never proposed as a candidate, leaving later loops with no correct target evidence to refine. The lower example is ambiguity-limited: Finder retrieves a side table with approximately correct geometry, but the anchor attribute is wrong because the nearby sofa is teal rather than brown. 
+
+5 Conclusion 
+
+We presented Finder, an agentic closed-loop primitive for object-centric grounding. Finder makes planning, scoped evidence gathering, candidate verification, and accept/continue/abort control explicit under a stable typed loop, while allowing lightweight wrappers to inject task context. Across object retrieval, sequential grounding, and object-centric question answering, the results show that explicit closed-loop grounding is a practical foundation for broader embodied behavior. 
+
+Limitations Finder currently assumes pre-captured RGB-D streams with known poses; extending the same loop to active exploration and online scene updates would reduce dependence on prior coverage. The current formulation is strongest for object-finding subproblems and does not yet fully support broader multi-object aggregation or counting. 8Acknowledgments 
+
+References 
+
+[1] A. Werby, C. Huang, M. Büchner, A. Valada, and W. Burgard. Hierarchical open-vocabulary 3d scene graphs for language-grounded robot navigation. In First Workshop on Vision-Language Models for Navigation and Manipulation at ICRA 2024 , 2024. [2] K. Rana, J. Haviland, S. Garg, J. Abou-Chakra, I. Reid, and N. Suenderhauf. Sayplan: Ground-ing large language models using 3d scene graphs for scalable robot task planning. arXiv preprint arXiv:2307.06135 , 2023. [3] M. Shridhar, J. Thomason, D. Gordon, Y. Bisk, W. Han, R. Mottaghi, L. Zettlemoyer, and D. Fox. ALFRED: A benchmark for interpreting grounded instructions for everyday tasks. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 10740–10749, 2020. [4] A. Padmakumar, J. Thomason, A. Shrivastava, P. Lange, A. Narayan-Chen, S. Gella, R. Pi-ramuthu, G. Tur, and D. Hakkani-Tur. TEACh: Task-driven embodied agents that chat. In 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , volume 36, pages 2017–2025, 2022. [5] Z. Cai, Y. Du, C. Wang, and Y. Kong. Vision to geometry: 3d spatial memory for sequential embodied mllm reasoning and exploration. arXiv preprint arXiv:2512.02458 , 2025. [6] N. Gorlo, L. Schmid, and L. Carlone. Describe anything anywhere at any moment. arXiv preprint arXiv:2512.00565 , 2025. [7] S. Peng, K. Genova, C. Jiang, A. Tagliasacchi, M. Pollefeys, T. Funkhouser, et al. Openscene: 3d scene understanding with open vocabularies. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 815–824, 2023. [8] Q. Gu, A. Kuwajerwala, S. Morin, K. M. Jatavallabhula, B. Sen, A. Agarwal, C. Rivera, W. Paul, K. Ellis, R. Chellappa, et al. Conceptgraphs: Open-vocabulary 3d scene graphs for perception and planning. In 2024 IEEE International Conference on Robotics and Automation (ICRA) ,pages 5021–5028. IEEE, 2024. [9] J. Jiang, Y. Zhu, Z. Wu, and J. Song. Dualmap: Online open-vocabulary semantic mapping for natural language navigation in dynamic changing scenes. IEEE Robotics and Automation Letters , 2025. [10] S. Koch, N. Vaskevicius, M. Colosi, P. Hermosilla, and T. Ropinski. Open3dsg: Open-vocabulary 3d scene graphs from point clouds with queryable objects and open-set relationships. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 14183–14193, 2024. [11] D. Maggio, Y. Chang, N. Hughes, M. Trang, D. Griffith, C. Dougherty, E. Cristofalo, L. Schmid, and L. Carlone. Clio: Real-time task-driven open-set 3d scene graphs. IEEE Robotics and Automation Letters , 9(10):8921–8928, 2024. [12] C. Zhang, A. Delitzas, F. Wang, R. Zhang, X. Ji, M. Pollefeys, and F. Engelmann. Open-vocabulary functional 3d scene graphs for real-world indoor spaces. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 19401–19413, 2025. [13] J. Yang, X. Chen, S. Qian, N. Madaan, M. Iyengar, D. F. Fouhey, and J. Chai. Llm-grounder: Open-vocabulary 3d visual grounding with large language model as an agent. In 2024 IEEE International Conference on Robotics and Automation (ICRA) , pages 7694–7701. IEEE, 2024. 9[14] M. Booker, G. Byrd, B. Kemp, A. Schmidt, and C. Rivera. Embodiedrag: Dynamic 3d scene graph retrieval for efficient and scalable robot task planning. arXiv preprint arXiv:2410.23968 ,2024. [15] Y. Chang, R. Chen, Z. Zhang, Y. Chen, and S. Xie. Rag-3dsg: Enhancing 3d scene graphs with re-shot guided retrieval-augmented generation. arXiv preprint arXiv:2601.10168 , 2026. [16] A. Anwar, J. Welsh, J. Biswas, S. Pouya, and Y. Chang. Remembr: Building and reasoning over long-horizon spatio-temporal memory for robot navigation. In 2025 IEEE International Conference on Robotics and Automation (ICRA) , pages 2838–2845. IEEE, 2025. [17] Y. Fang, Z. Shi, J. Qiu, Z. Chen, J. Shi, H. Xu, J. Huo, and Y. Gao. Inherit-sg: Incremental hierarchical semantic scene graphs with rag-style retrieval. arXiv preprint arXiv:2602.12971 ,2026. [18] S. K. Ramakrishnan, A. Gokaslan, E. Wijmans, O. Maksymets, A. Clegg, J. Turner, E. Under-sander, W. Galuba, A. Westbury, A. X. Chang, et al. Habitat-matterport 3d dataset (hm3d): 1000 large-scale 3d environments for embodied ai. arXiv preprint arXiv:2109.08238 , 2021. [19] K. Yadav, R. Ramrakhya, S. K. Ramakrishnan, T. Gervet, J. Turner, A. Gokaslan, N. Maestre, A. X. Chang, D. Batra, M. Savva, et al. Habitat-matterport 3d semantics dataset. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 4927–4936, 2023. [20] Y. Chang, L. Fermoselle, D. Ta, B. Bucher, L. Carlone, and J. Wang. Ashita: Automatic scene-grounded hierarchical task analysis. arXiv preprint arXiv:2504.06553 , 2025. [21] N. Hughes, Y. Chang, and L. Carlone. Hydra: A real-time spatial perception system for 3d scene graph construction and optimization. arXiv preprint arXiv:2201.13360 , 2022. [22] T. B. Martins, M. R. Oswald, and J. Civera. Open-vocabulary online semantic mapping for slam. IEEE Robotics and Automation Letters , 2025. [23] P. Saxena and J. Chiun. Zing-3d: Zero-shot incremental 3d scene graphs via vision-language models. arXiv preprint arXiv:2510.21069 , 2025. [24] Y. Tang, M. Wang, Y. Deng, Z. Zheng, J. Deng, S. Zuo, and Y. Yue. Openin: Open-vocabulary instance-oriented navigation in dynamic domestic environments. IEEE Robotics and Automation Letters , 10(9):9256–9263, 2025. [25] L. Schmid, M. Abate, Y. Chang, and L. Carlone. Khronos: A unified approach for spatio-temporal metric-semantic slam in dynamic environments. arXiv preprint arXiv:2402.13817 ,2024. [26] Z. Yan, S. Li, Z. Wang, L. Wu, H. Wang, J. Zhu, L. Chen, and J. Liu. Dynamic open-vocabulary 3d scene graphs for long-term language-guided mobile manipulation. IEEE Robotics and Automation Letters , 2025. [27] L. Ge, X. Zhu, Z. Yang, and X. Li. Dynamicgsg: Dynamic 3d gaussian scene graphs for environment adaptation. In 2025 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pages 2232–2239. IEEE, 2025. [28] S. Salimpour, L. Fu, K. Rachwał, P. Bertrand, K. O’Sullivan, R. Jakob, F. Keramat, L. Militano, G. Toffetti, H. Edelman, et al. Towards embodied agentic ai: Review and classification of llm-and vlm-driven robot autonomy and interaction. arXiv preprint arXiv:2508.05294 , 2025. [29] H. Yin, X. Xu, Z. Wu, J. Zhou, and J. Lu. Sg-nav: Online 3d scene graph prompting for llm-based zero-shot object navigation. Advances in neural information processing systems , 37: 5285–5307, 2024. 10 [30] M. Lei, H. Cai, Z. Cui, L. Tan, J. Hong, G. Hu, S. Zhu, Y. Wu, S. Jiang, G. Wang, et al. Robomemory: A brain-inspired multi-memory agentic framework for lifelong learning in physical embodied systems. In NeurIPS 2025 Workshop on Space in Vision, Language, and Embodied AI , 2025. [31] L. Zhang, Y. Liu, Z. Zhang, M. Aghaei, Y. Hu, H. Gu, M. A. Alomrani, D. G. A. Bravo, R. Karimi, A. Hamidizadeh, et al. Mem2ego: Empowering vision-language models with global-to-ego memory for long-horizon embodied navigation. arXiv preprint arXiv:2502.14254 ,2025. [32] R. Korekata, Q. Xie, Y. Bisk, and K. Sugiura. Affordance rag: Hierarchical multimodal retrieval with affordance-aware embodied memory for mobile manipulation. IEEE Robotics and Automation Letters , 11(3):2706–2713, 2026. [33] I. Ahmadi, M. Taji, A. M. Kashani, A. Jadidi, S. Kashani, and B. Khalaj. Mallvi: a multi agent framework for integrated generalized robotics manipulation. arXiv preprint arXiv:2602.16898 ,2026. [34] N. Carion, L. Gustafson, Y.-T. Hu, S. Debnath, R. Hu, D. Suris, C. Ryali, K. V. Alwala, H. Khedr, A. Huang, et al. Sam 3: Segment anything with concepts. arXiv preprint arXiv:2511.16719 ,2025. [35] X. Zhou, T. Xiao, L. Liu, Y. Wang, M. Chen, X. Meng, X. Wang, W. Feng, W. Sui, and Z. Su. Fsr-vln: Fast and slow reasoning for vision-language navigation with hierarchical multi-modal scene graph. arXiv preprint arXiv:2509.13733 , 2025. [36] Z. Liu, L. Zhu, B. Shi, Z. Zhang, Y. Lou, S. Yang, H. Xi, S. Cao, Y. Gu, D. Li, et al. Nvila: Efficient frontier visual language models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 4122–4134, 2025. [37] Z. Zhang, Z. Zhu, J. Li, P. Li, T. Wang, T. Liu, X. Ma, Y. Chen, B. Jia, S. Huang, et al. Task-oriented sequential grounding and navigation in 3d scenes. arXiv preprint arXiv:2408.04034 ,2024. 11 Finder: Agentic Closed-Loop Object Finding for Embodied Grounding 
+
+Appendix A Implementation Details 
+
+Finder is implemented as a bounded closed loop rather than a one-shot open-vocabulary retrieval call. The planner first separates object phrases from spatial scope, the router allocates a frame budget under room/floor priors when available, and the judge either accepts the current candidate or emits structured hints for the next loop. Outer-session memory is optional: previously resolved objects, selected regions, and known context objects enter only as structured planner/judge hints. 
+
+A.1 Default settings 
+
+Table 6 lists the default control settings used in the Object Retrieval benchmark. Table 6: Default control settings used by Finder in the Object Retrieval benchmark. 
+
+Setting Default Role Loop budget 3 loops Allows retry after zero detections, weak support evidence, or unstable candidates. Frame cap 200 frames Caps perception cost after scope-based routing and resampling. Frame stride 10 Reduces redundant adjacent views before budgeted detection. Primary phrases 2 Provides compact phrase diversity for the target object. Support phrases 2 Adds relational/context evidence without dominating the target search. Support execution Adaptive Lets the planner choose global, candidate-local, conditional, or no support search. 
+
+A.2 API-family sensitivity 
+
+Table 7 tests whether Finder’s typed state contract remains effective under different planner and VLM APIs. Planner capability is the dominant factor in this axis, while VLM size does not produce a strictly monotonic trend because final performance also depends on planner quality and candidate evidence construction. We use MiMo-v2-Pro with Qwen 397B-A17B as the default primarily for stable service availability during the evaluation cycle. Table 7: API-family ablation on the simulated retrieval split, pairing MiMo planner families with Qwen VLM choices. Cells report S@1 / LocErr; best in bold , second underlined. 
+
+35B-A3B 122B-A10B 397B-A17B Variant S@1 ↑ LocErr ↓ S@1 ↑ LocErr ↓ S@1 ↑ LocErr ↓
+
+MiMo-v2-Pro / Qwen 64.71 0.194 66.65 0.188 67.29 0.187 MiMo-v2.5 / Qwen 66.06 0.190 66.90 0.184 67.16 0.193 MiMo-v2.5-Pro / Qwen 68.69 0.191 67.81 0.190 66.97 0.186 
+
+Matched Qwen / Qwen 65.10 0.189 63.10 0.189 68.00 0.193 
+
+A.3 Planning and evidence construction details Planning fields. The target-side SearchPlan contains one primary target, zero or more supporting targets, an evidence-goal list, and compact phrase sets for targets scheduled for active detection. The primary target is the object to be returned if the loop succeeds. Supporting targets are introduced 12 only when they help anchor or disambiguate the primary target, such as in relational queries. The 
+
+ScopePlan contains four search-control fields: hard scopes from explicit room/floor constraints, soft scopes from semantic room hints or support cues, per-scope frame budgets with a global reserve, and explored constraints that deprioritize regions or points in later loops. 
+
+Routing and support execution. If an explicit room or floor is available, Finder spends the budget inside that hard scope. Otherwise, it splits the budget between likely room scopes and a global reserve. The frame router applies room/floor filtering, excludes previously explored regions when requested, and pose-samples the remaining frame inventory to satisfy the scope budget. Each supporting target carries an execution policy: it can be detected globally, deferred until primary candidates are available, or kept as context only. The local-after-primary mode gathers support-object evidence only on candidate-local views, which is useful when support objects mainly disambiguate among already plausible primary candidates. 
+
+Candidate formation and evidence cards. For each routed frame, phrase-conditioned masks are backprojected into 3D, clustered into raw object proposals, and merged by geometry-aware deduplication when proposals likely correspond to the same object. Each retained candidate stores a 3D center, a compact geometry summary, representative views, and provenance linking it to detector instances. Finder then constructs one evidence card per primary candidate. Evidence cards summarize candidate-local measurements, visual/geometry cues, support proximity, and the source of support evidence, giving the selector and judge a target-centric record rather than a flattened scene summary. 
+
+A.4 Baseline and variant definitions 
+
+All methods are evaluated with the same query splits, ground-truth centroids, and radius-based success metrics defined in Section C.1. The baseline implementations are summarized as follows: • HOV-SG [1]: a pre-built open-vocabulary scene graph baseline. We use top-1 graph retrieval and score the returned object centroid with the same geometry-only success metric as Finder. Hard queries are evaluated from text only, while simple queries additionally use the available room prior for filtering. • DualMap [9]: a dual semantic-spatial map baseline evaluated under the same hard/simple query protocol. Simulated scenes use the dense-frame rerun results, and real-world scenes are scored after alignment to the shared z-up coordinate convention. • FSR-VLN [35]: a navigation-oriented scene-graph/memory baseline adapted to the Object Retrieval queries. We use the same benchmark queries and available simple-query priors, and report the radius-specific retrieval fields when available. For Sequential Grounding and Spatio-Temporal QA, we compare against published benchmark results from ASHiTA [20], DAAAM [6], ReMEmbR [16], and ConceptGraphs [8], rather than introducing additional task-specific reruns. Table 8: Variant-to-change mapping for the main ablation in Table 5.             
+
+> Variant Change Single-shot Set max_loops=1 .No Feedback Clear carried notes and next-loop hints between loops. LLM Sel. Planner Replace the default structured selection planner with an LLM-based planner. No Support Targets Remove supporting targets and candidate-local support follow-up. Rule Selector Replace VLM visual verification with a simple heuristic selector. Rule Judge Replace the VLM loop judge with a lightweight accept/continue heuristic. Finder-Global Force all supporting targets into the global pass. Finder-Adaptive Default Finder configuration with planner-chosen support execution. Finder-Local Force supporting targets to run in local_after_primary .
+
+13 B Dataset Details 
+
+The Object Retrieval benchmark contains 1,632 single-object queries over 197 query-target categories across 9 simulated scenes and 4 real-world scenes. The simulated split is built from RGB-D streams, semantic object annotations, and posed camera trajectories in Habitat/HM3D scenes. We canonicalize object categories, remove structural or unreachable labels, keep visible instances with valid centroids and view evidence, and export room/floor metadata only as optional priors for scoped simple queries. The real-world split is built from cluttered indoor RGB-D captures where targets are manually selected from RGB-D frames and lifted to 3D centroids from annotated masks. 
+
+B.1 Dataset statistics 
+
+Figure 5: Object Retrieval dataset overview. Left: query distribution across object categories, showing a long-tailed benchmark with 1,632 queries over 197 categories. Right: per-scene query counts and the simple/hard split, with 811 simple and 821 hard queries across 9 simulated and 4 real-world scenes. Table 9: Dataset statistics for the Object Retrieval splits. Object counts refer to retrievable target objects after filtering. Category counts follow the query-target category canonicalization used throughout the benchmark.                           
+
+> Statistic Simulated Real-world Number of scenes 94Total rooms 122 4Avg. rooms per scene 13.6 1.0 Total target objects 1,890 82 Avg. target objects per scene 210.0 20.5 Indexed RGB-D views 31,520 67 Avg. indexed RGB-D views per scene 3,502.2 16.8 Simple queries 811 0Hard queries 739 82 Single-object queries 1,550 82 Sequential tasks 110 0Query-target categories 166 49
+
+B.2 Annotation workflow and prompts 
+
+Simulated annotations follow four steps: scene inventory, view indexing, query writing, and ground-truth binding. Simple queries include explicit room/floor priors when available, while hard queries are evaluated scene-wide and must rely on visual, relational, or contextual language rather than hidden room metadata. Real-world annotations use the same final schema after the selected RGB-D mask is lifted to a 3D object point cloud. 14 Table 10: Query-writing prompt constraints used during dataset construction.       
+
+> Field Prompt Constraint Target binding Each query must refer to one annotated target object with a canonical category and 3D centroid. Simple query Include available room/floor scope when it is part of the intended prior. Hard query Do not reveal room/floor metadata; use visible appearance, relation, or context to identify the target. Ambiguity control If multiple same-category objects exist, wording should preserve the intended ambiguity level without becoming ungrounded. Quality control Reject queries whose target is not visible in the evidence views or whose wording cannot be checked from visual context.
+
+B.3 Annotation interface 
+
+The annotation interfaces let annotators bind language queries to target objects, inspect visual evidence, and verify the saved 3D target metadata. Figures 6 and 7 show the real-world and simulated annotation tools. 
+
+Figure 6: Annotation and verification interface for real-world data. 
+
+Figure 7: Annotation and verification interface for simulated data. 
+
+C Supplementary Experiments 
+
+C.1 Evaluation protocol and metrics 
+
+Object Retrieval is evaluated separately on simulated and real-world scenes and then combined using query-weighted averaging. The simulated benchmark contains both simple and hard queries; the real-world benchmark currently contains only hard queries. Success@ r requires both a category match and centroid distance below radius r; LocErr is the mean centroid distance over Success@1m cases. For ambiguous same-category queries, a prediction succeeds if it falls within the radius threshold of any valid same-category ground-truth instance under the query scope. Sequential grounding and spatio-temporal QA follow the metrics summarized in Table 1. 15 Table 11: Per-scene Object Retrieval results on simulated scenes, split by hard, simple, and combined protocols. Values are percentages for S@0.5 and S@1; Err is mean distance in meters over S@1 successes. 
+
+HOV-SG DualMap FSR-VLN Finder Scene Split Num S@0.5 S@1 Err S@0.5 S@1 Err S@0.5 S@1 Err S@0.5 S@1 Err 00824-Dd4bFSTQ8gi Hard 91 20.88 39.56 0.504 25.27 43.96 0.424 36.26 51.65 0.420 61.54 71.43 0.222 00824-Dd4bFSTQ8gi Simple 101 32.67 53.47 0.397 31.68 49.50 0.382 37.62 62.38 0.424 58.42 69.31 0.255 00824-Dd4bFSTQ8gi Overall 192 27.08 46.88 0.440 28.64 46.87 0.402 36.98 57.29 0.422 59.90 70.31 0.239 00829-QaLdnwvtxbs Hard 55 18.18 32.73 0.404 23.64 34.55 0.322 30.91 45.45 0.449 49.09 54.55 0.187 00829-QaLdnwvtxbs Simple 67 25.37 41.79 0.466 38.81 50.75 0.289 50.75 68.66 0.366 53.73 59.70 0.215 00829-QaLdnwvtxbs Overall 122 22.13 37.71 0.442 31.97 43.45 0.304 41.81 58.20 0.395 51.64 57.38 0.203 00843-DYehNKdT76V Hard 52 32.69 48.08 0.454 38.46 55.77 0.398 50.00 59.62 0.324 53.85 57.69 0.151 00843-DYehNKdT76V Simple 66 42.42 62.12 0.397 33.33 46.97 0.385 54.55 66.67 0.328 63.64 66.67 0.155 00843-DYehNKdT76V Overall 118 38.13 55.93 0.418 35.59 50.85 0.391 52.54 63.56 0.326 59.32 62.71 0.153 00847-bCPU9suPUw9 Hard 78 19.23 42.31 0.546 35.90 44.87 0.292 15.38 35.90 0.557 71.79 74.36 0.157 00847-bCPU9suPUw9 Simple 83 44.58 62.65 0.386 40.96 54.22 0.306 38.55 62.65 0.430 66.27 73.49 0.198 00847-bCPU9suPUw9 Overall 161 32.30 52.80 0.448 38.51 49.69 0.299 27.32 49.69 0.475 68.94 73.91 0.178 00861-GLAQ4DNUx5U Hard 69 17.39 33.33 0.471 44.93 53.62 0.298 20.29 31.88 0.468 53.62 55.07 0.160 00861-GLAQ4DNUx5U Simple 89 42.70 58.43 0.359 44.94 59.55 0.355 34.83 50.56 0.430 59.55 66.29 0.187 00861-GLAQ4DNUx5U Overall 158 31.65 47.47 0.393 44.94 56.96 0.330 28.48 42.40 0.443 56.96 61.39 0.176 00862-LT9Jq6dN3Ea Hard 138 14.49 26.09 0.482 30.43 39.86 0.322 14.49 22.46 0.489 44.20 50.72 0.221 00862-LT9Jq6dN3Ea Simple 148 31.08 47.97 0.416 41.22 55.41 0.347 29.73 45.27 0.450 66.22 72.30 0.183 00862-LT9Jq6dN3Ea Overall 286 23.08 37.41 0.439 36.01 47.91 0.335 22.38 34.26 0.462 55.59 61.89 0.198 00873-bxsVRursffK Hard 90 47.78 63.33 0.332 50.00 57.78 0.242 26.67 40.00 0.465 72.22 76.67 0.146 00873-bxsVRursffK Simple 87 58.62 74.71 0.293 50.57 63.22 0.335 43.68 56.32 0.320 65.52 68.97 0.151 00873-bxsVRursffK Overall 177 53.11 68.92 0.311 50.28 60.45 0.288 35.03 48.02 0.382 68.93 72.88 0.148 00877-4ok3usBNeis Hard 71 38.03 61.97 0.454 32.39 53.52 0.397 19.72 40.85 0.526 63.38 71.83 0.197 00877-4ok3usBNeis Simple 75 54.67 74.67 0.355 36.00 60.00 0.427 45.33 61.33 0.361 77.33 84.00 0.186 00877-4ok3usBNeis Overall 146 46.58 68.49 0.398 34.24 56.85 0.412 32.88 51.37 0.426 70.55 78.08 0.191 00890-6s7QHgap2fW Hard 95 22.11 46.32 0.519 40.00 52.63 0.338 18.09 43.16 0.518 56.84 61.05 0.169 00890-6s7QHgap2fW Simple 95 38.95 56.84 0.371 46.32 57.89 0.294 44.21 58.95 0.357 65.26 73.68 0.192 00890-6s7QHgap2fW Overall 190 30.53 51.58 0.438 43.16 55.26 0.316 31.15 51.06 0.426 61.05 67.37 0.181 Query Weighted Hard 739 24.90 42.76 0.458 35.59 48.04 0.334 23.95 39.24 0.466 58.05 63.46 0.182 Query Weighted Simple 811 40.44 58.32 0.377 40.69 55.49 0.346 40.57 57.71 0.389 64.12 70.78 0.192 Query Weighted Overall 1550 33.03 50.90 0.409 38.26 51.94 0.340 32.65 48.90 0.419 61.23 67.29 0.187 
+
+Table 12: Per-scene Object Retrieval results on real-world scenes. The real benchmark currently contains only hard queries, so no simple split is reported. Values are percentages for S@0.5 and S@1; Err is mean distance in meters over S@1 successes. 
+
+HOV-SG DualMap FSR-VLN Finder Scene Num S@0.5 S@1 Err S@0.5 S@1 Err S@0.5 S@1 Err S@0.5 S@1 Err icra_ic3f 18 33.33 38.89 0.330 16.67 27.78 0.345 11.11 16.67 0.497 44.44 50.00 0.326 icra_ic4f 16 31.25 43.75 0.453 25.00 37.50 0.445 18.75 43.75 0.633 50.00 62.50 0.306 icra_ic7f 30 26.67 36.67 0.434 3.33 16.67 0.610 10.00 23.33 0.492 20.00 36.67 0.409 icra_sh3f 18 38.89 55.56 0.343 0.00 0.00 – 11.11 16.67 0.425 38.89 44.44 0.300 Query Weighted 82 31.71 42.68 0.391 9.76 19.51 0.494 12.20 24.39 0.532 35.37 46.34 0.339 
+
+Table 13: Object-type response analysis for Finder on the aggregated Object Retrieval benchmark. Queries are grouped by target-object profile rather than dataset split. 
+
+Type Examples Queries S@0.5 ↑ S@1 ↑ S@3 ↑ Tq ↓
+
+Large fixed bed, sofa, cabinet, table 836 59.45 65.91 81.10 80.5s Small clutter cup, bottle, vase, toy 368 55.43 62.23 70.11 96.1s Thin / flat book, plate, tray, wall art 201 64.68 67.16 74.63 86.0s Soft items pillow, towel, bag, clothing 227 64.76 73.13 82.38 92.8s 
+
+C.2 Per-scene retrieval breakdowns 
+
+Tables 11 and 12 provide the per-scene retrieval breakdown behind the aggregate Object Retrieval table. We report hard and simple splits separately when both are available. Entries marked “–” indicate undefined metrics, such as LocErr when a method has no S@1 successes. 
+
+C.3 Object-type response analysis 
+
+Beyond module-wise ablations, it is useful to understand which kinds of objects Finder responds to most reliably and how response time varies by target type. Table 13 groups Object Retrieval queries by coarse target-object profile using the ground-truth target category. The success columns use the same geometry-only radius thresholds as the main Object Retrieval table, and Tq reports mean per-query runtime. 16 D Prompt Templates 
+
+D.1 Request-Planning Prompt Request-Planning Prompt 
+
+You are the request planner for an object-finding loop. Your job is NOT to directly choose a final object. Your job is to decide what this loop should search for and which contextual objects should support the search. You must produce: 1. the PRIMARY target object for this loop 2. zero or more SUPPORTING targets that provide memory anchors, spatial disambiguation, or additional context 3. search phrases for the primary target and any supporting targets that need active detection 4. evidence goals for this loop 5. an optional scope_plan describing how detection frame budget should be spent Important design rules: - There must be exactly ONE primary target. - Supporting targets are optional. - Only include supporting targets if they help locate or disambiguate the primary target. - Supporting targets may use these usages: - "memory_anchor": look up or anchor from memory or metadata - "disambiguate": help compare candidates using spatial relations - "detect": actively detect this supporting object - "context_only": mention it in reasoning but do not actively detect it - Every supporting target must include a support_policy with: - "semantic_type": one of ["anchor", "verifier", "memory"] - "execution_mode": one of ["global", "local_after_primary", "conditional", "none", "rescue_only"] - "expected_value": estimated usefulness in [0, 1] - Search phrases must describe objects themselves, not rooms or long spatial descriptions. - Every primary target must output exactly 2 short object phrases. - Every supporting target must output exactly 2 short object phrases. - Do not generate open-ended synonym lists or phrase expansion beyond those required counts. - Spatial scope and frame budget policy are separate from the object phrases. - Keep the plan compact. Do not expand the plan into unnecessary targets. - Preserve hard constraints already known from upstream context. - If the user query contains a relational description like "the mug near the coffee machine", the mug is usually primary and the coffee machine is usually supporting. - If previous loop notes exist, use them carefully. They are hints, not hard truth. - If ‘previous_loop_hints.phrase_policy.locked‘ is true, preserve the prior primary phrases and prioritize scope/frame changes over phrase changes. 
+
+17 D.2 Candidate Visual-Verification Prompt Candidate Visual-Verification Prompt 
+
+You are the factual visual verifier in an object-finding loop. Your job is NOT to decide whether the loop should continue or stop. Your job is to extract image-grounded facts for each candidate. You will receive: - the raw user query - the primary target and supporting-target expectations - a shortlist of candidate objects - objective, relation-specific evidence for each candidate - a manifest that maps attached images to candidate keys Important rules: - Base your output primarily on what is visually observable in the images. - Use relation-specific measurements only as supporting context, not as a substitute for visual facts. - Every attached image is a full-frame scene view. These are not cropped object-only patches. - If an image is described as "bbox", it means the full scene frame with a box overlay, not a crop. - Do not output loop-control fields such as decisive / continue / accept. - Do not guess room type from the image unless it is visually obvious. Room binding will be handled separately. - Never infer room type from the user query, candidate label, or support-target name. - Never say a room is "assumed", "likely", or "probably" based on query context. - If room type is not visually explicit, say "room not visually determined" or omit room claims entirely. - If room type is unclear, say it is unclear; do not say the image lacks context when surrounding furniture, wall, floor, doorway, or nearby objects are visible. - Keep rationale and notes factual. Do not add advice, recommendations, or loop-control guidance. - Only cite image indices that exist in the manifest. Allowed categorical values: - object_type_match: strong | partial | weak | mismatch | unclear - color_match: strong | partial | weak | mismatch | unclear - appears_against_wall: yes | no | unclear - wall_contact_visibility: direct | partial | not_visible - image_context: full_room | partial_room | object_focused | unclear - object_completeness: complete | partial | unclear 
+
+18 D.3 Loop-Judgment Prompt Loop-Judgment Prompt 
+
+You are the loop judge in an object-finding system. Your job is to decide whether to: - accept the current best candidate - continue to another loop - abort because the loop budget is exhausted or the evidence is too weak You will receive: - the user query - factual verifier output for each candidate - room-binding facts derived from room_info and candidate pose - support-relation metrics - support-detection summary - loop history and current shortlist Important rules: - The verifier output is factual only. Do not expect it to decide whether the loop should continue. - Determine room compatibility from room_info / pose facts, not from image semantics alone. - Prefer accepting when one candidate is clearly strongest across visual facts, support relations, room binding, and loop-history stability. - Missing confirmation is not the same as contradiction. Treat ‘unclear‘, ‘ambiguous‘, or absent visual confirmation as weak evidence, not negative evidence. - Only explicit mismatches or concrete contradictory facts should block acceptance. For example, "not glass" is blocking, but "material not fully visible" is not. - For relation queries such as beside / near / against / under / on, structured 3D support-relation metrics can be sufficient even when the support object is not co-visible in the verifier image. - If the support target was not detected anywhere in the loop, treat relation evidence as unavailable rather than negative against a specific primary candidate. - When support evidence is globally unavailable, only continue if the next loop will concretely change support detection strategy, such as phrase retargeting or scope/frame changes. - If there is only one viable candidate, it already satisfies room and relation constraints, and the verifier shows no explicit contradiction, prefer accept over continue. - If multiple top candidates all satisfy the core constraints and remain hard to distinguish, treat this as local query ambiguity rather than a failure. In that case, prefer accepting the highest-scoring candidate instead of continuing to chase uniqueness. - Continue only when another loop is likely to change the ranking, reveal a missing competing candidate, or resolve a concrete contradiction that matters to the final decision. - Continue only when another loop could plausibly change the answer in a concrete way. - If the current loop already detected primary candidates, prefer scope/frame changes over phrase changes. - If the current loop detected zero primary candidates, a continue decision may split recovery between scope/frame and phrase changes. - If the loop budget is already exhausted, do not return continue. - Use next_loop_hints to focus the next loop on the best candidate(s) and deprioritize weak ones. - Keep the reason factual and concise. Do not add motivational language or speculative claims. - Do not repeat room guesses from visual evidence when room_info / pose facts already determine room compatibility. 
+
+19
