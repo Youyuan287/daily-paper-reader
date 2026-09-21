@@ -1,0 +1,596 @@
+Title: 2D GauSS-MI: Efficient Active Scene Reconstruction with Balanced Visual and Geometric Quality
+
+URL Source: https://arxiv.org/pdf/2609.21516v1
+
+Published Time: Mon, 21 Sep 2026 00:48:22 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# 2D GauSS-MI: Efficient Active Scene Reconstruction with Balanced Visual and Geometric Quality 
+
+Yuhan Xie and Jia Pan 
+
+Abstract — Active reconstruction requires efficient active view selection to achieve high-quality reconstruction within limited onboard computational resources. Existing methods face chal-lenges in adequately balancing visual and geometric quality with the computational efficiency required for real-time op-eration. In this work, we present an active reconstruction framework based on 2D Gaussian Splatting (2DGS). We develop an efficient online 2DGS mapping pipeline for incremental RGB-D observations and introduce a probabilistic reliability model that characterizes the view-dependent reconstruction quality of individual 2D Gaussian splats. Building on this model, we formulate 2D Gaussian Splatting Shannon Mutual Informa-tion (2D GauSS-MI), a mutual-information-based metric that exploits the explicit surface orientation of 2DGS to evaluate the expected information gain of candidate views. The proposed metric enables active view selection to account for both visual and geometric reconstruction quality. We evaluate the proposed system against three state-of-the-art baselines on eight Replica scenes. Experimental results demonstrate that our method achieves a favorable balance between visual and geometric reconstruction quality with substantially lower computational cost and competitive model storage. 
+
+I. I NTRODUCTION 
+
+Radiance-field-based 3D reconstruction has attracted sig-nificant attention in recent years due to its high visual fidelity and fast rendering capability [1], [2]. Recent ad-vances in radiance-field representations have further im-proved geometric reconstruction accuracy while preserving their strong rendering performance, exemplified by Gaussian Surfels [3] and 2D Gaussian Splatting (2DGS) [4]. These advances have also motivated the development of active reconstruction and exploration for robotic systems, which enable robots to autonomously acquire informative obser-vations and progressively improve their scene understand-ing. Such active perception capabilities can substantially enhance robotic autonomy in applications such as search and rescue, construction, and inspection. However, compared with conventional 3D reconstruction, active reconstruction introduces additional system-level requirements, including online reconstruction, next-best-view (NBV) selection, robot planning, and computational efficiency for resource-limited onboard platforms. Prior to the development of efficient radiance-field re-construction methods, active reconstruction and exploration approaches predominantly relied on computationally efficient geometric representations, such as voxel grids, meshes, and point clouds. Consequently, their NBV selection criteria                   
+
+> The authors are with the School of Computing and Data Sci-ence, the University of Hong Kong, Hong Kong SAR, China (Email: yuhanxie@connect.hku.hk, jpan@cs.hku.hk). Ours (10.4 MB) ActiveGS (24.7 MB) GauSS-MI (9.0 MB) FisherRF (9.4 MB)
+> 10 210 3
+> FPS
+> 31 32 33 34 35 36 37
+> PSNR [dB]
+> 0.92 0.93 0.94 0.95 0.96 0.97 0.98
+> F-score
+> Fig. 1. Overall comparison of reconstruction quality, computational efficiency, and model size. The numbers in parentheses indicate the model size. Results are averaged over three runs for each of the eight scenes. Our method achieves a favorable balance among visual and geometric quality, computational efficiency, and model compactness.
+
+were primarily designed to assess geometric information, such as surface coverage or geometric uncertainty [5]. Early radiance-field-based active reconstruction methods naturally inherited these geometry-driven NBV criteria [6]. With the adoption of radiance-field representations that enable ef-ficient novel-view rendering, recent works have begun to exploit their rendering capability to directly evaluate visual quality for NBV selection [7]. Nevertheless, existing methods still face challenges in balancing visual fidelity with geomet-ric quality, modeling view-dependent information gain for NBV evaluation, and maintaining computational efficiency for online view selection. To overcome the aforementioned challenges, this paper proposes an efficient active reconstruction system based on 2DGS [4], which jointly considers visual and geometric quality throughout online reconstruction and NBV selec-tion. Specifically, we develop an efficient online 2DGS reconstruction module that optimizes rendering quality with geometry-aware regularization. We further introduce a view-dependent probabilistic reliability model to characterize the observation quality of individual 2D Gaussian splats, and formulate an efficient NBV metric based on the resulting reliability. Finally, we integrate these components into a complete active reconstruction system that achieves high reconstruction quality with computational efficiency and a compact model. The implementation of the proposed system will be publicly released 1 upon acceptance to facilitate future research in active reconstruction. The main contributions of our work are summarized as 
+
+> 1GitHub link: * arXiv:2609.21516v1 [cs.CV] 18 Sep 2026
+
+follows:  
+
+> •
+
+A probabilistic reliability model for 2DGS that quanti-fies the uncertainty of the reconstructed map.  
+
+> •
+
+A 2D Gaussian Splatting Shannon Mutual Informa-tion (2D GauSS-MI) metric for real-time novel-view assessment, jointly considering visual and geometric reconstruction quality.  
+
+> •
+
+An efficient active scene reconstruction system based on the probabilistic reliability model and 2D GauSS-MI.  
+
+> •
+
+Extensive experiments across eight scenes against state-of-the-art methods, demonstrating superior visual fi-delity and geometric accuracy, along with high com-putational efficiency and competitive model storage. II. R ELATED WORK 
+
+In contrast to conventional reconstruction, where the ob-servation sequence is given in advance, active reconstruction aims to build a complete and high-quality 3D representa-tion by actively controlling the sensor trajectory to collect informative observations. The core problem is therefore to determine the next-best-view (NBV) that provides the most useful information for reconstruction. Early approaches primarily relied on explicit geometric representations, eval-uating candidate views according to geometric information gain [8], [9], mutual information [5], [10], frontier, or surface coverage [11]. These methods are effective for geometric exploration, but do not directly account for the visual fidelity of the reconstructed scene. The emergence of Neural Radiance Fields (NeRF) [1] and 3D Gaussian Splatting (3DGS) [2] has substantially improved the visual quality and rendering efficiency of scene reconstruction, motivating their adoption in active reconstruction. Early radiance-field-based active reconstruc-tion methods still selected views primarily according to geometric completeness or coverage [6], [12]. To exploit the learned representation, subsequent methods estimated view-dependent uncertainty using neural networks [13], [14], but their performance can depend on training data and the quality of the learned uncertainty estimator. In contrast to NeRF’s implicit modeling approach, 3DGS explicitly represents the scene with spatially distributed Gaussians, enabling uncer-tainty to be evaluated more directly [15]–[17]. Despite their strong rendering capability, the surface re-construction using 3D Gaussian modeling and splatting faces several challenges [4]. The volumetric radiance representa-tion of 3D Gaussians is not well suited to the thin nature of surfaces, and it does not natively provide surface normals, which are essential for high-quality surface reconstruction. Moreover, the rasterization of 3D ellipsoids lacks multi-view consistency, resulting in varied 2D intersection planes from different viewpoints. This motivates 2D Gaussian represen-tations, including Gaussian Surfels [3] and 2DGS [4], which were proposed independently. Gaussian Surfels flatten a 3D Gaussian by constraining its z-scale to zero, whereas 2DGS represents each primitive as an oriented planar Gaussian with perspective-correct ray-splat intersection and geometry-aware regularization. Both representations improve the ge-World Space   
+
+> viewpoint
+> Image Space Camera Space
+> Fig. 2. Illustration of 2D Gaussian splatting.
+
+ometric accuracy of Gaussian-based reconstruction. Recent works have also explored Gaussian-surfel representations for active reconstruction. ActiveGS [18] combines Gaussian surfels with a voxel map and uses Gaussian confidence to identify under-reconstructed regions. ObjSplat [19] in-troduces geometry-aware view evaluation for active object reconstruction based on back-face visibility and multi-view covisibility. Recent Gaussian-Surfel-based active reconstruction meth-ods demonstrate the potential of 2D Gaussian representations for active perception. However, view-dependent quality as-sessment requires not only a surface-oriented representation but also geometrically consistent rendering across view-points, which is particularly important for NBV selection where candidate views are unobserved and often oblique. Both 3DGS and Gaussian Surfels employ an affine approx-imation of perspective projection, whose accuracy degrades away from the Gaussian center. In contrast, 2DGS achieves multi-view-consistent surface geometry through perspective-correct ray-splat intersection [4]. Moreover, unlike Gaussian surfels, which require external normal priors during training and volumetric post-processing, 2DGS only incorporates geometry-aware regularization during training, making it more suitable for RGB-D-based active reconstruction. Building on these properties, we adopt the information-theoretic framework of GauSS-MI [7] and reformulate it based on 2DGS. Specifically, GauSS-MI defines view-dependent reliability over four horizontal quadrants in the world frame, which does not explicitly account for the orientation of individual Gaussians. The explicit surface normal of 2DGS instead provides a natural reference for defining reliability with respect to each primitive’s intrin-sic orientation. We therefore define an orientation-aware reliability model and formulate the 2D GauSS-MI metric accordingly, enabling view selection to better capture the information contributed by different observations. Further-more, we leverage the geometry-aware properties of 2DGS to jointly incorporate visual and geometric quality into NBV selection and online mapping optimization, leading to im-proved reconstruction results. To the best of our knowledge, this is the first active scene reconstruction system built upon the 2DGS representation. III. M APPING 
+
+This section introduces the map representation of our active reconstruction system, 2DGS [4], and the online re-construction pipeline that processes incremental observations TABLE I MAIN NOTATIONS FOR METHODOLOGY                                 
+
+> Notations Explanation
+> G2D Gaussian Splatting map.
+> σCamera pose, or viewpoint.
+> μPosition of a Gaussian.
+> nNormal vector of a Gaussian.
+> TCumulative transmittance of a Gaussian.
+> C, ˆCRendered color and observed color.
+> D, ˆDRendered depth and observed depth.
+> N,ˆNRendered normal and normal estimated from observed depth.
+> NDNormal estimated from rendered depth.
+> λHyperparameters.
+> LTraining loss.
+> LReconstruction loss for reliability update.
+> P(r)Reliability probability of a Gaussian.
+> o, l Odds and log odds probability of a Gaussian.
+> δInverse sensing model.
+> z, Z Random variable and realization of an observation.
+> IMutual information.
+> (·)[i]Index of a Gaussian.
+> (·)[j]Index of a pixel.
+> (·)[m]Index of an ordered Gaussian.
+> (·)kProperty based on the observation at time k.
+> (·)1: kProperty based on observations from the start to time k.
+> (·)nProperty of candidate viewpoint n.
+
+in real time. The resulting online map provides the basis for active view evaluation and selection in Section IV. The main notations used throughout the methodology are summarized in Table I. 
+
+A. 2D Gaussian Splatting 
+
+As illustrated in Figure 2, a 2D Gaussian is defined on a local tangent plane by its center μ and two orthogonal tangential vectors tu, tv with scale factors su, s v . The unit normal vector is given by n = tu × tv , forming the rotation matrix R = [ tu, tv , n]. Each Gaussian also carries an opacity 
+
+α and a color c [4]. To reduce computational overhead, spherical harmonics are omitted, making the color view-independent. To render an image from a viewpoint σ, the Gaussians intersecting each camera ray are ordered by depth and composited front-to-back. The cumulative transmittance of Gaussian i is defined as 
+
+T [i] = α[i] Y
+
+> m<i
+
+(1 − α[m]) (1) The rendered color C, depth D, and normal N images are then computed as 
+
+C = X
+
+> i
+
+c[i] T [i], D = X
+
+> i
+
+d[i] T [i], N = X
+
+> i
+
+n[i] T [i] (2) where d[i] denotes the depth of the ray-splat intersection. 
+
+B. Incremental Online Reconstruction 
+
+Online reconstruction is essential for active reconstruction, as it incrementally updates the Gaussian map in real time and maintains an up-to-date representation for subsequent active view evaluation and selection. At each timestep k, the robot collects a color image ˆCk and a depth image ˆDk at an estimated camera pose σk. Given the observation and pose, we update the 2DGS map with new Gaussians whose centers are initialized by back-projecting the observed depth, while the normal n is estimated from the local depth gradient and oriented toward the observing camera. To bound the size of the Gaussian map, a hash voxel grid is maintained to reject newly initialized primitives whose centers lie within the distance γ of existing Gaussians [20]. The updated 2DGS map is then optimized on the new observation for a fixed number of iterations Knew , fol-lowed by randomly replaying previously collected frames for Kreplay iterations to prevent degradation of previously reconstructed regions. To ensure that the Gaussian map not only produces high-fidelity image renderings but also captures the geometric structure of the scene, we incorporate two geometric regularizers from 2DGS [4] in addition to the rendering losses. The first is the depth distortion loss, which concentrates Gaussians along each ray within a thin band around the surface: 
+
+LDdist = X
+
+> i
+
+X
+
+> m<i
+
+T [i]T [m] d[i] − d[m] (3) The second is the normal consistency loss, which further aligns the splat normals with the surface geometry estimated from rendered depth: 
+
+LNconst = 1 − N T ND (4) where ND denotes the normal estimated from the rendered depth D. The training loss is thus formulated as the weighted sum of the rendering losses and geometric regularizers: 
+
+L = LC + λt,DLD + λt,Dd LDdist + λt,Nc LNconst (5) where LC is the color rendering loss combining the L1 and D-SSIM terms, and LD is the depth rendering loss computed using the L1 distance. IV. A CTIVE VIEW SELECTION 
+
+Given the real-time map reconstructed in the previous section, we first develop a probabilistic reliability model for 2D Gaussian Splatting to quantify the observed information in Section IV-A, and then formulate 2D Gaussian Splatting Shannon Mutual Information (2D GauSS-MI) for active view selection in Section IV-B. 
+
+A. 2D Gaussian Splat Reliability 1) Bayesian Modeling and Update: To model the infor-mation that a random observation z provides to the 2DGS map G, a random variable r[i] is introduced for each Gaussian splat i ∈ G . The probability that a Gaussian i is reliable for reconstruction is defined as P (r[i]) ∈ (0 , 1) , which can be equivalently represented by its odds ratio o[i] ∈ (0 , +∞) or log odds l[i] ∈ (−∞ , +∞):
+
+l[i] := log( o[i]) := log 
+
+ P (r[i])1 − P (r[i])
+
+
+
+(6) Initially, no prior information about the scene is assumed, and thus P0(r[i]) = 0 .5, ∀i ∈ G . The reliability probabilities are assumed to be independent across Gaussian splats. Under this assumption, P (r[i] | Z1: k) is recursively updated based on observations Z1 to Zk using a binary Bayesian filter: 
+
+o[i](Z1: k) = δ[i](Zk)o[i](Z1: k−1) (7) where δ[i](Zk) is termed the odds ratio of the inverse sensing model, characterizing the reliability evidence provided by observation k for Gaussian i. For brevity, we use δ[i] 
+
+> k
+
+to denote δ[i](Zk) in the following. The inverse sensing model is formulated based on the reconstruction loss Lk [7], 
+
+δ[i] 
+
+> k
+
+= ( λLLk)−λT T [i]
+
+(8) where λL and λT are hyperparameters. Substituting (8) into (7) and taking the logarithm gives 
+
+l[i]1: k = l[i] 
+
+> k
+
++ l[i]1: k−1 = −λT T [i] log( λLLk) + l[i]1: k−1 (9) Therefore, P (r[i] | Z1: k) can be updated by propagating the logarithm of the reconstruction loss image Lk to each Gaussian according to its cumulative transmittance T [i].
+
+2) Reliability for 2D Gaussian Splats: We next detail the reliability model for 2D Gaussian Splats, including its direction-dependent formulation and computation. The update in (9) assigns a single reliability probability to each Gaussian. However, a Gaussian that reconstructs well from one side can be unreliable from the other, making its reliability inherently direction-dependent. GauSS-MI [7] for 3DGS addresses this with a quadrant reliability defined in the world frame along the horizontal directions, which hardly accommodates the distinct orientation of each Gaussian. In contrast, each 2D Gaussian has an explicit normal vector that naturally defines its facing direction. Therefore, a two-sided reliability is defined for each 2D Gaussian, corresponding to its front and back sides: 
+
+P (r[i]) = 
+
+
+
+P (r[i]f ), P (r[i]b )
+
+
+
+(10) The front side is oriented along the Gaussian normal and faces the viewpoint from which it is initially observed, while the back side corresponds to the opposite viewing direction. In general, only the front-side reliability is meaningful, whereas the back-side reliability also becomes meaningful for thin structures that can be correctly observed from both sides. To determine the observed side and quantify the observa-tion weight, we define the unit viewing direction from Gaus-sian i to the camera pose σk as d[i] 
+
+> k
+
+=  σk − μ[i] /∥σk −
+
+μ[i]∥. The incidence angle θ[i] 
+
+> k
+
+and the observation-quality weight w[i] 
+
+> k
+
+are defined as 
+
+w[i] 
+
+> k
+
+= cos θ[i] 
+
+> k
+
+= d[i] 
+
+> k
+
+· n[i] (11) Thus, w[i] 
+
+> k
+
+= 1 indicates a head-on observation of the front side, w[i] 
+
+> k
+
+= 0 an edge-on observation, and w[i] 
+
+> k
+
+< 0 an observation from the back side. The weight w[i] 
+
+> k
+
+therefore characterizes the directional discrepancy between the view-point σk and the normal of the 2D Gaussian i.Since an observation only provides reliability evidence for the side it actually observes, the log odds to be updated is selected according to the sign of w[i] 
+
+> k
+
+:
+
+l[i] 
+
+> k, obs
+
+=
+
+
+
+l[i] 
+
+> k, f
+
+, w[i] 
+
+> k
+
+> w min 
+
+l[i]
+
+> k, b
+
+, w[i] 
+
+> k
+
+< −wmin 
+
+skip update , |w[i] 
+
+> k
+
+| ≤ wmin 
+
+(12) where the gate wmin > 0 skips Gaussians viewed nearly edge-on. Based on the inverse sensing model in (8) and (9), the se-lected log odds are updated using the per-pixel reconstruction loss L[j] 
+
+> k
+
+as 
+
+l[i] 
+
+> k, obs
+
+= λT |w[i] 
+
+> k
+
+| X
+
+> j
+
+− log( λLL[j] 
+
+> k
+
+)T [i,j ] (13) Here, T [i,j ] denotes the cumulative transmittance of Gaussian 
+
+i at pixel j, so only pixels to which Gaussian i contributes are included in the update. The occluded or out-of-view Gaussians therefore receive no update. In (13), the reconstruction loss image Lk combines color, depth, and normal discrepancies. For brevity, the subscript k
+
+is omitted below. 
+
+L = LC + λr,DLD + λr,Nr LNrend (14) where the rendered-normal loss LNrend is defined as 
+
+LNrend = 1 − N T ˆN (15) Here, ˆN denotes the normal estimated from the observed depth. Note that LNrend differs from the normal-consistency loss LNconst in (4): the latter aligns the rendered normal with the geometry estimated from the rendered depth dur-ing training, whereas the former measures the discrepancy between the rendered normal and the observed geometry for reliability estimation. The definitions of LC and LD are the same as those in (5), representing the color and depth rendering losses, respectively. 
+
+B. 2D Gaussian Splatting Shannon Mutual Information 
+
+Based on the proposed reliability model and Shannon mutual information, we formulate 2D Gaussian Splatting Shannon Mutual Information (2D GauSS-MI) to assess the information provided by novel viewpoints for NBV selection. 
+
+1) Expected Mutual Information for Novel Viewpoints: 
+
+Given past observations Z1: k−1, the next best view z∗
+
+> k
+
+is selected to maximize the mutual information (MI) 
+
+I(r; zk|Z1: k−1) [10]. For brevity, we write I(r; z) for 
+
+I(r; zk|Z1: k−1) in the following. Assuming pixel-wise in-dependent measurements, the MI decomposes over pixels j
+
+and Gaussians i as 
+
+I(r; z) = X
+
+> j
+
+X
+
+> i
+
+I(r[i]; z[j]) T [i,j ] (16) Based on information theory [5], [21], the MI between two random variables is defined as 
+
+I(r[i]; z[j]) := P (r[i], z [j] = Z) log 
+
+ P (r[i], z [j] = Z)
+
+P (r[i])P (z[j] = Z)
+
+
+
+=P (z[j] = Z)f (δ[i](Z), o [i]1: k−1)
+
+(17) Here, P (z[j] = Z) depends only on the observation and is affected by sensor quality, and is therefore termed the 
+
+measurement prior . The function f (δ[i](Z), o [i]1: k−1) is termed the information gain function , which can be derived and abbreviated as 
+
+f (δ, o ) = oo + δ−1 log 
+
+ o + 1 
+
+o + δ−1
+
+
+
+(18) For a novel candidate viewpoint, the corresponding ob-servation is unavailable, and thus the inverse sensing model must be estimated in expectation. Assuming that the expected reconstruction is reliable, we set Lk = 0, which gives 
+
+δ−1 = 0 in f (δ, o ). The information gain function then becomes 
+
+f [i] = log 
+
+ o[i] + 1 
+
+o[i]
+
+
+
+= − log 
+
+
+
+P (r[i])
+
+
+
+(19) Accordingly, the expected MI for a novel viewpoint is computed as 
+
+I(r; z) = X
+
+> j
+
+P (z[j]) X
+
+> i
+
+− log 
+
+
+
+P (r[i])
+
+
+
+T [i,j ] (20) 
+
+2) 2D GauSS-MI: Similar to the reliability update in (13), the observation-quality weight w[i] 
+
+> n
+
+defined in (11) is also used to characterize the directional discrepancy between the candidate viewpoint n and the orientation of the 2D Gaussian 
+
+i. Specifically, the information gain function f is computed as 
+
+f [i] 
+
+> n, obs
+
+= −| w[i] 
+
+> n
+
+| log 
+
+
+
+P (r[i]
+
+> n, obs
+
+)
+
+
+
+(21) where P (r[i]
+
+> n, obs
+
+) is selected from the two-sided reliability according to (12). The measurement prior P (z[j]) is approximated as 1 in simulation, assuming that the simulator provides ground-truth observations. For real-world deployment, P (z[j]) can be estimated from the camera noise model following [7]. Overall, the 2D GauSS-MI for novel-view evaluation is formulated as 
+
+In(r; z) = X
+
+> j
+
+P (z[j]) X
+
+> i
+
+−| w[i] 
+
+> n
+
+| log 
+
+
+
+P (r[i]
+
+> n, obs
+
+)
+
+
+
+T [i,j ]
+
+(22) This formulation jointly accounts for the measurement noise, the current reliability of each Gaussian, and its directional discrepancy with the candidate viewpoint. V. E XPERIMENTS 
+
+A. Experimental Setup 
+
+The simulation environment is built on the Habitat sim-ulator [22] with scenes from the Replica dataset [23]. A quadrotor serves as the agent for active reconstruction, and                   
+
+> TABLE II PARAMETERS OF THE PROPOSED SYSTEM
+> Parameter Value
+> Online 2DGS  Initialization rejection distance ( γ)5 cm
+> Training iterations for a new frame ( Knew )60
+> Training iterations for replay ( Kreplay )40
+> Depth rendering loss weight ( λt,D)5.0
+> Depth distortion loss weight ( λt,Dd)1.0
+> Normal consistency loss weight ( λt,Nc)0.05
+> Reliability  Near-edge-on observation threshold ( wmin )0.1
+> Reconstruction loss weight ( λL)1.0
+> Cumulative transmittance weight ( λT)1.2
+> Depth rendering loss weight ( λr,D)3.0
+> Normal rendering loss weight ( λr,Nr)0.15
+
+its trajectories are planned by SUPER [24], which gener-ates dynamically feasible trajectories for the quadrotor. The quadrotor is equipped with an RGB-D camera that captures images at a resolution of 640 × 480 with a 90 ◦ field of view (FOV). The online reconstruction module is built upon 2DGS-SLAM [20], which is adapted and extended for our active reconstruction system. We further accelerate the 2DGS rasterizer with several implementation-level optimizations to improve computational efficiency. Both the proposed active reconstruction system and the simulator operate on a desktop with a 32-thread i9-14900K CPU and an RTX 4090 GPU. 
+
+1) Baselines: The proposed method is compared against three active reconstruction baselines: ActiveGS [18], GauSS-MI [7], and FisherRF [15]. ActiveGS combines a coarse voxel map with Gaussian surfels [3] and selects viewpoints based on unexplored regions identified from the voxel map and confidence estimates from the Gaussian surfels. GauSS-MI constructs a probabilistic model of the 3DGS map from rendering residuals and selects the next-best view by maximizing the expected Shannon mutual information between the map and the candidate viewpoints. FisherRF is a radiance-field-based active view selection approach that quantifies the expected information gain through the Fisher information matrix. 
+
+2) Implementation Details: To complete the active re-construction system, we implement a viewpoint primitive library to generate candidate viewpoints, following [7]. At each timestep, 198 candidate viewpoints are sampled with varying 3D positions and yaw orientations. A trajectory to each candidate is planned by SUPER [24] with a feasibility check prior to the NBV evaluation and selection. GauSS-MI and FisherRF adopt the same view planner as the proposed system, and thus share the same set of candidate viewpoints for selection. Since FisherRF provides only a view-selection criterion rather than a complete system, we integrate it into the GauSS-MI implementation, allowing both methods to share the same online 3DGS reconstruction pipeline. ActiveGS retains its original planner, which does not constrain the pitch orientation of the viewpoints, resulting in trajectories that are infeasible for the quadrotor. All methods are evaluated on eight scenes from Replica [23]. Each experiment selects 200 frames, and the TABLE III OVERALL EVALUATION RESULTS                                                                                                                                                                
+
+> Metrics Visual Quality Geometric Quality Methods PSNR ↑SSIM ↑LPIPS ↓D-L1 ↓Acc ↓CD ↓F-score ↑
+> Ours 36.87 0.979 0.036 0.25 1.35 1.67 0.970
+> ActiveGS [18] 32.81 0.956 0.066 0.70 1.47 1.34 0.965 GauSS-MI [7] 34.70 0.966 0.071 1.47 2.28 2.41 0.928 FisherRF [15] 34.57 0.966 0.070 1.44 2.27 2.39 0.929 Evaluation is conducted on all eight Office and Room scenes in the Replica dataset. Each method is evaluated three times on each scene, and the results are averaged over the three runs and all scenes. Detailed per-scene results are reported in Table IV.
+> TABLE IV PER -S CENE EVALUATION RESULTS ON REPLICA
+> Methods 1Metrics 2Of0 Of1 Of2 Of3 Of4 R0 R1 R2 3
+> Ours PSNR ↑37.45 34.35 35.38 35.98 38.67 38.21 37.91 36.99
+> D-L1 ↓0.21 0.13 0.24 0.32 0.24 0.29 0.23 0.31
+> F-score ↑0.987 0.969 0.962 0.952 0.964 0.964 0.980 0.983
+> ActiveGS [18] PSNR ↑33.87 30.03 30.52 32.58 34.49 34.24 34.85 31.91 D-L1 ↓0.52 0.50 0.70 0.88 0.74 0.65 0.61 1.03 F-score ↑0.981 0.965 0.952 0.952 0.943 0.978 0.978 0.969 GauSS-MI [7] PSNR ↑35.17 33.42 31.27 31.26 37.14 36.12 37.55 35.65 D-L1 ↓1.30 1.27 1.67 1.67 1.50 1.54 1.26 1.54 F-score ↑0.961 0.935 0.893 0.901 0.921 0.926 0.961 0.925 FisherRF [15] PSNR ↑35.04 33.40 30.21 30.96 36.83 36.48 38.23 35.43 D-L1 ↓1.33 1.28 1.43 1.69 1.44 1.50 1.15 1.70 F-score ↑0.959 0.937 0.899 0.905 0.926 0.926 0.967 0.912
+> 1Each method is evaluated three times on each scene, and the results are averaged.
+> 2The metrics cover color rendering, depth rendering, and mesh quality.
+> 3‘Of’ denotes Office scenes, and ‘R’ denotes Room scenes in the Replica dataset.
+
+resulting reconstruction models are collected for further evaluation. The parameter values used in our system are summarized in Table II. 
+
+B. Evaluation Metrics 
+
+We evaluate reconstruction quality from both visual and geometric perspectives. Visual quality is assessed using PSNR, SSIM, and LPIPS, which measure image fidelity, structural similarity, and perceptual discrepancy, respectively. Geometric quality is evaluated using the Depth L1 (D-L1) [cm ], Accuracy (Acc)[ cm ], Chamfer Distance (CD)[ cm ], and F-score. Specifically, D-L1 measures depth rendering accu-racy. Acc and CD are computed from nearest-neighbor dis-tances between the reconstructed and ground-truth meshes. F-score is the harmonic mean of precision and recall under a 5 cm distance threshold. For clarity, we also refer to PSNR, SSIM, LPIPS, and D-L1 as rendering quality metrics. In contrast, Acc, CD, and F-score are referred to as mesh quality metrics. All rendering metrics are evaluated on a fixed set of ground-truth viewpoints shared by all methods. To assess mesh quality, we extract meshes from the Gaussian models by fusing rendered depth maps through TSDF integration, without additional geometry optimization. 
+
+C. Active Scene Reconstruction 
+
+The comparison results averaged over eight scenes are summarized in Table III, and Table IV details the per-scene performance on color rendering, depth rendering, and mesh quality. Overall, our method achieves the best performance in most evaluations across the two tables, with only three exceptions: ActiveGS achieves a lower overall CD and a higher F-score in the scene Room 0 , and FisherRF achieves a higher PSNR in Room 1 . Additionally, ActiveGS ties with our method for the best F-score in Office 3 . Although our method is not consistently the best on every individual metric, it achieves the strongest overall performance across the evaluated scenes. We attribute this to the reliability model introduced in Section IV-A, where the reconstruction loss 
+
+Lk jointly measures color, depth, and normal residuals. This enables the system to identify viewpoints with insufficient reconstruction quality and prioritize observations that provide greater information gain. Meanwhile, the online reconstruc-tion jointly optimizes photometric and depth losses with geometric regularizers, allowing the acquired observations to contribute to both appearance and geometry throughout the reconstruction process. The comparison also highlights distinct behaviors among the baselines. ActiveGS achieves the best CD, indicating favorable overall surface reconstruction despite its lower rendering quality. However, its higher D-L1 and Acc and relatively lower F-score reveal less accurate depth recon-struction and surface alignment. GauSS-MI and FisherRF, in contrast, achieve stronger visual results than ActiveGS but exhibit larger depth and mesh errors. Our method achieves a better balance between visual and geometric quality by jointly considering both during view selection, rather than relying solely on scene coverage or visual information gain. The qualitative comparison on the left-hand side of Fig-ure 3 further supports these observations. ActiveGS provides relatively complete geometric coverage but produces less ac-curate renderings, whereas GauSS-MI and FisherRF preserve better visual fidelity at the expense of geometric accuracy. Our method achieves a more consistent reconstruction, with sharper textures and cleaner object boundaries. The right-hand side of Figure 3 shows the reconstruction quality as the active reconstruction progresses, with the three plots corresponding to the color, depth, and mesh quality shown in the three rows on the left, respectively. ActiveGS improves rapidly during the early stage but begins to saturate after approximately 80 frames, with its accuracy slightly degrading thereafter. This behavior in the initial stage can be largely attributed to its original view planner, which neither accounts for quadrotor trajectory feasibility nor constrains the camera pitch, allowing it to select downward-facing viewpoints that are not reachable by the quadrotor. Such viewpoints provide broad observations of horizontal surfaces and can therefore yield strong initial coverage, but this advantage does not persist as the reconstruction progresses. In contrast, our method evaluates candidate viewpoints only after trajectory planning and feasibility checking. Although this constraint may limit the initial reconstruction speed, the proposed reliability-aware view selection continues to identify informative observations and steadily improves the reconstruction as more frames are acquired. Scene: Office 2 RGB Ground Truth          
+
+> 33.76 dB
+> Ours
+> 27.07 dB
+> ActiveGS
+> 33.00 dB
+> GauSS-MI
+> 32.41 dB
+> FisherRF
+> 25
+> 30
+> 35 PSNR [dB]
+> Depth
+> 0.33 cm 1.18 cm 1.59 cm 1.92 cm
+> 0
+> 2
+> 4Depth L1 [cm]
+> Normal
+> 3.4° 8.2° 17.7° 16.2°
+> 50 100 150 200 Frames
+> 2
+> 4
+> 6
+> 8Accuracy [cm]
+> 2
+> 4
+> 6
+> m
+
+Scene: Office 4 RGB Ground Truth          
+
+> 37.47 dB
+> Ours
+> 31.42 dB
+> ActiveGS
+> 35.55 dB
+> GauSS-MI
+> 36.10 dB
+> FisherRF
+> 25
+> 30
+> 35 PSNR [dB]
+> Depth
+> 0.31 cm 1.06 cm 1.46 cm 1.27 cm
+> 1
+> 2
+> 3Depth L1 [cm]
+> Normal
+> 2.6° 6.0° 14.8° 13.3°
+> 50 100 150 200 Frames
+> 2
+> 3
+> 4Accuracy [cm]
+> 2
+> 3
+> 4
+> 5
+> m
+
+Fig. 3. Novel view synthesis results compared to the ground truth, together with reconstruction quality over frames, for the scenes Office 2 and Office 4 .For each scene, the rendered color, depth, and normal images are presented, and each rendering is annotated with its PSNR [dB], Depth L1 [cm], and mean normal angular error [ ◦], respectively. The curves on the right report PSNR, Depth L1, and reconstruction accuracy as the number of collected frames increases, averaged over three runs, with the shaded areas indicating the variation across runs. 0 25 50 75 100 125 150 175 200 
+
+Frames 
+
+10 0
+
+10 1
+
+51   
+
+> Computation time per view [ms]
+> Ours ActiveGS GauSS-MI FisherRF
+
+Fig. 4. Candidate evaluation time over the active reconstruction process, averaged over three runs across eight scenes. 
+
+D. Efficiency Study 
+
+This subsection evaluates the efficiency of the proposed method in terms of computational cost and model size. We record the computation time of all methods throughout 
+
+TABLE V COMPUTATIONAL EFFICIENCY AND MODEL SIZE 
+
+Methods Time [ms] 1 ↓ fps [s −1]↑ Model Size [MB] ↓
+
+Ours 1.01 990.6 10.4 ActiveGS [18] 1.93 518.8 24.7 GauSS-MI [7] 5.34 187.2 9.0 
+
+FisherRF [15] 22.03 45.4 9.4  
+
+> 1
+
+Computation time for a single candidate viewpoint, averaged over all candidate evaluations from 24 complete active reconstruction runs, with 200 frames per run. 
+
+the complete active reconstruction process and summarize the results in Figure 4. As the reconstruction progresses, the computation time of our method remains relatively stable, whereas the baselines exhibit higher overhead. In particular, FisherRF shows an approximately linear increase in compu-tation time with the number of frames, as it requires ren-dering over all observed frames at each view selection step, making it unsuitable for real-time active reconstruction. The higher computation time observed during the initial frames for our method, GauSS-MI, and FisherRF is likely due to the shared simulation and trajectory-planning modules, which introduce additional initialization overhead. Once initialized, their computation time remains relatively stable throughout the reconstruction process. To provide a quantitative comparison, Table V reports the average computation time for candidate evaluation, the corresponding rate in frames per second (fps), and the resulting model size. Our method achieves the highest rate of 990 .6 fps , substantially outperforming all three baselines. This low computational cost is particularly beneficial for active reconstruction, where view selection and map updates must be performed online throughout the reconstruction process. In terms of model size, our method maintains a compact 10 .4 MB map, substantially smaller than ActiveGS and comparable to GauSS-MI and FisherRF. The similar model sizes of GauSS-MI and FisherRF are expected, as they share the same online reconstruction pipeline, with the remaining difference arising from their different selections of viewpoints. Overall, our method achieves superior reconstruction qual-ity with the lowest computational cost and a compact model size, as summarized in Figure 1. VI. C ONCLUSIONS 
+
+This paper presents an efficient active reconstruction system that balances visual and geometric reconstruction quality, computational efficiency, and model compactness. We develop an efficient incremental 2DGS mapping pipeline for real-time high-quality reconstruction, and introduce a probabilistic reliability model that characterizes the view-dependent reconstruction quality of individual 2D Gaussian splats based on their explicit surface orientation. Building on this model, we formulate 2D GauSS-MI to estimate the information provided by novel views and guide view selection according to both visual and geometric quality. Extensive experiments on eight Replica scenes demonstrate that the proposed framework achieves favorable overall reconstruction quality with low computational cost and a compact model size. ACKNOWLEDGMENT 
+
+The authors gratefully acknowledge Yixi Cai for insightful and valuable suggestions. REFERENCES [1] B. Mildenhall, P. P. Srinivasan, M. Tancik, J. T. Barron, R. Ramamoor-thi, and R. Ng, “NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis,” Communications of the ACM , vol. 65, no. 1, pp. 99–106, 2021. [2] B. Kerbl, G. Kopanas, T. Leimk¨ uhler, and G. Drettakis, “3D Gaussian Splatting for Real-Time Radiance Field Rendering,” ACM Transac-tions on Graphics , vol. 42, no. 4, July 2023. [3] P. Dai, J. Xu, W. Xie, X. Liu, H. Wang, and W. Xu, “High-quality Surface Reconstruction using Gaussian Surfels,” in ACM SIGGRAPH 2024 Conference Papers . Association for Computing Machinery, 2024. [4] B. Huang, Z. Yu, A. Chen, A. Geiger, and S. Gao, “2D Gaussian Splatting for Geometrically Accurate Radiance Fields,” in SIGGRAPH 2024 Conference Papers . Association for Computing Machinery, 2024. [5] Z. Zhang, T. Henderson, S. Karaman, and V. Sze, “FSMI: Fast Com-putation of Shannon Mutual Information for Information-Theoretic Mapping,” The International Journal of Robotics Research , vol. 39, no. 9, pp. 1155–1177, 2020. [6] D. Yan, J. Liu, F. Quan, H. Chen, and M. Fu, “Active Implicit Object Reconstruction Using Uncertainty-Guided Next-Best-View Optimiza-tion,” IEEE Robotics and Automation Letters , 2023. [7] Y. Xie, Y. Cai, Y. Zhang, L. Yang, and J. Pan, “GauSS-MI: Gaussian Splatting Shannon Mutual Information for Active 3D Reconstruction,” in Proceedings of Robotics: Science and Systems , Los Angeles, CA, USA, June 2025. [8] S. Isler, R. Sabzevari, J. Delmerico, and D. Scaramuzza, “An Infor-mation Gain Formulation for Active Volumetric 3D Reconstruction,” in 2016 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 2016, pp. 3477–3484. [9] L. Lu, Y. Zhang, P. Zhou, J. Qi, Y. Pan, C. Fu, and J. Pan, “Semantics-Aware Receding Horizon Planner for Object-Centric Active Mapping,” 
+
+IEEE Robotics and Automation Letters , 2024. [10] B. J. Julian, S. Karaman, and D. Rus, “On Mutual Information-Based Control of Range Sensing Robots for Mapping Applications,” The International Journal of Robotics Research , vol. 33, no. 10, pp. 1375– 1392, 2014. [11] Y. Zhang, X. Chen, C. Feng, B. Zhou, and S. Shen, “FALCON: Fast Autonomous Aerial Exploration Using Coverage Path Guidance,” 
+
+IEEE Transactions on Robotics , 2024. [12] Y. Li, Z. Kuang, T. Li, Q. Hao, Z. Yan, G. Zhou, and S. Zhang, “Ac-tiveSplat: High-Fidelity Scene Reconstruction through Active Gaus-sian Splatting,” IEEE Robotics and Automation Letters , 2025. [13] X. Pan, Z. Lai, S. Song, and G. Huang, “ActiveNeRF: Learning Where to See with Uncertainty Estimation,” in European Conference on Computer Vision . Springer, 2022, pp. 230–246. [14] Y. Ran, J. Zeng, S. He, J. Chen, L. Li, Y. Chen, G. Lee, and Q. Ye, “NeurAR: Neural Uncertainty for Autonomous 3D Reconstruction with Implicit Neural Representations,” IEEE Robotics and Automation Letters , vol. 8, no. 2, pp. 1125–1132, 2023. [15] W. Jiang, B. Lei, and K. Daniilidis, “FisherRF: Active View Selection and Mapping with Radiance Fields Using Fisher Information,” in 
+
+European Conference on Computer Vision . Springer, 2025, pp. 422– 440. [16] C. Shen, S. Zheng, B. Wu, Y. Feng, Y. Fei, M. Mei, H. Jiang, and X. Huang, “Auto3R: Automated 3D Reconstruction and Scan-ning via Data-Driven Uncertainty Quantification,” arXiv preprint arXiv:2512.04528 , 2025. [17] K. Jun-Seong, T.-H. Oh, E. P´ erez-Pellitero, and Y. Jang, “SA-ResGS: Self-Augmented Residual 3D Gaussian Splatting for Next Best View Selection,” arXiv preprint arXiv:2601.03024 , 2026. [18] L. Jin, X. Zhong, Y. Pan, J. Behley, C. Stachniss, and M. Popovi´ c, “ActiveGS: Active Scene Reconstruction Using Gaussian Splatting,” 
+
+IEEE Robotics and Automation Letters , vol. 10, no. 5, pp. 4866–4873, 2025. [19] Y. Li, Z. Jia, Y. Zhang, Q. Hao, and S. Zhang, “ObjSplat: Geometry-Aware Gaussian Surfels for Active Object Reconstruction,” IEEE Transactions on Automation Science and Engineering , 2026. [20] X. Zhong, Y. Pan, L. Jin, M. Popovi´ c, J. Behley, and C. Stachniss, “Globally Consistent RGB-D SLAM with 2D Gaussian Splatting,” 
+
+IEEE Transactions on Robotics (TRO) , 2026. [21] T. M. Cover and J. A. Thomas, Elements of Information Theory . New York, NY, USA: John Wiley & Sons, 1991. [22] M. Savva, A. Kadian, O. Maksymets, Y. Zhao, E. Wijmans, B. Jain, J. Straub, J. Liu, V. Koltun, J. Malik, D. Parikh, and D. Batra, “Habitat: A Platform for Embodied AI Research,” in Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) ,2019. [23] J. Straub, T. Whelan, L. Ma, Y. Chen, E. Wijmans, S. Green, J. J. En-gel, R. Mur-Artal, C. Ren, S. Verma, A. Clarkson, M. Yan, B. Budge, Y. Yan, X. Pan, J. Yon, Y. Zou, K. Leon, N. Carter, J. Briales, T. Gillingham, E. Mueggler, L. Pesqueira, M. Savva, D. Batra, H. M. Strasdat, R. D. Nardi, M. Goesele, S. Lovegrove, and R. Newcombe, “The Replica Dataset: A Digital Replica of Indoor Spaces,” arXiv preprint arXiv:1906.05797 , 2019. [24] Y. Ren, F. Zhu, G. Lu, Y. Cai, L. Yin, F. Kong, J. Lin, N. Chen, and F. Zhang, “Safety-Assured High-Speed Navigation for MAVs,” 
+
+Science Robotics , vol. 10, no. 98, p. eado6187, 2025.

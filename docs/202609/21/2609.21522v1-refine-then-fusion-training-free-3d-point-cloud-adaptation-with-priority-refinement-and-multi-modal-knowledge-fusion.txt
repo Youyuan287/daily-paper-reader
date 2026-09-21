@@ -1,0 +1,444 @@
+Title: Refine Then Fusion: Training-Free 3D Point Cloud Adaptation with Priority Refinement and Multi-Modal Knowledge Fusion
+
+URL Source: https://arxiv.org/pdf/2609.21522v1
+
+Published Time: Mon, 21 Sep 2026 00:43:24 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# Refine Then Fusion: Training-Free 3D Point Cloud Adaptation with Priority Refinement and Multi-Modal Knowledge Fusion 
+
+## Hang Cheng ∗, Yan Chen ∗, Mingyu Fan ∗, Long Zeng †
+
+> 1
+
+Tsinghua Shenzhen International Graduate School, Tsinghua University chenghan24@mails.tsinghua.edu.cn, chenyan23@mails.tsinghua.edu.cn, my-fan25@mails.tsinghua.edu.cn, zenglong@sz.tsinghua.edu.cn 
+
+Abstract 
+
+Recent pre-trained foundation models provide rich multi-modal priors for downstream 3D vision tasks. However, the effectiveness of these representations in few-shot scenarios is limited by two fundamental challenges: High-dimensional features often contain substantial channel redundancy and task-irrelevant noise, while the reliability of different modal-ities varies across samples. Consequently, direct aggregation of heterogeneous representations overlooks sample-dependent modality reliability and may obscure the discriminative cues essential. To address these limitations, we propose Refine Then Fusion (RTF) , a training-free framework for few-shot 3D recognition. RTF first identifies discriminative feature channels by jointly modeling inter-class similarity and intra-class stability, thereby decoupling domain-specific knowledge refinement from the cached representations of pre-trained models. It then introduces a reliability-aware fusion mech-anism that estimates sample-wise modality reliability from the distribution shifts induced by feature refinement, en-abling adaptive aggregation of multi-modal representations. Furthermore, RTF constructs a memory cache that integrates instance-level support features with class-level prototypes to infer query labels. Extensive experiments on five benchmarks demonstrate that RTF consistently outperforms single-modal baselines, partial-fusion variants, and existing lightweight adaptation methods, achieving state-of-the-art few-shot 3D recognition performance without gradient optimization, addi-tional training data, auxiliary training, or parameter updates. 
+
+## Introduction 
+
+Learning 3D object recognition with limited supervision re-mains a fundamental challenge in computer vision (Feng et al. 2025; Khan et al. 2024). Recently, multi-modal foun-dation models pre-trained on large-scale datasets (Huang et al. 2023; Liu et al. 2024), such as ULIP (Xue et al. 2023, 2024) and PointCLIP (Zhang et al. 2022a; Zhu et al. 2023a), have demonstrated remarkable zero-shot capability in 3D un-derstanding by providing rich transferable priors. However, adapting these representations to downstream few-shot sce-narios remains challenging due to severe domain shifts and limited annotations. A straightforward solution is to fine-tune the foundation models or employ parameter-efficient adapta-tion strategies (Zhang et al. 2024; Cheng et al. 2023). How-ever, such optimization-based approaches inevitably require gradient updates, additional training procedures, and careful 
+
+> ∗
+
+These authors contributed equally. 
+
+> †
+
+Corresponding author. Copyright © 2027, Association for the Advancement of Artificial Intelligence (www.aaai.org). All rights reserved. 10 3 10 2
+
+GFLOPs 60 70 80 90 ModelNet40 Accuracy (%) 
+
+> PointCLIP-V2 RECON OpenShape VIT-Lens ULIP-1 ULIP-2 ULIP-2* TIP-3D PointTFA PointTFA m
+> PointCLIP (FT) CLIP2Point (FT) PointCLIP-V2 (FT)
+
+Ours 
+
+> Train-Free Fine-Tune Ours
+
+Figure 1: Comparison of accuracy and training GFLOPs on 16-shot ModelNet40 classification. Our method achieves competitive accuracy with substantially reduced optimiza-tion cost, demonstrating its effectiveness and efficiency for training-free adaptation. hyperparameter tuning, which are undesirable in data-scarce and resource-constrained scenarios. Pioneering efforts such as Tip-Adapter (Zhang et al. 2022b) and its 3D extensions PointTFA (Wu et al. 2024)) have demonstrated the feasibility of training-free adapta-tion via key-value cache models. Nevertheless, we iden-tify two fundamental bottlenecks in these existing architec-tures. First, severe feature redundancy. Although foun-dation models provide abundant multi-modal knowledge, such representations are not uniformly reliable for down-stream tasks (Zhu et al. 2023b; Lin et al. 2024b). First, high-dimensional features extracted from pre-trained models often contain substantial channel redundancy and task-irrelevant information, where only a subset of feature dimensions con-tribute to discriminative recognition. Directly retaining all feature channels not only introduces unnecessary computa-tional overhead but may also dilute task-relevant cues stored in the representations. Second, different modalities exhibit varying reliability across samples due to their distinct se-mantic and geometric characteristics. 
+
+Second, naive multi-modal fusion. Point clouds inher-ently benefit from diverse modalities—such as 3D seman-arXiv:2609.21522v1 [cs.CV] 18 Sep 2026 Logit        
+
+> Final
+> Fusion
+> Encoder
+> “a photo of
+> [CLASS]”
+> Encoder
+> Adapter Adapter
+> Encoder
+> “a photo of [CLASS]”
+> Encoder
+> Cache Logit
+> Encoder Encoder Encoder
+> “a photo of [CLASS]”
+> Encoder
+> Cache
+> Logit
+> (a) Fine-tune methods (b) Cache methods
+> (c) Ours
+> Refine Refine Refine
+
+Figure 2: Comparison between previous adaptation paradigms and our RTF framework. tics (Xue et al. 2023), 2D visual projections (Ji et al. 2024; Wang et al. 2023), and structural geometry (Zhang et al. 2023b). However, seamlessly integrating such heterogeneous modalities in few-shot scenarios poses a formidable chal-lenge. Due to the inherent severe self-occlusion and high-dimensional sparsity of 3D data, forcibly coercing these rep-resentations into a unified embedding space via early feature fusion inevitably triggers the curse of dimensionality (Wu et al. 2026). More critically, it induces negative information gain—catastrophic noise from modalities operating within their cognitive blind spots can easily overwhelm the correct predictive signals from confident modalities. To address these challenges, we propose Refine Then Fu-sion (RTF) , a training-free framework that follows a sim-ple yet effective principle: refine informative knowledge be-fore adaptively fusing heterogeneous representations . Specif-ically, RTF introduces a Priority-guided Channel Refinement (PCR) module, which identifies discriminative feature chan-nels by jointly modeling inter-class similarity and inter-class variance. PCR selectively preserves task-relevant dimensions while suppressing redundant information in pre-trained rep-resentations, providing cleaner features for subsequent adap-tation. Building upon the refined representations, RTF develops a Reliability-aware Multi-Modal Fusion (RAMF) mechanism that estimates modality reliability according to refinement-induced distribution shifts. By measuring the consistency of each modality before and after refinement, RAMF adaptively aggregates complementary multi-modal representations and emphasizes stable knowledge while reducing the impact of unreliable modalities. Furthermore, RTF introduces a Hybrid Memory Cache (HMC) that integrates instance-level support retrieval with class-level prototype memory. By combining fine-grained sample matching and category-level abstraction, HMC improves query inference robustness under few-shot scenarios without additional parameter optimization. In summary, the main contributions of our work are as fol-lows: (1) We propose Refine Then Fusion (RTF), a training-free framework that refines informative representations be-fore adaptive multi-modal fusion for few-shot 3D recogni-tion. (2) We introduce Priority-guided Channel Refinement (PCR), which exploits inter-class similarity and variance to identify discriminative channels, suppressing redundant di-mensions while preserving task-relevant knowledge. (3) We develop Reliability-aware Multi-Modal Fusion (RAMF) and Hybrid Memory Cache (HMC), which respectively enable reliability-driven modality aggregation and complementary instance-prototype retrieval for robust query inference. (4) RTF achieves state-of-the-art performance among training-free methods on five benchmarks without any training costs. 
+
+## Related Work 
+
+3D Pre-trained Foundation Models 
+
+Recent 3D point-cloud understanding increasingly relies on transferring vision–language priors from large-scale pre-trained models, mitigating the need for training 3D encoders from scratch. PointCLIP-V1/V2 (Zhang et al. 2022a; Zhu et al. 2023a) perform CLIP-based zero-shot recognition via multi-view depth projections and enhanced textual prompts, while CLIP2Point, ViT-Lens (Lei et al. 2024), openshape(Liu et al. 2024)and ULIP (Xue et al. 2023, 2024) and CG3D (Hegde, Valanarasu, and Patel 2023) improve cross-modal adaptation by aligning 3D representations with pretrained image–text encoders. Despite different designs, these meth-ods share the same premise: leveraging upstream multimodal knowledge for 3D representation learning. Building on such pretrained encoders, we study efficient downstream adapta-tion without retraining. 
+
+Parameter-Efficient Fine-Tuning and Few-Shot Adaptation 
+
+Parameter-Efficient Fine-Tuning (PEFT) has emerged as an effective paradigm for adapting foundation models to few-shot downstream tasks. In 2D vision-language models, meth-ods such as CoOp (Zhou et al. 2022b), CoCoOp (Zhou et al. 2022a), VPT (Jia et al. 2022), and CLIP-Adapter (Gao et al. 2021) introduce learnable prompts or adapters, while prior-guided approaches including Tip-Adapter (Zhang et al. 2022c), Causal-FS (Lin et al. 2024a), and Tip-X (Udan-darao, Gupta, and Albanie 2023) exploit few-shot support sets through explicit key-value caches. Inspired by these ad-vances, recent works extend few-shot adaptation to 3D per-ception, including CrossPoint (Afham et al. 2022), Point-TFA (Wu et al. 2024, 2026), GAPrompt (Ai et al. 2025b), TopAdapter (Wang et al. 2026), and UPP (Ai et al. 2025a). However, existing 3D adaptation methods either rely on gradient-based optimization or suffer from insufficient fea-ture refinement. In contrast, our RTF performs training-free feature refinement to suppress noisy and redundant informa-tion, enabling more effective adaptation. 
+
+Multi-Modal Knowledge Fusion 
+
+Multi-modal representation learning exploits complemen-tary knowledge across heterogeneous modalities through cross-modal interaction. Attention-based fusion methods capture rich modality dependencies but introduce high com-putational costs (Sun et al. 2023; Zhang et al. 2023a; Xing et al. 2023; Tan and Bansal 2019). In contrast, CLIP-style dual encoders learn scalable shared embedding spaces via large-scale contrastive pre-training, enabling effective knowledge transfer for open-vocabulary tasks (Ramesh et al. 2021; Zhou, Shen, and Liu 2024). Inspired by these advances, recent works extend multi-modal knowledge transfer to 3D perception. GPT4Point (Qi et al. 2024) and LL3DA (Chen et al. 2024) incorporate language models for point cloud un-derstanding, while others explore semantic interaction and visual-language transfer for 3D representations (Xu et al. 2024; Zhou et al. 2025; Jiao et al. 2025). However, most existing approaches still rely on additional training or adap-tation, motivating our training-free framework. 
+
+## Proposed Method 
+
+In this section, we present the proposed Refine Then Fusion (RTF) framework for training-free 3D point cloud adap-tation. As illustrated in Fig. 3, RTF integrates three com-plementary modalities and operates without gradient opti-mization or parameter updates. We first introduce the multi-modal representation extraction process. Then, we present the Priority-guided Channel Refinement (PCR) module, which identifies and preserves discriminative feature dimen-sions while suppressing task-irrelevant redundancy. Next, we introduce the Reliability-aware Multi-Modal Fusion (RAMF) mechanism, which adaptively aggregates hetero-geneous representations according to modality reliability. Finally, we describe the Hybrid Memory Cache (HMC) 
+
+strategy, which combines instance-level features and class-level prototypes for efficient query inference. 
+
+Multi-Modal Representation 
+
+Given an input 3D point cloud P, we construct a compre-hensive representation by leveraging three complementary modalities, denoted as M = {3D , 2D , Geo }.
+
+• 3D Semantics: We employ a pre-trained 3D foundation model (e.g., ULIP) to extract holistic semantic features 
+
+f3D ∈ RD3D .
+
+• 2D Visual Projections: To capture complementary vi-sual cues, we project P into multi-view depth/color im-ages and extract visual representations using a pre-trained Vision Transformer (ViT), yielding f2D ∈ RD2D .
+
+• Local Geometry: To explicitly encode structural infor-mation independent of pre-training biases, we employ a non-parametric Point-NN to extract geometric features 
+
+fGeo ∈ RDGeo .All extracted features are L2-normalized and projected onto the unit hypersphere. 
+
+Priority-guided Channel Refinement 
+
+Pre-trained representations contain rich transferable knowl-edge, but many feature channels are irrelevant or unstable for specific few-shot tasks. To remove such redundancy without introducing learnable parameters, we propose the Priority-guided Channel Refinement (PCR) module, which selects discriminative channels according to their inter-class separa-bility. Given a support set with Ns samples from C categories, we first construct class prototypes X ∈ RC×Dm for each modality m. For zero-shot aligned models such as ULIP, prototypes are obtained from encoded text prompts, while for visual and geometric modalities they are computed by averaging support features within each class. For the k-th channel, PCR evaluates its discriminative priority by jointly considering inter-class similarity Sk and inter-class variance Vk. A desirable channel should exhibit low similarity across different classes and high variance among class prototypes. Therefore, we define the priority score as: 
+
+Jk = λs ˜Sk − (1 − λs) ˜Vk (1) where λs ∈ [0 , 1] controls the trade-off between the two cri-teria, and ˜(·) denotes Min-Max normalization for scale align-ment. Specifically, the inter-class similarity Sk measures the average pairwise correlation of the k-th channel across dif-ferent class prototypes, which can be efficiently computed as: 
+
+Sk = 1
+
+C(C − 1) 
+
+
+
+> C
+
+X
+
+> i=1
+
+Xi,k 
+
+!2
+
+−
+
+> C
+
+X
+
+> i=1
+
+X2
+
+> i,k
+
+ . (2) The inter-class variance Vk is calculated as the variance of the k-th channel over the C class prototypes, reflecting its capability to distinguish different categories. Channels with smaller Jk values are considered more dis-criminative. PCR retains the top-K channels with the lowest priority scores: 
+
+f ′ 
+
+> m
+
+= Φ TopK (fm, J m) ∈ RK , (3) where K = ⌊ρ × Dm⌋ is controlled by the keep ratio ρ. This parameter-free refinement suppresses task-irrelevant dimen-sions while preserving discriminative information for down-stream recognition. 
+
+Reliability-aware Multi-Modal Fusion 
+
+Different modalities exhibit varying reliability across sam-ples due to their distinct semantic, visual, and geometric char-acteristics. Direct feature averaging may introduce unreliable information and weaken discriminative cues. To address this issue, we propose the Reliability-aware Multi-Modal Fu-sion (RAMF) mechanism, which estimates modality relia-bility according to refinement-induced distribution shifts. 
+
+Key Observation. A reliable modality should preserve consistent semantic affinity after removing redundant chan-nels. If feature refinement substantially changes the similar-ity distribution between a query and the support memory, the original modality likely relies on unstable or task-irrelevant dimensions. Conversely, a stable distribution indicates robust discriminative information. Given a query feature f qm and support memory Fsm ∈
+
+RNs×Dm , the pre-refinement affinity distribution is com-puted as: 
+
+pmpre = Softmax  f qm(Fsm)⊤ . (4) After PCR, the refined affinity distribution pmpost is ob-tained using f ′qm and F′sm. The reliability of modality m is PCR 
+
+> PCR
+> PCR
+> Point Cloud
+> Encoder
+> CLIP Image
+> Encoder
+> Geometry
+> Encoder
+
+Inter -class 
+
+Similarity 
+
+Intra -class 
+
+Variance 
+
+Logits 
+
+Base logits  Final 
+
+Results 
+
+> CLIP Image
+> Encoder
+> Geometry
+> Encoder
+
+Hybrid Memory Cache (HMC) 
+
+Support Set  
+
+> PCR PCR
+> “a point cloud of
+> [CLASS]” “a photo of
+> [CLASS]”
+> CLIP Text
+> Encoder
+> PCR
+
+Priority -guided Channel Refinement (PCR)                    
+
+> “There is a [CLASS]
+> in the scene”
+> SelectTop K
+> Compute
+> Score
+> Onehot (1 )kskskJSV
+> =−−21
+> 1()
+> Cikkki
+> VxxC=
+> =−
+
+21 1            
+
+> 1CCijkkkijji
+> Sx x C==
+> =
+
+ 
+
+Reliability -aware 
+
+Multi -Modal Fusion Support Labels 
+
+> Point Cloud
+> Encoder
+> Distribution Shift
+> Branch Weight
+> Branch Weight
+> Branch Weight
+> Branch Weight
+
+Figure 3: Overview of the proposed RTF framework, consisting of Priority-guided Channel Refinement, Reliability-aware Multi-Modal Fusion, and Hybrid Memory Cache for training-free 3D adaptation. measured by the KL divergence between the two distribu-tions: 
+
+DmKL =
+
+> Ns
+
+X
+
+> i=1
+
+pmpre [i] log pmpre [i]
+
+pmpost [i] . (5) To obtain a stable modality-level reliability estimation un-der few-shot settings, we calculate the expected distribution shift: ¯DmKL = Eq [DmKL ]. (6) The fusion weight is then assigned through a temperature-scaled softmax: 
+
+wm = exp( −τ ¯DmKL )
+
+P 
+
+> j∈M
+
+exp( −τ ¯DjKL ) , (7) where τ > 0 controls the weighting sharpness. Finally, refined features with different dimensions are zero-padded into a unified semantic space of dimension 
+
+Dmax = max j (Dj ) and normalized. The fused represen-tation is obtained as: 
+
+ff used =
+
+P 
+
+> m∈M
+
+wm˜f ′
+
+> m
+
+P 
+
+> m∈M
+
+wm˜f ′ 
+
+> m2
+
+, (8) where ˜f ′ 
+
+> m
+
+denotes the padded refined representation. 
+
+Hybrid Memory Cache 
+
+After RAMF, RTF performs non-parametric prediction through the proposed Hybrid Memory Cache (HMC) . In few-shot scenarios, instance-level retrieval preserves fine-grained sample characteristics but may suffer from incom-plete intra-class coverage due to limited support samples. To address this limitation, HMC combines instance memory with a class-level prototype memory, capturing both local sample similarity and global category variations. Given fused support features Fs = {(fi, y i)}Ns
+
+> i=1
+
+, the in-stance memory directly stores support representations and performs similarity-based voting: 
+
+zins = X
+
+> i
+
+exp( −γ(1 − q⊤fi)) yi, (9) where q denotes the query feature. To enhance category-level robustness, HMC further con-structs a multi-prototype memory by clustering features within each class on the hypersphere using spherical K-means: 
+
+Mcls = {(pc,k , c )}, (10) where pc,k denotes the k-th prototype of class c. The pro-totype memory prediction is obtained through the same similarity-based voting: 
+
+zcls = X
+
+> c,k
+
+exp( −γ(1 − q⊤pc,k )) yc. (11) Since instance retrieval and prototype retrieval provide complementary but potentially uncertain predictions, HMC adaptively combines them according to prediction entropy: 
+
+α = exp( −H(zcls )) exp( −H(zins )) + exp( −H(zcls )) , (12) where lower entropy indicates higher prediction confidence. The final prediction is computed as: 
+
+z = zins + αz cls . (13) HMC integrates fine-grained instance discrimination and class-level semantic abstraction without parameter optimiza-tion, providing robust inference under few-shot settings. 
+
+## Experiments 
+
+Experiment Setup 
+
+Datasets We evaluate top-1 classification accuracy under training-free few-shot settings on three downstream bench-marks. ModelNet10 (Wu et al. 2014) contains 4,899 synthetic 3D models from 10 categories, with 3,991 training and 908 test samples. ModelNet40 (Wu et al. 2014) extends it to 40 categories and comprises 9,843 training and 2,468 test sam-ples. ScanObjectNN (Uy et al. 2019) contains 2,902 real-world object instances from 50 categories and provides three increasingly challenging variants: OBJ_ONLY, OBJ_BG, and OBJ_T50RS, which introduce background clutter and geometric perturbations to assess robustness under realistic scanning conditions. 
+
+Implementation Details 
+
+Following previous few-shot 3D recognition protocols, we evaluate our method under the K-shot setting, where K ∈{1, 2, 4, 8, 16 }, using the same support and query splits for all compared methods. We employ ULIP-2 (Xue et al. 2024) as the 3D semantic encoder, ViT (Dosovitskiy et al. 2020) as the 2D visual encoder, and PointNN (Zhang et al. 2023b) as the geometric encoder. For Priority Channel Refinement, the channel keep ratio ρ is set to 0.5 by default for all modalities, and the trade-off coefficient λs between inter-class similarity and variance is set to 0.5. The KL-guided fusion temperature 
+
+τ is empirically set to 1.0. All experiments are conducted using the same hyperparameter configuration across different datasets without dataset-specific tuning. 
+
+Comparison to State-of-the-Art Methods 
+
+We compare RTF with representative zero-shot, fine-tuning-based, and training-free 3D recognition methods, including PointCLIP (Zhang et al. 2022a), CLIP2Point (Huang et al. 2023), RECON (Qi et al. 2023), OpenShape (Liu et al. 2024), ViT-Lens (Lei et al. 2024), ULIP-1 (Xue et al. 2023), ULIP-2 (Xue et al. 2024), Point-NN (Zhang et al. 2023b), Seg-NN (Zhu et al. 2024), TIP-3D (Zhang et al. 2022b), Point-TFA (Wu et al. 2024), and PointTFA m (Wu et al. 2026). As reported in Tab. 1, these methods cover different adaptation paradigms, including image-assisted, point-cloud-based, and fine-tuning strategies. RTF achieves state-of-the-art performance on most bench-marks while maintaining a fully training-free pipeline. Un-der the 16-shot setting, RTF reaches 91.05% accuracy on ModelNet40, outperforming PointTFA and PointTFA m by 1.26% and 0.25%, respectively. On the challenging ScanOb-jectNN benchmarks, RTF further improves over PointTFA m
+
+by 1.91% on OBJ_T50RS under 16-shot and 8.71% un-der full-shot settings, demonstrating the robustness of PCR and RAMF in refining and aggregating reliable multi-modal knowledge. Although slightly below the strongest competitor on ModelNet10, RTF achieves the best performance on the remaining evaluated settings, highlighting the effectiveness of parameter-free knowledge refinement and fusion without model optimization. 
+
+## Ablation Studies 
+
+Impact of Support Data Availability 
+
+To evaluate the data efficiency of RTF, we vary the Propor-tion of Training Set used to construct the Hybrid Memory Cache (HMC) from 10% to 100% . As shown in Tab. 2, increasing the available support data consistently improves performance across different benchmarks, as a larger mem-ory cache provides broader coverage of the underlying data distribution. Notably, RTF maintains strong recognition ac-curacy with only 10% of the training set, demonstrating its effectiveness in exploiting limited support information under few-shot scenarios. 
+
+Effectiveness of Core Components 
+
+We conduct an ablation study to evaluate the contribution of each component in RTF. As shown in Fig. 4, performance consistently improves with the introduction of each compo-nent. Compared with direct averaging, Priority-guided Chan-nel Refinement (PCR) brings the largest gain by removing task-irrelevant channels and obtaining cleaner representa-tions. Reliability-aware Multi-Modal Fusion (RAMF) fur-ther improves performance by adaptively weighting modal-ities according to refinement-induced stability. Finally, Hy-brid Memory Cache (HMC) provides additional gains by integrating instance-level retrieval and class-level prototype abstraction. 
+
+Modality Contribution Analysis 
+
+To analyze modality complementarity, we evaluate individ-ual modalities and their combinations under the same setting. As shown in Tab. 3, each modality captures distinct informa-tion with inherent limitations. The 3D semantic modality provides strong category understanding, while 2D visual and geometric modalities offer complementary appearance and structural cues. Combining modalities consistently improves performance; for example, adding geometry to 3D semantics increases OBJ_T50RS accuracy from 77.97% to 81.30%. Finally, integrating all three modalities achieves the best re-sults across all benchmarks, validating their complementary nature and motivating the adaptive fusion in RTF. 
+
+Comparison of Feature Fusion Strategies 
+
+To validate the effectiveness of the proposed reliability-aware weighting strategy, we compare KL-guided fusion with uni-form averaging and entropy-based weighting. As shown in Fig. 5, entropy-based fusion provides limited improvements over uniform weighting, indicating that raw prediction con-fidence is insufficient for identifying reliable modalities. In contrast, KL-guided fusion consistently achieves the best per-formance by evaluating modality stability after PCR, demon-Method Conditions (K-shot) 2D-Modal 3D-Modal ModelNet40 ModelNet10 OBJ_ONLY OBJ_BG OBJ_T50RS PointCLIP Train-Free (0) ✓ ✓ 20.18 30.23 19.28 21.34 15.38 CLIP2Point Train-Free (0) ✓ ✓ 49.38 66.63 30.46 35.46 23.32 PointCLIP-V2 Train-Free (0) ✓ ✓ 64.22 73.13 50.09 41.22 35.36 RECON Train-Free (0) ✓ ✓ 61.70 75.60 43.70 40.40 30.50 OpenShape Train-Free (0) ✓ ✓ 85.30 - - 56.70 -VIT-Lens Train-Free (0) ✓ ✓ 87.60 - - 60.10 -ULIP-1 Train-Free (0) - ✓ 60.40 - - 48.50 -ULIP-2 Train-Free (0) - ✓ 75.60 - - - -ULIP-2* Train-Free (0) - ✓ 84.70 - - - -Point-NN Train-Free (Full) - ✓ 81.80 - 71.10 74.90 64.90 Seg-NN Train-Free (Full) - ✓ 84.20 - - - -TIP-3D Train-Free (16) - ✓ 86.06 89.76 73.49 75.56 59.61 CLIP2Point Fine-Tune (16) ✓ ✓ 87.46 - - - -PointCLIP Fine-Tune (16) ✓ ✓ 87.20 - - - -PointCLIP-V2 Fine-Tune (16) ✓ ✓ 89.55 - - - -PointTFA Train-Free (16) - ✓ 89.79 92.62 80.90 82.10 67.18 PointTFA m Train-Free (16) ✓ ✓ 90.80 93.94 85.54 84.51 72.03 
+
+Ours Train-Free (16) ✓ ✓ 91.05 92.84 87.26 84.85 73.94 
+
+PointTFA [33] Train-Free (Full) - ✓ 90.88 93.17 83.48 84.85 68.22 PointTFA m Train-Free (Full) ✓ ✓ 91.33 92.96 83.00 85.40 73.14 
+
+Ours Train-Free (Full) ✓ ✓ 92.91 93.50 91.57 90.36 81.85 
+
+Table 1: Comparison with state-of-the-art methods under few-shot and full-shot 3D recognition settings. “2D-Modal” indicates the use of image inputs during inference, while “3D-Modal” denotes the use of point clouds. ULIP-2 ∗ represents the model pre-trained on the large-scale Objaverse dataset. Best results are highlighted in bold. 1 2 4 8 16                   
+
+> Number of shots
+> 0.78 0.80 0.82 0.84 0.86 0.88 0.90 0.92 0.94
+> Classification Accuracy
+> ModelNet40
+> 1 2 4816
+> Number of shots
+> 0.80 0.82 0.84 0.86 0.88 0.90 0.92 0.94
+> ModelNet10
+> 1 2 4816
+> Number of shots
+> 0.65 0.70 0.75 0.80 0.85 0.90 OBJ_ONLY
+> 1 2 4816
+> Number of shots
+> 0.65 0.70 0.75 0.80 0.85 0.90 OBJ_BG
+> 1 2 4816
+> Number of shots
+> 0.45 0.50 0.55 0.60 0.65 0.70 0.75 0.80 OBJ_T50RS
+> Full Baseline + Refine + KL Fusion Baseline + Refine Baseline
+
+Figure 4: Few-shot performance comparison of different core components ablation on multiple benchmarks. 
+
+Proportion 10% 20% 40% 60% 80% 100% ModelNet10 89.73 91.25 91.96 92.29 92.62 93.50 
+
+ModelNet40 89.71 91.00 91.25 91.57 92.26 92.91 
+
+OBJ_ONLY 84.17 85.44 86.06 87.61 88.47 91.57 
+
+OBJ_BG 80.72 84.51 87.78 87.44 88.64 90.36 
+
+OBJ_T50RS 76.65 78.31 79.98 81.40 80.36 81.85 
+
+Table 2: Impact of Different Support Set Sizes strating that refinement-induced distribution shifts provide a more reliable criterion for adaptive multi-modal aggregation. 
+
+Comparison of Cluster Strategies 
+
+To investigate the effectiveness of prototype construction in HMC, we compare different clustering strategies for building class-level memory. As shown in Fig. 6, Spherical K-Means consistently outperforms conventional K-Means and random prototype selection across all benchmarks. This improve-ment stems from the normalized feature space of pre-trained representations, where semantic similarity is better charac-terized by angular distance than Euclidean distance. By opti-mizing cosine similarity, Spherical K-Means produces more discriminative prototypes and better captures intra-class vari-ations under few-shot settings. 
+
+Sensitivity of Hyper-parameters 
+
+We investigate the sensitivity of two key hyper-parameters in PCR, including the channel keep ratio ρ and the similarity-variance trade-off coefficient λs. As shown in Fig. 7, RTF maintains stable performance across a wide range of settings. The accuracy remains consistent when ρ varies from 0.1 to 0.9, while overly retaining all channels ( ρ = 1 .0) causes a clear degradation, confirming the necessity of removing re-Modality Accuracy (%) 3D 2D Geometry ModelNet40 ModelNet10 OBJ_ONLY OBJ_BG OBJ_T50RS 
+
+✓ × × 91.41 92.73 90.19 88.47 77.97 
+
+× ✓ × 83.14 87.56 70.05 74.18 54.75 
+
+× × ✓ 18.92 76.98 27.02 28.23 24.50 
+
+✓ ✓ × 91.98 92.95 91.22 88.81 78.14 
+
+✓ × ✓ 92.54 92.62 90.71 89.62 81.30 
+
+× ✓ ✓ 78.00 85.68 68.16 74.35 55.45 
+
+✓ ✓ ✓ 92.91 93.50 91.57 90.36 81.85 
+
+Table 3: Ablation study of different modality combinations. ModelNet40 ModelNet10 OBJ_ONLY OBJ_BG OBJ_T50RS 80 85 90 95 Classification Accuracy (%) Entropy Fusion Uniform 1/3 Ours 
+
+Figure 5: Comparison of different modality fusion strategies. ModelNet40 ModelNet10 OBJ_ONLY OBJ_BG OBJ_T50RS 70 75 80 85 90 95 Classification Accuracy (%) KMeans GMM Ours 
+
+Figure 6: Comparison of different clustering strategies for class-level memory construction. dundant dimensions. Similarly, λs exhibits limited influence within a broad range, indicating that PCR is robust to the balance between inter-class similarity and variance. These results demonstrate that the proposed refinement strategy does not rely on delicate parameter tuning. 
+
+Robustness Against Noise 
+
+To evaluate robustness under point cloud corruption, we in-ject Gaussian noise with σ = 0 .01 into point coordinates and compare different methods across benchmarks. As shown in Tab. 4, noise severely degrades single-modality models, with ULIP-2 dropping from 75.6% to 43.1% on ModelNet40. In contrast, RTF consistently achieves the best performance under noisy inputs, outperforming PointTFA m across all datasets. This robustness is attributed to the complemen-tary modalities, where the geometric branch provides stable 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0                        
+
+> 75.0 77.5 80.0 82.5 85.0 87.5 90.0 92.5 95.0
+> Overall Accuracy (%)
+> 91.98 92.42 92.54 92.63 92.91 92.46 92.63 92.22 92.02 77.31
+> 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+> 92.5 92.6 92.7 92.8 92.9 93.0 93.1
+> Overall Accuracy (%)
+> 92.83 92.87 92.87 92.87 92.87 92.91 92.87 92.87 92.87 92.83 92.63
+
+Figure 7: Sensitivity analysis of the channel keep ratio ρ (left) and similarity-variance trade-off coefficient λs (right). Dataset ULIP-2 ULIP-2 PointTFA PointTFA m Ours (Noise-Free) (+Noise) (+Noise) (+Noise) (+Noise) ModelNet40 75.6 43.1 53.1 68.2 69.3 
+
+ModelNet10 84.8 75.9 79.6 90.3 90.8 
+
+OBJ_ONLY 53.4 31.5 44.0 47.0 49.5 
+
+OBJ_BG 48.6 31.0 47.3 49.9 51.7 
+
+OBJ_T50RS 40.4 22.7 27.2 32.1 35.6 
+
+Table 4: Performance comparison under noise ( σ = 0 .01 ) on different datasets. structural cues and RAMF suppresses unreliable modalities according to refinement-induced reliability. 
+
+## Conclusion 
+
+In this paper, we present Refine Then Fusion (RTF), a training-free framework for few-shot 3D recognition that ex-tracts reliable knowledge from pre-trained representations through a refine-then-fuse paradigm. Specifically, Priority-guided Channel Refinement (PCR) identifies discrimina-tive dimensions by modeling inter-class similarity and vari-ance, removing redundant information before adaptation. Reliability-aware Multi-Modal Fusion (RAMF) estimates modality reliability through refinement-induced distribution shifts and adaptively aggregates complementary semantic, visual, and geometric knowledge. Hybrid Memory Cache (HMC) further integrates instance-level retrieval and class-level prototypes for robust query inference. Extensive exper-iments demonstrate that RTF achieves state-of-the-art per-formance among training-free approaches without gradient optimization or parameter updates, highlighting the effec-tiveness of non-parametric knowledge refinement and fusion for efficient 3D adaptation. References 
+
+Afham, M.; Dissanayake, I.; Dissanayake, D.; Dharmasiri, A.; Thilakarathna, K.; and Rodrigo, R. 2022. Crosspoint: Self-supervised cross-modal contrastive learning for 3d point cloud understanding. In Proceedings of the IEEE/CVF con-ference on computer vision and pattern recognition , 9902– 9912. Ai, Z.; Cui, Z.; Peng, Y.; and Zhou, J. 2025a. UPP: Unified Point-Level Prompting for Robust Point Cloud Analysis. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision , 27359–27368. Ai, Z.; Liu, Z.; Lei, Y.; Cui, Z.; Zou, X.; and Zhou, J. 2025b. Gaprompt: Geometry-aware point cloud prompt for 3d vision model. arXiv preprint arXiv:2505.04119 .Chen, S.; Chen, X.; Zhang, C.; Li, M.; Yu, G.; Fei, H.; Zhu, H.; Fan, J.; and Chen, T. 2024. Ll3da: Visual interactive instruction tuning for omni-3d understanding reasoning and planning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 26428–26438. Cheng, C.; Song, L.; Xue, R.; Wang, H.; Sun, H.; Ge, Y.; and Shan, Y. 2023. Meta-Adapter: An Online Few-Shot Learner for Vision-Language Model. arXiv preprint arXiv:2311.03774 .Dosovitskiy, A.; Beyer, L.; Kolesnikov, A.; Weissenborn, D.; Zhai, X.; Unterthiner, T.; Dehghani, M.; Minderer, M.; Heigold, G.; Gelly, S.; et al. 2020. An image is worth 16x16 words: Transformers for image recognition at scale. arXiv preprint arXiv:2010.11929 .Feng, Y.-Z.; Lin, S.-H. J.; Tang, X.; Wang, M.-Y.; Zheng, J.-Z.; He, Z.-Y.; Pang, Z.-Y.; Yang, J.; Chen, M.-S.; and Wei, X. 2025. Hyperbolic prototype rectification for few-shot 3D point cloud classification. Pattern Recognition , 158: 111042. Gao, P.; Geng, S.; Zhang, R.; Ma, T.; Fang, R.; Zhang, Y.; Li, H.; and Qiao, Y. 2021. Clip-adapter: Better vision-language models with feature adapters. arXiv preprint arXiv:2110.04544 .Hegde, D.; Valanarasu, J. M. J.; and Patel, V. 2023. Clip goes 3d: Leveraging prompt tuning for language grounded 3d recognition. In Proceedings of the IEEE/CVF International Conference on Computer Vision , 2028–2038. Huang, T.; Dong, B.; Yang, Y.; Huang, X.; Lau, R. W. H.; Ouyang, W.; and Zuo, W. 2023. CLIP2Point: Transfer CLIP to Point Cloud Classification with Image-Depth Pre-Training. In Proceedings of the IEEE/CVF International Conference on Computer Vision , 22157–22167. Ji, J.; Wang, H.; Wu, C.; Ma, Y.; Sun, X.; and Ji, R. 2024. JM3D & JM3D-LLM: Elevating 3D Representation with Joint Multi-modal Cues. IEEE Transactions on Pattern Anal-ysis and Machine Intelligence , 47(4): 2475–2492. Jia, M.; Tang, L.; Chen, B.-C.; Cardie, C.; Belongie, S.; Hariharan, B.; and Lim, S.-N. 2022. Visual prompt tuning. In 
+
+European conference on computer vision , 709–727. Springer. Jiao, S.; Dong, H.; Yin, Y.; Jie, Z.; Qian, Y.; Zhao, Y.; Shi, H.; and Wei, Y. 2025. CLIP-GS: Unifying vision-language representation with 3D Gaussian splatting. In Proceedings of the IEEE/CVF International Conference on Computer Vi-sion , 4670–4680. Khan, A. A.; Shao, J.; Shafiq, S.; Zhu, S.; and Shen, H. T. 2024. Enhancing few-shot 3D point cloud classification with soft interaction and self-attention. IEEE Transactions on Multimedia , 27: 1127–1141. Lei, W.; Ge, Y.; Yi, K.; Zhang, J.; Gao, D.; Sun, D.; Ge, Y.; Shan, Y.; and Shou, M. Z. 2024. ViT-Lens: Towards Omni-Modal Representations. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,26647–26657. Lin, G.; Xu, Y.; Lai, H.; and Yin, J. 2024a. Revisiting few-shot learning from a causal perspective. IEEE Transactions on Knowledge and Data Engineering , 36(11): 6908–6919. Lin, H.; Bai, H.; Liu, Z.; Hou, L.; Sun, M.; Song, L.; Wei, Y.; and Sun, Z. 2024b. Mope-clip: Structured pruning for efficient vision-language models with module-wise pruning error metric. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 27370–27380. Liu, M.; Shi, R.; Kuang, K.; Zhu, Y.; Li, X.; Han, S.; Cai, H.; Porikli, F.; and Su, H. 2024. OpenShape: Scaling Up 3D Shape Representation Towards Open-World Understand-ing. In Advances in Neural Information Processing Systems ,volume 36. Qi, Z.; Dong, R.; Fan, G.; Ge, Z.; Zhang, X.; Ma, K.; and Yi, L. 2023. Contrast with Reconstruct: Contrastive 3D Repre-sentation Learning Guided by Generative Pretraining. In In-ternational Conference on Machine Learning , 28223–28243. PMLR. Qi, Z.; Fang, Y.; Sun, Z.; Wu, X.; Wu, T.; Wang, J.; Lin, D.; and Zhao, H. 2024. Gpt4point: A unified framework for point-language understanding and generation. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 26417–26427. Ramesh, A.; Pavlov, M.; Goh, G.; Gray, S.; Voss, C.; Radford, A.; Chen, M.; and Sutskever, I. 2021. Zero-Shot Text-to-Image Generation. In International Conference on Machine Learning , 8821–8831. PMLR. Sun, F.; Ren, P.; Yin, B.; Wang, F.; and Li, H. 2023. CAT-Net: A Cascaded and Aggregated Transformer Network for RGB-D Salient Object Detection. IEEE Transactions on Multimedia .Tan, H.; and Bansal, M. 2019. LXMERT: Learning Cross-Modality Encoder Representations from Transformers. arXiv preprint arXiv:1908.07490 .Udandarao, V.; Gupta, A.; and Albanie, S. 2023. Sus-x: Training-free name-only transfer of vision-language models. In Proceedings of the IEEE/CVF International Conference on Computer Vision , 2725–2736. Uy, M. A.; Pham, Q.-H.; Hua, B.-S.; Nguyen, T.; and Yeung, S.-K. 2019. Revisiting point cloud classification: A new benchmark dataset and classification model on real-world data. In Proceedings of the IEEE/CVF international confer-ence on computer vision , 1588–1597. Wang, C.; He, S.; Fang, X.; Li, W.; Shen, Y.; Xu, M.; Sun, Z.; and Tiwari, P. 2026. Topadapter: Topology-aware prompt tuning for efficient point cloud understanding. In Forty-third International Conference on Machine Learning .Wang, H.; Tang, J.; Ji, J.; Sun, X.; Zhang, R.; Ma, Y.; Zhao, M.; Li, L.; Lv, T.; Ji, R.; et al. 2023. Beyond first impres-sions: Integrating joint multi-modal cues for comprehensive 3d representation. arXiv preprint arXiv:2308.02982 .Wu, J.; Cao, C.; Zhang, H.; Fernando, B.; Hao, Y.; and Hong, H. 2024. PointTFA: Training-Free Clustering Adaption for Large 3D Point Cloud Models. In IJCAI , 1434–1442. Wu, J.; Hu, Y.; Cao, C.; Zhang, H.; Fernando, B.; Hao, Y.; and Hong, H. 2026. PointTFA m: Multi-Modal, Training-Free Adaptation for Point Cloud Understanding. IEEE Transac-tions on Multimedia .Wu, Z.; Song, S.; Khosla, A.; Yu, F.; Zhang, L.; Tang, X.; and Xiao, J. 2014. 3d shapenets: A deep representation for volumetric shapes. arXiv preprint arXiv:1406.5670 .Xing, Y.; Wu, Q.; Cheng, D.; Zhang, S.; Liang, G.; Wang, P.; and Zhang, Y. 2023. Dual Modality Prompt Tuning for Vision-Language Pre-Trained Model. IEEE Transactions on Multimedia .Xu, C.; Han, Y.; Xu, R.; Hui, L.; Xie, J.; and Yang, J. 2024. Multi-attribute interactions matter for 3d visual grounding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 17253–17262. Xue, L.; Gao, M.; Xing, C.; Martín-Martín, R.; Wu, J.; Xiong, C.; Xu, R.; Niebles, J. C.; and Savarese, S. 2023. ULIP: Learning a Unified Representation of Language, Images, and Point Clouds for 3D Understanding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 1179–1189. Xue, L.; Yu, N.; Zhang, S.; Panagopoulou, A.; Li, J.; Martín-Martín, R.; Wu, J.; Xiong, C.; Xu, R.; Niebles, J. C.; et al. 2024. ULIP-2: Towards Scalable Multimodal Pre-Training for 3D Understanding. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,27091–27101. Zhang, J.; Jiao, L.; Ma, W.; Liu, F.; Liu, X.; Li, L.; Chen, P.; and Yang, S. 2023a. Transformer-Based Conditional GAN for Multimodal Image Fusion. IEEE Transactions on Multi-media , 25: 8988–9001. Zhang, R.; Guo, Z.; Zhang, W.; Li, K.; Miao, X.; Cui, B.; Qiao, Y.; Gao, P.; and Li, H. 2022a. PointCLIP: Point Cloud Understanding by CLIP. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,8552–8562. Zhang, R.; Wang, L.; Guo, Z.; Wang, Y.; Gao, P.; Li, H.; and Shi, J. 2023b. Parameter Is Not All You Need: Starting from Non-Parametric Networks for 3D Point Cloud Analysis. 
+
+arXiv preprint arXiv:2303.08134 .Zhang, R.; Zhang, W.; Fang, R.; Gao, P.; Li, K.; Dai, J.; Qiao, Y.; and Li, H. 2022b. Tip-adapter: Training-free adaption of clip for few-shot classification. In European conference on computer vision , 493–510. Springer. Zhang, R.; Zhang, W.; Fang, R.; Gao, P.; Li, K.; Dai, J.; Qiao, Y.; and Li, H. 2022c. Tip-Adapter: Training-Free Adaption of CLIP for Few-Shot Classification. In European Conference on Computer Vision , 493–510. Springer. Zhang, W.; Zhang, Y.; Deng, Y.; Zhang, W.; Lin, J.; Huang, B.; Zhang, J.; and Yu, W. 2024. TA-Adapter: Enhancing Few-Shot CLIP with Task-Aware Encoders. Pattern Recognition ,153: 110559. Zhou, K.; Yang, J.; Loy, C. C.; and Liu, Z. 2022a. Conditional prompt learning for vision-language models. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 16816–16825. Zhou, K.; Yang, J.; Loy, C. C.; and Liu, Z. 2022b. Learning to prompt for vision-language models. International journal of computer vision , 130(9): 2337–2348. Zhou, X.; Shen, K.; and Liu, Z. 2024. ADMNet: Attention-Guided Densely Multi-Scale Network for Lightweight Salient Object Detection. IEEE Transactions on Multime-dia .Zhou, Z.; Wang, P.; Liang, Z.; Bai, H.; and Zhang, R. 2025. Cross-modal 3d representation with multi-view images and point clouds. In Proceedings of the Computer Vision and Pattern Recognition Conference , 3728–3739. Zhu, X.; Zhang, R.; He, B.; Guo, Z.; Liu, J.; Xiao, H.; Fu, C.; Dong, H.; and Gao, P. 2024. No Time to Train: Em-powering Non-Parametric Networks for Few-Shot 3D Scene Segmentation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 3838–3847. Zhu, X.; Zhang, R.; He, B.; Guo, Z.; Zeng, Z.; Qin, Z.; Zhang, S.; and Gao, P. 2023a. PointCLIP V2: Prompting CLIP and GPT for Powerful 3D Open-World Learning. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision , 2639–2650. Zhu, X.; Zhang, R.; He, B.; Zhou, A.; Wang, D.; Zhao, B.; and Gao, P. 2023b. Not all features matter: Enhancing few-shot clip with adaptive prior refinement. In Proceedings of the IEEE/CVF international conference on computer vision ,2605–2615.
