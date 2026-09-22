@@ -1,0 +1,380 @@
+Title: SatOV: Restoring Spatial Priors for Training-Free Open-Vocabulary Segmentation in Remote Sensing Imagery
+
+URL Source: https://arxiv.org/pdf/2609.22834v1
+
+Published Time: Tue, 22 Sep 2026 00:52:51 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# SatOV: Restoring Spatial Priors for Training-Free Open-Vocabulary Segmentation in Remote Sensing Imagery 
+
+Changhao Zhao 1, Haoxiang Li 1, Hai Liu 1, LingLin Zeng 1,†
+
+> 1
+
+College of Resources and Environment, Huazhong Agricultural University, Wuhan 430070, China 
+
+{132, hailiu, l h x }@webmail.hzau.edu.cn, zenglinglin@mail.hzau.edu.cn 
+
+Keywords: CLIP, Feature Upsampling, Open-Vocabulary Segmentation, Remote Sensing, Training-Free, Vision Foundation Model, Vision Language Model, Zero-shot Segmentation 
+
+Abstract 
+
+Open-vocabulary semantic segmentation (OVS) of remote sensing imagery is a challenging pixel-level understanding task that demands strong generalization and adaptation to the unique spatial characteristics of remote sensing data. While existing vision-language foundation models excel in general-domain scenarios, their image-level classification design inevitably leads to the de-gradation of spatial priors required for high-resolution remote sensing segmentation. In particular, spatial information is degraded at two different stages of the representation pipeline: structural spatial relations are weakened during deep feature transformation, while fine-grained spatial details are lost during feature downsampling. To address these complementary deficiencies, we pro-pose SatOV, a training-free downstream framework for open-vocabulary segmentation in remote sensing, built around a unified perspective of spatial-prior restoration at two different stages of the representation pipeline . Specifically, (1) Residual QQ Attention (ResQQ) restores structural spatial priors in deep feature representations by extracting Query-Key self-attention from an intermediate CLIP layer and fusing it with the final-layer Query-Query attention through a residual combination, thereby preserving spatially coherent relationships suppressed by the final-layer representation; and (2) Spatially Modulated Upsampling (SatUp) 
+
+restores fine-grained spatial priors lost during downsampling by using the original high-resolution RGB image as spatial guidance and combining spatial feature modulation with guided cross-attention to reconstruct pixel-level textures and boundaries. Extensive experiments on multiple remote sensing benchmarks, including DOTA, UDD, LoveDA, and Vaihingen, demonstrate that SatOV consistently improves training-free OVS performance and achieves competitive results against existing state-of-the-art methods in both quantitative and qualitative evaluations. These results demonstrate the effectiveness of restoring spatial priors at both the representation and spatial-resolution stages for remote sensing open-vocabulary segmentation. 
+
+1. Introduction 
+
+Semantic segmentation of remote sensing imagery is widely demanded in agricultural monitoring, disaster assessment, and urban planning. Traditional supervised methods, however, rely on large-scale pixel-wise annotations and generalise poorly to unseen scenes. How to achieve high-generalisation segmenta-tion with low annotation dependency remains a core challenge. Vision-language models (VLMs) like CLIP(Radford et al., 2021) have opened new avenues for open-vocabulary semantic segmentation (OVS). Yet CLIP is inherently designed for image-level classification, resulting in a pronounced global se-mantic bias(Li et al., 2025) and insufficient fine-grained spatial modelling. When applied directly to remote sensing images, a severe domain prior drift emerges – natural images typically centre on a single prominent object, whereas remote sensing scenes feature densely packed structures and anisotropic tex-tures – fundamentally undermining segmentation performance. Specifically, CLIP suffers from two intertwined spatial-prior losses. First, although its intermediate Transformer layers en-code rich spatial structure, the final-layer global self-attention progressively overwrites these priors, causing the output fea-tures to lose covariance with respect to rotation and scale. Second, the final output resolution is only 14×14 or 16×16; the abundant texture, edge, and detail priors from the original high-resolution image are discarded during downsampling and cannot be recovered by simple interpolation. Existing solutions fall into two main categories. One is fine-tuning CLIP(Liu et al., 2024), which incurs prohibitive an-notation costs and introduces dataset bias(Wysocza´ nska et al., 2024). The other comprises training-free methods(Karazija et al., 2025) that typically only replace the final-layer attention and thus fail to handle complex spatial relationships in remote sens-ing. This failure stems from CLIP’s image-level pre-training objective: its global self-attention inherently erases local spa-tial correlations, and tweaking only the final attention layer cannot remedy this issue. Meanwhile, alongside VLM-based models, self-supervised foundation models(Xiao et al., 2025) have also advanced; however, they typically rely on down-stream fine-tuning for deployment and thus cannot provide in-stant generalisation in dynamic, open-world scenarios. To re-cover spatial priors, we exploit two complementary sources: 
+
+(1) intermediate attention matrices , which retain patch-wise spatial relations before they are globally collapsed, and (2) high-resolution images , which preserve fine-grained edges and textures that are otherwise lost under CLIP’s standard low-resolution input. In response, this work targets a genuinely training-free and zero-shot segmentation paradigm – direct application to arbit-rary remote sensing images without any parameter updates or fine-tuning, and with the ability to recognise novel categor-ies never seen during training. We propose SatOV, a training-free downstream framework for zero-shot open-vocabulary seg-mentation in remote sensing, which systematically addresses CLIP’s spatial-prior deficiencies through through intrinsic ar-chitectural mechanisms. arXiv:2609.22834v1 [cs.CV] 19 Sep 2026 Beyond empirical gains, we analyse CLIP’s limitations for remote-sensing dense prediction through feature-space spa-tial covariance. Meaningful segmentation representations re-quire correlated features for spatially adjacent patches. Op-timised for image-level classification, CLIP’s final-layer global self-attention gradually erases patch-level spatial correlation. This covariance decay stems from its pre-training objective and cannot be fully resolved by adjusting only final-layer atten-tion. Accordingly, we recover spatial priors from two ortho-gonal sources: intermediate Transformer attention matrices re-taining patch relationships, and high-resolution input imagery preserving edges and textures. Our main contributions are summarized as follows:  
+
+> •
+
+We identify two complementary spatial-prior deficiencies of CLIP for training-free open-vocabulary segmentation in remote sensing imagery: the weakening of intermediate spatial relations and the loss of high-resolution visual de-tails.  
+
+> •
+
+We propose Residual Query-Query Attention (ResQQ), which combines final-layer query-query attention with re-lational attention extracted from an intermediate CLIP layer. This design preserves spatially coherent structures while retaining the semantic generalization of the CLIP representation, without any target-dataset adaptation.  
+
+> •
+
+We propose Spatially Modulated Upsampling (SatUp), a remote-sensing-pretrained feature upsampler that uses the original high-resolution RGB image as spatial guidance. SatUp reconstructs dense semantic features through spa-tial feature modulation and guided cross-attention, com-plementing the structural prior recovered by ResQQ. Note that “training-free” in this paper strictly means no fine-tuning or gradient updates on downstream target data-sets ; SatUp undergoes an offline general-purpose pre-training on Million-AID, and its weights remain frozen during infer-ence. 
+
+2. Related Work 2.1 Vision-Language Models and Remote Sensing Found-ation Models 
+
+In recent years, vision foundation models and vision-language models have advanced rapidly. Among them, CLIP stands out by achieving coarse-grained cross-modal semantic align-ment through image-text contrastive learning, demonstrating strong zero-shot capability and requiring no training or fine-tuning for downstream tasks—it can be used out of the box. In stark contrast, mainstream remote sensing foundation models predominantly adopt MIM or contrastive learning as their pre-training paradigms, with representative examples including Ol-moEarth(Herzog et al., 2026), AlphaEarth(Brown et al., 2025), and TESSERA(Feng et al., 2026). These models aim at visual representation learning rather than cross-modal semantic under-standing. Although they are also pre-trained on massive un-labeled remote sensing data without human annotations, they still require fine-tuning for specific downstream tasks at de-ployment, falling short of the genuine zero-shot generalisation achieved by CLIP. In essence, the two paradigms differ funda-mentally: one is trained on natural images and directly gen-eralises zero-shot to remote sensing, while the other is trained on remote sensing data yet remains constrained by fine-tuning dependence, limiting its applicability in dynamic open-world scenarios. 
+
+2.2 Training-Free Open-Vocabulary Segmentation 
+
+The global semantic bias of CLIP severely limits its dense seg-mentation performance. To address this, many training-free methods reformulate CLIP’s final-layer attention to enhance local modelling. MaskCLIP(Zhou et al., 2022) removes global pooling and replaces fully connected layers with convolu-tions to output dense feature maps. SCLIP(Wang et al., 2023b) replaces standard attention with Query-Query atten-tion, cutting global token interactions for stronger local focus. ClearCLIP(Lan et al., 2024a) removes residual connections and feed-forward networks with class-token debiasing to strip global background. NACLIP(Hajimiri et al., 2025) introduces neighbourhood Gaussian attention for local clustering prefer-ence. PEARL(Pei et al., 2026) uses orthogonal transformation and smooth propagation for refinement. ProxyCLIP(Lan et al., 2024b) and LPOSS(Stojni´ c et al., 2025) incorporate DINO af-finity matrices or Laplacian label propagation for finer local pri-ors. These methods are training-free and achieve preliminary dense prediction by modifying attention or features. However, they are primarily designed for natural images with single dominant objects and clear features, overlooking the dense, anisotropic, and complex characteristics of remote sensing. They remain within CLIP’s feature space, fail to address the overwriting of intermediate spatial priors, and neglect pixel-level details from original high-resolution images, leading to insufficient recovery for remote sensing imagery. 
+
+2.3 Open-Vocabulary Segmentation for Remote Sensing Imagery 
+
+Thanks to the dominance of single objects, distinct fea-tures, and moderate resolution in natural images, training-free open-vocabulary segmentation has made significant progress in natural scenes. However, extending these methods to dense re-mote sensing imagery remains underexplored, and most exist-ing efforts still rely on training. Cat-Seg(Cho et al., 2024) first adopts cost-aggregation train-ing to optimise CLIP features; OVRS(Cao et al., 2025) fur-ther adapts this approach for remote sensing characteristics; GSNet(Ye et al., 2025) builds upon Cat-Seg by incorporating DINO’s fine-grained features. These methods generally de-pend on training, incurring high annotation costs and introdu-cing dataset bias that undermines CLIP’s original generalisa-tion. SegEarth-OV(Li et al., 2025) addresses the resolution bottleneck by introducing FeatUp(Fu et al., 2024) as an up-sampling module and removing global class-token bias via sub-traction filtering. However, FeatUp’s training based on joint bilateral filtering remains neighbourhood-weighted, failing to fully leverage the spatial structural priors embedded in the ori-ginal RGB images. Unlike the above works, we systematically analyse the two types of spatial prior loss faced by CLIP in remote sens-ing and propose targeted recovery solutions. Under the strict training-free and zero-shot setting, our method significantly outperforms existing state-of-the-art approaches, offering a new and effective pathway for open-vocabulary segmentation in re-mote sensing. 3. Our Method 3.1 Overall Architecture 
+
+Existing training-free methods primarily focus on optimising the neighbourhood attention in CLIP’s final layer, which gen-erally works well for natural images. However, remote sensing imagery suffers from two fundamentally distinct types of spa-tial prior loss. We interpret these two failure modes from the perspective of feature spatial covariance. Let F ∈ RN ×D denote patch features, where N is the number of spatial patches and D is the feature dimension. We define the spatial covariance matrix Σ ∈ RN ×N :
+
+Σi,j = 1
+
+D
+
+> D
+
+X
+
+> d=1
+
+˜Fi,d ˜F ∗ j, d (1) where Σi,j quantifies feature correlation between patch i and patch j. For dense segmentation, physically adjacent patches should maintain high covariance. First, covariance erasure in final-layer attention : CLIP inter-mediate layers encode strong spatial covariance among patches. Optimised for image-text alignment, the final-layer global self-attention mixes tokens across the whole image and gradu-ally decays Σ. We characterize this trend by averaging Σ(l)
+
+> i,j
+
+over spatially neighboring patch pairs N at each layer l.Even QQ-attention (e.g., SCLIP) only modifies the final layer and cannot retrieve covariance already discarded in forward passes. Second, irreversible high-frequency loss during down-sampling : patch embedding compresses fine-grained edges and textures into low-dimensional tokens. Simple interpola-tion acts as a linear smoother and cannot restore averaged-out high-frequency signals such as building boundaries and narrow roads. These two degradation modes are theoretically ortho-gonal: one occurs inside the transformer feature space, the other arises from image downsampling. 
+
+Figure 1. Experimental analysis of spatial covariance across Transformer depth, showing the progressive loss of spatial detail with increasing semantic abstraction. 
+
+To address these issues, ResQQ and SatUp are respectively de-signed to recover these two types of priors. ResQQ operates within CLIP’s feature space, extracting the overwritten struc-tural priors from intermediate layers and injecting them into the final layer to restore spatial covariance. SatUp, on the other hand, leverages the original high-resolution RGB image as guidance to reconstruct the pixel-level high-frequency details discarded during downsampling. SatOV consists of two core components: Residual QQ Atten-tion (ResQQ): Through residual connections, it fuses the spa-tially covariant Query-Key attention priors from CLIP’s inter-mediate layers with the Query-Query self-attention in the final layer, restoring the spatial structure and neighbourhood aware-ness of the output features. Spatially Modulated Upsampling (SatUp): Guided by the original high-resolution RGB im-age, it employs spatial feature modulation and cross-attention to upsample CLIP’s coarse-grained features to pixel-level fine-grained features, recovering the fine spatial details of re-mote sensing imagery. 
+
+3.2 Dynamic Positional Encoding and Global Bias Re-moval 
+
+To accommodate varying input resolutions, we dynamically in-terpolate the fixed positional embeddings to match the current feature map size. Since CLIP’s positional embeddings are pre-trained for a specific grid size (e.g., 14 ×14 or 16 ×16 ), directly applying them to different resolutions would cause spatial mis-alignment. We thus perform bicubic interpolation to resize the positional embeddings to the current feature grid dimensions: 
+
+Pnew = Ibicubic (Pold , (Hnew , W new )) (2) where Pold ∈ R(1+ HW )×D denotes the original positional em-bedding matrix, Ibicubic (·, (Hnew , W new )) represents the bicubic interpolation operator resizing to the target spatial dimensions, and (Hnew , W new ) denotes the height and width of the current feature map. In addition, the CLS token in CLIP encodes global image-level semantics learned through contrastive pre-training, which is be-neficial for image classification but introduces a global bias that contaminates local patch features in dense prediction tasks. To eliminate this interference, we subtract the CLS token from every patch token: 
+
+ˆF(p) = Fpatch (p) − Fcls , ∀p ∈ Ω (3) where Fpatch (p) ∈ RD is the feature vector at spatial position 
+
+p, Fcls ∈ RD is the CLS token feature, and Ω denotes the set of all patch positions. This subtraction explicitly removes the global semantic component from each patch, allowing the sub-sequent attention mechanisms to focus on local spatial struc-tures rather than global context. 
+
+3.3 Residual Query-Query Attention (ResQQ) 
+
+The native self-attention in the final layer of CLIP is a stand-ard global self-attention, where every token attends to all other tokens including the CLS token. This global interaction gradu-ally overwrites the spatial structural priors encoded in the in-termediate layers. Inspired by SCLIP, we replace the stand-ard Query-Key attention with Query-Query attention in the last layer. The resulting attention is still globally computed over all patch tokens, but its affinity is determined directly by query-query similarity, reducing the semantic asymmetry introduced by the learned key projection. The standard self-attention is formulated as: Figure 2. Left panel illustrates the restoration of structural priors within the CLIP ViT: ResQQ extracts the Query-Key attention from the penultimate layer as the overwritten spatial prior, and fuses it with the final-layer Query-Query self-attention via residual connections, recovering the spatial covariance of the low-resolution features. Right panel demonstrates the recovery of pixel-level detail priors: SatUp uses the original high-resolution RGB image as a spatial index, and applies Spatial Feature Modulation (SFT) together with cross-attention to upsample the low-resolution semantic features back to pixel-level space. 
+
+Attn (Q, K, V) = softmax 
+
+ QK ⊤
+
+√d
+
+
+
+V, (4) while our adopted Query-Query self-attention in the final layer is: Attn self (Q, Q, V) = softmax 
+
+ QQ ⊤
+
+√d
+
+
+
+V. (5) Nevertheless, relying solely on the final-layer Q-Q attention discards the rich spatial structure encoded in the intermedi-ate layers. To remedy this, inspired by ResCLIP(Yang et al., 2025), we propose Residual Query-Query Attention (ResQQ) , which injects the intermediate spatial priors into the final layer via a residual connection. Specifically, during the forward pass through the the penultim-ate layer (the (L − 1) -th layer in 1-index, i.e., the (L − 2) -th layer in 0-index), we extract its Query-Key self-attention mat-rix. This layer has not yet been contaminated by the global self-attention of the final layer, thus its attention distribution preserves meaningful spatial relationships among patches. Fol-lowing our implementation, we compute the Query QL−1 and Key KL−1 from this layer and obtain the cross-attention: 
+
+Amid = softmax 
+
+ QL−1K⊤
+
+> L−1
+
+√dmid 
+
+
+
+, (6) where dmid is the head dimension of that layer. Simultaneously, we compute the final-layer Query-Query attention matrix Alast .We then fuse the two attention matrices via a residual combin-ation: 
+
+Afused = (1 − α) · Alast + α · Amid (7) where α is the residual fusion weight (set to 0.5 by default in our code). When the number of attention heads differs between the two layers, we align Amid by averaging over the head dimension to obtain a single aggregated attention map. This aggregated matrix is then replicated along the head dimension to match the head count of the final layer. The fused matrix is renormalized and used to weight the final-layer Value vectors, producing the output of the attention module. With this design, ResQQ combines the query-driven affinity of Q-Q attention with the spatial structural relations preserved in the intermediate layer. The residual fusion therefore improves the spatial coherence of the output features while retaining the semantic representation of CLIP. 
+
+3.4 Spatially Modulated Upsampling (SatUp) 
+
+After the ResQQ attention reconstruction, the CLIP output fea-tures regain spatial structural priors. However, the spatial res-olution remains only 14 × 14 or 16 × 16 . The rich texture, edge, and detail priors from the original high-resolution remote sensing images are discarded during CLIP’s downsampling and cannot be recovered within its feature space. To address this, we design SatUp , a plug-and-play upsampling module tailored for remote sensing, which leverages the original high-resolution RGB image as a guide to restore low-resolution semantic fea-tures to pixel-level space. Unlike Neighborhood Attention-based upsampling ap-proaches such as FeatUp, NAF(Chambon et al., 2025), and AnyUp(Wimmer et al., 2026), SatUp employs spatial feature modulation and global cross-attention as core mechanisms to extract spatial priors from the high-resolution image and drive fine-grained pixel-level reconstruction. It is worth emphasising that our definition of ”training-free” refers to the inference stage, where no fine-tuning or gradient updates are performed on any downstream dataset. The offline pre-training of SatUp is consistent with the pre-training nature of the CLIP visual encoder—both build general-purpose, category-agnostic capabilities with frozen weights during inference, without task-specific adaptation. 
+
+Rotary Position Embedding (RoPE). Unlike directly inter-polating CLIP’s fixed positional embeddings, SatUp incorpor-Figure 3. SatUp takes low-resolution CLIP features and the original high-resolution RGB image as inputs. It encodes the image into spatial queries, applies rotary positional encoding, and performs cross-attention with SFT-modulated keys and semantic values, producing pixel-aligned high-resolution features. 
+
+ates a Rotary Position Embedding specifically designed for the overhead-view characteristics of remote sensing. For each spa-tial position (i, j ) on the feature map, we first generate normal-ised coordinates: 
+
+ci,j =
+
+ iH , jW
+
+
+
+∈ [0 , 1] 2 (8) The coordinate matrix is then multiplied with a learnable fre-quency matrix θ ∈ R2×d to obtain rotation angles, and a rota-tion is applied to each token feature x ∈ Rd:RoPE (x, c) = x ⊙ cos( c · θ) + rotate half (x) ⊙ sin( c · θ) (9) where rotate half (x) = [−xd/ 2+1 , . . . , −xd, x 1, . . . , x d/ 2].This encoding explicitly injects spatial position information, enabling the subsequent attention to perceive rotation and scale variations. 
+
+Guided Cross-Attention. This is the core forward design of SatUp for upsampling. We encode the high-resolution RGB image into spatial features Fimg ∈ RB×d×H×W , and generate Query and Key from it: 
+
+Q = Φ q (Fhr ), K = Φ k (Fhr ) (10) Meanwhile, the low-resolution semantic features Fclip ∈
+
+RB×d×h×w from CLIP are mapped to Value via an encoder: 
+
+V = Φ v (Flr ) (11) The cross-attention is then computed as: 
+
+Fup = Softmax 
+
+ QK ⊤
+
+√d
+
+
+
+V (12) In practice, V is first linearly projected to the same dimension as Q and K for attention computation, and the output is then projected back to the original semantic dimension. The physical intuition is that the rich edge and texture cues in the high-resolution image serve as a ”spatial index” to precisely query and retrieve the corresponding low-resolution semantic features, enabling pixel-level detail reconstruction. This pro-cess involves only linear projections and matrix multiplications, without any iterative optimisation. 
+
+Spatial Feature Modulation (SFT). To further enhance the guidance of high-resolution images over semantic features, we introduce Spatial Feature Modulation in the Key branch. In-spired by global modulation methods such as AdaIN(Huang and Belongie, 2017) and FiLM(Perez et al., 2018), but over-coming their lack of spatial sensitivity, SFT(Wang et al., 2018) generates independent modulation parameters for each spatial position from the low-resolution semantic features: 
+
+γ, β = G(Flr ) (13) where G is implemented by two convolutional layers. The guid-ance features are then modulated as: 
+
+Fmod = γ ⊙ GroupNorm( Fhr ) + β (14) Notably, the GroupNorm here contains no learnable affine para-meters ( affine=False ), ensuring that the modulation is en-tirely driven by the current input image rather than relying on pre-trained statistics. 
+
+Training and Loss Function. SatUp adopts a zero-shot self-supervised training strategy without any semantic annotations. Following the training paradigms of JAFAR and LoftUp(Huang et al., 2025), we leverage feature consistency and continuous reconstruction between image pairs of different resolutions as supervision signals. During training, two images of the same scene at resolutions 224 × 224 and 112 × 112 are fed as input. SatUp is required to upsample the low-resolution features to high-resolution space and maintain semantic consistency with the ground-truth high-resolution features. The supervision loss combines cosine similarity and L2 loss: 
+
+L = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+h
+
+λ1
+
+
+
+1 − cos( f up  
+
+> i
+
+, f hr  
+
+> i
+
+)
+
+
+
++ λ2∥f up  
+
+> i
+
+− f hr  
+
+> i
+
+∥2
+
+i
+
+(15) The training data is sampled from a subset of Million-AID. Us-ing a single RTX 4080 GPU with a batch size of 5, we train for 25,000 steps, achieving a final convergence loss of approx-imately 0.3. After training, the SatUp weights are completely frozen during inference, without any fine-tuning on downstream datasets, preserving the training-free nature of the entire frame-work. 
+
+3.5 Sliding-Window Inference with Gaussian Fusion 
+
+Since CLIP is pre-trained with a fixed resolution of 224 × 224 ,directly resizing high-resolution remote sensing images would result in significant loss of fine-grained details. To address this, we adopt a sliding-window strategy that partitions the input im-age into overlapping 224 × 224 patches, each fed independently into SatOV for inference. To mitigate stitching artefacts along window boundaries, we apply a 2D Gaussian weight mask that assigns higher confidence to the central region of each window while smoothly decaying towards the edges: 
+
+M(u, v ) = exp 
+
+
+
+− (u − μu)2 + ( v − μv )2
+
+2σ2
+
+
+
+(16) The predictions from all windows are then weighted by this mask, accumulated, and normalised to produce a globally con-sistent segmentation map with smooth transitions. 
+
+3.6 SoftMax Synonym Aggregation 
+
+SatOV matches pixel-level visual features with frozen CLIP text embeddings. Since a single prompt often fails to describe a category comprehensively, we adopt a synonym ensemble strategy: each category ck is associated with a set of synonyms 
+
+Sk = {s1 
+
+> k
+
+, . . . , s Mk 
+
+> k
+
+}, and for each synonym smk we apply a template set T and encode the prompted sentences with a frozen CLIP text encoder. The resulting embeddings are averaged and 
+
+ℓ2-normalized to obtain ˜emk . Rather than averaging these em-beddings, which dilutes strong evidence, we reweight them by their mutual agreement, 
+
+wmk = exp  τs
+
+P 
+
+> n
+
+cos(˜ emk , ˜enk )P 
+
+> j
+
+exp  τs
+
+P 
+
+> n
+
+cos(˜ ejk , ˜enk ) , (17) and form the category prototype ek = P 
+
+> m
+
+wmk ˜emk , ℓ2-normalized. As τs grows, the weights concentrate on the syn-onym most consistent with the ensemble; as τs shrinks, they approach a uniform mean. The prototypes are stacked into 
+
+W = [ e1, . . . , eK ] and matched with pixel features scaled by a learnable temperature τ to produce the segmentation logits. This synonym ensemble requires no fine-tuning and consist-ently improves the robustness of zero-shot classification across remote sensing categories. 
+
+4. Experiments 
+
+To comprehensively evaluate the effectiveness of SatOV, we design three sets of experiments. First, we compare the com-plete SatOV framework against state-of-the-art training-free methods in an end-to-end manner, examining its overall advant-age on remote sensing segmentation tasks. Second, we fix the CLIP visual encoder and replace only the upsampler module to assess the standalone performance gain brought by SatUp. Finally, we conduct systematic ablation studies to isolate and quantify the individual contributions of each key component, including ResQQ and SatUp, to the final performance. 
+
+4.1 Datasets 4.1.1 Pre-training dataset for SatUp. To support offline pre-training of the upsampling module, we use the Million-AID(Long et al., 2021) remote sensing dataset, which com-prises 1,000,000 images covering 25 typical land-cover categor-ies. 
+
+4.1.2 Downstream evaluation datasets. To comprehens-ively evaluate the zero-shot generalisation capability of SatOV under the training-free setting, we conduct experiments on four publicly available remote sensing segmentation benchmarks. These datasets cover diverse imaging platforms including un-manned aerial vehicles (UAV), high-resolution satellites, and multispectral satellites, and involve various task scenarios such as urban land-cover mapping, dense object segmentation, and agricultural field extraction. Table 1 summarises the character-istics of each dataset. 
+
+Dataset Imaging Platform Primary Type 
+
+UDD UAV Urban DOTA Satellite Dense objects LoveDA Satellite Farmland and Urban Vaihingen Aerial (no blue band) Building and House 
+
+Table 1. Overview of evaluation datasets. 
+
+For all datasets, We mainly select dense-image subsets with high resolution (greater than 1000×1000 pixels) to better chal-lenge the segmentation capability. Notably, the Vaihingen data-set lacks the blue spectral band, so we adapt the input chan-nels during preprocessing by using all available bands. Since SatUp is pre-trained on three-channel RGB imagery, we per-form channel-wise averaging projection to map multi-band Vaihingen inputs to 3-channel feature representations for mod-ule compatibility. All models are evaluated directly in a zero-shot manner without any fine-tuning or parameter updates on the target datasets, ensuring a fair assessment of their training-free generalisation performance. For the DOTA dataset, we adopt the processing pipeline from SAMRS(Wang et al., 2023a) to convert this object-detection dataset into a semantic-segmentation dataset. Among Vaihin-gen and Potsdam, we choose the Vaihingen dataset due to its higher spatial resolution. 
+
+4.2 Comparative Experiments of SatOV 
+
+Since our primary goal is training-free segmentation, we mainly compare against training-free methods. We adopt MaskCLIP as the baseline and include ClearCLIP, LPOSS, SegEarth-OV (with FeatUp) and DinoSplat-OV(with Dino(Caron et al., 2021) and GSUP) for comparison. Although not our main focus, we also report results of training-based methods including Cat-Seg, OVRS, and GSNet, all of which are only pre-trained on RS sub-dataset of ImageNet, to examine their generalisation under lightweight training. Experiments are conducted on four remote sensing data-sets: UDD(Zhang et al., 2018), DOTA(Xia et al., 2018b), LoveDA(Wang et al., 2021), and Vaihingen(Cramer, 2010). We use mean Intersection over Union (mIoU) as the evaluation met-ric. Table 2 presents the quantitative results. As shown in Table 2, SatOV achieves the best perform-ance across all datasets, outperforming the strongest compet-itor SegEarth-OV by nearly 2 percentage points on average. Model UDD DOTA LoveDA Vaihingen Avg. 
+
+Training-Free Methods 
+
+MaskCLIP ECCV baseline 32.4 25.1 27.8 23.4 27.2 SCLIP ECCV 38.7 29.3 30.4 29.1 31.9 ClearCLIP ECCV 41.2 31.0 31.6 35.5 34.8 LPOSS CVPR 41.8 33.9 32.4 38.0 36.5 SegEarth-OV CVPR 45.3 40.3 36.9 42.3 41.2 
+
+SatOV Ours 45.9 40.4 39.8 47.3 43.3 
+
+Additional Training-based Methods (w/o target dataset training) Cat-Seg CVPR 31.9 27.8 20.1 24.5 29.4 OVRS TGRS 37.2 31.3 28.7 29.2 31.6 GSNet AAAI 38.2 29.5 27.0 30.6 31.3 
+
+Table 2. Performance comparison of different methods on four remote sensing datasets. The primary comparison is conducted among training-free methods under the same zero-shot evaluation setting. 
+
+Figure 4. For the segmentation mask comparison on the DOTA dataset with densely packed objects, it can be observed that MaskCLIP predictions are largely semantically correct but completely lack spatial structure. ClearCLIP shows some improvement yet still suffers from internal holes. In contrast, SatOV accurately delineates the boundaries of densely arranged buildings and narrow roads, demonstrating the effectiveness of ResQQ and SatUp in jointly recovering spatial priors. 
+
+ClearCLIP, which only modifies the final layer without fus-ing intermediate features, produces noticeable semantic holes in the predictions. LPOSS introduces DINO affinity and Lapla-cian propagation, achieving moderate improvements; however, DINO is trained on natural images, and its features are far less effective than the pixel-wise fine-grained features recovered by SatUp. SegEarth-OV adopts FeatUp for upsampling, but its training remains neighbourhood-weighted and neglects the spa-tial covariance in remote sensing, leading to degraded perform-ance in dense scenes. The effectiveness of SatOV demonstrates that in training-free open-vocabulary segmentation, explicitly recovering CLIP’s missing spatial priors from both structural (via ResQQ) and detail (via SatUp) perspectives is more funda-mental and efficient than merely modifying attention or introdu-cing external affinity matrices such as DINO (as in LPOSS). As for Cat-Seg, OVRS, and GSNet, although they are trained on remote sensing data, their reliance on supervision limits gen-eralisation and yields inferior zero-shot performance compared to our training-free framework. The results that their reported scores are not directly comparable due to different training pro-tocols. In addition to multi-class semantic segmentation tasks, we also conducted visualization for single-class extraction tasks, covering Road, River, Building, vegetation, Cropland, and Ground . The visualization clearly demonstrates that SatUp Figure 5. These are binary classification attention maps. The second row shows ClearCLIP outputs while the third row shows our SatOV. Significant differences arise from the resolution bottleneck, and SatOV achieves true pixel-level fine-grained prediction. 
+
+achieves fine-grained boundary extraction for categories such as roads, rivers, and buildings. In contrast, ClearCLIP barely has the capability of fine boundary extraction, which is the most essential requirement in remote sensing. 
+
+4.3 Comparative Evaluation of SatUp 
+
+Figure 6. Visualization of feature reconstruction across different upsampling methods. It can be observed that SatUp achieves the best fine-grained reconstruction. 
+
+Model Pre-training Data UDD 
+
++DINO CVPR ImageNet 41.8 +FeatUp ICLR ImageNet 45.3 +AnyUp ICLR ImageNet 44.2 
+
++SatUp Ours Million-AID 45.9 
+
+Table 3. Performance comparison of different upsamplers on the UDD dataset. Taking DINO as the baseline, all methods yield performance improvements, yet SatUp achieves the best results for remote sensing tasks. 
+
+In this section, we isolate the contribution of the upsampling module by fixing the CLIP features enhanced by ResQQ as the shared input representation, and evaluate the performance of different upsamplers. Notably, the compared methods—AnyUp and FeatUp—are pre-trained on natural images (ImageNet), while SatUp is specifically designed for remote sensing and pre-trained on Million-AID. As shown in the Table 3, SatUp achieves the best overall per-formance among the compared upsampling methods. FeatUp relies on JBU-based training, while AnyUp employs neighbour-hood attention modules such as NATTEN. Although these ap-proaches yield improved local sensitivity, they essentially per-form interpolation based on feature similarity and fail to effect-ively exploit the spatial priors embedded in the original RGB images. Moreover, FeatUp requires compilation of CUDA op-erators, which severely limits its deployability on Windows and Mac platforms. In contrast, SatUp relies solely on standard cross-attention, offering superior portability and practical ap-plicability across different environments. 
+
+4.4 Ablation Studies 
+
+To systematically quantify the contribution of each component in SatOV, we conduct two sets of ablation experiments. The first set examines the impact of individual modifications within the CLIP reconstruction pipeline, while the second evaluates the plug-and-play effectiveness of SatUp under a fixed ResQQ backbone. 
+
+4.4.1 CLIP-side Reconstruction Ablation We progress-ively remove or disable each component in the CLIP feature re-construction pipeline to assess its individual contribution. The results are summarised in Table 4. As shown in Table 4, each component contributes positively to the final performance. Notably, CLS token debiasing and Q-Q attention bring the most substantial gains, highlighting that mitigating CLIP’s inherent global semantic bias is a critical prerequisite for dense segmentation. Removing the FFN also yields a non-trivial improvement, consistent with ClearCLIP’s observation that FFN layers tend to propagate global inform-ation across patches. The combination of all components Configuration DOTA ∇
+
+Full SatOV 40.4 — 
+
+> −
+
+SatUp 34.8 ∇5.6 
+
+> −
+
+ResQQ 32.8 ∇2.0 
+
+> −
+
+CLS token debiasing 30.9 ∇1.9 
+
+> −
+
+FFN and Residual Removing 30.0 ∇0.9 
+
+> −
+
+Query–Query attention 29.0 ∇1.0 
+
+> −
+
+Sliding window & Gaussian fusion 28.4 ∇0.6
+
+> Table 4. Ablation study on the proposed components. Starting from the full SatOV model, we progressively remove each component to quantify its individual contribution. All models are evaluated under the same training-free, zero-shot setting on the DOTA dataset.
+
+achieves the best result, validating their complementary nature. When further combined with SatUp, the performance leaps to 40.4 mIoU, demonstrating that structural recovery alone is in-sufficient without pixel-level detail refinement. 
+
+> Figure 7. Visualization results for different ablation configurations. It can be seen that ResQQ can recover CLIP features to a certain extent, while SatUp leverages guidance from the original image to achieve full pixel-level granularity.
+
+4.4.2 SatUp-side Plug-and-Play Ablation To evaluate the plug-and-play effectiveness of SatUp, we fix the complete ResQQ-enhanced CLIP backbone and replace SatUp with al-ternative upsamplers or remove it entirely. The results are presented in Table 3. Removing the upsampling module leads to a dramatic perform-ance drop of 5.2 percentage points (from 40.4 to 34.8), indic-ating that simply increasing resolution via bilinear interpola-tion is detrimental to semantic segmentation. Among the com-pared methods, SatUp consistently outperforms AnyUp and GSUP(Zhao et al., 2026), demonstrating its superiority in lever-aging high-resolution RGB guidance to recover fine-grained details. GSUP, based on Gaussian splatting, achieves mod-erate improvement but still lags behind SatUp, likely due to its limited capability in capturing complex spatial structures. AnyUp, which relies on neighbourhood attention, shows com-petitive performance but tends to generate over-smoothed res-ults and erase small ground objects. These results confirm that SatUp serves as an effective and portable plug-in module, and its design philosophy of decoupling spatial prior recovery from the visual encoder offers clear advantages over alternative up-sampling strategies. 
+
+5. Conclusion and Discussion 5.1 Discussion 
+
+This work demonstrates that spatial priors for open-vocabulary segmentation can be effectively acquired through general-purpose pre-training on million-scale remote sensing datasets, without requiring any fine-tuning or gradient updates for down-stream tasks. Moreover, as a plug-and-play module, SatUp is designed to be decoupled from the upstream visual encoder, fa-cilitating the integration of spatial priors across different feature extractors. 
+
+Potential extension beyond CLIP. The proposed spatial prior module, SatUp, is not inherently tied to CLIP’s specific archi-tecture and can potentially be transferred to other visual en-coders such as DINO and MIM-based models. This suggests that spatial-prior restoration could be incorporated into various training-free open-vocabulary segmentation paradigms, includ-ing the “visual foundation model + text alignment” paradigm, affinity propagation, and conditional random fields (CRF). Our concurrent work, DinoSplat-OV(Zhao et al., 2026), which builds upon DINOv3 rather than CLIP, provides a practical ex-ample of exploring this broader direction. 
+
+Temporal and Spectral priors. Current mainstream methods predominantly rely on RGB channels, yet remote sensing im-agery uniquely offers rich multi-spectral information (e.g., NIR, SWIR) and multi-temporal sequences, which encode abundant spatial and semantic cues. Exploring how to effectively distil these spectral and temporal priors into vision-language models remains a promising research direction. 
+
+Bag-of-words spatial optimisation. The performance upper bound of current open-vocabulary segmentation is constrained by the quality of the bag-of-words embedding space of CLIP or DINOv2. There is still no consensus on which vocabulary yields superior segmentation results or how to optimally com-bine different textual descriptions, leaving substantial room for further investigation. Although we employ synonym aggrega-tion to alleviate this issue, better methods are worth investigat-ing. 
+
+5.2 Conclusion 
+
+In this work, we proposed SatOV, a training-free framework for open-vocabulary semantic segmentation in remote sensing imagery. By identifying the degradation of spatial priors in CLIP-based representations, we introduced two complement-ary components, ResQQ and SatUp, to restore spatial informa-tion at different stages. ResQQ restores structural spatial rela-tions by integrating intermediate Query-Key self-attention with final-layer Query-Query attention, while SatUp reconstructs fine-grained spatial details through spatially guided feature up-sampling. Extensive experiments on DOTA, UDD, LoveDA, and Vaihingen demonstrate the effectiveness of the proposed spatial-prior restoration strategy across multiple remote sensing benchmarks. ResQQ and SatUp complement each other by restoring spatial priors at two distinct stages of the representation pipeline: in-ternal structural relations within the visual representation and fine-grained details at the spatial-resolution stage. 6. Acknowledgments 
+
+This work was supported by the National Natural Science Foundation of China (No.42571434). 
+
+References 
+
+Brown, C. F., Kazmierski, M., Pasquarella, V. J., Rucklidge, W. J., Samsikova, M., Zhang, C., Shelhamer, E., Lahera, E., Wiles, O., Ilyushchenko, S., Gorelick, N., Zhang, L., Alj, S., Schechter, E., Askay, S., Guinan, O., Moore, R., Boukouvalas, A., Kohli, P., 2025. AlphaEarth Foundations: An embedding field model for accurate and efficient global mapping from sparse label data. ArXiv , abs/2507.22291. ht-tps://api.semanticscholar.org/CorpusID:280391412. Cao, Q., Chen, Y., Ma, C., Yang, X., 2025. Open-Vocabulary High-Resolution Remote Sensing Image Semantic Segmenta-tion. IEEE Transactions on Geoscience and Remote Sensing .Caron, M., Touvron, H., Misra, I., J´ egou, H., Mairal, J., Bojanowski, P., Joulin, A., 2021. Emerging properties in self-supervised vision transformers. Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 9650– 9660. Chambon, L., Couairon, P., Zablocki, E., Boulch, A., Thome, N., Cord, M., 2025. Naf: Zero-shot feature upsampling via neighborhood attention filtering. Chen, Y., Wang, Y., Lu, P., Chen, Y., Wang, G., 2018. Large-scale structure from motion with semantic constraints of aerial images. Chinese Conference on Pattern Recognition and Com-puter Vision (PRCV) , Springer. Cho, S., Shin, H., Hong, S., Arnab, A., Seo, P. H., Kim, S., 2024. Cat-seg: Cost aggregation for open-vocabulary semantic segmentation. Couairon, P., Chambon, L., Serrano, L., Haugeard, J.-E., Cord, M., Thom´ e, N., 2025. Jafar: Jack up any feature at any res-olution. Advances in Neural Information Processing Systems (NeurIPS) .Cramer, M., 2010. The ISPRS Vaihingen data set for 2D se-mantic labeling. ISPRS Annals of the Photogrammetry, Remote Sensing and Spatial Information Sciences , I-3, 293–298. Feng, Z., Atzberger, C., Jaffer, S., Knezevic, J., Sormunen, S., Young, R., Lisaius, M. C., Immitzer, M., Jackson, T., Ball, J. et al., 2026. Tessera: Temporal embeddings of surface spec-tra for earth representation and analysis. Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recog-nition , 34818–34831. Fu, S., Hamilton, M., Brandt, L. E., Feldmann, A., Zhang, Z., Freeman, W. T., 2024. Featup: A model-agnostic framework for features at any resolution. The Twelfth International Conference on Learning Representations .Hajimiri, S., Ben Ayed, I., Dolz, J., 2025. Pay attention to your neighbours: Training-free open-vocabulary semantic segment-ation. Proceedings of the IEEE/CVF Winter Conference on Ap-plications of Computer Vision .Herzog, H., Bastani, F., Zhang, Y., Tseng, G., Redmon, J., Sablon, H., Park, R., Morrison, J., Buraczynski, A., Farley, K., Hansen, J., Howe, A., Johnson, P. A., Otterlee, M., Schmitt, T., Pitelka, H., Daspit, S., Ratner, R., Wilhelm, C., Wood, S., Jacobi, M., Kerner, H., Shelhamer, E., Farhadi, A., Krishna, R., Beukema, P., 2026. Olmoearth: Stable latent image mod-eling for multimodal earth observation. Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recog-nition (CVPR) , 34806–34817. Huang, H., Chen, A., Havrylov, V., Geiger, A., Zhang, D., 2025. Loftup: Learning a coordinate-based feature upsampler for vis-ion foundation models. Proceedings of the IEEE/CVF Interna-tional Conference on Computer Vision (ICCV) , 9913–9923. Huang, X., Belongie, S., 2017. Arbitrary style transfer in real-time with adaptive instance normalization. ICCV .Jose, C., Moutakanni, T., Kang, D., Baldassarre, F., Dar-cet, T., Xu, H., Li, D., Szafraniec, M., Ramamonjisoa, M., Oquab, M., Sim´ eoni, O., Vo, H. V., Labatut, P., Bojanowski, P., 2025. Dinov2 meets text: A unified framework for image-and pixel-level vision-language alignment. Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recog-nition (CVPR) , 24905–24916. Karazija, L., Laina, I., Vedaldi, A., Rupprecht, C., 2025. A Sur-vey on Training-free Open-Vocabulary Semantic Segmentation. 
+
+arXiv preprint arXiv:2505.22209 .Lan, M., Chen, C., Ke, Y., Wang, X., Feng, L., Zhang, W., 2024a. Clearclip: Decomposing clip representations for dense vision-language inference. European Conference on Computer Vision , Springer, 143–160. Lan, M., Chen, C., Ke, Y., Wang, X., Feng, L., Zhang, W., 2024b. Proxyclip: Proxy attention improves clip for open-vocabulary segmentation. European Conference on Computer Vision , Springer, 70–88. Li, K., Liu, R., Cao, X., Bai, X., Zhou, F., Meng, D., Wang, Z., 2025. Segearth-ov: Towards training-free open-vocabulary segmentation for remote sensing images. Proceedings of the Computer Vision and Pattern Recognition Conference , 10545– 10556. Liu, F., Chen, D., Guan, Z., Zhou, X., Zhu, J., Zhou, J., 2024. RemoteCLIP: A Vision Language Foundation Model for Re-mote Sensing. IEEE Transactions on Geoscience and Remote Sensing , 62, 1–16. Long, Y., Xia, G.-S., Li, S., Yang, W., Yang, M. Y., Zhu, X. X., Zhang, L., Li, D., 2021. On Creating Benchmark Dataset for Aerial Image Interpretation: Reviews, Guidances and Million-AID. IEEE Journal of Selected Topics in Applied Earth Obser-vations and Remote Sensing , 14, 4205-4230. Niemeyer, J., Rottensteiner, F., Soergel, U., 2012. ISPRS 2D Semantic Labeling Contest. ISPRS Annals of Photogrammetry, Remote Sensing and Spatial Information Sciences , I-3, 293– 298. Pei, G., Jiang, X., Cai, X., Chen, T., Yao, Y., Jeon, B., 2026. PEARL: Geometry Aligns Semantics for Training-Free Open-Vocabulary Semantic Segmentation. arXiv preprint arXiv:2603.21528 .Perez, E., Strub, F., de Vries, H., Dumoulin, V., Courville, A., 2018. Film: Visual reasoning with a general conditioning layer. 
+
+Proceedings of the AAAI Conference on Artificial Intelligence ,32number 1, 3942–3951. Radford, A., Kim, J. W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J. et al., 2021. Learning transferable visual models from natural language supervision. International Conference on Machine Learning , 8748–8763. Stojni´ c, V., Kalantidis, Y., Matas, J., Tolias, G., 2025. Lposs: Label propagation over patches and pixels for open-vocabulary semantic segmentation. Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition (CVPR) .Walmer, M., Suri, S., Aggarwal, A., Shrivastava, A., 2026. UP-LiFT: Efficient Pixel-Dense Feature Upsampling with Local At-tenders. arXiv preprint arXiv:2601.17950 .Wang, D., Zhang, J., Du, B., Xu, M., Liu, L., Tao, D., Zhang, L., 2023a. Samrs: Scaling-up remote sensing segmentation dataset with segment anything model. Advances in Neural Information Processing Systems , 36, 8815–8827. Wang, F., Mei, J., Yuille, A., 2023b. SCLIP: Rethinking Self-Attention for Dense Vision-Language Inference. arXiv preprint arXiv:2312.01597 .Wang, J., Zheng, Z., Ma, A., Lu, X., Zhong, Y., 2021. LoveDA: A remote sensing land-cover dataset for domain adaptive se-mantic segmentation. Proceedings of the Neural Information Processing Systems Track on Datasets and Benchmarks , 1. Wang, X., Yu, K., Dong, C., Loy, C. C., 2018. Recovering real-istic texture in image super-resolution by deep spatial feature transform. IEEE Conference on Computer Vision and Pattern Recognition (CVPR) .Wimmer, T., Truong, P., Rakotosaona, M.-J., Oechsle, M., Tombari, F., Schiele, B., Lenssen, J. E., 2026. Anyup: Univer-sal feature upsampling. Proceedings of the International Con-ference on Learning Representations (ICLR) .Wysocza´ nska, M., Sim´ eoni, O., Ramamonjisoa, M., Bursuc, A., Trzci´ nski, T., P´ erez, P., 2024. CLIP-DINOiser: Teaching CLIP a few DINO tricks for open-vocabulary semantic seg-mentation. ECCV .Xia, G.-S., Bai, X., Ding, J., Zhu, Z., Belongie, S., Luo, J., Datcu, M., Pelillo, M., Zhang, L., 2018a. Dota: A large-scale dataset for object detection in aerial images. The IEEE Confer-ence on Computer Vision and Pattern Recognition (CVPR) .Xia, G.-S., Bai, X., Ding, J., Zhu, Z., Belongie, S., Luo, J., Datcu, M., Pelillo, M., Zhang, L., 2018b. Dota: A large-scale dataset for object detection in aerial images. Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 3974–3983. Xiao, A., Xuan, W., Wang, J., Huang, J., Tao, D., Lu, S., Yokoya, N., 2025. Foundation Models for Remote Sensing and Earth Observation: A Survey. IEEE Geoscience and Remote Sensing Magazine .Yang, Y., Deng, J., Li, W., Duan, L., 2025. Resclip: Resid-ual attention for training-free dense vision-language inference. 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 29968–29978. Ye, C., Zhuge, Y., Zhang, P., 2025. Towards open-vocabulary remote sensing image semantic segmentation. Proceedings of the AAAI Conference on Artificial Intelligence .Zhang, Z., Zhang, Y., Xiang, S., Wei, L., 2018. Udd: Urban drone dataset for semantic segmentation. Zhao, C., Li, H., Li, Y., Liu, H., Zeng, L., 2026. Standalone DINOv3 for Training-Free Open-Vocabulary Se-mantic Segmentation in Remote Sensing. arXiv preprint arXiv:2608.03023 .Zhou, C., Loy, C. C., Dai, B., 2022. Maskclip: Extracting clip features for representation-free segmentation. IEEE/CVF Con-ference on Computer Vision and Pattern Recognition .

@@ -1,0 +1,422 @@
+Title: Structured Spatio-Temporal Evidence Graphs for Open-Vocabulary Object Retrieval in Videos
+
+URL Source: https://arxiv.org/pdf/2609.23393v1
+
+Published Time: Tue, 22 Sep 2026 01:18:46 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# Structured Spatio-Temporal Evidence Graphs for Open-Vocabulary Object Retrieval in Videos 
+
+Jingdan Wang 1 and Chuanwen Li 1⋆
+
+School of Computer Science and Engineering, Northeastern University, Shenyang, China 
+
+wangjingdan@stumail.neu.edu.cn lichuanwen@mail.neu.edu.cn 
+
+Abstract. Open-vocabulary object retrieval in videos requires answering free-form object queries under bounded query-time cost. Existing index-based systems typically store independent frame-level regions and retrieve them with vision–language similarity, which is effective for appearance queries but mismatched with predicates whose evidence is temporal or relational, such as stopped state, scene-region occupancy, persistence, and object interactions. We identify this gap as an evidence-unit mis-match: the query is expressed over tracklets or object tuples, while the index stores isolated boxes. To address it, we propose STEG-OVR, a structured spatio-temporal evidence graph for open-vocabulary object retrieval. STEG-OVR represents persistent objects as tracklet nodes and temporally compatible object pairs as relation edges, storing appearance, motion, scene occupancy, relative geometry, velocity compatibility, and symbolic relation evidence. A query is decomposed into entity, state, scene, temporal, and relation slots, which activate only the corresponding retrieval channels before soft score fusion and fixed-budget consistency verification. Diagnostic experiments on three object-centric settings show AP improvements from 0.0882 to 0.2073 on Beach, from 0.0834 to 0.1505 on Shibuya, and from 0.701 to 0.743 in a LOVO-style comparison. The gains are strongest for stopped-state and scene/region-occupancy queries, while sustained relations remain sensitive to tracking continuity and predicate calibration. 
+
+Keywords: Video retrieval · Open-vocabulary object search · Spatio-temporal evidence graph · Tracklet indexing · Relation-aware retrieval 
+
+## 1 Introduction 
+
+Open-vocabulary object retrieval aims to locate object instances in video col-lections from free-form textual queries. In contrast to closed-vocabulary video analytics, where categories and predicates are specified before deployment, open-vocabulary retrieval must support long-tail object names, attributes, and contex-tual descriptions that may be unknown when the archive is indexed. A practical  
+
+> ⋆
+
+Corresponding author. arXiv:2609.23393v1 [cs.DB] 20 Sep 2026 2 J. Wang and C. Li 
+
+design is to decouple expensive visual computation from online querying: videos are processed offline, region embeddings are extracted by vision–language models, and online queries are answered through approximate nearest-neighbor search and reranking [2, 3, 6]. LOVO follows this index-based philosophy and shows that compact visual embeddings can support efficient complex object queries in large video collections [1]. This design, however, implicitly assumes that the evidence needed by a query can be represented by independent frame-level regions. The assumption is reasonable for appearance-centric queries such as “a red car” or “a person with a backpack”. It becomes problematic for queries such as “a stopped object”, “an object in the crosswalk”, “two objects side by side”, or “a vehicle following another vehicle”. These predicates are not properties of a single crop alone. They depend on velocity over time, occupancy of a scene region, temporal persistence, or the geometry and motion compatibility between two objects. We call this limitation an evidence-unit mismatch . The semantic unit of the query is a tracklet or a tuple of tracklets, whereas the indexed unit is usually a static detection box. One possible remedy is to run tracking, relation reasoning, or video-language inference at query time, but this weakens the central benefit of index-based retrieval. Our key observation is that the offline index should store evidence at the same granularity as the predicates that users ask about. Appearance can remain open-vocabulary and vector-based, but state, scene, temporal, and relation evidence should be materialized over tracklets and tracklet pairs. Based on this observation, we propose STEG-OVR, a structured spatio-temporal evidence graph for open-vocabulary object retrieval. The graph contains tracklet nodes with appearance, motion, duration, trajectory, and scene-occupancy descriptors, and relation edges with temporal overlap, relative geometry, velocity alignment, and symbolic relation labels. At query time, a natural-language query is decomposed into entity, attribute, motion, scene, temporal, and relation slots. These slots activate only the required retrieval channels, allowing candidate generation through vector search, symbolic access buckets, relation-edge joins, soft score fusion, and fixed-budget consistency verification. This formulation preserves the offline/online separation of LOVO-style re-trieval while changing the semantics of the indexed evidence. The method does not replace the underlying open-vocabulary detector or visual encoder; it reorga-nizes their outputs into predicate-aligned retrieval units. The contributions are threefold. First, we formulate open-vocabulary video object retrieval as structured evidence ranking over tracklets and tracklet tuples, and identify evidence-unit mismatch as a key limitation of frame-level region indexes. Second, we propose STEG-OVR, a hybrid graph index that materializes tracklet nodes, relation edges, dual-rate sampling evidence, query-channel decomposition, multi-channel scoring, and bounded late consistency checking. Third, we provide diagnostic experiments across three object-centric settings, showing consistent improvements especially for stopped-state and scene/region-occupancy queries, and analyze failure cases for sustained relations and coarse relative regions. Structured Evidence Graphs for Open-Vocabulary Retrieval 3
+
+## 2 Related Work 
+
+Index-based video analytics. Systems such as NoScope, Focus, BlazeIt, OTIF, Seiden, and ExSample reduce online video-query cost by preprocessing videos into indexes, materialized views, specialized models, or adaptive samples [7–12]. They show the importance of offline computation for practical video search, but mostly target predefined predicates or fixed categories. STEG-OVR follows the same efficiency principle while targeting open-vocabulary object retrieval and storing tracklet-relation evidence. 
+
+LOVO-style open-vocabulary object retrieval. LOVO addresses efficient complex object query in videos through one-time feature extraction, compact key-frame embeddings, inverted multi-index storage, and cross-modal reranking [1]. Its strength is the separation between offline visual computation and online query processing. However, the searchable evidence is still primarily frame-level object evidence, so predicates such as stopped state, scene occupancy, and persistent relations must be approximated from isolated regions or handled by reranking. STEG-OVR keeps the same efficiency principle but changes the indexed evidence unit from boxes to tracklets and temporally compatible tracklet pairs. 
+
+Open-vocabulary visual recognition. Vision–language pretraining enables direct comparison between text and visual regions [2]. Open-vocabulary detectors, including OWL-ViT, GLIP, and Grounding DINO, extend localization to unseen object names and referring expressions [3–5]. These models provide appearance evidence, but independent frame application does not encode stopped state, trajectory interaction, or relation persistence. STEG-OVR treats open-vocabulary recognition as an evidence extractor and adds temporal and relational structure on top. 
+
+Tracking and language-based video retrieval. Tracking-by-detection methods link object detections into trajectories; ByteTrack shows that associating low-score detections can improve track continuity [13]. Natural-language moment retrieval and video grounding show that textual queries often describe temporally extended events [14–16]. STEG-OVR focuses on an object-centric regime: the output is a tracklet or a tuple of related tracklets, and online computation is bounded by an offline evidence graph. 
+
+## 3 Problem Definition 
+
+Let V = {vi}Mi=1 be a video collection. Each video vi is a sequence of frames 
+
+vi = {f it }Ti
+
+> t=1
+
+. An open-vocabulary localizer produces a set of detections at sampled frames: 
+
+ojt = ( bjt , e jt , c jt , s jt ), (1) where bjt = ( xjt , y jt , w jt , h jt ) is a bounding box, ejt ∈ Rd is the region embedding, cjt
+
+is an optional open-vocabulary pseudo-category, and sjt ∈ [0 , 1] is the localization 4 J. Wang and C. Li 
+
+confidence. The spatial overlap between two boxes is measured by intersection over union, 
+
+IoU( b, b ′) = |b ∩ b′||b ∪ b′| , (2) where | · | denotes image area. We use this definition both for detection association and for evaluating spatial consistency with scene regions. A tracklet τm represents one physical object over a temporal interval: 
+
+τm = {oat 
+
+> t
+
+| tms ≤ t ≤ tme }, Im = [ tms , t me ]. (3) The index is an evidence graph 
+
+GV = ( T , E, X , R), (4) where T is the set of tracklets, E ⊆ T × T is the set of relation edges between temporally compatible tracklets, X stores node descriptors, and R stores edge descriptors. A natural-language query q is decomposed into a query graph 
+
+Gq = ( Eq , Aq , Mq , Lq , Sq , Tq ), (5) where Eq denotes entities, Aq attributes, Mq motion or state predicates, Lq pair-wise relations, Sq scene or relative-region constraints, and Tq temporal constraints. The output is a ranked list of candidates 
+
+c ∈ C q =
+
+> rmax
+
+[
+
+> r=1
+
+{(τ1, . . . , τ r ) ∈ T r | τi̸ = τj for i̸ = j}, (6) where r is the number of object entities required by the query. A single-object query returns one tracklet; a relation query returns a tuple of tracklets. 
+
+## 4 Method 
+
+4.1 Overview 
+
+Figure 1 gives the overall framework. STEG-OVR is designed to align each query predicate with an indexed evidence unit. Appearance predicates are matched against open-vocabulary region features, state and scene predicates are evaluated on tracklet-level descriptors, and relation predicates are matched against pre-materialized tracklet-pair edges. The offline stage builds this hybrid graph index from dual-rate video samples. The online stage decomposes a query into a structured graph and activates only the evidence channels needed by that query. The key design principle is that temporal and relational structure is materialized offline, while online reasoning is limited to indexed lookup, graph joins, score fusion, and top-K verification. Structured Evidence Graphs for Open-Vocabulary Retrieval 5Input 
+
+> Raw videos
+
+Structured Evidence Graph 
+
+> Open -vocab.
+> perception
+> Tracklet
+> construction
+> Relation
+> modeling
+
+Evidence Graph  
+
+> t1
+> t2
+> t3
+> t4
+> tracklets | relations
+> Query
+> graph
+> Graph
+> matching
+> Evidence
+> aggregation
+> Ranked
+> result
+
+Graph -aware Retrieval 
+
+> Natural -
+> language
+> guery
+
+Fig. 1. Core idea of STEG-OVR. Videos are converted into a structured evidence graph through open-vocabulary perception, tracklet construction, and relation modeling. Graph-aware retrieval maps a natural-language query into a query graph, matches it against the structured evidence, aggregates evidence, and returns ranked results. 
+
+4.2 Design Requirements 
+
+STEG-OVR is designed around four requirements. Evidence granularity requires the indexed unit to match the query predicate: appearance can be represented by a region embedding, but stopped state, duration, scene occupancy, and relations require temporal aggregation. Offline materialization requires reusable visual, motion, scene, and relation evidence to be computed before a query arrives, so query time is not dominated by tracking or pair construction. Channel selectivity 
+
+requires a query to activate only the channels it needs, preventing relation or scene reasoning from being applied to pure appearance queries. Compatibility requires reuse of standard open-vocabulary detectors, tracking outputs, and approximate nearest-neighbor indexes. These requirements lead to a hybrid design: node evidence is used for single-object queries, edge evidence for relation queries, and symbolic buckets are used only as high-recall access paths. Final ranking remains soft and multi-channel. Operationally, STEG-OVR samples key frames for open-vocabulary appear-ance evidence and denser tracking frames for temporal continuity, links detections into tracklets, computes node descriptors, and materializes relation edges only for temporally compatible tracklet pairs. At query time, entity and attribute slots query the appearance index, state and scene slots access high-recall buck-ets, and relation slots join entity candidates through precomputed edges before channel-normalized fusion and fixed-budget verification. 6 J. Wang and C. Li 
+
+4.3 Dual-Rate Evidence Acquisition 
+
+A single sampling rate creates an undesirable tradeoff. Sparse sampling is efficient for appearance indexing but damages tracking and motion estimation; dense sampling improves temporal continuity but makes open-vocabulary localization and embedding extraction unnecessarily expensive. We therefore use two synchro-nized sampling streams. Let ρk be the key-frame rate and ρt the tracking-frame rate, with ρk < ρ t. In the implementation reflected by the experiments, ρk = 1 
+
+fps and ρt = 5 fps. For a video v with native frame rate rv and duration Tv , the sampled set at rate ρ is 
+
+Fρ(v) = {f⌊nr v /ρ ⌋ | n = 0 , . . . , ⌊ρT v ⌋ − 1}. (7) The key-frame and tracking-frame sets are then 
+
+Fk(v) = Fρk (v), Ft(v) = Fρt (v). (8) Key frames are used to compute expensive open-vocabulary embeddings ejt and build the appearance index. Tracking frames are used to maintain short-range association, estimate velocity, and recover temporal relations. This separates semantic indexing cost from temporal sampling density. For consecutive tracking frames, detections are linked by minimizing an association cost 
+
+D(oit, o jt+∆) = λIoU 
+
+ 1 − IoU( bit, b jt+∆)
+
++ λc
+
+∥μ(bit) − μ(bjt+∆)∥2
+
+∆ + λeχt,t +∆ij 
+
+ 1 − cos( eit, e jt+∆).
+
+(9) where μ(b) is the box center and χt,t +∆ij ∈ { 0, 1} indicates whether both de-tections have valid appearance embeddings. Matches are solved by bipartite assignment with a maximum-cost rejection threshold; unmatched detections start new tracklets, and unmatched active tracklets are retained for a short grace period. This cost explains how the dual-rate design remains compatible with a key-frame embedding index such as LOVO: dense frames refine tracks even if only key frames carry full open-vocabulary features. 
+
+4.4 Predicate-Aligned Tracklet Evidence 
+
+For each tracklet τ , STEG-OVR builds a node descriptor xτ composed of ap-pearance, motion, trajectory, state, and scene evidence: 
+
+xτ = aτ , m τ , g τ , p state (τ ), p scene (τ ). (10) The appearance descriptor is a confidence-weighted and normalized average of key-frame embeddings, 
+
+aτ =
+
+P  
+
+> t∈Iτ∩F k
+
+stet
+
+P  
+
+> t∈Iτ∩F k
+
+stet 2 + ϵ . (11) Structured Evidence Graphs for Open-Vocabulary Retrieval 7
+
+This preserves the open-vocabulary matching ability of CLIP/OWL-ViT-style features while reducing tracklet evidence to one searchable vector. Motion evidence is computed from the center trajectory ct = μ(bt) after normalizing image coordinates to [0 , 1] 2:
+
+uℓ = ctℓ+1 − ctℓ
+
+tℓ+1 − tℓ
+
+, ¯uτ = 1
+
+Lτ − 1 
+
+> Lτ−1
+
+X
+
+> ℓ=1
+
+∥uℓ∥2. (12) For Lτ = 1 , ¯uτ is set to +∞ so that a single detection cannot be classified as stopped. A soft stopped-state score is defined as 
+
+pstop (τ ) = σ (α(δu − ¯uτ )) , (13) where δu is a speed threshold and σ is the sigmoid function. This formulation avoids a brittle binary decision: slow tracklets receive high stopped scores, while noisy but nearly stationary tracks are not immediately discarded. Scene and relative-region evidence are stored as soft occupancy rather than a single hard label. For a predefined region r with image mask or polygon Ωr , the occupancy is 
+
+pr (τ ) = 1
+
+|Iτ |
+
+X
+
+> t∈Iτ
+
+|bt ∩ Ωr ||bt| . (14) This descriptor supports absolute scene queries such as “in the crosswalk” and relative-region queries such as “in the left region”. Candidate generation uses a conservative bucket Bs(r; ηr ) = {τ | pr (τ ) ≥ ηr }, while the continuous score pr (τ )
+
+is retained for score fusion. This distinction is important: if a query region is coarse or a tracklet crosses a boundary, an overly high ηr can over-filter relevant objects. 
+
+4.5 Temporally Compatible Relation Evidence 
+
+For two tracklets τi and τj , an edge is created only when their temporal intervals overlap sufficiently. Temporal overlap is measured by 
+
+tIoU( τi, τ j ) = |Ii ∩ Ij ||Ii ∪ Ij | . (15) When tIoU( τi, τ j ) > η t, the edge descriptor stores relative geometry and motion statistics over the shared interval Iij = Ii ∩ Ij :
+
+rij = ∆c ij , d ij , κ ij , tIoU( τi, τ j ), ℓ ij 
+
+ . (16) Here ∆c ij is the normalized relative center displacement, dij is the mean object distance, κij is the mean velocity alignment, and ℓij is a symbolic relation label such as near , left-of , right-of , side-by-side , or following . A following score, for example, can be written as 
+
+ψfollow (i, j ) = σ  γ1κij − γ2dij + γ3tIoU( τi, τ j ) . (17) 8 J. Wang and C. Li 
+
+This edge representation is deliberately hybrid. Vector terms provide graded simi-larity, while symbolic labels enable efficient filtering. Thus relation reasoning does not require scanning all object pairs online; candidate pairs are pre-materialized as graph edges. 
+
+4.6 Hybrid Graph Index Layout 
+
+After node and edge construction, the evidence graph is stored in a hybrid index 
+
+I = ( Ia, I m, I s, I t, I r ), (18) where Ia is an approximate nearest-neighbor index over appearance descriptors, 
+
+Im stores motion and state buckets, Is stores scene-region buckets, It stores duration or temporal-interval buckets, and Ir stores relation-label lists with pointers to edge descriptors. The index also stores back-pointers from each tracklet to its original boxes and timestamps. These pointers are not scanned during candidate generation; they are accessed only for visualization and bounded verification. This layout separates dense vector search from sparse symbolic access. Appear-ance matching provides open-vocabulary recall, while motion, scene, temporal, and relation buckets restrict the candidate set when the query explicitly requests such evidence. The design is therefore sublinear in raw detections at query time and avoids enumerating all object pairs for relation queries. 
+
+4.7 Query-Time Cost and Evidence Semantics 
+
+The graph index is intended to change the semantics of retrieved evidence without changing the online cost model of index-based retrieval. Let N be the number of frame-level detections, T the number of tracklets, and E the number of pre-materialized relation edges. A frame-level baseline retrieves from N visual regions. In contrast, STEG-OVR retrieves from T tracklet nodes for single-object queries and from the relevant subset of E edges for relation queries. Since detections belonging to the same physical object are collapsed into one tracklet, typically 
+
+T ≪ N for videos with persistent objects. Relation candidates are not produced by online pair enumeration over T 2 pairs; only temporally compatible edges are stored and queried. For a single-object query, the dominant online operations are an approximate nearest-neighbor lookup in Ia, a small number of bucket accesses in Im, Is, or 
+
+It, and score fusion over the resulting shortlist. For a two-object relation query, candidate pairs are generated by joining entity shortlists through Ir. The cost is therefore governed by the shortlist size and the number of matching indexed edges, not by the raw video length. This property is important for PRICAI-style AI systems settings: the method adds explicit symbolic and geometric evidence, but it keeps expensive visual inference and pair construction offline. The same structure also clarifies what each retrieved item means. A high score from Ia says that a tracklet looks like the entity phrase; a high motion Structured Evidence Graphs for Open-Vocabulary Retrieval 9
+
+Table 1. Representative query decomposition patterns used in the experiments. Entity and attribute phrases remain open-vocabulary appearance queries; structural predicates use lexicon/template slots.                      
+
+> Query form Active slots Candidate arity Main evidence channel
+> a stopped object entity, state 1tracklet velocity statistics
+> an object in the crosswalk entity, scene 1scene occupancy bucket and score
+> an object in the bottom region entity, relative region 1soft region occupancy
+> an object next to another object two entities, relation 2precomputed relation edge
+> an object following another object two entities, sustained relation 2temporal overlap, distance, velocity alignment
+> a moving object entity, motion 1normalized trajectory speed
+
+score says that its trajectory satisfies a state predicate; a high scene score says that it occupies a named or relative region over time; and a high relation score says that two tracklets satisfy a precomputed temporal-geometric relation. This decomposition makes the ranking more auditable than a single cross-modal similarity score and explains the family-level behavior observed in the experiments. 
+
+4.8 Query Graph Decomposition 
+
+A text query q is decomposed into a query graph Gq . The parser does not attempt full language understanding; it exposes retrieval slots. Entity and attribute phrases remain open-vocabulary appearance queries, while lexicon/template rules map terms such as stopped , moving , near , next to , following , scene names, and relative-region words to motion, relation, temporal, and scene slots. Unmatched words stay in the appearance phrase, which avoids discarding useful text when a phrase cannot be mapped to a symbolic slot. We represent the active channel mask as 
+
+zq = ( za, z m, z s, z r , z t) ∈ { 0, 1}5, (19) corresponding to appearance, motion, scene, relation, and temporal channels. This mask controls which indexes are queried and which score terms are included, so pure appearance queries do not invoke relation verification and relation queries are not reduced to appearance similarity. 
+
+4.9 Candidate Generation 
+
+Given the active channel mask, STEG-OVR first retrieves candidates from each active index and then intersects only the symbolic buckets requested by the query. These bucket intersections are candidate-access operations, not final relevance decisions: thresholds are set conservatively and continuous motion/scene scores remain in the fusion stage. For a single-object query, 
+
+C(1)  
+
+> q
+
+= TopK a(q) ∩ \ 
+
+> k∈{ m,s,t }:zk(q)=1
+
+Bk(q), (20) where TopK a(q) is the appearance shortlist and Bm, Bs, and Bt are motion, scene, and temporal buckets. If a bucket is absent or unreliable for a query, the corresponding predicate is handled as a soft score rather than as a hard access 10 J. Wang and C. Li 
+
+constraint. For a relation query, node candidates are generated for each entity and joined through precomputed graph edges: 
+
+C(2)  
+
+> q
+
+= {(τi, τ j ) | τi ∈ C (1)  
+
+> q, 1
+
+, τ j ∈ C (1)  
+
+> q, 2
+
+, (τi, τ j ) ∈ E , ℓ ij ∼ ℓq }. (21) Here ℓij ∼ ℓq denotes compatibility between the indexed relation label and the requested relation. This join avoids enumerating all object pairs online. 
+
+4.10 Channel-Selective Retrieval and Score Fusion 
+
+For a single-tracklet candidate τ , the retrieval score is a sum of active evidence terms rather than a monolithic cross-modal score: 
+
+Snode (q, τ ) = λa(q)ϕa(q, τ ) + λm(q)ϕm(q, τ ) + λs(q)ϕs(q, τ ) + λt(q)ϕt(q, τ ), (22) where ϕa is text–appearance similarity, ϕm evaluates motion or state predicates, 
+
+ϕs evaluates scene or relative-region membership, and ϕt evaluates duration constraints. For a relation candidate (τi, τ j ), we add an edge score 
+
+Sedge (q, τ i, τ j ) = λr (q)ϕr (q, r ij ) + 12 Snode (q, τ i) + 12 Snode (q, τ j ). (23) The channel weights are query-adaptive: 
+
+λk(q) = zk(q) exp( θk)
+
+P 
+
+> ℓ
+
+zℓ(q) exp( θℓ) + ϵ , k ∈ { a, m, s, r, t }. (24) The mask zk(q) removes irrelevant channels, while the learnable or tuned prior 
+
+θk controls the relative importance of active evidence types. This formulation is more interpretable than a monolithic neural score because each component has a direct retrieval meaning. After candidate generation, STEG-OVR applies optional fixed-budget tempo-ral consistency scoring to the top-ranked candidates. In the reported experiments, the same late scoring budget is used for the full model and ablations, so the comparison primarily evaluates how the graph index changes the candidate set and ranking before this final check. The scorer loads a short clip around the can-didate interval, target object crops, related object crops when present, trajectory tokens, relation tokens, and the query graph. It produces a bounded consistency score 
+
+Scons (q, c ) ∈ [0 , 1] . (25) The final score is 
+
+Sfinal (q, c ) = βS retrieval (q, c ) + (1 − β)Scons (q, c ). (26) This scorer is not used as an additional full-video reasoning model. It is a fixed-budget consistency check over a small candidate set, so its cost scales with the candidate budget rather than with the total video length. Structured Evidence Graphs for Open-Vocabulary Retrieval 11 
+
+## 5 Experiments 
+
+5.1 Experimental Setup 
+
+We report empirical results across three object-centric evaluation settings. Beach and Shibuya are diagnostic retrieval settings with complete per-query and per-family logs. Each contains 13 queries covering spatial relation, sustained relation, multi-object proximity, temporal action, stopped state, and scene/relative-region constraints. The third setting is an object-centric spatio-temporal benchmark with 10 weakly supervised queries, 16 tracklets, and 643 pairwise relations. It is used as a complementary comparison against the LOVO baseline. The primary baseline is a frame-level open-vocabulary retrieval system fol-lowing the same offline indexing principle as LOVO. On Beach and Shibuya, this baseline is denoted Frame-OVR because it ranks isolated frame/object evidence and does not materialize tracklet state, scene occupancy, or relation edges. On the object-centric benchmark, the baseline is denoted LOVO because the available comparison follows the published LOVO-style object retrieval protocol. The comparisons are organized to isolate evidence representation. In each setting, the baseline and STEG-OVR use the same evaluated detections, region embeddings, query text, and metric implementation; STEG-OVR changes how this evidence is aggregated and indexed by adding tracklet nodes, scene/motion descriptors, and relation edges. The bounded consistency scoring budget is fixed across full and ablated variants. For all settings, higher AP, recall, precision, and nDCG are better. AP is macro-averaged over queries. The subsequent per-family, per-query, and time analyses are reported on Beach and Shibuya because these two settings provide complete query-family logs. 
+
+5.2 Metrics and Implementation Details 
+
+For a query q, candidates are sorted by Sfinal (q, c ) and compared against annotated relevant tracklets or tracklet tuples. Precision and recall at rank K evaluate top-ranked retrieval quality. Average precision is computed as 
+
+AP( q) = 1
+
+N +
+
+> qNq
+
+X
+
+> k=1
+
+Pq (k)rel q (k), (27) where N + 
+
+> q
+
+is the number of relevant candidates, Pq (k) is precision at rank k, and 
+
+rel q (k) ∈ { 0, 1} indicates whether the candidate at rank k is relevant. We report macro AP by averaging over queries. Ranking quality is also measured by 
+
+nDCG@ K(q) = 1IDCG K (q)
+
+> K
+
+X
+
+> k=1
+
+2rel q (k) − 1log 2(k + 1) . (28) AP measures full-list ranking, recall measures coverage, precision measures top-ranked correctness, and nDCG rewards placing relevant candidates early. 12 J. Wang and C. Li 
+
+Table 2. Implementation details shared across the reported experiments. Thresholds are used for candidate access; the corresponding continuous scores are still used during fusion.                      
+
+> Component Setting Open-vocabulary evi-dence same evaluated detections, region embeddings, and query text for compared methods within each setting Sampling 1 fps key frames for appearance evidence; 5 fps tracking frames for temporal continuity Tracking bipartite matching with IoU, center displacement, and gated appear-ance cost Query parser open-vocabulary entity/attribute phrases; lexicon/template slots for motion, scene, relation, and time Scene and motion access conservative symbolic buckets plus continuous occupancy/speed scores in fusion Relation access pre-materialized temporally overlapping tracklet pairs with symbolic relation labels Fusion weights fixed query-channel priors normalized over active channels Consistency scoring same bounded top-ranked candidate budget for full model and abla-tions Timing online retrieval plus fixed-budget consistency scoring on Beach/Shibuya query logs; offline indexing excluded
+
+Table 3. Main retrieval comparison across three object-centric evaluation settings. Higher is better.                                               
+
+> Dataset Method AP R@5 R@10 P@10 nDCG@10 ∆AP Beach Frame-OVR 0.0882 0.0201 0.0447 0.3833 0.4099 –STEG-OVR 0.2073 0.0819 0.1281 0.5854 0.6319 +0.1191 Shibuya Frame-OVR 0.0834 0.0179 0.0357 0.3438 0.3378 –STEG-OVR 0.1505 0.0550 0.0850 0.5396 0.5344 +0.0671 Object-centric benchmark LOVO [1] 0.701 0.344 0.613 0.613 0.721 –STEG-OVR 0.743 0.353 0.646 0.677 0.750 +0.042
+
+All comparisons reuse the same visual evidence source within each setting. The frame-level baseline ranks isolated frame/object evidence, while STEG-OVR aggregates the same detections into tracklets and relation edges. Query decomposition is fixed before evaluation and is shared by the full model and the channel ablations. Scene and motion thresholds are used only to construct high-recall buckets; their continuous scores remain in the fusion stage. Unless otherwise stated, the bounded verifier is applied with the same candidate budget across variants, so ablation differences reflect the indexed evidence channels rather than a larger verification budget. Table 2 summarizes the implementation choices that affect reproducibility. 
+
+5.3 Main Results on Three Datasets 
+
+Table 3 shows the main retrieval results. On Beach, AP increases from 0.0882 to 0.2073; on Shibuya, AP increases from 0.0834 to 0.1505. These gains are mainly associated with state and scene-constrained queries, where frame-level regions lack the temporal or region-occupancy evidence required by the query. On the Structured Evidence Graphs for Open-Vocabulary Retrieval 13 
+
+Table 4. Top-K retrieval profile averaged over Beach and Shibuya. The analysis uses the two datasets with complete top-K logs.                                     
+
+> Method R@5 R@10 R@20 R@30 P@5 P@10 P@20 nDCG@10 nDCG@20 Frame-OVR 0.0190 0.0402 0.0616 0.0685 0.3812 0.3635 0.3031 0.3739 0.3286 STEG-OVR 0.0684 0.1066 0.1459 0.1594 0.5625 0.5625 0.4805 0.5832 0.5170
+> Abs. gain +0.0494 +0.0664 +0.0843 +0.0909 +0.1813 +0.1990 +0.1774 +0.2093 +0.1884
+
+Table 5. AP by query family on Beach and Shibuya. Scene constraints include abso-lute scene regions such as crosswalk/intersection and relative-region queries such as left/right/bottom/center.                                                    
+
+> Query family Beach Shibuya Avg. ∆
+> Base STEG-OVR ∆Base STEG-OVR ∆
+> Spatial relation 0.0228 0.0449 +0.0221 0.0000 0.0000 +0.0000 +0.0111 Sustained relation 0.0843 0.0890 +0.0047 0.0817 0.0659 -0.0158 -0.0055 Multi-object proximity 0.0760 0.1082 +0.0322 0.0397 0.0504 +0.0107 +0.0215 Temporal action 0.1749 0.2111 +0.0362 0.2405 0.2161 -0.0244 +0.0059 Stopped state 0.0119 0.3103 +0.2984 0.0027 0.2231 +0.2204 +0.2594 Scene/relative-region constraint 0.1594 0.4805 +0.3211 0.1359 0.3476 +0.2117 +0.2664
+
+object-centric benchmark, STEG-OVR improves AP from 0.701 to 0.743 against LOVO. The gain is smaller, but it is consistent with the view that tracklet and relation evidence can complement frame-level open-vocabulary matching. The absolute recall values remain modest, especially on Beach and Shibuya, so the results should be read as precision-oriented retrieval improvements rather than complete coverage of all relevant objects. This interpretation is consistent with the top-K analysis below: the strongest effect of the graph index is to move relevant structured candidates earlier in the ranking. 
+
+5.4 Top-K Ranking Behavior on Beach and Shibuya 
+
+The early-rank behavior matters because video retrieval systems are usually inspected through the first few returned instances. Table 4 shows that STEG-OVR improves both recall and precision in the top ranks. This means that the graph index does not merely retrieve more candidates at large K; it also places relevant tracklets earlier in the ranking. The gain in nDCG@10 further indicates that the improvement is not only a filtering effect but also a ranking-quality effect. 
+
+5.5 Query-Family Analysis on Beach and Shibuya 
+
+Table 5 explains where the overall improvement comes from. The largest gains appear in stopped-state and scene/relative-region queries. This is consistent with the method design: stopped-state queries depend on velocity statistics aggregated over tracklets, while scene queries depend on region occupancy accumulated over time. Multi-object proximity also improves because pairwise edges reduce the ambiguity of independently retrieved objects. 14 J. Wang and C. Li 
+
+Table 6. Component ablation on Beach and Shibuya. R10, P10, and N10 denote Recall@10, Precision@10, and nDCG@10; Time is wall-clock evaluation time in seconds.                                                              
+
+> Variant Beach Shibuya AP R10 P10 N10 Time AP R10 P10 N10 Time Full STEG-OVR 0.2073 0.1281 0.5854 0.6319 193.0 0.1505 0.0850 0.5396 0.5344 151.9 w/o relation channel 0.1883 0.1154 0.5600 0.6104 191.6 0.1446 0.0804 0.5300 0.5207 151.3 w/o motion channel 0.1766 0.1095 0.5514 0.6209 192.1 0.1350 0.0742 0.5167 0.5038 152.0 w/o scene channel 0.1427 0.0857 0.5229 0.5694 193.4 0.1052 0.0573 0.4937 0.4896 152.7 Frame-OVR 0.0882 0.0447 0.3833 0.4099 181.5 0.0834 0.0357 0.3438 0.3378 153.9
+
+Sustained relation and temporal action are not the main source of improvement. These families depend strongly on tracking quality and predicate calibration. If a trajectory is fragmented, or if “following” is expressed by a loose distance rule rather than a learned relation score, structured evidence can introduce false negatives. Thus the current graph is most reliable for tracklet state, scene occupancy, and region constraints, while sustained relation reasoning requires better edge calibration. 
+
+5.6 Component Ablation 
+
+Table 6 indicates that scene evidence is the most important component in the two fully logged datasets, followed by motion and relation evidence. This ordering is consistent across Beach and Shibuya and matches the query families: scene evidence supports road, sidewalk, crosswalk, intersection, and relative-region queries; motion supports stopped and moving predicates; relation edges provide a smaller but positive signal for object-pair queries. The pattern supports the interpretation that STEG-OVR is not merely a larger reranker, but a combination of distinct indexed evidence channels. The object-centric benchmark provides a complementary ablation: full STEG-OVR obtains AP/R@10/nDCG@10 of 0.743 /0.646 /0.750 , while removing query decomposition gives 0.701 /0.613 /0.721 , removing the motion channel gives 
+
+0.688 /0.635 /0.687 , and removing the scene channel gives 0.709 /0.622 /0.719 .This again supports the claim that the gains arise from semantically special-ized evidence rather than from merely adding parameters or reranking every candidate. 
+
+5.7 Per-Query Diagnostics and Region Calibration 
+
+The lower values in Table 7 identify predicates that need careful calibration. They mostly occur in coarse relative-region queries such as bottom, left/right, and center-of-road. These predicates are harder than named scene regions because their boundaries are not semantically stable: an object can cross from center to bottom during a tracklet, camera perspective changes the apparent region, and annotation protocols may label the object by a representative frame rather than by full temporal occupancy. In the current implementation, a hard threshold on Structured Evidence Graphs for Open-Vocabulary Retrieval 15 
+
+Table 7. Representative per-query AP diagnostics. Positive ∆ indicates improvement over the frame-level baseline; lower values highlight calibration-sensitive structured predicates.                                        
+
+> Query Family Beach ∆Shibuya
+> ∆
+> Interpretation an object in the crosswalk Scene con-straint +0.9736 +0.9063 strong gain from explicit re-gion occupancy an object in the intersec-tion Scene con-straint +1.0000 +0.8085 strong gain from scene-region filtering a stopped object Stopped state +0.2985 +0.2204 velocity aggregation re-solves static-state query an object next to another object Multi-object +0.0322 +0.0106 relation edges improve object-pair retrieval an object following an-other object Sustained rela-tion +0.0047 -0.0158 sensitive to trajectory frag-mentation a moving object Temporal ac-tion +0.0362 -0.0243 affected by motion thresh-old calibration an object in the bottom region Relative region -0.1441 -0.0360 coarse region bin can over-filter an object in the center of road Relative/scene region -0.1106 -0.1871 boundary crossing and am-biguous annotations
+
+Table 8. Online time cost on Beach and Shibuya. Timing covers retrieval plus fixed-budget consistency scoring on the query logs; offline detection, tracking, and index construction are excluded. AP/s and N10/s are multiplied by 10 3 for readability.                                                    
+
+> Dataset Method QTime (s) s/query 10 3AP/s 10 3N10/s nDCG@10 Beach Frame-OVR 13 181.5 13.96 0.486 2.258 0.4099 Beach STEG-OVR 13 193.0 14.85 1.074 3.274 0.6319 Shibuya Frame-OVR 13 153.9 11.84 0.542 2.195 0.3378 Shibuya STEG-OVR 13 151.9 11.68 0.991 3.518 0.5344 Average Frame-OVR 13 167.7 12.90 0.512 2.229 0.3739 Average STEG-OVR 13 172.4 13.27 1.037 3.382 0.5832
+
+pr (τ ) may therefore penalize a relevant tracklet. The strong gains on crosswalk, intersection, sidewalk, road, and stopped-state queries show that structured scene and temporal evidence is beneficial when the region semantics are well defined, while coarse relative regions call for softer calibration. 
+
+5.8 Efficiency 
+
+Table 8 reports online wall-clock evaluation time on the Beach and Shibuya query logs. On average, time increases from 167.7s to 172.4s. Because offline detection, tracking, graph construction, and index building are excluded, the table should be read as online retrieval plus fixed-budget consistency scoring. After graph construction, adding tracklet descriptors, relation edges, and scene memberships does not substantially increase measured online time in these logs. 16 J. Wang and C. Li 
+
+## 6 Discussion 
+
+The results support a bounded but useful conclusion: open-vocabulary retrieval benefits when indexed evidence matches the query predicate. State and scene predicates align well with tracklet velocity and occupancy descriptors, while relation predicates require reliable temporal overlap, trajectory continuity, and calibrated distance or velocity thresholds. Coarse relative-region phrases are also sensitive to camera perspective and boundary crossing. These observations point to learned relation/region calibration and adaptive access thresholds that keep symbolic buckets high-recall while leaving final relevance to soft fusion and bounded verification. 
+
+## 7 Conclusion 
+
+This paper presented STEG-OVR, a structured spatio-temporal evidence graph for open-vocabulary object retrieval in videos. The method builds a hybrid graph index over tracklets and relation edges, parses queries into structured evidence requirements, and combines vector retrieval with symbolic filtering and fixed-budget consistency scoring. Diagnostic experiments across three object-centric settings show AP improvements, especially for stopped-state and scene/region-occupancy queries. The main conclusion is that open-vocabulary appearance retrieval benefits from structured indexed evidence when queries contain explicit state, scene, or selected relation predicates. 
+
+## References 
+
+1. Liu, Y., et al.: LOVO: Efficient complex object query in large-scale video datasets. In: IEEE International Conference on Data Engineering (ICDE), pp. 1938–1951 (2025) 2. Radford, A., et al.: Learning transferable visual models from natural language supervision. In: ICML, pp. 8748–8763 (2021) 3. Minderer, M., et al.: Simple open-vocabulary object detection with vision trans-formers. In: ECCV, pp. 728–755 (2022) 4. Li, L.H., et al.: Grounded language-image pre-training. In: CVPR, pp. 10965–10975 (2022) 5. Liu, S., et al.: Grounding DINO: Marrying DINO with grounded pre-training for open-set object detection. arXiv:2303.05499 (2024) 6. Johnson, J., Douze, M., Jégou, H.: Billion-scale similarity search with GPUs. IEEE Transactions on Big Data 7(3), 535–547 (2019) 7. Kang, D., Emmons, J., Abuzaid, F., Bailis, P., Zaharia, M.: NoScope: Optimizing neural network queries over video at scale. Proceedings of the VLDB Endowment 
+
+10 (11), 1586–1597 (2017) 8. Hsieh, K., et al.: Focus: Querying large video datasets with low latency and low cost. In: OSDI, pp. 269–286 (2018) 9. Kang, D., Bailis, P., Zaharia, M.: BlazeIt: Optimizing declarative aggregation and limit queries for neural network-based video analytics. Proceedings of the VLDB Endowment 13 (4), 533–546 (2019) Structured Evidence Graphs for Open-Vocabulary Retrieval 17 10. Bastani, F., et al.: OTIF: Efficient tracker pre-processing over large video datasets. In: SIGMOD, pp. 2091–2104 (2022) 11. Bang, J., Kang, D., Venkataraman, S.: Seiden: Revisiting query processing in video analytics systems. In: CIDR (2023) 12. Moll, O., Schwan, C., Cudre-Mauroux, P.: ExSample: Efficient searches on video repositories through adaptive sampling. In: ICDE, pp. 2417–2430 (2022) 13. Zhang, Y., et al.: ByteTrack: Multi-object tracking by associating every detection box. In: ECCV, pp. 1–21 (2022) 14. Lei, J., Berg, T.L., Bansal, M.: QVHighlights: Detecting moments and highlights in videos via natural language queries. In: NeurIPS (2021) 15. Liu, Y., et al.: UMT: Unified multi-modal transformers for joint video moment retrieval and highlight detection. In: CVPR, pp. 3042–3051 (2022) 16. Yu, Z., et al.: ActivityNet-QA: A dataset for understanding complex web videos via question answering. In: AAAI, pp. 9127–9134 (2019)

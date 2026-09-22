@@ -1,0 +1,284 @@
+Title: AdaGeoVLN: Selective Geometry Across Representation Depth and Navigation Time for Vision-Language Navigation
+
+URL Source: https://arxiv.org/pdf/2609.18789v1
+
+Published Time: Thu, 17 Sep 2026 01:21:02 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# AdaGeoVLN: Selective Geometry Across Representation Depth and Navigation Time for Vision-Language Navigation 
+
+Quan-Dung Pham 1,∗, Anh Dao 1,∗, Danh Vinh Le 1,∗, Nguyen Viet Tri Pham 1,∗, The-Anh Nguyen 1,Zhirui Dai 2, Yiyu Chen 1, Tuyen P. Le 1, Truong Nguyen 1, Quan Nguyen 3
+
+Fig. 1: AdaGeoVLN overview. Geometry is selected along two complementary axes. Across representation depth ,intermediate VGGT states are coupled to successive VLM stages. Across navigation time , historical VGGT global-attention KV states are selectively retained under a bounded memory budget. The right panel summarizes performance relative to representative single-RGB streaming VLN baselines on R2R-CE and RxR-CE Val-Unseen. 
+
+Abstract — Vision-language navigation requires aligning lan-guage with visual observations while maintaining spatial un-derstanding over time. Geometry foundation models (GFMs) expose intermediate representations throughout their hierarchy, but how navigation policies should use these features and retain historical geometric evidence remains unresolved. We introduce AdaGeoVLN, a streaming VLN framework that addresses these questions across representation depth and navigation time. Hi-erarchical GFM–VLM fusion couples earlier, intermediate, and later GFM representations to successive policy stages instead of repeatedly injecting a terminal feature. Navigation-aware GFM memory retains historical VGGT global-attention KV states according to instruction relevance, geometric confidence, and transition novelty under a bounded per-layer budget. Retained states provide geometric context for subsequent observations before fusion with the policy. Across R2R-CE and RxR-CE, AdaGeoVLN achieves strong performance using a single RGB stream without additional navigation-specific external data. Controlled ablations show that multi-depth coupling substantially outperforms repeated terminal-feature injection at matched fusion locations. Bounded navigation-aware retention preserves navigation performance while considerably reducing GFM-KV memory relative to larger-memory temporal reten-tion. These findings support jointly examining the geometric representations exposed to the policy and the historical evidence 
+
+> 1VinMotion, Inc., Vietnam
+> 2Department of Electrical and Computer Engineering, University of California San Diego, La Jolla, CA 92093, USA
+> 3University of Southern California, USA
+> ∗Equal contribution
+
+retained for future inference. Project page: https://humano id-research.github.io/adageovln/ .
+
+I. INTRODUCTION Vision-language navigation (VLN) has advanced through stronger vision-language models, large-scale instruction fol-lowing, and streaming policies operating on continuous vi-sual observations. Yet navigating unseen environments re-quires more than object recognition or language–appearance matching. An agent must reason about spatial relations, view-point changes, route geometry, and temporal connections among observations to follow an instruction. These demands make spatial understanding central to VLN and motivate geometric representations that complement visual-semantic reasoning. Geometry foundation models (GFMs) provide a promising source of spatial information. VGGT [1], for example, learns geometric representations from large-scale visual data and in-fers scene structure without requiring depth or pose inputs at deployment. However, how its representations should inter-act with a language-conditioned navigation policy remains unresolved . A common approach exposes the policy only to the geometry encoder’s terminal representation, although intermediate states may contain complementary information. This raises our first question: should representations from multiple geometric depths interact with successive stages arXiv:2609.18789v1 [cs.RO] 16 Sep 2026 of policy reasoning? The distinction concerns representation diversity rather than injection frequency: repeatedly injecting a terminal feature increases interaction without exposing earlier GFM states. We therefore investigate geometry selec-tion across representation depth , coupling representations from different geometric depths to successive policy stages without assigning predefined semantic roles to individual lay-ers. A repeated-terminal control at matched fusion locations tests whether multi-depth access provides benefits beyond additional geometry–policy interactions. This comparison evaluates the utility of intermediate geometric representa-tions for sequential navigation rather than assuming that the terminal feature is sufficient. An orthogonal challenge arises across navigation time .Historical geometric states preserve spatial context across viewpoints, but unrestricted retention requires memory that grows with trajectory length. Recency-based retention bounds this growth while treating observation age as aproxy for utility, which may be inadequate for instruction-conditioned navigation. Earlier observations can remain use-ful because they capture an instruction landmark, provide reliable geometry, or represent a distinctive trajectory tran-sition. This motivates our second question: which historical geometric states should remain available for future geometric inference under a bounded memory budget? 
+
+We address these questions with AdaGeoVLN, a stream-ing VLN framework combining multi-depth GFM–VLM coupling with navigation-aware retention of VGGT global-attention states (Fig. 1). Retention uses instruction relevance, geometric confidence, and transition importance. Because retained states are reused within VGGT, selection shapes the context available to subsequent observations before policy fusion. The mechanisms govern which representations the policy accesses and which historical evidence supports their computation. Our contributions are:  
+
+> •
+
+Geometry selection across representation depth. We couple multiple GFM depths to successive policy stages and use matched repeated-terminal controls to isolate the contribution of representation diversity.  
+
+> •
+
+Navigation-conditioned geometric memory. We intro-duce bounded retention of historical GFM states based on instruction relevance, geometric confidence, and tra-jectory transitions, allowing navigation utility to guide the context available for future geometric inference.  
+
+> •
+
+Controlled evaluation in simulation and demon-stration on a physical humanoid. We evaluate Ada-GeoVLN on R2R-CE and RxR-CE, separately ablate selection across depth and time, and deploy the resulting policy on a Unitree G1 humanoid. II. RELATED WORK 
+
+a) Vision-Language Navigation.: VLN-CE [2] ex-tended VLN from oracle navigation graphs to continuous en-vironments, where agents execute low-level actions without known topology or perfect localization. Multimodal foun-dation models have since enabled video-centric navigation in NaVid and Uni-NaVid [3], [4], vision-language planning coupled with locomotion in NaVILA [5], streaming context in StreamVLN [6], and separate spatial-geometric and visual-semantic implicit memories in JanusVLN [7]. Building on these advances, we investigate how a pretrained GFM’s representations should support policy reasoning and persist across navigation time. 
+
+b) Spatial and Geometric Representations for VLN.: 
+
+Explicit spatial structure addresses limitations of appearance-only reasoning. Structured Scene Memory [8] organizes visual-geometric observations for long-range reasoning; GridMM [9] aggregates instruction-relevant history in agrowing top-down grid; Bird’s-Eye-View Scene Graph [10] integrates local BEV representations with a global scene graph; and Volumetric Environment Representation [11] lifts multi-view observations into structured 3D cells. These ap-proaches provide policies with task-specific spatial struc-tures. AdaGeoVLN instead examines the hierarchy already learned by a pretrained GFM: whether its terminal state suffices for navigation, or whether intermediate geometric representations should remain accessible at successive policy stages. 
+
+c) Geometry Foundation Models and Geometry-Augmented MLLMs.: Geometric representation learning has evolved from task-specific depth and reconstruction networks toward transferable models. Depth Anything [12] scales monocular-depth pretraining; DUSt3R [13] predicts multi-view point maps; MASt3R [14] extends this formulation to geometry-grounded matching; and VGGT [1] unifies camera estimation, depth, point maps, and tracking in a feed-forward Transformer. For multimodal reasoning, VG-LLM [15] introduces video geometry priors, while SpatialStack [16] explores multi-level geometry. These studies motivate geometry-language coupling. We investigate its role in sequential embodied decision-making, specifically whether access to multiple GFM depths benefits VLN beyond repeatedly injecting a terminal representation. 
+
+d) Long-Horizon Memory and Streaming Navigation.: 
+
+VLN methods encode history through panoramic en-coders [17], explicit scene memories or maps [8], [9], [18], and persistent environmental memory [19]. Foundation-model policies also compress or reuse neural context: StreamVLN maintains compact streaming context [6], whereas JanusVLN retains fixed-size spatial-geometric and visual-semantic KV memories using initial and sliding win-dows [7]. AdaGeoVLN selects the GFM’s global-attention KV states according to instruction relevance, geometric confidence, and transition importance. Retention therefore determines which historical observations support future geo-metric inference , allowing navigation utility to guide memory selection beyond recency alone. III. METHOD 
+
+A. Problem Formulation and Overview 
+
+At navigation step t, the agent observes an RGB image It
+
+and instruction L, then predicts at ∈ A from the current ob-servation and history. A geometry foundation model (GFM) G processes the visual stream and exposes intermediate representations {Gmt } at depths m to a vision-language navigation policy πθ :
+
+at ∼ πθ (at | L , I 1: t, Mt), (1) where Mt is the retained geometry-side memory. AdaGeoVLN comprises two mechanisms corresponding to the depth and temporal selection problems introduced in Sec. I. Hierarchical GFM–VLM fusion exposes multiple GFM depths to successive policy stages, while navigation-aware GFM memory retains historical global-attention KV states under a fixed budget. Figures 2 and 3 illustrate these mechanisms. 
+
+B. Hierarchical Geometry Fusion for Navigation Reasoning 
+
+Following the multi-depth interface used in Spatial-Stack [16], we extract VGGT representations at depths m ∈{11 , 17 , 23 } and couple them to the first three Qwen3.5-4B decoder layers k ∈ { 0, 1, 2}:
+
+(G11  
+
+> t
+
+, G 17  
+
+> t
+
+, G 23  
+
+> t
+
+) −→ (L0, L 1, L 2). (2) The selected depths span separated stages of the VGGT hierarchy and are injected early so that each geometry update can propagate through subsequent policy computation. Im-portantly, AdaGeoVLN does not assign predefined semantic roles to these depths. Instead, the hierarchy is treated as an empirical hypothesis: latent states obtained at different stages of geometric processing may provide complementary information for navigation that is obscured when only one terminal state is repeatedly injected. For each depth m, the VGGT representation is normalized and spatially aligned with the VLM image-token resolution: 
+
+Zmt = Group 2×2(RMSNorm( Gmt )) . (3) VGGT provides a 2048-D feature at each spatial location; grouping four neighboring patches produces an 8192-D to-ken. A depth-specific adapter maps it to the 2560-D language hidden space, 
+
+Φm : R8192 → R4096 → R2560 , (4) while a token-wise gating network 
+
+Γm : R8192 → R2048 → R (5) outputs a scalar gating logit for each merged token. The geometric update is 
+
+∆mt = sm [σ(Γ m(Zmt )) Φ m(Zmt )] , (6) where the learned scalar sm controls the contribution of depth m.Let Hkt, img denote the image-token output of decoder layer 
+
+Lk; geometry is injected after that layer through 
+
+Hk, + 
+
+> t, img
+
+= Hkt, img +∆ mt , (m, k ) ∈ { (11 , 0) , (17 , 1) , (23 , 2) }.
+
+(7) Subsequent decoder layers propagate this geometry-enriched visual context without directly overwriting text-token states. To distinguish representation diversity from injection fre-quency, Sec. IV-C compares (G11 , G 17 , G 23 ) with a matched control that injects G23 at all three decoder layers. 
+
+Fig. 2: Hierarchical GFM–VLM fusion across represen-tation depth. VGGT depths 11, 17, and 23 are coupled to Qwen3.5-4B decoder layers L0, L1, and L2. Each branch applies RMSNorm, 2 × 2 grouping, projection, token-wise gating, and a learned scale before residual addition at image-token positions. 
+
+C. Navigation-Aware GFM KV Retention 
+
+Long-horizon navigation requires geometric evidence whose utility is not determined by recency alone, yet re-taining the complete history incurs memory growth with trajectory length. We therefore formulate GFM memory as 
+
+navigation-conditioned token selection under a fixed capac-ity. Three complementary criteria guide retention: instruction relevance, geometric confidence, and transition importance. Selection operates on the VGGT global-attention KV cache ;the Qwen/VLM cache and the CPU buffer of frame-aligned 
+
+G11 /17 /23 features used for hierarchical fusion (Sec. III-B) are separate. For global-attention layer g, the candidate memory com-bines retained history with the current observation: 
+
+Cgt = M gt−1 ∪ (Kgt , V gt ). (8) Selection follows the current VGGT pass; thus, the retained states determine geometric context at t + 1 without altering the current-frame representation. 
+
+a) Instruction-conditioned relevance.: To associate ge-ometry with individual navigation subgoals, we segment instructions using punctuation, sequencing markers (e.g., “then,” “next,” and “after that”), and conjunctions intro-ducing navigation verbs, preserving phrases such as “next to.” Each episode-level segment embedding ej is obtained Fig. 3: Navigation-aware GFM KV retention. Instruction relevance, geometric confidence, and transition novelty jointly determine which historical and current states remain available. Layer-specific score normalization and budgeted selection yield the geometric memory used at the next observation. by mean-pooling and ∥ej ∥2 = 1 its Qwen input-token embeddings. Let uf,p ∈ R2560 denote a spatially grouped token from 
+
+G11  
+
+> f
+
+projected into Qwen space before gating and scaling. To remove shared embedding components, we center visual tokens within the frame and segment embeddings within the instruction: 
+
+¯uf = 1
+
+PfPf
+
+X
+
+> p=1
+
+uf,p , ¯e = 1
+
+J
+
+> J
+
+X
+
+> j=1
+
+ej , (9) where Pf and J denote the numbers of projected tokens and instruction segments. Relevance is defined by 
+
+rf,p = 1 + max j cos( uf,p − ¯uf , e j − ¯e)2 . (10) Maximization associates each token with its most relevant segment, rather than requiring alignment with the instruc-tion as a whole. For single-segment instructions, text-side centering is omitted to avoid a zero vector. 
+
+b) Geometric confidence.: Instruction relevance alone does not establish geometric confidence. We therefore average-pool VGGT’s depth- and point-map confidence fields onto the aligned projected-token grid and map each pooled value ˜c ∈ (1 , ∞) to 1 − 1/˜c ∈ (0 , 1) . Their conservative combination is 
+
+cf,p = min 
+
+
+
+cdepth  
+
+> f,p
+
+, c point 
+
+> f,p
+
+
+
+. (11) The minimum makes high confidence from both predictors necessary for a high reliability score. 
+
+c) Transition novelty.: To reduce redundant geometric history, we quantify transition novelty: how distinct aframe’s viewpoint is from every other observed frame Each frame is represented by uniformly pooled, uncentered projected shallow tokens: 
+
+df = norm 
+
+ 1
+
+PfPf
+
+X
+
+> p=1
+
+uf,p 
+
+ . (12) Here, norm denotes ℓ2 normalization. Let F≤t contain all observed frames, whose descriptors remain available even after KV eviction. At each step, frame novelty is recomputed relative to its nearest other descriptor: 
+
+νf |t =1 − max f ′∈F ≤t  
+
+> f′̸=f
+
+cos( df , d f ′ )2 . (13) We define novelty as zero when only one frame has been observed. A high value otherwise indicates that no other observed frame provides a similar geometric descriptor. All candidate patches from frame f share this score: 
+
+νf,p |t = νf |t. (14) 
+
+d) Joint retention score.: Relevance and confidence are mapped to source KV patches, cached at insertion, and shared across layers; novelty is refreshed at each step. To combine these signals on comparable scales, we standardize each over the candidate patches of layer g, excluding special tokens: 
+
+St,g (f, p ) = λr zt,g (rf,p ) + λczt,g (cf,p ) + λν zt,g (νf,p |t).
+
+(15) Here, zt,g denotes layer- and step-specific z-score normaliza-tion. Equal weights are fixed without tuning; the leave-one-signal-out ablations in Sec. IV-D (c) assess signal contribu-tions under the same budget, rather than weight optimality. 
+
+e) Budgeted memory selection.: The total capacity is distributed across VGGT’s 24 global-attention layers as 
+
+Bg = ⌊ρg Btotal ⌋ ,
+
+> 24
+
+X
+
+> g=1
+
+ρg = 1 , (16) where ρg is derived offline from per-layer input–output co-sine similarity following GHOST [20]. Independent selection then defines the retained memory: 
+
+M gt = TopK( Cgt , S t,g , B g ) . (17) Accordingly, budgets such as the “900K” setting reported in Sec. IV refer to the aggregate layer-token capacity Btotal 
+
+across all 24 VGGT global-attention layers, rather than to the number of unique scene tokens. IV. EXPERIMENTS 
+
+A. Experimental Setup a) Benchmarks and training.: We evaluate Ada-GeoVLN on the Val-Unseen splits of R2R-CE [2] and RxR-CE [21], comprising 1, 839 and 3, 669 navigation episodes, respectively. The navigation policy combines a Qwen3.5-4B backbone with VGGT [1] as a frozen geometry foundation model. We train jointly on the R2R and RxR training sets for approximately 100 hours using 8× NVIDIA H100 GPUs. All Qwen3.5 parameters and geometry-fusion modules are opti-mized, while VGGT remains frozen. Qwen3.5 SFT denotes the geometry-free Qwen3.5-4B policy fine-tuned on the R2R and RxR training sets, corresponding to the “None” geometry configuration in Table. III. The policy receives a single RGB stream without panoramic observations, odometry, or depth input. Following the benchmark protocols, we report success rate (SR), success weighted by path length (SPL), navigation error (NE), oracle success (OS), and normalized dynamic time warping (nDTW). NE is measured in meters; all other metrics are multiplied by 100. 
+
+b) Evaluation configurations.: We compare Ada-GeoVLN with state-of-the-art methods on both benchmarks and investigate representation depth and bounded-memory retention through ablations on R2R-CE Val-Unseen. Re-tention budgets specify the total retained token capacity summed across layers, rather than GPU memory in bytes. We distinguish the memory occupied by the GFM KV cache from total allocated GPU memory, reporting both separately. For the accuracy–memory comparison, we use measured mean allocated GPU memory to characterize the overall allocation footprint of each evaluated configuration. 
+
+B. Main Benchmark Results 
+
+Tables I and II compare representative methods and training variants, grouped by observation requirements. On R2R-CE, AdaGeoVLN achieves 55.7% SR and 51.4% SPL, exceeding JanusVLN ∗ by 2.9 and 2.2 percentage points, TABLE I: Comparison on R2R-CE Val-Unseen. Pano., Odo., Depth, and S.RGB denote panoramic observations, odometry, depth, and a single RGB stream. External Data counts additional training samples beyond R2R/RxR; “– ” denotes an unreported total. StreamVLN ∗ is its oracle-navigation ablation [6]. NaVILA ∗ excludes human-following data, and JanusVLN ∗ uses no additional external data [7]. Bold denotes the best navigation metric among the listed variants.                                                                                                                                     
+
+> Method Observation R2R-CE Val-Unseen Training Pano. Odo. Depth S.RGB NE ↓OS ↑SR ↑SPL ↑External Data HPN+DN [22] ✓✓✓6.31 40.0 36.0 34.0 –Sim2Sim [23] ✓✓✓6.07 52.0 43.0 36.0 –VLN ⟳BERT [24] ✓✓✓5.74 53.0 44.0 39.0 –Ego 2-Map [25] ✓✓✓5.54 56.0 47.0 41.0 –DreamWalker [26] ✓✓✓5.53 59.0 49.0 44.0 –AO-Planner [27] ✓✓5.55 59.0 47.0 33.0 –g3D-LF [28] ✓✓✓5.70 59.5 47.2 34.6 –Seq2Seq [2] ✓✓7.77 37.0 25.0 22.0 –NaVid-4D [29] ✓✓5.99 55.7 43.8 37.1 –NavMorph [30] ✓✓5.75 56.9 47.9 33.2 –NaVid [3] ✓5.47 49.1 37.4 35.9 953K Sim2Real [31] ✓5.95 55.8 44.9 30.4 0K StreamVLN ∗[6] ✓5.98 51.3 45.6 42.3 –Uni-NaVid [4] ✓5.58 53.3 47.0 42.7 3577K NaVILA ∗[5] ✓5.37 57.6 49.7 45.5 12574K JanusVLN ∗[7] ✓5.17 58.0 52.8 49.2 0K
+> AdaGeoVLN(Ours) ✓5.27 60.7 55.7 51.4 0K
+
+TABLE II: Comparison on RxR-CE Val-Unseen. Notation follows Table I. StreamVLN uses its standard configura-tion [6]; its total external sample count, including EnvDrop, is not separately quantified. JanusVLN ∗ uses no additional external data. Bold denotes the best navigation metric among the listed variants.                                                                              
+
+> Method Observation RxR-CE Val-Unseen Training Pano. Odo. Depth S.RGB NE ↓SR ↑SPL ↑nDTW ↑External Data VLN ⟳BERT [24] ✓✓✓8.98 27.0 22.6 46.7 –AO-Planner [27] ✓✓7.06 43.3 30.5 50.1 –Seq2Seq [2] ✓✓12.10 13.9 11.9 30.8 –NavMorph [30] ✓✓8.85 30.8 22.8 44.2 –Sim2Real [31] ✓8.79 36.7 25.5 18.1 0K StreamVLN [6] ✓6.72 48.6 42.5 60.2 –Uni-NaVid [4] ✓6.24 48.7 40.9 –3577K NaVILA [5] ✓6.77 49.3 44.0 58.8 13132K JanusVLN ∗[7] ✓6.46 51.4 44.3 59.1 0K
+> AdaGeoVLN (Ours) ✓5.64 54.1 44.7 61.8 0K
+
+respectively. OS increases from 58.0% to 60.7%, with com-parable NE (5.27 versus 5.17 m). On RxR-CE, AdaGeoVLN achieves 54.1% SR, 44.7% SPL, 61.8 nDTW, and 5.64 m NE. Relative to JanusVLN ∗, these correspond to gains of 2.7 percentage points in SR, 0.4 points in SPL, and 2.7 points in nDTW, with a 0.82 m reduction in NE. The improvements on both benchmarks suggest that the benefits of geometry-aware navigation extend across their different instruction and trajectory distributions. These re-sults use a single RGB stream without additional navigation training samples beyond R2R/RxR. Cross-method compar-isons should nevertheless account for the sensing assump-tions and external supervision reported in the tables; the following ablations isolate the contributions of representation depth and temporal retention within our model. TABLE III: Geometry fusion on R2R-CE Val-Unseen. 
+
+Deep ×3 matches the three fusion locations of hierarchical fusion while reusing the terminal representation.                                                                 
+
+> Geometry SR ↑SPL ↑OS ↑NE ↓
+> None 46.5 42.3 56.0 5.19
+> Single deep G23 →L248.9 44.1 56.0 5.28 Deep ×3G23 42.1 36.9 56.7 6.64
+> Hier. G11 /17 /23 55.7 51.4 60.7 5.27
+> (a) Geometry fusion SR SPL (%)
+> 35 40 45 50 55 60
+> No geometry 42.3 46.5 Single deep 44.1 48.9 Deep ×336.9 42.1
+> Hierarchical 51.4 55.7
+> (b) Retention: accuracy and memory
+> Nav. (600/800/900K) Hybrid 8+24 Hybrid 8+48 GHOST InfiniteVGGT Higher is better
+> 18 20 22 24 50 52 54 56 +0 .4pp 55.7
+> SR (%)
+> 18 20 22 24 48 49 50 51 52 +1 .4pp 51.4
+> SPL (%)
+> Mean allocated GPU memory ( 10 3MB)
+> 900K vs. 8+48 Memory ( 10 3MB) Saved (0–50%)
+> Mean GPU 24.16 →19.28 20.22%
+> Mean KV 5.77 →3.48 39.73%
+
+Fig. 4: Geometry fusion and retention on R2R-CE Val-Unseen. (a) SR/SPL for geometry-fusion ablations. (b) 
+
+SR/SPL versus mean allocated GPU memory; the legend identifies methods. Red lines connect 600K, 800K, and 900K aggregate layer-token budgets. Dotted brackets mark 900K gains over Hybrid Inc. (8+48), in percentage points. The bottom strip reports corresponding GPU and GFM-KV memory savings relative to that baseline. 
+
+C. Effect of Hierarchical Geometry Fusion 
+
+We test whether access to multiple geometric represen-tation depths improves navigation beyond increasing fusion frequency. Table III and Fig. 4(a) compare hierarchical fusion with a geometry-free policy, a single terminal-feature injec-tion, and repeated injection of the terminal representation at the same three fusion sites. Hierarchical fusion improves SR/SPL by 9.2/9.1 percentage points over the geometry-free policy and 6.8/7.3 points over single-deep fusion. The largest gains, 13.6/14.5 points, occur over Deep ×3, which matches the number and positions of fusion operations. Thus, repeated terminal-feature injection does not recover the benefit of multi-depth access. These results support selecting geometric representations across depth, without requiring fixed seman-tic interpretations of individual layers. The improvement is strongest in success-based metrics; the geometry-free policy retains a slightly lower NE (5.19 versus 5.27 m). TABLE IV: Selected retention strategies on R2R-CE Val-Unseen. Nav. denotes our navigation-aware retention. KV and Alloc. report mean GFM-KV and allocated GPU memory in MB. Bold marks the best displayed value in each column. Hybrid Incr. denotes hybrid incremental update. The notation 8 + 24 and 8 + 48 denotes retaining the first 8 observations together with the most recent 24 or 48 observations, respectively. GHOST and InfiniteVGGT use fixed budgets of 1m2 and 1m2 , respectively. 
+
+Retention SR ↑ SPL ↑ OS ↑ NE ↓ KV ↓ Alloc. ↓
+
+Hybrid Inc. (8+24) [7] 55.1 50.3 62.4 5.30 3595.53 21263.14 Hybrid Inc. (8+48) [7] 55.3 50.0 61.5 5.21 5767.55 24161.94 GHOST [20] 50.0 48.0 54.9 5.55 6758.17 23075.50 InfiniteVGGT [32] 54.1 49.6 60.3 5.30 6854.04 22066.32 Nav. 600K 53.1 49.2 59.2 5.42 2340.81 18133.58 
+
+Nav. 800K 54.2 50.2 59.5 5.38 3105.28 18903.07 Nav. 900K 55.7 51.4 60.7 5.27 3475.92 19275.87 
+
+D. Navigation-Aware Geometric Memory 
+
+We evaluate selected retention strategies, vary the retained-token budget, and ablate the navigation-aware scoring com-ponents. 
+
+a) Comparison of retention strategies.: Navigation-aware retention improves navigation success and path effi-ciency with lower memory usage than the evaluated temporal baselines (Table IV). At a similar measured KV footprint, Nav. 900K surpasses Hybrid Inc. (8+24) by 0.6 percentage points in SR and 1.1 points in SPL, using 3.33% less mean GFM-KV memory and 9.35% less mean allocated GPU memory. Relative to Hybrid Inc. (8+48), it improves SR/SPL by 0.4/1.4 points while reducing KV and allocated GPU memory by 39.73% and 20.22%, respectively. These comparisons support navigation-aware selection as an effec-tive approach to improving SR/SPL with a smaller geomet-ric memory footprint. Nav. 900K achieves the highest SR (55.7%) and SPL (51.4%) among the selected configurations, while temporal baselines retain the best OS and NE. 
+
+b) Retention-budget sensitivity.: Navigation perfor-mance improves consistently with retention capacity (Fig-ure 4(b)). Increasing the budget from 600K to 800K and 900K raises SR from 53.1% to 54.2% and 55.7%, and SPL from 49.2% to 50.2% and 51.4%, respectively. Moving from 600K to 900K yields gains of 2.6 SR points and 2.2 SPL points for an additional 1142.29 MB of mean allocated GPU memory. The budget therefore offers an accuracy–memory trade-off, with 900K achieving the strongest SR/SPL among the tested capacities. 
+
+c) Contribution of the retention signals.: Each compo-nent of the navigation-aware score contributes to retention quality at a fixed memory budget (Table V). Removing instruction relevance, geometric confidence, or transition importance reduces both SR and SPL, while mean GFM-KV memory varies by only 0.20 MB. Removing confidence causes the largest SR decrease (2.1 percentage points), followed by instruction relevance (1.5 points) and transition importance (1.4 points). The complete score therefore out-TABLE V: Leave-one-signal-out ablation at 900K on R2R-CE Val-Unseen. All signals denotes the complete retention score. KV reports mean GFM-KV memory in MB. Bold marks the best navigation metric in each column.                          
+
+> Retention score SR ↑SPL ↑OS ↑NE ↓KV (MB) All signals 55.7 51.4 60.7 5.27 3475.92 w/o Transition 54.3 50.3 60.1 5.41 3475.96 w/o Confidence 53.6 49.6 59.4 5.48 3475.85 w/o Instruction 54.2 50.1 59.2 5.45 3475.76
+
+performs every tested two-signal variant at approximately constant KV memory, supporting the proposed combination of instruction and geometric cues for selecting useful navi-gation history. 
+
+E. Qualitative Analysis and Real-World Deployment 
+
+Figure 5 shows simulation rollouts and physical deploy-ment. The selected R2R-CE episode involves walking away from a fireplace, climbing a curved staircase, and stopping at a bedroom doorway. AdaGeoVLN reaches the target, whereas Qwen3.5 SFT and JanusVLN fail, illustrating multi-step instruction following alongside the controlled ablations. We also deploy AdaGeoVLN on a Unitree G1 humanoid with a ZED X Mini camera. Jetson AGX Orin preprocesses images and communicates with a remote NVIDIA RTX A6000 workstation for policy inference. The policy uses a single RGB stream and the same geometric reasoning frame-work as in simulation. Two indoor trials involve landmark-conditioned turns, passing a plant on the instructed side, bypassing an irrelevant doorway, and stopping near desig-nated targets. Paired third-person and first-person views align the robot’s progress with instruction segments, demonstrating physical execution beyond simulation. V. CONCLUSION We presented AdaGeoVLN, a streaming VLN framework combining multi-depth GFM–VLM fusion with navigation-aware bounded GFM-KV retention. Evaluations on R2R-CE and RxR-CE demonstrate strong navigation perfor-mance, with R2R-CE ablations favoring multi-depth repre-sentations over single-terminal and repeated-terminal fusion. Navigation-aware retention improves SR/SPL over temporal selection at a similar measured KV footprint and substan-tially reduces geometric memory relative to larger-memory temporal retention. Deployment on a Unitree G1 demon-strates physical execution, supporting the use of selective geometric representations and historical evidence for em-bodied navigation. A limitation is the use of equal retention coefficients without optimizing their relative weights. The signal ablations do not establish optimal weighting; tuning or learning these coefficients remains future work. REFERENCES [1] J. Wang, M. Chen, N. Karaev, A. Vedaldi, C. Rupprecht, and D. Novotny, “VGGT: Visual geometry grounded transformer,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 5294–5306, 2025. [2] J. Krantz, E. Wijmans, A. Majumdar, D. Batra, and S. Lee, “Beyond the nav-graph: Vision-and-language navigation in continuous environ-ments,” in Proceedings of the European Conference on Computer Vision (ECCV) , pp. 104–120, Springer, 2020. [3] J. Zhang, K. Wang, R. Xu, G. Zhou, Y. Hong, X. Fang, Q. Wu, Z. Zhang, and H. Wang, “NaVid: Video-based VLM plans the next step for vision-and-language navigation,” in Proceedings of Robotics: Science and Systems , 2024. [4] J. Zhang, K. Wang, S. Wang, M. Li, H. Liu, S. Wei, Z. Wang, Z. Zhang, and H. Wang, “Uni-NaVid: A video-based vision-language-action model for unifying embodied navigation tasks,” in Proceedings of Robotics: Science and Systems , 2025. [5] A.-C. Cheng, Y. Ji, Z. Yang, Z. Gongye, X. Zou, J. Kautz, E. Bıyık, H. Yin, S. Liu, and X. Wang, “NaVILA: Legged robot vision-language-action model for navigation,” in Proceedings of Robotics: Science and Systems , 2025. [6] M. Wei, C. Wan, X. Yu, T. Wang, Y. Yang, X. Mao, C. Zhu, W. Cai, H. Wang, Y. Chen, et al. , “StreamVLN: Streaming vision-and-language navigation via SlowFast context modeling,” arXiv preprint arXiv:2507.05240 , 2025. [7] S. Zeng, D. Qi, X. Chang, F. Xiong, S. Xie, X. Wu, S. Liang, M. Xu, and X. Wei, “JanusVLN: Decoupling semantics and spatiality with dual implicit memory for vision-language navigation,” in International Conference on Learning Representations (ICLR) , 2026. [8] H. Wang, W. Wang, W. Liang, C. Xiong, and J. Shen, “Structured scene memory for vision-language navigation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pp. 8455–8464, 2021. [9] Z. Wang, X. Li, J. Yang, Y. Liu, and S. Jiang, “GridMM: Grid memory map for vision-and-language navigation,” in Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) ,pp. 15579–15590, 2023. [10] R. Liu, X. Wang, W. Wang, and Y. Yang, “Bird’s-eye-view scene graph for vision-language navigation,” in Proceedings of the IEEE/CVF In-ternational Conference on Computer Vision , pp. 10968–10980, 2023. [11] R. Liu, W. Wang, and Y. Yang, “Volumetric environment representa-tion for vision-language navigation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 16317– 16328, 2024. [12] L. Yang, B. Kang, Z. Huang, X. Xu, J. Feng, and H. Zhao, “Depth anything: Unleashing the power of large-scale unlabeled data,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 10371–10381, 2024. [13] S. Wang, V. Leroy, Y. Cabon, B. Chidlovskii, and J. Revaud, “DUSt3R: Geometric 3D vision made easy,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) ,pp. 20697–20709, 2024. [14] V. Leroy, Y. Cabon, and J. Revaud, “Grounding image matching in 3D with MASt3R,” in Proceedings of the European Conference on Computer Vision (ECCV) , pp. 71–91, 2024. [15] D. Zheng, S. Huang, Y. Li, and L. Wang, “Learning from videos for 3D world: Enhancing MLLMs with 3D vision geometry priors,” in Advances in Neural Information Processing Systems (NeurIPS) ,vol. 38, pp. 23356–23382, 2025. [16] J. Zhang, S. Zhou, B. Liu, A. Kadambi, and Z. Fan, “SpatialStack: Layered geometry-language fusion for 3D VLM spatial reasoning,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2026. [17] S. Chen, P.-L. Guhur, C. Schmid, and I. Laptev, “History aware mul-timodal transformer for vision-and-language navigation,” in Advances in Neural Information Processing Systems (NeurIPS) , vol. 34, 2021. [18] S. Chen, P.-L. Guhur, M. Tapaswi, C. Schmid, and I. Laptev, “Think global, act local: Dual-scale graph transformer for vision-and-language navigation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 16537–16547, 2022. [19] J. Krantz, S. Banerjee, W. Zhu, J. Corso, P. Anderson, S. Lee, and J. Thomason, “Iterative vision-and-language navigation,” in Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 14921–14930, 2023. [20] L. Chen, J. Wu, Z. Li, and Y. Zhang, “GHOST: Geometry-hierarchical online streaming token eviction for efficient 3D reconstruction,” arXiv preprint arXiv:2605.15852 , 2026. [21] A. Ku, P. Anderson, R. Patel, E. Ie, and J. Baldridge, “Room-Across-Room: Multilingual vision-and-language navigation with dense spatiotemporal grounding,” in Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP) ,pp. 4392–4412, 2020. Fig. 5: Simulation rollouts and humanoid deployment. Top: an R2R-CE Val-Unseen route requiring staircase traversal, multiple direction changes, and precise stopping. AdaGeoVLN reaches the target, whereas Qwen3.5 SFT and JanusVLN fail to complete this route. Bottom: representative indoor navigation sequences on a Unitree G1 equipped with a ZED X Mini camera. 
+
+[22] J. Krantz, A. Gokaslan, D. Batra, S. Lee, and O. Maksymets, “Way-point models for instruction-guided navigation in continuous environ-ments,” in Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pp. 15142–15151, IEEE, 2021. [23] J. Krantz and S. Lee, “Sim-2-sim transfer for vision-and-language nav-igation in continuous environments,” in Proceedings of the European Conference on Computer Vision (ECCV) , pp. 588–603, Springer, 2022. [24] Y. Hong, Z. Wang, Q. Wu, and S. Gould, “Bridging the gap between learning in discrete and continuous environments for vision-and-language navigation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 15418–15428, IEEE, 2022. [25] Y. Hong, Y. Zhou, R. Zhang, F. Dernoncourt, T. Bui, S. Gould, and H. Tan, “Learning navigational visual representations with semantic map supervision,” in Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pp. 3032–3044, IEEE, 2023. [26] H. Wang, W. Liang, L. Van Gool, and W. Wang, “Dreamwalker: Mental planning for continuous vision-language navigation,” in Pro-ceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pp. 10839–10849, IEEE, 2023. [27] J. Chen, B. Lin, X. Liu, L. Ma, X. Liang, and K.-Y. K. Wong, “Affordances-oriented planning using foundation models for contin-uous vision-language navigation,” in Proceedings of the AAAI Confer-ence on Artificial Intelligence , vol. 39, pp. 23568–23576, 2025. [28] Z. Wang and G. H. Lee, “g3D-LF: Generalizable 3D-language feature fields for embodied tasks,” in Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition (CVPR) , pp. 14191– 14202, 2025. [29] H. Liu, W. Wan, X. Yu, M. Li, J. Zhang, B. Zhao, Z. Chen, Z. Wang, Z. Zhang, and H. Wang, “NaVid-4D: Unleashing spatial intelligence in egocentric RGB-D videos for vision-and-language navigation,” in 
+
+Proceedings of the IEEE International Conference on Robotics and Automation (ICRA) , pp. 10607–10615, 2025. [30] X. Yao, J. Gao, and C. Xu, “NavMorph: A self-evolving world model for vision-and-language navigation in continuous environments,” in 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pp. 5536–5546, 2025. [31] Z. Wang, X. Li, J. Yang, Y. Liu, and S. Jiang, “Sim-to-real transfer via 3D feature fields for vision-and-language navigation,” in Proceedings of The 8th Conference on Robot Learning (CoRL) , pp. 2982–2995, 2024. [32] S. Yuan, Y. Yang, X. Yang, X. Zhang, Z. Zhao, L. Zhang, and Z. Zhang, “InfiniteVGGT: Visual geometry grounded transformer for endless streams,” arXiv preprint arXiv:2601.02281 , 2026.

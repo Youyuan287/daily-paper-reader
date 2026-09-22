@@ -1,0 +1,672 @@
+Title: PosEviLoc: Position-Conditioned Spatial Evidence for Language-Based 3D Localization
+
+URL Source: https://arxiv.org/pdf/2609.23534v1
+
+Published Time: Tue, 22 Sep 2026 01:58:18 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+## PosEviLoc: Position-Conditioned Spatial Evidence for Language-Based 3D Localization 
+
+Tianyi Shang 1∗, Yike Shi 2∗, Zhenyu Li 3†
+
+> 1
+
+Purdue University 
+
+> 2
+
+Xi’an Jiaotong-Liverpool University 
+
+> 3
+
+Qilu University of Technology (Shandong Academy of Sciences) shangt@purdue.edu, yike.shi22@student.xjtlu.edu.cn, lizhenyu@qlu.edu.cn 
+
+Abstract 
+
+Language-based 3D localization retrieves the point-cloud submap containing a target position from descriptions of nearby objects and their spatial relations. Existing meth-ods typically compress queries and submaps into global de-scriptors, potentially obscuring object-level semantics and cross-description spatial coherence. We propose Position-Conditioned Evidence Localization (PosEviLoc), a query-position-aware framework for coarse text-to-point-cloud lo-calization. Instead of relying on global matching, PosEviLoc evaluates each candidate submap using explicit semantic and spatial evidence. It models direction as a relation jointly de-termined by an object position and a hypothetical query po-sition. The resulting Query-Position Spatial Evidence Field (QSEF) measures the fraction of query descriptions supported at each hypothetical position, explicitly capturing their agree-ment without using the ground-truth query pose to construct the evidence field. A Multi-Level Evidence Readout (MER) summarizes this evidence in a compact representation, which a lightweight MLP converts into a retrieval score. Across five benchmarks, PosEviLoc outperforms MNCL by an average of 17 percentage points in Recall@1. When used as a plug-and-play reranker, it improves MNCL by an average of 16 percentage points. Moreover, PosEviLoc introduces substan-tially fewer parameters and achieves faster inference speed than existing methods. 
+
+Introduction 
+
+Language-based 3D localization aims to identify a target position in a large-scale 3D environment from descriptions of nearby objects and their spatial relations. For example, given a query such as “the target is east of a gray building and north of a traffic sign,” the system should retrieve the point-cloud submap containing a location that satisfies both descriptions. This task provides an intuitive interface for applications such as autonomous navigation, location retrieval, and embodied spatial reasoning. Most existing methods formulate this task as cross-modal representation learning. They encode a language query and each candidate point-cloud submap into a shared embedding space and rank the candidates according to the similarity be-tween their global descriptors (Xia et al. 2024; Xu et al. 2025; 
+
+> ∗
+
+These authors contributed equally. 
+
+> †
+
+Corresponding author. Language Query Point Cloud  
+
+> Previous Methods PosEviLoc
+> Wrong Position
+> Language Query Point Cloud Right
+> Right Position
+> Wrong
+> Wrong Position
+> QSEF
+
+Figure 1: Left: Comparison between PosEviLoc and pre-vious methods. Right: Top-1 recall of MNCL, PosEviLoc, and MNCL enhanced with PosEviLoc as a plug-in reranker across five datasets. Liu et al. 2025). Representative methods, such as Text2Loc, CMMLoc, and MNCL, commonly follow a coarse-to-fine pipeline: the first stage retrieves candidate submaps from a gallery, while the second stage estimates a more precise po-sition within the retrieved submaps. This paradigm enables efficient retrieval from large-scale submap galleries and has achieved substantial progress. However, compressing an en-tire query and submap into a single descriptor may obscure the fine-grained evidence required for language-based local-ization. A high global similarity does not necessarily indicate that the candidate contains objects with the requested classes and colors, nor does it ensure that multiple descriptions admit a spatially coherent explanation. This limitation is particularly important for directional lan-guage. Relations such as east , west , north , and south are not intrinsic attributes of scene objects. Instead, they depend on the relative configuration of an object and the query posi-tion. The same object may be east of one location but west of another. Assigning a static direction label to each object therefore removes the position-dependent nature of spatial language. Moreover, independently matching individual de-1arXiv:2609.23534v1 [cs.CV] 20 Sep 2026 scriptions is insufficient: multiple class–color–direction de-scriptions may each be supported somewhere in a candidate submap while corresponding to mutually inconsistent query positions. A reliable retrieval model should therefore de-termine whether the objects in a candidate submap jointly support as many query descriptions as possible at a shared location. To address these limitations, we propose Position-Conditioned Evidence Localization (PosEviLoc), a spa-tial evidence retrieval framework for coarse text-to-point-cloud localization. Unlike conventional retrieval methods, PosEviLoc does not produce a global descriptor for query– submap matching. Instead, it evaluates each candidate submap through explicit object-level semantic and spatial evidence. PosEviLoc improves only the first-stage submap retrieval, while the original fine-localization module is re-tained without modification and is not considered part of our contribution. The core of PosEviLoc is a Query-Position Spatial Evi-dence Field (QSEF), which defines a two-dimensional grid of hypothetical query positions for each candidate submap, as shown in Figure 1 left. At each grid position, object di-rections are dynamically determined from their relative off-sets to the hypothetical query position. QSEF then measures the fraction of query descriptions supported by objects with the required class, color, and position-conditioned direction, explicitly capturing whole-query spatial coherence without using the ground-truth pose. A Multi-Level Evidence Readout (MER) further summa-rizes complementary semantic and spatial evidence, includ-ing class–color compatibility, shared-position soft agree-ment, exact spatial feasibility, and the spatial extent of valid support. These statistics form a compact evidence represen-tation that is mapped to a retrieval score by a lightweight multilayer perceptron. PosEviLoc can operate independently or serve as a plug-and-play reranking module for existing methods without modifying or retraining their encoders. As shown in Fig-ure 1 (right), PosEviLoc surpasses MNCL by an average of 17 Recall@1 points across five benchmarks and improves it by 16 points as a reranker. Our main contributions are summarized as follows: 
+
+• We propose PosEviLoc, which formulates coarse text-to-point-cloud localization as position-conditioned evidence evaluation, explicitly verifying whether candidate objects jointly support the query. 
+
+• We introduce QSEF and MER. QSEF evaluates class, color, and direction evidence over hypothetical query po-sitions, while MER summarizes semantic compatibility, soft agreement, and spatial feasibility for retrieval. 
+
+• PosEviLoc achieves the best Recall@1 on all five bench-marks and, as a plug-and-play reranker for six meth-ods, improves 89 of 90 reported R@1–R@3 results. Po-sEviLoc also achieves faster inference with lower compu-tational overhead. 
+
+Related Work 
+
+LiDAR Place Recognition 
+
+LiDAR place recognition (LPR) retrieves previously ob-served locations from 3D scans and is robust to illumination and appearance changes. Early methods used handcrafted ge-ometric descriptors. M2DP derives a compact signature from multi-view point-cloud projections (He, Wang, and Zhang 2016), while Scan Context employs a polar grid for efficient yaw-aware retrieval (Kim and Kim 2018). However, these descriptors remain sensitive to sparsity, occlusion, and struc-tural repetition. Learning-based methods instead learn global descrip-tors from data. PointNetVLAD combines PointNet with NetVLAD (Uy and Lee 2018), while LPD-Net enhances lo-cal geometry through adaptive feature extraction and graph aggregation (Liu et al. 2019). MinkLoc3D uses sparse voxel convolutions (Komorowski 2021), whereas SOE-Net and PPT-Net adopt orientation-aware attention and multi-scale Transformer aggregation (Xia et al. 2021; Hui et al. 2021). LoGG3D-Net further improves descriptor repeatabil-ity through local feature consistency (Vidanapathirana et al. 2022). Recent methods explore hybrid representations and stronger robustness. CASSPR fuses point-wise and sparse-voxel features through cross-attention (Xia et al. 2023), while BEVPlace performs rotation-equivariant retrieval from bird’s-eye-view projections (Luo et al. 2023). ForestLPR and HOTFormerLoc extend LPR to forests and ground–aerial settings (Shen et al. 2025; Griffiths et al. 2025), whereas C-LaV improves robustness under adverse weather through latent denoising (Cao et al. 2026). Overall, LPR has evolved from handcrafted signatures toward learned multi-scale and condition-robust geometric representations. 
+
+Cross-Modal Place Recognition 
+
+Natural-language-based place recognition enables users to specify target locations through nearby objects, visual at-tributes, and spatial relations. Text2Pos introduced text-to-point-cloud localization and the KITTI360Pose benchmark, establishing the coarse-to-fine paradigm of retrieving can-didate submaps before estimating the target position within the selected submap (Kolmet et al. 2022). Most subsequent methods follow this design. RET models relations between textual hints and 3D instances (Wang, Fan, and Kankanhalli 2023), while Text2Loc combines hierarchical text aggrega-tion, contrastive text–submap learning, and matching-free fine localization (Xia et al. 2024). MambaPlace uses modality-specific and cross-modal Mamba modules to capture long-range dependencies (Shang et al. 2025b). Des4Pos models multi-scale spatial rela-tions with a bidirectional LSTM and reduces the modal-ity gap using CLIP priors (Shang et al. 2026). FourierPlace introduces frequency-domain point-cloud representations, Fourier-gated attention, and hierarchical language model-ing (Shang et al. 2025a). PMSH (Feng et al. 2025) handles partially matched submaps by propagating uncertainty into the coarse retrieval metric. MNCL adopts multi-level nega-tive contrastive learning (Liu et al. 2025), whereas CMMLoc 2Pose is north of a brown vegetation Pose is south of a black traffic sign                   
+
+> Pose is west of a dark green
+> sidewolk. Pose is East of a green garage.
+> Rule-based
+> parser
+> Rule-based
+> parser Class Color
+> Query to all Submap
+> Query to Soft Best Positions
+> Class Color Direction Class Color Direction Query to Hard Best Positions
+> Class Color Direction Query to all Positions
+> Object Number in Submap Composite Evidence Object-Count
+> Soft Tuple
+> Compatibility Spatial Feasibility Spatial Feasibility
+> MLP
+> Top-K Submaps Frozen PointNet++
+> RGB
+> Coordinates
+> Color Tree
+> Classifier
+> Context
+> Enhancement Class Tree Classifier
+> Wrong
+> Position
+> Cells Language Query
+> Query-Position Spatial Evidence Field (QSEF)
+> Object Attribute Prediction Data Preparation Multi-Level Evidence Readout
+> Must be the same Can be the same or different
+> Wrong Position
+> Right Position 𝐷 𝑚𝑎𝑥 (𝑞 ,𝑠 )𝐷 𝜇 (𝑞 ,𝑠 )𝐻 (𝑞 ,𝑠 )𝐴 (𝑞 ,𝑠 )
+> Prior 𝐶 (𝑠 )
+
+Figure 2: Overall architecture of the proposed PosEviLoc framework. introduces uncertainty-aware text–scene association and di-rectional modeling (Xu et al. 2025). Unlike full coarse-to-fine pipelines, VLM-Loc focuses on fine localization within re-trieved submaps using a vision-language model (Kang et al. 2026). 
+
+Method 
+
+Overview 
+
+PosEviLoc retrieves submaps by testing whether their objects jointly explain a language query from a plausible position, rather than by matching global descriptors (Figure 2). A fixed rule-based parser converts the query into object descriptions 
+
+q = {di}mi=1 , di = ( ci, a i, r i), (1) where ci ∈ C, ai ∈ A, and ri ∈ R denote class, color, and spatial relation, respectively, and R =
+
+{north , south , east , west , on-top }. The parser is fixed across data splits and has no learnable parameters; exact duplicate tuples are merged, leaving m distinct descriptions. Each can-didate s ∈ S contains an object set Os.For each candidate, PosEviLoc predicts object attributes, constructs a Query-Position Spatial Evidence Field (QSEF), and uses a Multi-Level Evidence Readout (MER) to map semantic and spatial evidence to a retrieval score zθ (q, s ).The ground-truth query pose is used only to identify training positives and compute evaluation metrics, never to derive object attributes or spatial relations. 
+
+Object Attribute Prediction 
+
+For each o ∈ O s, PosEviLoc predicts its class ˆco, color ˆao,and horizontal location po ∈ R2.
+
+Context-aware class prediction. A base PointNet++ clas-sifier provides a geometric feature xgeo  
+
+> o
+
+and class posterior 
+
+bo ∈ [0 , 1] |C| . We augment them with ℓo = Elayout (o, Os),which summarizes relative position, scale, and local density, yielding 
+
+hcls  
+
+> o
+
+= [ xgeo  
+
+> o
+
+; bo; ℓo]. (2) A tree ensemble then combines object and contextual evi-dence: 
+
+pcls (o) = 1
+
+KcKcX
+
+> k=1
+
+T cls  
+
+> k
+
+(hcls  
+
+> o
+
+),
+
+ˆco = arg max  
+
+> c∈C
+
+pcls  
+
+> c
+
+(o),
+
+(3) where Kc is the number of trees and T cls  
+
+> k
+
+outputs a class posterior. 
+
+RGB-based color prediction. Let ro denote the RGB ob-servations of object o. We directly feed these RGB values to a lightweight tree-based classifier: 
+
+pcol (o) = T col (ro), ˆao = arg max  
+
+> a∈A
+
+pcol  
+
+> a
+
+(o). (4) This branch provides explicit color evidence without intro-ducing a separate high-capacity appearance encoder. 
+
+Query-Position Spatial Evidence Field 
+
+The core of PosEviLoc is the Query-Position Spatial Evi-dence Field (QSEF), which evaluates whether the objects in a candidate submap can support the query from a common hypothetical location. A direction is therefore treated as a relation induced jointly by a query position and an object position, rather than as a fixed object attribute. We place a normalized 2D grid G on each submap, where each g ∈ G represents a hypothetical query position rather than an observed point or object center. For object o, define 
+
+∆(g, o ) = g − po = (∆ x, ∆y ). (5) Let ρ(g, o ) = ∥∆(g, o )∥2. The position-conditioned direc-tion operator is 
+
+D(g, o ) = 
+
+
+
+on-top , ρ(g, o ) ≤ τ, 
+
+east , ρ(g, o ) > τ, |∆x| > |∆y |, ∆x > 0,
+
+west , ρ(g, o ) > τ, |∆x| > |∆y |, ∆x ≤ 0,
+
+north , ρ(g, o ) > τ, |∆x| ≤ | ∆y |, ∆y > 0,
+
+south , ρ(g, o ) > τ, |∆x| ≤ | ∆y |, ∆y ≤ 0.
+
+(6) 3Here, τ = 0 .06 is the on-top radius in normalized submap coordinates. We denote the resulting relation by 
+
+ˆro(g) ≜ D(g, o ). (7) Thus, ˆro(g) is computed from g and po, rather than from a static object annotation or a relation label derived from the ground-truth query pose. For description di = ( ci, a i, r i), exact support at g is 
+
+M (s) 
+
+> i
+
+(g) = 1[∃o ∈ O s : ˆ co = ci, ˆao = ai, ˆro(g) = ri] .
+
+(8) Here, 1[·] equals one when the enclosed condition holds and zero otherwise. Hence, M (s) 
+
+> i
+
+(g) = 1 only when one scene object jointly supports the class, color, and direction required by description i at position g. Aggregating all descriptions gives the query-conditioned evidence field 
+
+Uq,s (g) = 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+M (s) 
+
+> i
+
+(g). (9) A high value indicates that many descriptions agree at the same hypothetical query position, so QSEF captures a joint spatial explanation rather than a count of individ-ually compatible objects. Descriptions are evaluated inde-pendently, allowing one physical instance to support multi-ple co-referential descriptions. At a fixed g, however, each object has only one direction and cannot support mutually incompatible directional requirements. 
+
+Multi-Level Evidence Readout 
+
+Given the QSEF, the Multi-Level Evidence Readout (MER) summarizes each query–submap pair from complementary semantic and spatial perspectives. It measures semantic com-patibility, soft tuple compatibility at a shared position, exact spatial feasibility, and the spatial extent of valid support. In addition, we introduce a lightweight object-count prior to characterize the overall amount of scene evidence available in each candidate submap. These statistics preserve the in-terpretable structure of the QSEF while forming a compact representation for retrieval scoring. 
+
+Semantic Compatibility. We first measure whether each description can find a semantically compatible object without enforcing directional consistency: 
+
+I(q, s ) = 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+max 
+
+> o∈O s
+
+12 (1[ˆ co = ci] + 1[ˆ ao = ai]) .
+
+(10) Because both indicators are evaluated on the same object, a full score requires the class and color to match on the same instance, whereas a match on either attribute receives par-tial credit. Thus, I(q, s ) provides a tolerant semantic signal when one predicted attribute is unreliable, while avoiding the combination of unrelated class and color matches from different objects. 
+
+Soft Tuple Compatibility. We next incorporate the position-conditioned direction while retaining partial credit for incomplete tuple matches. For description di, object o,and hypothetical query position g, we define 
+
+αi(g, o ) = 13
+
+ 1[ˆ co = ci] + 1[ˆ ao = ai]+ 1[ˆ ro(g) = ri].
+
+(11) The position-wise and submap-level compatibility scores are defined as 
+
+eA(q, s ; g) = 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+max 
+
+> o∈O s
+
+αi(g, o ), (12) and 
+
+A(q, s ) = max 
+
+> g∈G
+
+eA(q, s ; g). (13) All descriptions are evaluated at the same shared position g,preventing their directional requirements from being satisfied at unrelated description-specific positions. Since αi(g, o ) as-signs partial credit to incomplete class–color–direction tu-ples, A(q, s ) measures graded compatibility rather than re-quiring all three attributes to match exactly. It therefore pre-serves useful partial evidence when one predicted attribute is incorrect. 
+
+Spatial Feasibility. To complement the partial evidence captured by the graded compatibility score, we compute 
+
+Dmax (q, s ) = max  
+
+> g∈G
+
+Uq,s (g), (14) which represents the largest fraction of descriptions that can be exactly satisfied at a single shared position. Unlike A(q, s ),which permits partial tuple matches, Dmax (q, s ) counts only complete class–color–direction matches and therefore di-rectly measures whole-query spatial coherence. We further measure the spatial extent of exact support as 
+
+Dμ(q, s ) = 1
+
+|G|
+
+X
+
+> g∈G
+
+Uq,s (g). (15) Here, Dmax captures the strongest shared explanation at a single hypothetical position, whereas Dμ complements this peak value by describing how broadly exact support is dis-tributed across the latent query position space. Together, they distinguish sharp and localized agreement from diffuse sup-port spread over a larger region. 
+
+Object-Count Prior. We additionally encode the number of detected objects in each candidate submap as a coarse scene-density prior: 
+
+C(s) = log (1 + |O s|)log (1 + Nmax ) , (16) where Nmax is the maximum number of detected objects in any training submap. The logarithm reduces the influence of unusually dense submaps, while the denominator normalizes the feature to a scale comparable to those of the remaining ev-idence measures. Thus, C(s) provides a query-independent estimate of the amount of available scene evidence without allowing the object count to dominate the retrieval represen-tation. 4Method KITTI360Pose S3DISPose PandaSetPose nuScenesPose NPM3DCoursePose R@1 R@2 R@3 R@1 R@2 R@3 R@1 R@2 R@3 R@1 R@2 R@3 R@1 R@2 R@3                                                                                                          
+
+> Text2Loc 0.30 0.43 0.51 0.09 0.17 0.25 0.46 0.64 0.72 0.55 0.67 0.72 0.18 0.30 0.37 FourierPlace 0.33 0.48 0.55 0.05 0.10 0.13 0.29 0.38 0.46 0.61 0.76 0.80 0.10 0.22 0.28 Des4Pos 0.31 0.44 0.52 0.08 0.18 0.27 0.39 0.53 0.60 0.54 0.67 0.72 0.19 0.41 0.49 MambaPlace 0.30 0.44 0.51 0.10 0.19 0.26 0.19 0.29 0.36 0.53 0.62 0.71 0.14 0.26 0.39
+> MNCL 0.43 0.58 0.66 0.09 0.15 0.22 0.43 0.56 0.64 0.51 0.63 0.70 0.10 0.16 0.19 CMMLoc 0.32 0.46 0.54 0.10 0.19 0.26 0.27 0.43 0.54 0.58 0.71 0.75 0.11 0.24 0.34
+> PosEviLoc (Ours) 0.53 0.65 0.71 0.41 0.53 0.60 0.50 0.62 0.67 0.62 0.72 0.77 0.32 0.46 0.56
+
+Table 1: Coarse-retrieval performance on five language-based 3D localization benchmarks, measured by Recall@ K. The best, second-best, and third-best results are indicated by boldface, underlining, and italics, respectively. 
+
+Composite Evidence Summary. The preceding statistics capture distinct but complementary properties of a candi-date submap. We combine the three principal compatibility measures as 
+
+H(q, s ) = I(q, s ) + A(q, s ) + Dmax (q, s ). (17) This equal-weight summary provides the shallow scorer with an explicit monotonic combination of semantic compatibil-ity, soft shared-position support, and exact spatial feasibility. We do not treat H(q, s ) as an independent source of infor-mation; rather, it is a linear reparameterization of the main evidence coordinates. 
+
+Retrieval Representation. Because I(q, s ) = H(q, s ) −
+
+A(q, s )−Dmax (q, s ), semantic compatibility remains recov-erable from the retained components. We use the represen-tation 
+
+ϕ(q, s ) = H(q, s ), A (q, s ), D max (q, s ), D μ(q, s ), C (s).
+
+(18) The retrieval score is then computed as 
+
+zθ (q, s ) = fθ (ϕ(q, s )) , (19) where fθ is a two-hidden-layer MLP with parameters θ,ReLU activations, and dropout. We train it with listwise cross-entropy to rank the positive submap above hard and randomly sampled negatives. The scorer calibrates the rel-ative contributions of semantic, directional, and spatial evi-dence across different query patterns. After scoring all candidate submaps, PosEviLoc ranks them in descending order of zθ (q, s ) and returns the top-
+
+K results: bSK (q) = TopK 
+
+> s∈S
+
+zθ (q, s ). (20) For plug-and-play use, PosEviLoc reranks only the Top-25 submaps returned by the base retriever. 
+
+Experiments 
+
+Dataset Preparation 
+
+We evaluate PosEviLoc on five language-based 3D localiza-tion datasets covering outdoor driving, indoor rooms, and urban mobile-mapping environments. Each query describes a sampled pose using nearby objects, semantic attributes, and relative spatial relations, while the task is evaluated as coarse cell retrieval. 
+
+Figure 3: Component ablation. “w/o Class/Color/Direction” removes the corresponding symbolic cue, “w/o Context” dis-ables context-aware class refinement, and “w/o QSEF” as-signs directions at the cell center. 
+
+KITTI360Pose. KITTI360Pose is built from nine KITTI-360 outdoor driving sequences. Following the official setting, we use 30-m cells with 10-m spacing and the original split. Its queries mainly involve static roadside structures and strong cardinal-direction cues. 
+
+PandaSetPose. PandaSetPose covers 100 PandaSet driv-ing sequences using 30-m cells with 10-m spacing. Com-pared with KITTI360Pose, it contains more dynamic traffic participants, including vehicles and pedestrians. 
+
+S3DISPose. S3DISPose contains 272 aligned indoor rooms. Unlike the outdoor datasets, each room is treated as an adaptive-size cell, and queries describe indoor elements such as walls, furniture, and clutter. 
+
+nuScenesPose. nuScenesPose is constructed from 850 ur-ban driving scenes with 30-m cells and 10-m spacing. It provides diverse urban traffic layouts for evaluating localiza-tion in dense urban environments. 
+
+NPM3DCoursePose. NPM3DCoursePose covers mobile laser scans from Lille and Paris and comprises 91 cells of 20 m with 10-m spacing. Unlike the driving datasets, it rep-resents large-scale European street environments acquired through mobile mapping. 5Method KITTI360Pose S3DISPose PandaSetPose nuScenesPose NPM3DCoursePose R@1 R@2 R@3 R@1 R@2 R@3 R@1 R@2 R@3 R@1 R@2 R@3 R@1 R@2 R@3 Text2Loc + 0.45                                                                                          
+
+> (+0.15) 0.59
+> (+0.16) 0.66
+> (+0.15) 0.42
+> (+0.33) 0.54
+> (+0.37) 0.61
+> (+0.36) 0.54
+> (+0.08) 0.66
+> (+0.02) 0.73
+> (+0.01) 0.65
+> (+0.10) 0.76
+> (+0.09) 0.80
+> (+0.08) 0.32
+> (+0.14) 0.46
+> (+0.16) 0.56
+> (+0.19) FourierP +0.46
+> (+0.13) 0.61
+> (+0.13) 0.68
+> (+0.13) 0.35
+> (+0.30) 0.44
+> (+0.34) 0.49
+> (+0.36) 0.52
+> (+0.23) 0.62
+> (+0.24) 0.68
+> (+0.22) 0.65
+> (+0.04) 0.76
+> (+0.00) 0.82
+> (+0.02) 0.32
+> (+0.22) 0.46
+> (+0.24) 0.56
+> (+0.28) Des4Pos +0.46
+> (+0.15) 0.60
+> (+0.16) 0.67
+> (+0.15) 0.42
+> (+0.34) 0.54
+> (+0.36) 0.61
+> (+0.34) 0.54
+> (+0.15) 0.66
+> (+0.13) 0.72
+> (+0.12) 0.66
+> (+0.12) 0.75
+> (+0.08) 0.81
+> (+0.09) 0.32
+> (+0.13) 0.46
+> (+0.05) 0.56
+> (+0.07) MambaP +0.45
+> (+0.15) 0.59
+> (+0.15) 0.66
+> (+0.15) 0.41
+> (+0.31) 0.52
+> (+0.33) 0.58
+> (+0.32) 0.47
+> (+0.28) 0.57
+> (+0.28) 0.67
+> (+0.31) 0.66
+> (+0.13) 0.77
+> (+0.15) 0.82
+> (+0.11) 0.34
+> (+0.20) 0.47
+> (+0.21) 0.56
+> (+0.17) MNCL +0.50
+> (+0.07) 0.64
+> (+0.06) 0.70
+> (+0.04) 0.39
+> (+0.30) 0.49
+> (+0.34) 0.58
+> (+0.36) 0.51
+> (+0.08) 0.63
+> (+0.07) 0.69
+> (+0.05) 0.65
+> (+0.14) 0.76
+> (+0.13) 0.82
+> (+0.12) 0.32
+> (+0.22) 0.46
+> (+0.30) 0.56
+> (+0.37) CMMLoc +0.46
+> (+0.14) 0.61
+> (+0.15) 0.68
+> (+0.14) 0.41
+> (+0.31) 0.49
+> (+0.30) 0.58
+> (+0.32) 0.54
+> (+0.27) 0.66
+> (+0.23) 0.72
+> (+0.18) 0.67
+> (+0.09) 0.76
+> (+0.05) 0.81
+> (+0.06) 0.32
+> (+0.21) 0.46
+> (+0.22) 0.56
+> (+0.22)
+
+Table 2: PosEviLoc as a top-25 plug-in reranker. The superscript “+” denotes integration with PosEviLoc. Each entry reports the reranked recall on the first line and the absolute gain over the corresponding original result in Table 1 on the second line.                                     
+
+> MER Variant KITTI S3DIS Panda nuScenes NPM3D PosEviLoc (Full) 0.53 0.41 0.50 0.62 0.32
+> w/o H(q, s )0.35 0.25 0.46 0.39 0.20 w/o A(q, s )0.36 0.41 0.50 0.62 0.29 w/o Dmax (q, s )0.52 0.31 0.47 0.60 0.31 w/o Dμ(q, s )0.53 0.36 0.45 0.57 0.32
+> w/o C(s)0.50 0.31 0.41 0.40 0.29
+
+Table 3: Leave-one-feature-out ablation of the five-dimensional MER representation. Recall@1 is reported, and the best result in each column is shown in bold. 
+
+Comparison with State of the Art 
+
+Table 1 shows that PosEviLoc obtains the best R@1 on all five benchmarks. Relative to the strongest baseline on each dataset, the absolute R@1 gains are 0.10 on KITTI360Pose, 0.31 on S3DISPose, 0.04 on PandaSetPose, 0.01 on nuScene-sPose, and 0.13 on NPM3DCoursePose. PosEviLoc is also best at every reported rank on KITTI360Pose, S3DISPose, and NPM3DCoursePose. On PandaSetPose and nuScenes-Pose, it achieves the best R@1 while trailing the strongest R@2/R@3 result by only 0.02/0.05 and 0.04/0.03, respec-tively. The large gain on S3DISPose suggests that QSEF re-mains effective for cluttered indoor rooms with adaptive cell sizes, rather than relying on a fixed outdoor grid. Its leading R@1 on PandaSetPose and nuScenesPose further suggests consistent performance under dynamic traffic and in dense urban layouts, while the NPM3DCoursePose gain extends to smaller cells. Together, these results outperform prior meth-ods and demonstrate consistent performance across different scene types and cell constructions. 
+
+Plug-and-Play Reranking 
+
+Table 2 evaluates PosEviLoc as a plug-and-play reranker for the Top-25 candidates produced by six retrieval methods, without modifying or retraining their encoders. PosEviLoc improves 89 of the 90 reported R@1–R@3 results. The gains are especially large on S3DISPose, where all methods im-prove by 30–37 percentage points. On NPM3DCoursePose, MNCL increases from 0.10/0.16/0.19 to 0.32/0.46/0.56 at R@1/R@2/R@3. Consistent improvements are also ob-served on the outdoor datasets, including R@1 gains of 0.28 and 0.27 for MambaPlace and CMMLoc on PandaSetPose. These results demonstrate that position-conditioned object evidence complements global cross-modal similarity. The base retriever efficiently generates candidate submaps, while PosEviLoc improves their ordering by verifying whether the objects jointly satisfy the query semantics and spatial rela-tions. 
+
+Ablation and Parameter Analysis 
+
+Figure 3 confirms that class, color, and direction are complementary. Removing direction causes the largest average degradation, particularly on PandaSetPose and NPM3DCoursePose, whereas removing class or color also produces substantial losses across datasets. Disabling con-textual class refinement also reduces performance. More im-portantly, replacing QSEF with directions computed only at the cell center sharply reduces S3DISPose R@1 and low-ers mean R@1–R@5. A single center-based direction as-signment misses valid query locations; evaluating direction over hypothetical positions is therefore important for finding where multiple descriptions agree. The MER results in Table 3 show that the retained evidence coordinates are useful to the scorer. Removing H degrades all datasets, reducing R@1 from 0.53 to 0.35 on KITTI360Pose, from 0.62 to 0.39 on nuScenesPose, and from 0.32 to 0.20 on NPM3DCoursePose. Since H = I + A + Dmax , remov-ing it also eliminates the recoverable semantic term I while retaining A and Dmax , demonstrating the value of an aggre-gate semantic–spatial coordinate rather than an independent evidence source. Removing the object-count prior C causes drops, includ-ing 0.41 to 0.31 on S3DISPose and 0.50 to 0.41 on Pan-daSetPose, showing that scene-density context helps inter-pret the evidence. The soft term A is selectively benefi-cial: its removal leaves three datasets unchanged but reduces KITTI360Pose from 0.53 to 0.36 and NPM3DCoursePose from 0.32 to 0.29, consistent with retaining partial class– color–direction matches under attribute errors. 6Pose is on-top of a beige pole. Pose is east of a gray ground. Pose is west of a beige pole.      
+
+> Pose is on-top of a gray road. Pose is north of a bright-gray sidewalk. Pose is on-top of a black vegetation. Pose is north of a gray-green terrain. Pose is north of a beige pole. Pose is east of a beige traffic sign.
+> Pose is west of a gray beam. Pose is north of a gray door. Pose is east of a gray floor. Pose is east of a gray clutter.
+> Textual query Ground truth cell Ours–Top-1 Ours–Top-2 CMMLOC–Top-1 CMMLOC–Top-2 NPM3D KITTI360Pose S3DISPose
+
+Figure 4: Qualitative retrieval results on 3 Datasets. From left to right: text query, ground-truth cell, Top-1 and Top-2 results from our method, and those from CMMLoc. Green and red borders indicate correct and incorrect retrievals, respectively. 
+
+Figure 5: Effect of QSEF grid resolution. Left: Recall@1 by dataset. Right: mean Recall@ K across datasets for K =1, . . . , 5.Finally, removing Dmax lowers S3DISPose from 0.41 to 0.31, whereas removing Dμ reduces S3DISPose, PandaSet-Pose, and nuScenesPose to 0.36, 0.45, and 0.57. These results show that peak exact feasibility and the average distribution of exact support capture different properties of QSEF. We further analyze the impact of QSEF grid resolution. As shown in Fig. 5, different resolutions are evaluated on five datasets. The results show that increasing the grid resolution generally improves retrieval performance. We therefore adopt 32 ×32 as the default setting. 
+
+Visualization 
+
+Figure 4 visualizes the Top-1 and Top-2 retrievals for three representative queries. PosEviLoc ranks the ground-truth cell first in all examples, whereas CMMLoc places spatially in-consistent cells first on KITTI360Pose and S3DISPose. The t-SNE visualization in Figure 6 further suggests that the Top-5 submaps retrieved by PosEviLoc form a compact cluster around the text query and lie close to the ground-truth location. In contrast, the retrieval results of competing meth-（a）PosEviLoc （b）Text2Loc   
+
+> （d）FourierPlace
+> （c）MambaPlace
+> （e）CMMLoc （f）MNCL Text Query Positive Submaps
+
+Figure 6: t-SNE visualization of the Top-5 retrieved submaps on KITTI360Pose. ods are more widely scattered, indicating weaker consistency between their retrieved submaps, the language query, and the target location. 
+
+Computing Resource 
+
+On KITTI360Pose, our method contains only 0.017M pa-rameters, substantially fewer than MambaPlace (366.917M), CMMLoc (357.205M), and MNCL (359.029M), because it does not rely on heavyweight T5 backbone. Although the QSEF-based position hypotheses introduce additional com-putational overhead, our method requires only 7.09 ms per query, remaining clearly faster than MambaPlace (26.48 ms), CMMLoc (12.37 ms), and MNCL (14.46 ms). Therefore, our method provides clear advantages in both model size and in-ference speed. 
+
+Conclusion 
+
+This paper presented PosEviLoc, an evidence-based frame-work for text-to-point-cloud localization. PosEviLoc treats 7direction as a relation between an object and a hypothetical query position. QSEF evaluates class, color, and direction support over candidate positions, thereby measuring whether multiple descriptions agree at a shared location, while MER combines complementary semantic and spatial evidence for retrieval scoring. Across five benchmarks, PosEviLoc im-proves Recall@1 over the strongest baseline by 0.10, 0.31, 0.40, 0.10, and 0.13, respectively, while improving 89 of 90 reranking results. Moreover, it requires substantially fewer parameters and achieves faster inference than previous meth-ods. 
+
+References 
+
+Cao, X.; Yang, J.; Zeng, Z.; Zhang, Y.; and Xia, Y. 2026. C-LaV: Conditional Latent Velocity Field Denoising for Weather-Robust LiDAR Place Recognition. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2928– 2937. Feng, M.; Mei, L.; Wu, Z.; Luo, J.; Tian, F.; Feng, J.; Dong, W.; and Wang, Y. 2025. Partially Matching Submap Helps: Uncertainty Modeling and Propagation for Text to Point Cloud Localization. In 
+
+Proceedings of the IEEE/CVF International Conference on Com-puter Vision , 8296–8305. Griffiths, E.; Haghighat, M.; Denman, S.; Fookes, C.; and Ramezani, M. 2025. HOTFormerLoc: Hierarchical Octree Trans-former for Versatile Lidar Place Recognition Across Ground and Aerial Views. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 6648–6658. He, L.; Wang, X.; and Zhang, H. 2016. M2DP: A novel 3D point cloud descriptor and its application in loop closure detection. In 
+
+2016 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , 231–237. IEEE. Hui, L.; Yang, H.; Cheng, M.; Xie, J.; and Yang, J. 2021. Pyramid point cloud transformer for large-scale place recognition. In Pro-ceedings of the IEEE/CVF International Conference on Computer Vision , 6098–6107. Kang, S.; Liao, Y.; Wang, P.; Liao, W.; Zhang, Q.; Busam, B.; Chen, X.; and Liu, Y. 2026. Vlm-loc: Localization in point cloud maps via vision-language models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 41365– 41375. Kim, G.; and Kim, A. 2018. Scan context: Egocentric spatial de-scriptor for place recognition within 3d point cloud map. In 2018 IEEE/RSJ International Conference on Intelligent Robots and Sys-tems (IROS) , 4802–4809. IEEE. Kolmet, M.; Zhou, Q.; Ošep, A.; and Leal-Taixé, L. 2022. Text2pos: Text-to-point-cloud cross-modal localization. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-tion , 6687–6696. Komorowski, J. 2021. Minkloc3d: Point cloud based large-scale place recognition. In Proceedings of the IEEE/CVF winter confer-ence on applications of computer vision , 1790–1799. Liu, D.; Huang, S.; Li, W.; Shen, S.; and Wang, C. 2025. Text to point cloud localization with multi-level negative contrastive learning. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, 5397–5405. Liu, Z.; Zhou, S.; Suo, C.; Yin, P.; Chen, W.; Wang, H.; Li, H.; and Liu, Y.-H. 2019. Lpd-net: 3d point cloud learning for large-scale place recognition and environment analysis. In Proceedings of the IEEE/CVF International Conference on Computer Vision ,2831–2840. Luo, L.; Zheng, S.; Li, Y.; Fan, Y.; Yu, B.; Cao, S.-Y.; Li, J.; and Shen, H.-L. 2023. BEVPlace: Learning LiDAR-based place recognition using bird’s eye view images. In Proceedings of the IEEE/CVF International Conference on Computer Vision , 8700– 8709. Shang, T.; Li, Z.; Lu, S.; and Xu, P. 2025a. FourierPlace: A Vision-Language Localization Framework Based on Frequency Domain Representations. IEEE Robotics and Automation Letters , 11(1): 642–649. Shang, T.; Li, Z.; Pei, W.; Xu, P.; Deng, Z.; and Kong, F. 2025b. MambaPlace: Text-to-Point-Cloud Cross-Modal Place Recognition with Attention Mamba Mechanisms. IEEE/RSJ International Con-ference on Intelligent Robots and Systems (IROS) .Shang, T.; Li, Z.; Xu, P.; and Deng, Z. 2026. Vehicle-SceneInteraction: A Text-Driven 3-D Lidar Place Recognition Method for Autonomous Driving. IEEE Transactions on Intelli-gent Transportation Systems .Shen, Y.; Tuna, T.; Hutter, M.; Cadena, C.; and Zheng, N. 2025. ForestLPR: LiDAR place recognition in forests attentioning multi-ple BEV density Images. In Proceedings of the Computer Vision and Pattern Recognition Conference , 6659–6669. Uy, M. A.; and Lee, G. H. 2018. Pointnetvlad: Deep point cloud based retrieval for large-scale place recognition. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition ,4470–4479. Vidanapathirana, K.; Ramezani, M.; Moghadam, P.; Sridharan, S.; and Fookes, C. 2022. LoGG3D-Net: Locally guided global descrip-tor learning for 3D place recognition. In International Conference on Robotics and Automation (ICRA) , 2215–2221. IEEE. Wang, G.; Fan, H.; and Kankanhalli, M. 2023. Text to point cloud localization with relation-enhanced transformer. In Proceedings of the AAAI Conference on Artificial Intelligence , 2501–2509. Xia, Y.; Gladkova, M.; Wang, R.; Li, Q.; Stilla, U.; Henriques, J. F.; and Cremers, D. 2023. Casspr: Cross attention single scan place recognition. In Proceedings of the IEEE/CVF international conference on computer vision , 8461–8472. Xia, Y.; Shi, L.; Ding, Z.; Henriques, J. F.; and Cremers, D. 2024. Text2loc: 3d point cloud localization from natural language. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 14958–14967. Xia, Y.; Xu, Y.; Li, S.; Wang, R.; Du, J.; Cremers, D.; and Stilla, U. 2021. SOE-Net: A self-attention and orientation encoding net-work for point cloud based place recognition. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-tion , 11348–11357. Xu, Y.; Qu, H.; Liu, J.; Zhang, W.; and Yang, X. 2025. CMMLoc: Advancing Text-to-PointCloud Localization with Cauchy-Mixture-Model Based Framework. In Proceedings of the Computer Vision and Pattern Recognition Conference , 6637–6647. 
+
+8Appendix A Independent Method Comparison 
+
+Figure A1 presents the complete Top-1 to Top-10 retrieval curves of PosEviLoc and five competing methods, namely Text2Loc, FourierPlace, MambaPlace, CMMLoc, and MNCL, across five datasets. In contrast to the individual Top-k metrics reported in the main paper, these curves characterize how recall evolves as the retrieval depth increases. All results are evaluated at the submap-cell level: a query is counted as correct if its ground-truth submap cell is included among the top k retrieved candidates. On KITTI360Pose, PosEviLoc consistently outperforms the baselines across all retrieval depths, with a particularly clear margin at small values of k. This indicates that PosEviLoc is more effective at placing the correct location near the top of the ranked candidate list. On S3DISPose, PosEviLoc delivers a substantial and consistent improvement over all competing methods. It also achieves the best performance at most retrieval depths on NPM3D, with pronounced gains from Top-1 to Top-5. On PandaSetPose, PosEviLoc outperforms most baselines, although Text2Loc obtains higher recall at larger retrieval depths. The performance differences are smaller on nuScenesPose, where PosEviLoc nevertheless remains competitive. Overall, the results demonstrate that the advantage of PosEviLoc is not confined to a particular Top-k threshold; instead, the method maintains robust ranking performance across diverse environments and retrieval depths. 025 50 75 100           
+
+> (a) KITTI360Pose
+> 025 50 75 100
+> (b) S3DISPose
+> 025 50 75 100
+> (c) PandaSetPose
+> 025 50 75 100
+> (d) nuScenesPose
+> 12345678910
+> Retrieval rank, k
+> 025 50 75 100
+> (e) NPM3D
+> Top-k recall (%)
+> PosEviLoc MNCL FourierPlace CMMLoc MambaPlace Text2Loc
+
+Figure A1: Top-k place-retrieval performance on five datasets. We compare PosEviLoc with five baseline methods on KITTI360Pose, S3DISPose, PandaSetPose, nuScenesPose, and NPM3D in terms of Top-1 through Top-10 recall. A query is considered successfully localized when its ground-truth submap cell appears among the top k retrieved candidates. Po-sEviLoc achieves superior or competitive recall across most datasets and retrieval depths, with particularly clear improvements on KITTI360Pose, S3DISPose, and NPM3D. 9B Comparison as Plug-and-play Module 
+
+As shown in Figures A2 and A3, PosEviLoc improves R@1 for all 30 method–dataset combinations. Based on the recall fractions displayed in the heatmap, the mean absolute improvement is 0.18, with individual gains ranging from 0.04 to 0.34. The largest and most consistent improvements occur on S3DISPose, where all six coarse retrievers gain between 0.30 and 0.34 at R@1 .Substantial gains are also observed on PandaSetPose and NPM3DCoursePose, although their magnitude varies more across the coarse retrieval methods. This consistency across six substantially different retrievers indicates that the reranking benefit is not restricted to one retrieval architecture. The improvement remains positive for 28 of the 30 method–dataset combinations at R@10 , with a mean change of 0.11. The lower average gain at R@10 than at R@1 indicates that PosEviLoc primarily changes the ordering near the head of the retrieved list. S3DISPose again shows the strongest overall response, with R@10 gains between 0.20 and 0.31. On NPM3DCoursePose, MNCL obtains a gain of 0.23, whereas Text2Loc and Des4Pos each decrease by 0.02. These two decreases represent the only negative cells in the figure. The isolated R@10 decreases do not indicate a reduction in Top-25 candidate coverage. PosEviLoc operates on a fixed Top-25 candidate set, so a negative ∆R@10 means that, for a small subset of queries, the correct candidate is moved from the first ten positions to a lower position within the same candidate set. Conversely, the broad positive pattern at R@1 and R@10 shows that PosEviLoc usually moves correct candidates toward the leading ranks. The results therefore support the intended role of PosEviLoc as a candidate-preserving reranker rather than an independent retrieval stage. 1 3 5 7 10                      
+
+> K
+> −5 010 20 30 40
+> Absolute Recall@ K gain (pp)  a
+> R@1–3
+> KITTI360Pose
+> 135710
+> K
+> bS3DISPose
+> 135710
+> K
+> cPandaSetPose
+> 135710
+> K
+> dnuScenesPose
+> 135710
+> K
+> eNPM3DCoursePose
+> Text2Loc FourierPlace Des4Pos MambaPlace MNCL CMMLoc
+
+Figure A2: Absolute Recall@ K improvement produced by PosEviLoc. Each panel shows the change in recall after applying PosEviLoc to the Top-25 candidates retrieved by six coarse localization methods on one dataset. We report absolute improvement as ∆R@K = ( R@Kreranked −R@Koriginal )×100 percentage points (pp). The shaded region denotes K = 1 –3 and corresponds to the operating points reported in the paper. PosEviLoc changes only the ordering of the original Top-25 candidates; their membership remains fixed. KITTI360Pose S3DISPose PandaSetPose nuScenesPose NPM3DCoursePose                                                   
+
+> Text2Loc FourierPlace Des4Pos MambaPlace MNCL CMMLoc
+> +0.15 +0.33 +0.08 +0.10 +0.14 +0.13 +0.30 +0.23 +0.04 +0.22 +0.15 +0.34 +0.15 +0.12 +0.13 +0.15 +0.31 +0.28 +0.13 +0.20 +0.07 +0.30 +0.08 +0.14 +0.22 +0.14 +0.31 +0.27 +0.09 +0.21
+> aAbsolute improvement at R@1
+> KITTI360Pose S3DISPose PandaSetPose nuScenesPose NPM3DCoursePose
+> Text2Loc FourierPlace Des4Pos MambaPlace MNCL CMMLoc
+> +0.08 +0.21 +0.03 +0.04 -0.02 +0.07 +0.31 +0.15 +0.01 +0.13 +0.08 +0.20 +0.09 +0.05 -0.02 +0.08 +0.23 +0.18 +0.04 +0.12 +0.03 +0.23 +0.08 +0.06 +0.23 +0.07 +0.23 +0.07 +0.06 +0.12
+> bAbsolute improvement at R@10
+> −0.3 −0.2 −0.1 0.0 0.1 0.2 0.3
+> Absolute Recall gain
+
+Figure A3: Absolute recall improvement at the leading and broader retrieval cutoffs. Left, Absolute R@1 improvement from PosEviLoc for each coarse method–dataset pair. Right, Corresponding absolute R@10 improvement. Each cell reports ∆R@K =
+
+R@Kreranked − R@Koriginal as a recall fraction (0.01 corresponds to one percentage point), computed from full-precision recall values before display rounding. Blue cells indicate gains and orange cells indicate decreases. The two panels use the same color scale, and the Top-25 candidate membership is fixed throughout reranking. 10 C Visualization Results for Right Cases 
+
+This Figure A4 presents qualitative retrieval results of our method across multiple datasets. Despite substantial differences in scene structure, point-cloud density, and semantic distribution, our method accurately retrieves the target cells by leveraging the semantic and spatial relations expressed in textual descriptions. In contrast, CMMLOC fails to retrieve the correct locations in most cases. These results intuitively demonstrate the superior accuracy and robustness of our method across multiple datasets. Pose is on-top of a gray road. Pose is north of a bright-gray sidewalk. Pose is on-top of a black vegetation. Pose is north of a gray-green terrain. Pose is north of a beige pole. Pose is east of a beige traffic sign. 
+
+Pose is on-top of a gray road. Pose is on-top of a green sidewalk. Pose is north of a dark-green vegetation. Pose is west of a dark-green terrain. Pose is west of a green pole. Pose is north of a dark-green garage. 
+
+Pose is east of a gray pedestrian. Pose is east of a gray-green pedestrian. Pose is south of a dark-green pedestrian. Pose is east of a beige trafficcone. Pose is west of a dark-green pedestrian. Pose is south of a gray barrier. 
+
+Pose is on-top of a gray-green pedestrian. Pose is east of a gray pedestrian. Pose is east of a gray pedestrian. Pose is east of a gray truck. Pose is west of a gray-green trafficcone. Pose is west of a gray trafficcone. 
+
+Pose is north of a dark-green truck. Pose is south of a gray car. Pose is south of a gray-green car. Pose is south of a gray-green car. Pose is south of a gray-green car. Pose is west of a dark-green pedestrian. 
+
+Pose is south of a gray car. Pose is north of a gray-green sign. Pose is south of a gray car. Pose is south of a dark-green car. Pose is south of a dark-green car. Pose is south of a dark-green truck. 
+
+Pose is on-top of a beige pole. Pose is east of a gray ground. Pose is west of a beige pole. 
+
+Pose is on-top of a gray ground. Pose is south of a beige pole. Pose is east of a beige building. 
+
+Pose is west of a gray beam. Pose is north of a gray door. Pose is east of a gray floor. Pose is east of a gray clutter. 
+
+Pose is north of a gray floor. Pose is south of a gray bookcase. Pose is north of a gray-green ceiling. Pose is south of a gray wall. 
+
+Textual query Ground truth cell Ours–Top-1 Ours–Top-2 CMMLOC–Top-1 CMMLOC–Top-2 KITTI360Pose nuScenesPose PandaSetPose NPM3D S3DISPose 
+
+Figure A4: Two query examples are shown for each dataset. From left to right, the columns present the complete textual query, the ground-truth cell, the Top-1 and Top-2 cells retrieved by our method, and the corresponding Top-1 and Top-2 results of CMMLOC. Green and red borders denote correct and incorrect retrievals, respectively. 11 D Visualization Results for Wrong Cases 
+
+As shown in Figure A5, these examples are deliberately selected to analyze the retrieval behavior of our model under challenging conditions. In the first type of case, the ground-truth cell is ranked first, while an incorrect cell still receives a high similarity score and appears in the Top-2 results. This suggests that the model captures the dominant scene cues but does not always fully distinguish between candidates with similar semantic compositions. In the second type, neither of the top two candidates matches the ground-truth location, indicating stronger ambiguity between the query and the scene. Several factors may contribute to these errors: different locations may contain repetitive or highly similar road, building, or indoor structures; the landmark categories and color attributes mentioned in the query may provide insufficient discriminative information; spatial relations defined with respect to local reference objects can be confused across similar layouts; and cell-based spatial discretization may reduce matching consistency when the ground-truth position lies close to a cell boundary. Moreover, when a query contains multiple spatial constraints, an unstable or noisy relation may weaken the joint representation, causing the model to emphasize shared semantic elements while overlooking fine-grained geometric cues that distinguish candidate locations. These observations indicate that further improvements are possible in repetitive-scene discrimination, fine-grained spatial reasoning, and joint modeling of multiple spatial relations. The selected examples illustrate representative failure modes and are not intended to reflect the overall quantitative performance of the model . Pose is on-top of a beige sidewalk. Pose is on-top of a green vegetation. Pose is on-top of a gray road. Pose is west of a black sidewalk. Pose is east of a dark-green vegetation. Pose is west of a black vegetation. 
+
+> Pose is on-top of a dark-green sidewalk. Pose is on-top of a green road. Pose is west of a black vegetation. Pose is west of a green terrain. Pose is north of a gray-green vegetation. Pose is west of a dark-green vegetation.
+> Pose is north of a dark-green car. Pose is north of a gray car. Pose is south of a gray car. Pose is north of a gray pedestrian. Pose is north of a beige pedestrian. Pose is west of a gray-green truck.
+> Pose is north of a dark-green barrier. Pose is west of a gray-green pushable pullable. Pose is north of a dark-green barrier. Pose is east of a gray barrier. Pose is west of a dark-green pedestrian. Pose is west of a dark-green pedestrian.
+> Pose is east of a gray-green car. Pose is west of a gray-green car. Pose is west of a dark-green vehicle. Pose is west of a black pedestrian. Pose is west of a dark-green bicycle. Pose is south of a dark-green car.
+> Pose is on-top of a dark-green car. Pose is west of a dark-green car. Pose is south of a black car. Pose is west of a gray-green bicycle. Pose is north of a dark-green car. Pose is south of a gray pedestrian.
+
+Pose is on-top of a gray ground. Pose is west of a beige pole. Pose is west of a gray pedestrian. 
+
+Pose is on-top of a gray ground. Pose is east of a gray pedestrian. Pose is east of a gray pedestrian. 
+
+Pose is on-top of a beige ceiling. Pose is on-top of a gray-green floor. Pose is south of a green chair. Pose is east of a beige table. 
+
+Pose is south of a gray clutter. Pose is south of a black clutter. Pose is west of a beige wall. Pose is east of a gray floor. 
+
+Textual query Ground truth cell Ours–Top-1 Ours–Top-2 CMMLOC–Top-1 CMMLOC–Top-2 KITTI360Pose nuScenesPose PandaSetPose NPM3D S3DISPose 
+
+Figure A5: Two query examples are shown for each dataset. From left to right, the columns present the complete textual query, the ground-truth cell, the Top-1 and Top-2 cells retrieved by our method, and the corresponding Top-1 and Top-2 results of CMMLOC. Green and red borders denote correct and incorrect retrievals, respectively. 12 E Visualization for Top-5 Submaps 
+
+To further examine the spatial behavior of different methods in coarse submap retrieval, we visualize the real Top-5 retrieval results for fixed query scenes across five datasets. Unlike schematic t-SNE visualizations, this figure directly uses the real world-coordinate centers of submaps from each dataset, so the spatial distance between the orange retrieved submaps and the red query location directly reflects localization error. As shown in Figure A6 for each dataset, we select two real queries for visualization, where PosEviLoc achieves smaller average spatial distances than the six baselines. The results show that PosEviLoc more reliably retrieves submaps near the target query location, while the baseline methods often include spatially distant candidates in their Top-5 results, even when some retrieved submaps are close to the target. This demonstrates that PosEviLoc provides more stable spatial evidence modeling and stronger coarse localization robustness across datasets. 
+
+Figure A6: Real Top-5 retrieval visualization of PosEviLoc and six baselines on five datasets. Each dataset contains two fixed query scenes, and each row compares the same query across seven methods. Blue points denote the real world-coordinate centers of test submaps, the red star denotes the GT cell center corresponding to the text query, and orange squares denote the real Top-5 retrieved submaps of each method. 13 F Visualization of the Five-Dimensional Features 
+
+As shown in Figure A7, this figure further illustrates how the five-dimensional features contribute to cross-dataset retrieval. Cor-rect candidates generally exhibit strong and consistent responses across structural matching, attribute matching, and directional consistency. This observation suggests that our method does not rely solely on the presence of semantically matched objects but jointly considers their attributes and spatial configurations. In contrast, some incorrect candidates achieve relatively high object-context or attribute scores but show weaker mean directional consistency. Such candidates contain semantically similar objects but fail to satisfy multiple spatial constraints expressed by the query. Therefore, individual semantic or attribute evi-dence is insufficient to reliably distinguish visually similar scenes, whereas the complementary five-dimensional representation supports more accurate candidate ranking. The feature distributions also vary across datasets. Sparse driving scenes depend more strongly on spatial relations among a limited number of landmarks, whereas dense outdoor and indoor environments provide richer object and attribute evidence. Despite substantial differences in scene structure, point-cloud density, and semantic composition, correct candidates generally exhibit more coherent combinations of multidimensional evidence. This result demonstrates the cross-dataset adaptability of the proposed features. Nevertheless, some incorrect candidates present feature profiles similar to those of correct candidates, indicating that repetitive scene structures, common semantic objects, and ambiguities near submap boundaries can still lead to retrieval confusion. Pose is on-top of a gray-green road. Pose is north of a bright-gray sidewalk. Pose is west of a black vegetation. Pose is east of a beige pole. Pose is south of a black pole. Pose is on-top of a dark-green sidewalk.                               
+
+> 0.5 10.0 m 74.5 m 343.6 m 341.5 m 5464.1 m
+> Pose is on-top of a gray road. Pose is south of a bright-gray sidewalk. Pose is west of a dark-green vegetation. Pose is south of a gray terrain. Pose is west of a green pole. Pose is north of a green sidewalk.
+> 0.5 10.0 m 14.7 m 5533.1 m 5497.5 m 5866.5 m
+> Pose is east of a gray pedestrian. Pose is east of a gray-green pedestrian. Pose is south of a dark-green pedestrian. Pose is east of a beige trafficcone. Pose is west of a dark-green pedestrian. Pose is south of a gray barrier.
+> 0.5 10.0 m 11.8 m 173.9 m 23.0 m 397.9 m
+> Pose is on-top of a gray-green pedestrian. Pose is east of a gray pedestrian. Pose is east of a gray pedestrian. Pose is east of a gray truck. Pose is west of a gray-green trafficcone. Pose is west of a gray trafficcone.
+> 0.5 10.0 m 11.7 m 988.5 m 815.7 m 876.2 m
+> Pose is north of a dark-green truck. Pose is south of a gray car. Pose is south of a gray-green car. Pose is south of a gray-green car. Pose is south of a gray-green car. Pose is west of a dark-green pedestrian.
+> 0.5 10.0 m 9.7 m 81.1 m 10.1 m 52.5 m
+> Pose is south of a gray car. Pose is north of a gray-green sign. Pose is south of a gray car. Pose is south of a dark-green car. Pose is south of a dark-green car. Pose is south of a dark-green truck.
+> 0.5 10.0 m 11.8 m 150.1 m 151.5 m 117.9 m
+
+Pose is on-top of a beige pole. Pose is east of a gray ground. Pose is west of a beige pole.      
+
+> 0.5 10.0 m 80.0 m 10.0 m 41.2 m 50.0 m
+
+Pose is on-top of a gray ground. Pose is south of a beige pole. Pose is east of a beige building.      
+
+> 0.5 10.0 m 14.1 m 10.0 m 14.1 m 40.0 m
+
+Pose is west of a gray beam. Pose is north of a gray door. Pose is east of a gray floor. Pose is east of a gray clutter.      
+
+> 0.5 10.0 m 3.9 m 34.2 m 0.4 m 31.2 m
+
+Pose is north of a gray floor. Pose is south of a gray bookcase. Pose is north of a gray-green ceiling. Pose is south of a gray wall.      
+
+> 0.5 10.0 m 13.9 m 7.7 m 16.6 m 15.9 m
+
+Textual query GT submap Top-1 Top-2 Top-3 Top-4 Top-5       
+
+> normalized evidence
+> KITTI360Pose nuScenesPose PandaSetPose NPM3D S3DISPose
+> Object context Structural score Direction mean Attribute Direction max Correct retrieval Incorrect retrieval
+
+Figure A7: Visualization of Top-5 retrieval results and five-dimensional features across five datasets. Two textual queries are presented for each dataset. From left to right, the columns show the complete textual query, the ground-truth submap, and the Top-1 to Top-5 candidates retrieved by our method. For each candidate, the bar chart visualizes five retrieval features: object context, structural score, direction mean, attribute matching, and direction maximum. For visualization, the structural score is divided by three, while the other features retain their original model scales. Green and red borders indicate correct and incorrect retrievals, respectively. The value in the upper-right corner reports the distance between the center of the candidate submap and the ground-truth location. 14 G Dataset Details 
+
+To evaluate text-to-pose localization beyond KITTI360Pose, we construct four additional benchmarks from S3DIS, PandaSet, nuScenes, and Paris-Lille-3D. Although these source datasets differ substantially in sensing platforms, spatial scales, and annotation formats, we convert them into a unified KITTI360Pose-compatible representation. The construction pipeline com-prises coordinate alignment, semantic-instance extraction, submap generation, pose sampling, spatial-language generation, and leakage-free data splitting. Each resulting sample contains a query pose, a natural-language description of nearby landmarks, and its associated ground-truth submap. In Figure A8, we have provided a detailed presentation of the four newly established datasets we have created. 
+
+G.1 S3DISPose. 
+
+S3DISPose is constructed from the aligned version of S3DIS and represents indoor localization in offices, conference rooms, corridors, and other building environments. Each complete room is treated as an independent scene and converted into one adaptive submap whose spatial extent covers the entire room. Object instances are obtained from the original instance-level annotations and retain their semantic categories and RGB colors. We sample up to eight query poses per room and describe each pose using four nearby semantic landmarks and their relative directions. To prevent room-level overlap, complete rooms are deterministically divided into 136 training, 68 validation, and 68 test rooms. The resulting benchmark contains 272 submaps, 2,170 poses, and 9,832 semantic objects. 
+
+G.2 PandaSetPose. 
+
+PandaSetPose extends the task to large-scale urban-driving environments captured by a roof-mounted LiDAR system. LiDAR measurements and annotated objects are represented in a common world coordinate frame using the provided sensor poses. We construct overlapping 30 m × 30 m submaps at a spatial interval of 10m and aggregate semantic instances observed within each local region. Query poses follow the vehicle trajectory, and each query is described using six nearby landmarks, including vehicles, pedestrians, traffic cones, signs, barriers, and other traffic-related objects. The 100 complete driving sequences are divided by sequence into 50 training, 25 validation, and 25 test sequences, thereby avoiding frame-level leakage between splits. PandaSetPose contains 779 submaps, 8,000 query poses, and 11,789 semantic objects. 
+
+G.3 nuScenesPose. 
+
+nuScenesPose is constructed from the 850 scenes of the nuScenes v1.0-trainval release. Raw LiDAR points are first transformed from the LiDAR sensor frame to the ego-vehicle frame and subsequently to the global world frame using the calibrated-sensor and ego-pose transformations. Overlapping 30m submaps are generated at 10m intervals along the vehicle trajectories. Six nearby annotated instances are selected for each query pose to form spatial descriptions covering pedestrians, vehicles, barriers, traffic cones, bicycles, and other urban objects. Splitting is performed at the complete-scene level: 425 scenes are used for training, 212 for validation, and 213 for testing. The test set includes all 150 official nuScenes validation scenes and 63 deterministically selected training scenes. The resulting benchmark comprises 6,944 submaps, 30,151 query poses, and 53,044 semantic objects. 
+
+G.4 NPM3DCoursePose. 
+
+NPM3DCoursePose is derived from the Paris-Lille-3D/NPM3D mobile-laser-scanning benchmark and evaluates localization in dense outdoor street environments. We retain six landmark categories—ground, building, pole, pedestrian, car, and vege-tation—and partition the source scans into overlapping 20m submaps with a spacing of 10m. Each retained cell contains at least three usable semantic landmarks, and four query poses are sampled per cell. Each query is described using three nearby landmarks and their spatial relations. Because the source point clouds do not provide RGB values, deterministic semantic pseudo-colors are assigned only for visualization. Geographical separation is maintained by using Lille1 for training, Lille2 for validation, and Paris for testing. The constructed dataset contains 91 submaps, 364 query poses, and 417 semantic objects. 15 Figure A8: Overview of the four constructed pose-localization datasets. From top to bottom, we show S3DISPose, PandaSetPose, nuScenesPose, and NPM3DCoursePose. For each dataset, the upper row presents a large-scale point-cloud overview, while the lower row contains two textual queries, each paired with the annotated ground-truth submap and an additional valid ground-truth submap whose center lies within 15m of the target pose. 16 H Five-seed stability analysis 
+
+Figure A9 examines the sensitivity of PosEviLoc to training randomness. Across all five datasets, the mean recall increases consistently with retrieval depth, while the upper and lower boundaries remain relatively close at most values of k. This indicates that the reported performance does not depend on a particular random initialization. KITTI360Pose exhibits the highest stability among the five datasets. Its Top-1, Top-5, and Top-10 recalls are 54 .07 ±0.61% , 78 .79 ±0.27% , and 85 .29 ±0.25% , respectively. The upper and lower boundaries nearly overlap across the complete Top-1 to Top-10 range, indicating that model initialization and negative sampling have only a limited effect on the final rankings for this large-scale test set. PosEviLoc is also stable on S3DISPose, achieving Top-1 and Top-10 recalls of 43 .87 ± 0.74% and 86 .61 ± 0.31% , respectively. Although this dataset contains only 542 test queries, the retrieval curves remain consistent across the five runs. This suggests that the model reliably learns the object attributes and spatial relationships present in indoor environments. On PandaSetPose, the variation is small from Top-1 to Top-4 but becomes more pronounced at Top-5 and Top-6. The corresponding standard deviations are 2.13 and 2.24 percentage points, primarily because seed 3 performs relatively poorly at these two retrieval depths. The difference narrows again as k increases, resulting in a Top-10 recall of 87 .89 ± 0.82% . The observed variation therefore mainly affects the local ordering of the correct candidate rather than its overall inclusion in the retrieved set. nuScenesPose achieves the highest mean Top-1 recall, 61 .98 ± 1.21% , among the five datasets. Its upper and lower boundaries are wider than those observed on KITTI360Pose, suggesting that the learned scorer is moderately more sensitive to training randomness on nuScenesPose. Nevertheless, the Top-10 recall remains consistently high at 88 .97 ± 0.87% . Thus, the variation mainly influences the precise placement of the correct location near the top of the ranked list rather than whether it is retrieved within a broader candidate set. On NPM3D, the Top-1 and Top-10 recalls are 31 .72 ±0.72% and 81 .90 ±0.61% , respectively. This dataset contains only 116 test queries, meaning that a single query changes recall by approximately 0.86 percentage points. Its comparatively visible boundary width should therefore be interpreted in the context of the limited test-set size rather than being attributed entirely to unstable model training. Overall, PosEviLoc demonstrates good reproducibility across random seeds. KITTI360Pose and S3DISPose produce the most stable results, PandaSetPose exhibits localized variation at intermediate retrieval depths, nuScenesPose shows moderate ranking sensitivity, and the variation on NPM3D is amplified by its small test set. These results confirm that the principal performance trends of PosEviLoc remain consistent under different model initializations and training orders. 1 3 5 7 10 025 50 75 100                    
+
+> (a) KITTI360Pose
+> 135710
+> (b) S3DISPose
+> 135710
+> (c) PandaSetPose
+> 135710
+> (d) nuScenesPose
+> 135710
+> (e) NPM3D
+> Retrieval rank, k
+> Top-k recall (%)
+> Mean Upper bound Lower bound
+
+Figure A9: Five-seed stability analysis of PosEviLoc across five datasets. Top-1 through Top-10 recall is reported on KITTI360Pose, S3DISPose, PandaSetPose, nuScenesPose, and NPM3D. The solid line denotes the mean performance over five random seeds, while the upper and lower boundaries indicate the maximum and minimum recall observed at each retrieval depth, respectively. 17

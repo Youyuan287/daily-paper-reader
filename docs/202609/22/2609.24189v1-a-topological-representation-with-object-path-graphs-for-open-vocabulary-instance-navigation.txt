@@ -1,0 +1,287 @@
+Title: A Topological Representation with Object-Path Graphs for Open-Vocabulary Instance Navigation
+
+URL Source: https://arxiv.org/pdf/2609.24189v1
+
+Published Time: Tue, 22 Sep 2026 02:12:58 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# A Topological Representation with Object–Path Graphs for Open-Vocabulary Instance Navigation 
+
+Linwei Zheng 1, Daojie Peng 1, Bingtao Wang 1, Haoang Li 1, and Jun Ma 1,2
+
+Abstract — Vision-language navigation requires embodied agents to navigate environments using natural language instruc-tions and visual observations. Existing approaches typically decompose navigation into sequential language-guided decisions or rely on online exploration without prior environmental knowledge. Scene graph representations offer compact semantic memory but remain decoupled from downstream navigation, which still depends on dense metric maps. To close this gap, we propose an object–path graph that unifies open-vocabulary semantic reasoning with topological navigation. The proposed representation jointly supports semantic grounding, graph-based localization, and navigation within a single lightweight topological framework. Building on this graph, we introduce a navigation strategy that combines global path planning with local inter-node execution through lightweight node localization and semantic visual servoing, enabling navigation directly over the graph without dense metric reconstruction. Experiments on HM3D and Replica demonstrate competitive performance in open-vocabulary object grounding through the proposed hi-erarchical graph structure, while achieving effective navigation performance. Real-world robot experiments further validate the practicality of the proposed framework. 
+
+I. INTRODUCTION Vision-language navigation (VLN) aims to enable embod-ied agents to navigate environments using natural language instructions together with visual observations. Unlike tra-ditional robotic navigation systems that depend on manu-ally engineered rules or dense metric maps, VLN requires agents to jointly perform multimodal perception, semantic reasoning, spatial understanding, and sequential decision-making [1]–[3]. These capabilities are essential for broad applications in household robotics, autonomous systems, emergency response, and human-robot interaction. Recent advances in large vision-language models (VLMs) and large language models (LLMs) have significantly ac-celerated progress in VLN research [4]. By leveraging pre-trained semantic knowledge and language reasoning, modern VLN systems can interpret complex instructions and perform navigation with improved generalization. Existing methods commonly transform visual observations into semantic rep-resentations and use language-guided reasoning to predict actions, subgoals, or exploration strategies. Open-vocabulary perception further enables agents to recognize unseen object categories and reason about semantic relationships within the environment. Despite recent progress, current VLN systems still face two fundamental limitations. Most approaches either rely on sequential language-guided decision making [5], [6], where 
+
+> 1The Hong Kong University of Science and Technology (Guangzhou)
+> 2The Hong Kong University of Science and Technology Room Node
+> Object Node Room Edge Object Edge Free Space Nav-graph
+
+Fig. 1: The object-path graph consists of two essential topological layers: an object-level graph encoding semantic entities and their relations, and a path-level graph capturing navigable connectivity between spatial nodes. navigation is decomposed into step-by-step actions, or oper-ate without prior environmental knowledge [7], [8], requiring online exploration to locate the target. Consequently, naviga-tion over long distances is prone to accumulated errors, re-dundant exploration, and inefficient trajectories. Scene graph representations [9]–[11] have recently emerged as a compact semantic memory for embodied agents, providing struc-tured object relationships and supporting language reasoning. However, they are primarily used for high-level semantic understanding, while downstream navigation still depends on dense metric maps or continuous global localization. To bridge this gap, we propose an object–path graph representation that unifies semantic understanding and topo-logical navigation. As shown in Fig. 1, the overall framework constructs an object graph for open-vocabulary semantic reasoning together with a path graph encoding navigable connectivity. Building upon this representation, we introduce a graph-based navigation strategy that combines global path planning with local inter-node execution, enabling topolog-ical navigation directly over the graph through lightweight node localization and semantic visual servoing. The main contributions of this work are summarized as follows:  
+
+> •
+
+We propose an object–path graph representation that unifies open-vocabulary semantic understanding and arXiv:2609.24189v1 [cs.RO] 21 Sep 2026 topological navigation within a single graph framework.  
+
+> •
+
+We introduce a graph-based navigation strategy that combines global planning with local inter-node execu-tion, enabling navigation directly over the constructed graph without requiring dense metric maps.  
+
+> •
+
+We demonstrate the effectiveness of the proposed rep-resentation for multiple VLN tasks, including object grounding, node initialization, topological routing, and inter-node navigation, validating the feasibility of graph-centric navigation. II. R ELATED WORK 
+
+Recent advances in VLMs have enabled zero-shot nav-igation through direct reasoning over visual observations. PIVOT [12] formulates navigation as sequential visual rea-soning, where VLMs select actions from observed frames. Other works introduce reusable spatial memories to improve long-horizon navigation. Value-map-based methods, such as VLFM [8] and WMNav [13], rank exploration regions according to task relevance, while semantic map-based ap-proaches including ESC [14], L3MVN [15], and OpenFM-Nav [16] integrate object semantics and spatial structures for viewpoint selection. Nevertheless, many of these rep-resentations are task-specific or require additional metric planning modules for navigation. More recently, graph-based representations have been explored as unified memories for semantic reasoning and navigation. SG-NAV [7] and SayNav [6] construct hierarchical scene graphs to support goal localization and reasoning, while MC-GPT [1] builds a topological memory over sampled viewpoints for long-horizon navigation. Related approaches such as ETPNav [17] and OVL-Map [18] further incorporate structured graph-like memories to support LLM-driven navigation policies and action selection. These methods primarily treat graphs as intermediate memory structures for high-level reasoning, while low-level navigation relies on step-by-step instruction decisions, in-troducing additional overhead. In contrast, another line of work focuses on constructing explicit 3D scene representa-tions for open-vocabulary understanding. ConceptGraphs [9] builds open-vocabulary scene graphs from 3D observations, while VLMaps [11] constructs visual-language maps for language-guided navigation, which a follow-up work extends with acoustic information [19]. HOV-SG [10] further intro-duces hierarchical open-vocabulary scene graphs with room-level organization. Recent works such as OpenIN [20] and DualMap [21] extend semantic mapping to dynamic settings. However, these approaches primarily focus on semantic representation and scene understanding, and do not directly formulate navigation over the graph structure itself. Our work bridges this gap by enabling global planning and topology-only navigation directly on the constructed graph. III. M ETHODOLOGY 
+
+This section presents the proposed object–path graph framework for topological vision-language navigation. As Relocalization 
+
+> Pose Align & Association
+> Object Segmentation
+> Feature Embedding Feature Embedding Object Grounding Object Grounding
+> Room Node
+> Supporter Node Object Node
+> Object Graph
+> Nav Graph
+> Topological Graph
+> A cup in the
+> kitchen
+> Kitchen
+> Cup
+> Free Space Free Space Inter-Node Navigation
+> Object Navigation
+> Keypoints Keypoints Visual Servoing Visual Servoing
+
+Fig. 2: Overview of the proposed framework. The pipeline consists of four key components: Open-Vocabulary Semantic Segmentation for extracting object-level observations from RGB-D inputs, Object Scene Graph construction for encod-ing objects and their semantic relations, Traversability Navi-gation Graph for modeling navigable free-space connectivity, and Topological Navigation for performing goal-driven inter-node navigation using the constructed object–path graph representation. shown in Fig. 2, the framework first constructs an open-vocabulary object representation from RGB-D observations (Section III-A), builds object and traversability graphs for semantic reasoning and spatial connectivity (Sections III-B and III-C), and finally performs graph-based navigation through node initialization and visual servoing (Section III-D). 
+
+A. Open-Vocabulary 3D Object Mapping 
+
+The objective of the open-vocabulary mapping module is to construct a compact semantic representation of the envi-ronment from RGB-D observations and pose measurements. Then we group geometrically and semantically consistent points into object-level segments. This significantly reduces representation redundancy while naturally producing object-centric entities that serve as the nodes of the proposed object graph. Given a sequence of RGB-D frames, we first apply the Segment Anything Model (SAM) to generate class-agnostic 2D segmentation masks. Using the corresponding depth maps, masked pixels are projected into 3D space to obtain local point-cloud segments. With odometry information, all segments are transformed into a shared global coordinate frame. To maintain a consistent object representation, newly observed segments are associated with existing segments using geometric overlap and semantic similarity. The overlap between segments Sm and Sn is defined as O(m, n ) =
+
+a(Sm, S n)/ max( n(Sm), n (Sn)) , where a(Sm, S n) denotes neighboring point correspondences within a distance thresh-old. Semantic similarity is measured by the cosine similarity of CLIP features, C(m, n ) = f ⊤ 
+
+> m
+
+fn/(∥fm∥∥ fn∥). Segments are merged only when both measures exceed predefined thresholds. After association, the object feature is updated through weighted fusion: 
+
+f = X
+
+> i
+
+wifi, wi = n(Si)
+
+P 
+
+> j
+
+n(Sj ) , (1) where n(Si) denotes the number of retained points after downsampling. This weighting assigns greater importance to observations with stronger geometric evidence, producing a stable object-level semantic representation. After processing the image sequence, VLMs generate object descriptions from informative multi-view image crops. The resulting captions are subsequently refined by an LLM into a single coherent object-level description for each object. 
+
+B. Object Scene Graph 
+
+Recent approaches have explored room-level decompo-sition from structural observations [10]. Following this paradigm, we partition the environment into disjoint room regions using the projected structural layout and an Euclidean Distance Field (EDF). After segmentation, each room is represented as a room node. To assign semantic labels, we collect the detected objects contained within each room and prompt an LLM to generate a concise room description, resulting in an open-vocabulary semantic label (e.g., kitchen ,
+
+bedroom , or office ). Inspired by [20], we categorize detected objects within each room into supporter objects and regular objects . Sup-porters correspond to large structural objects such as beds, desks, cabinets, and sofas that naturally organize the sur-rounding scene, while regular objects denote smaller mov-able items such as books, cups, and keyboards. Specifically, this categorization is determined based on the estimated volume of each object’s 3D bounding box. Each supporter is connected directly to its parent room node. Regular objects are associated with one or multiple nearby supporters ac-cording to their spatial proximity, allowing objects located on shared surfaces or between neighboring furniture to maintain multiple supporting connections. In addition, every object is assigned an LLM-generated caption describing its semantic attributes. To capture semantic interactions beyond the hierarchical structure, we establish candidate edges between spatially adjacent objects using 3D proximity. For each candidate pair, object captions together with their relative spatial con-figurations are provided to an LLM, which predicts their semantic relationship (e.g., on top of , inside , or next to ). The inferred relation is stored as the edge attribute, replacing purely geometric adjacency with semantically meaningful connectivity. Finally, adjacent room nodes are connected through traversable doorways to preserve inter-room topology. The resulting open-vocabulary scene graph GO = (VO , E O )
+
+encodes room hierarchy, supporting structures, object-level semantic relations, and room connectivity. Within this graph, supporter and regular object nodes maintain object-level states for downstream grounding and navigation, while room nodes provide hierarchical semantic context. 
+
+C. Traversability Navigation Graph 
+
+Navigation nodes are generated based on changes in surrounding views, where view similarity is measured by the ratio between the number of shared visible objects and the total number of observed objects from two viewpoints. The initial set of navigation nodes is obtained from the recorded robot poses. A new node is added when the sur-rounding view differs significantly from the previous node, allowing the graph to preserve important transitions along the trajectory. Doorway regions between rooms are explicitly inserted as additional nodes to maintain inter-room connec-tivity. For free-space regions that are not sufficiently covered by the original trajectory, we randomly sample candidate positions and group them according to view similarity. The mean position of each group is then selected as an additional navigation node. Edges are established between two nodes when the straight-line path connecting them is collision-free according to the reconstructed free-space representation. Since sparse node sampling may result in disconnected graph components, additional nodes are inserted between neighboring compo-nents to establish connectivity. The resulting traversability graph GP (VP , E P ) captures the topological connectivity of the environment and provides a compact representation for global planning and inter-node navigation. 
+
+D. Object Navigation 1) Map Representation: Instead of relying on dense point cloud or occupancy grids, we represent the environment using a sparse object-grounded topological graph. The map is defined as 
+
+GO = ( V room O ∪ V obj O , E O ), (2) where V room O denotes room nodes, V obj O denotes object nodes including supporters and regular objects, and EO
+
+represents semantic and hierarchical relationships among nodes. Object nodes vi ∈ V obj O store a structured state represen-tation: 
+
+vi = {pi, fi, c i, d i}, (3) where pi = ( xi, y i, z i) is the 3D position of the object centroid, fi ∈ Rd is the semantic feature embedding extracted from VLMs, and ci is the object category or open-vocabulary caption. di is the volume of the object. This formulation jointly encodes geometric connectivity and semantic rela-tionships in a unified graph structure, providing a compact representation for downstream planning and navigation. 
+
+2) Node Initialization: We formulate initial localization as a coarse node retrieval problem over the constructed object–path graph. The robot first performs a short-range exploration to acquire sufficient surrounding observations for constructing a panoramic semantic descriptor. To enable efficient node retrieval, we employ a lightweight semantic retrieval framework [22]. Each navigation node is represented by a compact semantic panoramic descrip-tor. Instead of encoding geometric laser signatures, the descriptor represents the surrounding semantic observations of each node. Specifically, visible objects are projected into a discretized panoramic representation with N angular bins, where each bin aggregates the semantic features of the corresponding visible objects. The resulting panoramic descriptor s is made rotation-invariant by considering circular shifts during descriptor matching, enabling robust retrieval under unknown heading alignment. Given the query descriptor squery , the starting node is determined through comparing the cosine similarity: 
+
+v∗ = arg max 
+
+> vi∈VP
+
+cos( squery , si), (4) where si denotes the semantic panoramic descriptor stored at navigation node vi.
+
+3) Topological Navigation: Given the current navigation node v∗ obtained from node initialization and the target node vT identified through object grounding, a global path 
+
+P = (v∗ = v0, v 1, . . . , v M = vT ) is computed using a shortest-path search (e.g., Dijkstra’s algorithm) over the traversability graph GP (VP , E P ). The resulting path defines an ordered sequence of navigation nodes connecting the start and target locations. Inter-node navigation then executes this route as a visual servoing process, where each step transitions from the current node vk to the next node vk+1 . Rather than relying on explicit metric localization or dense trajectory optimization, the agent directly aligns its current observation with the panoramic snapshot stored at vk+1 .During map construction, a panoramic snapshot is cre-ated for every navigation node. Each panoramic image is processed using an open-vocabulary segmentation model to obtain object-level observations. For every segmented object, the image centroid is approximated by 
+
+c = 1
+
+|S|
+
+X
+
+> (u,v )∈S
+
+(u, v ), (5) where S denotes the object mask. Each keypoint is rep-resented by its center, object label, and semantic feature embedding. To avoid ambiguous correspondences, only dis-tinctive keypoints are retained. Specifically, a keypoint is preserved if its label is unique within the observation, or, for repeated labels, its feature embedding differs sufficiently from the other detections according to a cosine similarity threshold. During navigation, the current observation is processed in the same manner, and correspondences with the target-node snapshot are established by matching object labels followed by cosine similarity verification between their semantic fea-ture embeddings. Given the current observation and target snapshot, navi-gation is formulated as a visual servoing process that aligns their object arrangements. Let kci and kgi denote matched keypoints in the current and goal observations, respectively. Instead of minimizing pixel displacement, we measure the relative angular discrepancy between consecutive keypoints, 
+
+Fig. 3: The robot at current position C observes a panoramic representation at the goal point G, from which keypoints Ki
+
+are detected. The control objective is to compute a motion command that aligns the robot toward the goal configura-tion by minimizing the angular and geometric discrepancy between the current observation and the goal-view keypoint structure. which is more robust to camera translation and viewpoint variation. Since the robot operates in planar motion, key-points are projected onto the XY-plane, and the geometric residual is defined as: 
+
+ei = ( θci+1 − θci ) − (θgi+1 − θgi ), (6) where θci and θgi represent the horizontal angular po-sitions of the i-th matched keypoint in the current and goal observations, respectively. The residual measures the difference in relative object arrangement between the two views and provides the basis for generating the navigation control command. The overall alignment objective is defined as: 
+
+E = X
+
+> i
+
+wi∥ei∥, (7) where wi denotes the confidence weight derived from se-mantic similarity. The aggregated residual is then mapped to robot motion commands through the visual servoing controller: 
+
+vt = f ({eti}) → (vtx, v ty ). (8) To illustrate the geometric intuition behind the proposed controller, we first consider a simplified case with three matched keypoints, as shown in Fig. 3. The robot motion is determined by comparing the relative angular differences between the current and target observations. If we define the angular alignment error as ei = αci − αgi ,where αi = θi+1 − θi represents the relative angle between consecutive keypoints, the control objective is to reduce the temporal evolution of this error: 
+
+˙ei = ˙ αci . (9) The relationship between the angular error dynamics and robot motion can be derived geometrically. Since α1 and α2
+
+are independent, it suffices to analyze a single angular sector. We consider motion along an arbitrary direction vi within the sector formed by −−→
+
+CK i and −−→
+
+CK i+1 . The motion direction partitions the angular sector αi into two sub-angles, denoted by αcii and αcii +1 . Using trigonometric geometry together with the small-angle approximation, the error dynamics are obtained as 
+
+˙ei =
+
+ sin( αcii )
+
+|CK i| + sin( αcii +1 )
+
+|CK i+1 |
+
+
+
+sgn( αci − αgi ) vi. (10) Treating v1 and v2 as basis directions, we can enforce a negative error dynamics ˙e < 0, which drives the error vector 
+
+[e1, e2]T → 0. This ensures that the robot is guided to the goal node. Within the visual servoing framework, the control input is defined as a proportional mapping from the alignment error to motion commands. The motion along each bisector direction is decomposed onto adjacent edge vectors, leading to the following local velocity formulation: 
+
+vi = −
+
+−−→
+
+CK i + −−→
+
+CK i+1 
+
+
+
+(αci − αgi ) cos 
+
+ αci
+
+2
+
+
+
+, (11) where −−→
+
+CK i here denotes the unit vector pointing toward the i-th keypoint. The overall control input is obtained by summing the contributions from all angular sectors, 
+
+u = X
+
+> i
+
+vi.
+
+The modulation term cos( αci /2) serves two purposes. First, its sign changes when αci > π, automatically reversing the control direction to maintain convergence. Second, its magnitude increases as αci decreases, providing a larger control gain when the observed angular configuration devi-ates significantly from the target, thereby providing enough excitation during the early stage of navigation while naturally reducing the control effort near the goal. By stacking all edge contributions, the global motion can be expressed in matrix form as 
+
+vx
+
+vy
+
+
+
+= −AB α, (12) where A = [I, I, . . . , I], B is a block-diagonal matrix constructed from edge vectors −−→
+
+CK i and α collects the angular alignment errors with cosine modulation. This for-mulation compactly couples panoramic angular errors with the underlying spatial configuration of the navigation graph. Therefore, the overall controller can be expressed in the following weighted linear form: 
+
+u = K we , (13) where K is the induced gain matrix determined by the geometric decomposition, e denotes the panoramic angular alignment error, and w is a diagonal weight matrix derived from semantic similarity. The inter-node navigation process is terminated when the alignment error satisfies ∥e∥ < ϵ, where ϵ is a predefined threshold. Although the system only provides linear velocity commands [vx, v y ], the control vector can be further mapped to unicycle control inputs [v, ω ] where a gain k adjusts the turning aggressiveness to produce smoother robot motion: 
+
+v =
+
+q
+
+v2 
+
+> x
+
++ v2 
+
+> y
+
+, ω = k · atan2( vy , v x). (14) TABLE I: Structural representation comparison across dif-ferent methods.             
+
+> Method Room Structure Built-in Nav-graph
+> ConceptGraphs [9] ×−
+> VLMaps [11] ×−
+> HOV-SG [10] ✓✓
+> Ours ✓✓
+
+By transforming node-to-node navigation into a semantic visual alignment problem, the proposed controller enables the robot to follow topological connections through percep-tual feedback. The resulting framework provides an efficient alternative to metric navigation, requiring only compact node representations for graph traversal. IV. E XPERIMENT 
+
+We evaluate the proposed topological mapping framework on goal-driven vision-language navigation tasks. The ex-periments are designed to analyze three aspects: (i) object query grounding capability using semantic and relational cues, (ii) starting node initialization through graph-based relocalization using the constructed object-level topological graph, and (iii) navigation performance over the inferred graph structure when the target object is correctly identified as a goal node. 
+
+A. Object Query on the Graph Map 
+
+We evaluate the proposed object–path graph on open-vocabulary object queries involving semantic, relational, and instance-level descriptions. Given a natural language query, an LLM extracts the target object together with optional supporter and room information. Retrieval is then performed hierarchically from room to supporter to target object, falling back to object-level search when higher-level constraints are unavailable. We compare against representative open-vocabulary scene representations, including ConceptGraphs [9], VLMaps [11], and HOV-SG [10], on the Habitat-Matterport 3D (HM3D) [23] and Replica [24] datasets. All methods are evaluated under identical object query settings, where the agent retrieves the target object instance from a natural language query. As shown in Table I, ConceptGraphs and VLMaps do not maintain an explicit navigation graph for route planning. Instead, they rely on dense spatial representations, such as costmaps or occupancy grids, to perform geometric planning. HOV-SG adopts a Voronoi graph, also requiring global metric localization. Object query performance is evaluated using Success Rate (SR). We evaluate object grounding with 120 queries across four scenes, covering object-only, relation-based, and room-aware descriptions. Table II shows that our method consistently improves retrieval, especially for relational queries, highlighting the benefit of hierarchical semantic modeling. As illustrated in Fig. 4, this effectively resolves relational queries such as “a book on top of a desk in the living room.” We further evaluate object navigation using the retrieved graph node as the navigation goal. As shown in Table III, the proposed object–path graph achieves ConceptGraph ConceptGraph Vlmap Vlmap   
+
+> HOV-SG HOV-SG Ours Ours
+> Bottle on the desk in the bedroom Chair next to window in the dining room
+
+Fig. 4: By jointly leveraging object–relation structure and room identification, our method achieves more accurate instance-level retrieval compared to competing approaches. TABLE II: Object query SR performance.                     
+
+> Method Object Relation Room+Relation Avg. ConceptGraphs [9] 0.58 0.63 0.60 0.60 VLMaps [11] 0.60 0.70 0.75 0.68 HOV-SG [10] 0.63 0.75 0.85 0.74
+> Ours 0.68 0.88 0.93 0.83
+
+the highest average SPL, demonstrating that accurate object grounding naturally translates into efficient navigation. 
+
+B. Scene Graph Node Retrieval 
+
+We evaluate the proposed node initialization strategy by retrieving the current navigation node from a short observa-tion sequence. SceneGraphLoc [25] is one of the few meth-ods addressing localization on scene graph representations by learning a cross-modal embedding between scene graphs and visual observations. Since the original SceneGraphLoc constructs scene-level subgraphs that are too coarse for navigation, we instead generate subgraphs centered at navigation nodes while pre-serving its graph matching pipeline, making the comparison consistent with topological navigation. As shown in Table IV, the proposed method achieves com-parable localization performance to SceneGraphLoc while using a simpler retrieval framework. These results demon-strate that navigation nodes equipped with compact semantic descriptors provide sufficient discriminative information for reliable topological node initialization. 
+
+C. Edge-Navigation Performance Evaluation 
+
+We evaluate the proposed inter-node navigation strategy by measuring the accuracy of reaching target navigation nodes. Since the controller aligns the current observation with the semantic snapshot stored at the target node, its performance TABLE III: Object navigation performance in terms of SPL from 10 different start points.                         
+
+> Method Obj-1 Obj-2 Obj-3 Obj-4 Obj-5 Avg. SPL VLMaps [11] 0.21 0.26 0.18 0.29 0.23 0.234 HOV-SG [10] 0.34 0.38 0.31 0.46 0.36 0.37
+> Ours 0.40 0.43 0.38 0.41 0.42 0.408
+
+TABLE IV: Retrieval performance (Recall@K) comparison across scenes.                                
+
+> Scene Metric SceneGraphLoc Ours Scene-1 R@1 0.86 0.78 R@3 0.9 0.91
+> R@5 0.97 0.94 Scene-2 R@1 0.80 0.72 R@3 0.93 0.87 R@5 0.96 0.92 Scene-3 R@1 0.81 0.88
+> R@3 0.92 0.96
+> R@5 0.98 0.95 Scene-4 R@1 0.75 0.74 R@3 0.89 0.90
+> R@5 0.93 0.97
+
+depends on both the available visual observations and the semantic information retained in the snapshot. For each transition, the agent moves from the current node toward the target node using the proposed visual servoing strategy. The translation error is defined as the Euclidean translation distance: 
+
+epos = || pr − pn|| 2, (15) where pr and pn denote the robot position and target node position. We further analyze the influence of the camera field of view during navigation and the number of objects retained in each navigation-node snapshot. Fig. 5 summarizes the resulting translation errors under different setups. Increasing the number of stored objects consistently improves con-vergence accuracy by providing richer semantic correspon-dences for visual alignment. When insufficient objects are retained (e.g., fewer than eight keypoints), narrow fields of view (90°) may cause insufficient correspondence and lead to off-route navigation. Panoramic observations further reduce the variance of the translation error, particularly when only a limited number of objects are available. Unless otherwise specified, all subsequent simulation experiments adopt panoramic observations during inter-node navigation. We also report two metrics for evaluation of navigation. Navigation Success Rate (NSR) measures the percentage of node transitions successfully completed within the conver-gence threshold. The Path Length Ratio (PLR) is defined as the ratio between the executed trajectory length and the shortest path length on the navigation graph, evaluating the efficiency of the generated trajectory. Table V summarizes the navigation performance across different HM3D scenes. The results demonstrate that the proposed topological navigation framework can reliably complete node-level navigation while maintaining efficient traversal over the constructed path graph. The proposed framework achieves reliable node-level nav-8 12 16 20 24 Objects in Navigation Snapshot 0.0 0.2 0.4 0.6 0.8 1.0 1.2 Translation Error FOV=90° FOV=180° FOV=360° Fig. 5: Translation error under different visual servoing configurations. The number of stored objects controls the semantic richness of each navigation-node snapshot, while different camera fields of view determine the available ob-servations during inter-node navigation. TABLE V: Navigation performance.               
+
+> Scene NSR ↑PLR ↓
+> Scene-1 0.92 1.18 Scene-2 0.89 1.25 Scene-3 0.94 1.15 Scene-4 0.87 1.32 Average 0.91 1.23
+
+igation across different scenes, indicating that the visual servoing strategy can effectively guide the agent through the constructed path graph. The high NSR demonstrates that the object-guided topological representation provides sufficient spatial constraints for accurate node transitions without requiring dense geometric localization. The Path Length Ratio remains higher than the theoretical shortest path due to the nature of the current node-based navigation strategy. Since each transition is independently performed through visual servoing toward the next relay node, the trajectory does not explicitly optimize global path smoothness or continuous motion between consecu-tive nodes. Although this introduces additional intermediate movements and occasional stopping behavior at relay nodes, it provides a simple and robust mechanism for graph-based navigation. Future work will investigate continuous trajectory optimization over the topological graph to further improve navigation efficiency. 
+
+D. Ablation Study 
+
+We conduct ablation experiments to evaluate the contri-bution of different components in the proposed object–path graph representation and visual servoing strategy. Results are summarized in Table VI. 
+
+1) Effect of Graph Structure: We analyze the contribu-tion of different structural components in the object graph, including room-level organization, supporter hierarchy, se-mantic relations, and spatial relations. Removing room-level information ( w/o room ) degrades performance due to the loss of contextual constraints. Removing the supporter hierarchy TABLE VI: Ablation study on graph design and feature weighting strategy                   
+
+> Component Setting NSR ↑SPL ↑
+> Graph w/o room 0.83 0.38 w/o supporter 0.77 0.32 w/o semantic relation 0.81 0.36 Weighting No weighting 0.82 0.36 Full model with weighting 0.88 0.42
+
+(w/o supporter ) weakens object organization by eliminating the structural relationship between large supporting objects and smaller movable objects. Removing semantic relations (w/o semantic relation ) further reduces object discrimination, especially among visually similar objects. These results demonstrate that hierarchical organization and relational reasoning are important for constructing an effective semantic representation for navigation. 
+
+2) Effect of Feature Weighting Strategy: We further evalu-ate the influence of feature weighting during visual servoing. Without weighting, all matched keypoints contribute equally to the control command, while similarity-based weighting emphasizes more reliable correspondences. The results show that feature weighting improves both NSR and SPL by reducing the impact of ambiguous matches and producing more stable navigation commands. 
+
+E. Real-World Navigation Validation 
+
+To validate the transferability of the proposed topological edge navigation strategy, we conduct real-world experiments using a wheeled mobile robot equipped with a Jetson onboard computer and an ORBBEC Gemini 336L RGB-D camera. The experiment focuses on evaluating the execution of inter-node transitions, where the robot aligns its current observa-tion with the semantic snapshot associated with the target navigation node. The robot is instructed to traverse a sequence of naviga-tion nodes toward a target location. During each transition, object observations are extracted from the RGB-D input and matched against the stored semantic snapshot of the next navigation node to estimate the control command. The exper-iment demonstrates that the proposed navigation strategy can reliably execute graph edges directly from sparse semantic node representations without requiring dense metric trajec-tory optimization. Fig. 6 shows an example of a successful transition toward a target node. The robot progressively reduces the visual alignment error and converges to the desired location V. C ONCLUSION 
+
+The proposed framework constructs an object graph for semantic reasoning and a path graph for spatial traversal, providing a unified representation for VLN tasks including object grounding and navigation. This work demonstrates the feasibility of performing navigation directly on a topo-logical map without requiring dense metric reconstruction or learned navigation policies. However, the current servo-based inter-node navigation does not explicitly optimize global path efficiency. Extending the framework to dynamic (a) 
+
+(b) (c) 
+
+Fig. 6: Real-world validation of topological edge navigation. After establishing the topological path to the target object, the robot traverses graph edges by aligning current obser-vations with the stored semantic representation of the next navigation node. (a) Navigation path between consecutive nodes. (b) Current observation. (c) Observation at reaching point, where the observation aligns with the stored node snapshot environments remains an important direction toward real-world deployment. REFERENCES [1] Z. Zhan, L. Yu, S. Yu, and G. Tan, “Mc-gpt: Empowering vision-and-language navigation with memory map and reasoning chains,” arXiv preprint arXiv:2405.10620 , 2024. [2] J. Wen, Y. Zhu, J. Li, M. Zhu, Z. Tang, K. Wu, Z. Xu, N. Liu, R. Cheng, C. Shen, et al. , “Tinyvla: Towards fast, data-efficient vision-language-action models for robotic manipulation,” IEEE Robotics and Automation Letters , 2025. [3] D. Peng, J. Cao, Q. Zhang, and J. Ma, “Lovon: Legged open-vocabulary object navigator,” arXiv preprint arXiv:2507.06747 , 2025. [4] G. Zhou, Y. Hong, Z. Wang, X. E. Wang, and Q. Wu, “Navgpt-2: Unleashing navigational reasoning capability for large vision-language models,” in European Conference on Computer Vision , pp. 260–278, Springer, 2024. [5] P. Anderson, Q. Wu, D. Teney, J. Bruce, M. Johnson, N. Sünderhauf, I. Reid, S. Gould, and A. van den Hengel, “Vision-and-Language Navigation: Interpreting Visually-Grounded Navigation Instructions in Real Environments,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , pp. 3674–3683, 2018. [6] A. Rajvanshi, K. Sikka, X. Lin, B. Lee, H.-P. Chiu, and A. Velasquez, “Saynav: Grounding large language models for dynamic planning to navigation in new environments,” in Proceedings of the International Conference on Automated Planning and Scheduling , vol. 34, pp. 464– 474, 2024. [7] H. Yin, X. Xu, Z. Wu, J. Zhou, and J. Lu, “SG-Nav: Online 3D Scene Graph Prompting for LLM-based Zero-shot Object Navigation,” Ad-vances in Neural Information Processing Systems , vol. 37, pp. 5285– 5307, 2024. [8] N. Yokoyama, S. Ha, D. Batra, J. Wang, and B. Bucher, “VLFM: Vision-Language Frontier Maps for Zero-Shot Semantic Navigation,” in 2024 IEEE International Conference on Robotics and Automation (ICRA) , pp. 42–48, 2024. [9] Q. Gu, A. Kuwajerwala, S. Morin, K. M. Jatavallabhula, B. Sen, A. Agarwal, C. Rivera, W. Paul, K. Ellis, R. Chellappa, C. Gan, C. M. de Melo, J. B. Tenenbaum, A. Torralba, F. Shkurti, and L. Paull, “ConceptGraphs: Open-Vocabulary 3D Scene Graphs for Perception and Planning,” in 2024 IEEE International Conference on Robotics and Automation (ICRA) , pp. 5021–5028, 2024. [10] A. Werby, C. Huang, M. Büchner, A. Valada, and W. Burgard, “Hier-archical Open-Vocabulary 3D Scene Graphs for Language-Grounded Robot Navigation,” in Robotics: Science and Systems , 2024. [11] C. Huang, O. Mees, A. Zeng, and W. Burgard, “Visual Language Maps for Robot Navigation,” in 2023 IEEE International Conference on Robotics and Automation (ICRA) , pp. 10608–10615, 2023. [12] S. Nasiriany, F. Xia, W. Yu, T. Xiao, J. Liang, I. Dasgupta, A. Xie, D. Driess, A. Wahid, Z. Xu, et al. , “Pivot: Iterative visual prompting elicits actionable knowledge for vlms,” arXiv preprint arXiv:2402.07872 , 2024. [13] D. Nie, X. Guo, Y. Duan, R. Zhang, and L. Chen, “Wmnav: Integrating vision-language models into world models for object goal navigation,” in 2025 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pp. 2392–2399, 2025. [14] K. Zhou, K. Zheng, C. Pryor, Y. Shen, H. Jin, L. Getoor, and X. E. Wang, “Esc: Exploration with soft commonsense constraints for zero-shot object navigation,” in International Conference on Machine Learning , pp. 42829–42842, 2023. [15] B. Yu, H. Kasaei, and M. Cao, “L3mvn: Leveraging large language models for visual target navigation,” in 2023 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pp. 3554–3560, IEEE, 2023. [16] Y. Kuang, H. Lin, and M. Jiang, “Openfmnav: Towards open-set zero-shot object navigation via vision-language foundation models,” in Findings of the Association for Computational Linguistics: NAACL 2024 , pp. 338–351, 2024. [17] D. An, H. Wang, W. Wang, Z. Wang, Y. Huang, K. He, and L. Wang, “ETPNav: Evolving Topological Planning for Vision-Language Nav-igation in Continuous Environments,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 47, no. 7, pp. 5130–5145, 2025. [18] S. Wen, Z. Zhang, Y. Sun, and Z. Wang, “OVL-MAP: An Online Visual Language Map Approach for Vision-and-Language Navigation in Continuous Environments,” IEEE Robotics and Automation Letters ,vol. 10, no. 4, pp. 3294–3301, 2025. [19] C. Huang, O. Mees, A. Zeng, and W. Burgard, “Multimodal spatial language maps for robot navigation and manipulation,” The Interna-tional Journal of Robotics Research , p. 02783649251351658, 2025. [20] Y. Tang, M. Wang, Y. Deng, Z. Zheng, J. Deng, S. Zuo, and Y. Yue, “OpenIN: Open-Vocabulary Instance-Oriented Navigation in Dynamic Domestic Environments,” IEEE Robotics and Automation Letters ,vol. 10, no. 9, pp. 9256–9263, 2025. [21] J. Jiang, Y. Zhu, Z. Wu, and J. Song, “DualMap: Online Open-Vocabulary Semantic Mapping for Natural Language Navigation in Dynamic Changing Scenes,” IEEE Robotics and Automation Letters ,vol. 10, no. 12, pp. 12612–12619, 2025. [22] L. Zheng, X. Hu, H. Li, and J. Ma, “Place Recognition for Place: Toward Point Cloud Descriptor Stability Across Viewpoints,” in 2025 IEEE International Conference on Robotics and Biomimetics (RO-BIO) , pp. 351–357, 2025. [23] S. K. Ramakrishnan, A. Gokaslan, E. Wijmans, O. Maksymets, A. Clegg, J. Turner, E. Undersander, W. Galuba, A. Westbury, A. X. Chang, M. Savva, Y. Zhao, and D. Batra, “Habitat-Matterport 3D Dataset (HM3D): 1000 Large-scale 3D Environments for Embodied AI,” arXiv preprint arXiv:2109.08238 , no. arXiv:2109.08238, 2021. [24] J. Straub, T. Whelan, et al. , “The Replica dataset: A digital replica of indoor spaces,” arXiv preprint arXiv:1906.05797 , 2019. [25] Y. Miao, F. Engelmann, O. Vysotska, F. Tombari, M. Pollefeys, and D. B. Baráth, “SceneGraphLoc: Cross-Modal Coarse Visual Local-ization on 3D Scene Graphs,” in European Conference on Computer Vision (ECCV) , 2024.
