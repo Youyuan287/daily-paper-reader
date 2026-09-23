@@ -6,62 +6,45 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-22
-- 运行时间：2026-09-22 22:13:37 UTC
+- 最新运行日期：2026-09-23
+- 运行时间：2026-09-23 22:29:32 UTC
 - 运行状态：成功
-- 本次总论文数：13
-- 精读区：2
-- 速读区：11
+- 本次总论文数：8
+- 精读区：0
+- 速读区：8
 
 ### 今日简报（AI）
-- 今日共生成 13 篇推荐（精读 2 篇，速读 11 篇）
-- 精读：《Hierarchical Aggregation of Semantic Uncertainty in 3D Scene Graphs》（9.0/10）, 《Probabilistic Scene Graphs: Hierarchical Representation and Real-time System》（8.0/10）
-- 速读：《PanoSeg3R: Feed-Forward 3D Semantic Segmentation for Panoramic Images with an Automatic Data Curation Pipeline》（7.0/10）, 《Structured Spatio-Temporal Evidence Graphs for Open-Vocabulary Object Retrieval in Videos》（7.0/10）, 《BindCLIP: One Balanced Coupling For Compositional Vision Language Scoring》（7.0/10）
-- 这些结果覆盖了当下较热的方向，建议先看精读区论文的关键问题与方法。
-- 详情：[/202609/22/README](/202609/22/README)
+2026-09-23 日报精选 8 篇速读论文，聚焦开放词汇检测与多视图/3D 分割。最值得看 InterHier 的层级语义互联和 SAM-V 的几何感知多视图实例分割（均 7.0/10），PartLLM 则把多模态大模型用于 3D 部件分割。建议普通读者优先挑与自身场景最接近的一篇速读，重点关注方法如何借基础模型提升分割泛化。
+- 详情：[/202609/23/README](/202609/23/README)
 
 ### 精读区论文标签
-1. [Hierarchical Aggregation of Semantic Uncertainty in 3D Scene Graphs](/202609/22/2609.22351v1-hierarchical-aggregation-of-semantic-uncertainty-in-3d-scene-graphs)  
-   标签：评分：9.0/10、query:open-vocab-d
-   evidence：开放词汇三维场景图，沿包含层次传播语义不确定性
-2. [Probabilistic Scene Graphs: Hierarchical Representation and Real-time System](/202609/22/2609.23144v1-probabilistic-scene-graphs-hierarchical-representation-and-real-time-system)  
-   标签：评分：8.0/10、query:open-vocab-d
-   evidence：层次化概率三维场景图，显式建模结构与几何不确定性
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [PanoSeg3R: Feed-Forward 3D Semantic Segmentation for Panoramic Images with an Automatic Data Curation Pipeline](/202609/22/2609.22687v1-panoseg3r-feed-forward-3d-semantic-segmentation-for-panoramic-images-with-an-automatic-data-curation-pipeline)  
+1. [InterHier: Learning Interconnected Hierarchical Semantics for Open-Vocabulary Object Detection](/202609/23/2609.24026v1-interhier-learning-interconnected-hierarchical-semantics-for-open-vocabulary-object-detection)  
    标签：评分：7.0/10、query:open-vocab-d
-   evidence：前馈联合三维几何与多视图语义掩码解码
-2. [Structured Spatio-Temporal Evidence Graphs for Open-Vocabulary Object Retrieval in Videos](/202609/22/2609.23393v1-structured-spatio-temporal-evidence-graphs-for-open-vocabulary-object-retrieval-in-videos)  
+   evidence：可学习的互联层次语义表征
+2. [SAM-V: Geometry-Aware Segment Anything for Multi-View Instance Segmentation](/202609/23/2609.25490v1-sam-v-geometry-aware-segment-anything-for-multi-view-instance-segmentation)  
    标签：评分：7.0/10、query:open-vocab-d
-   evidence：面向开放词汇检索的区域级视觉语言索引与时空证据图
-3. [BindCLIP: One Balanced Coupling For Compositional Vision Language Scoring](/202609/22/2609.23717v1-bindclip-one-balanced-coupling-for-compositional-vision-language-scoring)  
+   evidence：处理遮挡的多视角实例分割与2D-3D特征融合
+3. [PartLLM: A Unified Multimodal Foundation for 3D Part Segmentation](/202609/23/2609.25832v1-partllm-a-unified-multimodal-foundation-for-3d-part-segmentation)  
    标签：评分：7.0/10、query:open-vocab-d
-   evidence：令牌-图像块耦合实现区域与词语对应
-4. [HyperCLIP++: Fine-tuning CLIP forOpen-vocabulary Semantic Segmentation in Hyperbolic Space](/202609/22/2609.24564v1-hyperclip-fine-tuning-clip-foropen-vocabulary-semantic-segmentation-in-hyperbolic-space)  
-   标签：评分：7.0/10、query:open-vocab-d
-   evidence：在双曲空间微调CLIP，通过层次对齐实现开放词汇语义分割
-5. [What Makes a 3D Scene Editable? A Factorized Benchmark of Fidelity, Locality, Consistency, and Preservation](/202609/22/2609.14899v1-what-makes-a-3d-scene-editable-a-factorized-benchmark-of-fidelity-locality-consistency-and-preservation)  
+   evidence：统一多模态三维部件分割与语义分解
+4. [D3GS: Depth, DINO, and RGB Diffusion Co-Guided 3D Gaussian Splatting for Sparse-View Reconstruction](/202609/23/2609.22941v1-d3gs-depth-dino-and-rgb-diffusion-co-guided-3d-gaussian-splatting-for-sparse-view-reconstruction)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：可见性感知的三维目标支撑与跨视图一致性评估
-6. [ORCA: Occlusion-Aware Refinement and Completion for Novel View Synthesis](/202609/22/2609.17450v1-orca-occlusion-aware-refinement-and-completion-for-novel-view-synthesis)  
+   evidence：DINO引导的视角一致三维高斯泼溅
+5. [SRPR-Net: Semantic and Relational Prompt Refinement for Automated SAM-based Instance Segmentation](/202609/23/2609.24226v1-srpr-net-semantic-and-relational-prompt-refinement-for-automated-sam-based-instance-segmentation)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：高斯锚点的遮挡感知细化与补全
-7. [AdaGeoVLN: Selective Geometry Across Representation Depth and Navigation Time for Vision-Language Navigation](/202609/22/2609.18789v1-adageovln-selective-geometry-across-representation-depth-and-navigation-time-for-vision-language-navigation)  
+   evidence：面向掩码级实例分割的视觉语言语义提示精化
+6. [0.5%>100%: Bidirectional Reciprocal Learning for Referring Image Segmentation](/202609/23/2609.24510v2-05100-bidirectional-reciprocal-learning-for-referring-image-segmentation)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：视觉语言导航中分层几何特征融合与时序记忆
-8. [SatOV: Restoring Spatial Priors for Training-Free Open-Vocabulary Segmentation in Remote Sensing Imagery](/202609/22/2609.22834v1-satov-restoring-spatial-priors-for-training-free-open-vocabulary-segmentation-in-remote-sensing-imagery)  
+   evidence：面向指代图像分割的双向互惠视觉-语言对齐学习
+7. [Hierarchical Floorplan-Guided Vision-Language Exploration for Embodied Question Answering](/202609/23/2609.26360v1-hierarchical-floorplan-guided-vision-language-exploration-for-embodied-question-answering)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：免训练开放词汇分割，恢复细粒度空间先验
-9. [GrapeSplat: Geometry-Grounded Reconstruction via Amalgamated Pose-Free Encoding for Feed-Forward 3D Gaussian Splatting](/202609/22/2609.23182v1-grapesplat-geometry-grounded-reconstruction-via-amalgamated-pose-free-encoding-for-feed-forward-3d-gaussian-splatting)  
+   evidence：用于场景理解的层次场景图与开放词汇占据图
+8. [DIFTA-3D: Depth-Consistent Instance-Level Feature Transfer and Adaptation of DINOv3 for 3D Detection](/202609/23/2609.26702v1-difta-3d-depth-consistent-instance-level-feature-transfer-and-adaptation-of-dinov3-for-3d-detection)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：融合多视角线索为体素对齐的3D高斯场景表示
-10. [PosEviLoc: Position-Conditioned Spatial Evidence for Language-Based 3D Localization](/202609/22/2609.23534v1-poseviloc-position-conditioned-spatial-evidence-for-language-based-3d-localization)  
-   标签：评分：6.0/10、query:open-vocab-d
-   evidence：基于语言的三维定位，利用物体级语义与空间关系
-11. [A Topological Representation with Object-Path Graphs for Open-Vocabulary Instance Navigation](/202609/22/2609.24189v1-a-topological-representation-with-object-path-graphs-for-open-vocabulary-instance-navigation)  
-   标签：评分：6.0/10、query:open-vocab-d
-   evidence：统一开放词汇语义接地与拓扑表示的对象-路径图
+   evidence：将DINOv3图块特征深度一致地迁移到三维检测
 
 
 <div class="dpr-home-promo-card">

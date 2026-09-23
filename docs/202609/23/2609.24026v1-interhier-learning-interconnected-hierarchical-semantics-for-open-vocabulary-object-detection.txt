@@ -1,0 +1,485 @@
+Title: InterHier: Learning Interconnected Hierarchical Semantics for Open-Vocabulary Object Detection
+
+URL Source: https://arxiv.org/pdf/2609.24026v1
+
+Published Time: Tue, 22 Sep 2026 02:01:32 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+> Received 18 November 2025, accepted 9 January 2026, date of publication 19 January 2026, date of current version 29 January 2026.
+> Digital Object Identifier 10.1109/ACCESS.2026.3655392 Published in IEEE Access, vol. 14, pp. 14709–14721, 2026.
+
+# InterHier: Learning Interconnected Hierarchical Semantics for Open-Vocabulary Object Detection 
+
+YEONG-JIN KIM, HO-JOONG KIM, and SEONG-WHAN LEE, (Fellow, IEEE)  
+
+> 1Department of Artificial Intelligence, Korea University, Seoul 02841, Republic of Korea
+
+Corresponding author: Seong-Whan Lee (e-mail: sw.lee@korea.ac.kr) This work was supported in part by the Institute of Information and Communications Technology Planning and Evaluation (IITP) funded by Korean Government (MSIT) through the Artificial Intelligence Graduate School Program (Korea University) under Grant RS-2019-II190079, and in part by the Information Technology Research Center (ITRC) under Grant IITP-2025-RS-2024-00436857. 
+
+ABSTRACT Open-vocabulary object detection (OVD) aims to localize and classify objects from arbitrary categories. These categories are specified through textual input and are not limited to a predefined set. The existing methods explicitly utilize hierarchical semantic representations of super-/sub-categories to establish semantic relationships between base categories and unseen novel categories. These methods rely on a fixed connector such as “, which is a”, and this fixed connector is placed between each adjacent super-/sub-category to integrate them together. However, these methods are not an optimal solution because these relationships rely on hand-crafted connectors. To address this issue, we propose interconnected hierarchical semantic representations (InterHier). InterHier utilizes a prepended learnable context to globally guide the interpretation of prompts containing hierarchical relationships. InterHier operates in two main stages. In the first stage, InterHier constructs the hierarchy-aware prompt by integrating super-/sub-categories and then prepending a learnable context. In the second stage, InterHier optimizes this learnable context to align the visual region embeddings and textual embeddings. InterHier demonstrates consistently improved performance over methods that rely on fixed connectors. Moreover, InterHier offers high versatility and allows for seamless integration into existing OVD models. On OVD benchmarks, InterHier achieves competitive performance against other state-of-the-art methods. 
+
+INDEX TERMS Hierarchy-aware prompt, learnable context, object detection, open-vocabulary, prompt learning, semantic alignment, semantic hierarchy 
+
+I. INTRODUCTION 
+
+Recent advancements in computer vision [1]–[17] have im-proved a wide range of visual understanding tasks, such as image classification, object detection, and semantic seg-mentation. In particular, the development of vision-language models (VLMs) [18]–[20] has enabled effective joint learn-ing of visual and textual information. This joint learning has led to improvements in model expressiveness and generaliza-tion across multi-modal reasoning tasks. These tasks include image captioning [21]–[23], visual question answering [24]– [26], and vision-text retrieval [27]–[29]. Building upon these developments, open-vocabulary object detection (OVD) has emerged as a crucial task. OVD aims to detect objects from arbitrary categories that are specified through textual input and are not limited to a predefined set. This capability is enabled by VLMs such as CLIP [18] and ALIGN [19]. These models are trained on extensive image-text datasets to establish a semantic alignment between visual and textual embeddings. While the semantic alignment provides capabilities for image-level recognition, this alignment often struggles to capture the complex relationships between object categories. To further improve the recognition of diverse and unseen categories, the existing methods [30], [31] explore hierarchi-cal semantic structures. For instance, DetLH [30] leverages a language hierarchy to structure semantic relationships be-tween categories. DetLH expands weak image-level labels to generate more accurate pseudo-labels for the detector. Addi-tionally, SHiNe [31] constructs hierarchy-aware prompts by using a fixed connector such as “, which is a”, to sequentially integrate categories from the coarsest level to the finest level. The coarsest level represents a general super-category such as “vehicle”, while the finest level represents a specific sub-category such as “scooter”. Through this integration, SHiNe is designed to improve the semantic relationships between super-/sub-categories. However, despite this sequential inte-    
+
+> VOLUME 14, 2026 ©2026 The Authors. This work is licensed under a Creative Commons Attribution 4.0 License. For more information, see https://creativecommons.org/licenses/by/4.0/ 1arXiv:2609.24026v1 [cs.CV] 21 Sep 2026 Y.-J. Kim et al. : InterHier: Learning Interconnected Hierarchical Semantics for Open-Vocabulary Object Detection
+
+gration of categories, these methods are not an optimal solu-tion because these prompts rely on hand-crafted connectors. To demonstrate this issue, Fig. 1 presents a comparative analysis evaluating different fixed connectors used to in-tegrate these hierarchical relationships across the six label granularity levels on iNatLoc [32]. First, the Comma con-nector clearly separates each category, showing improved performance over the Concat connector, which lacks this separation. This result is attributed to the Concat connector creating a single, grammatically unnatural phrase. Addition-ally, the simpler A connector demonstrates a more concise representation of the categories than the IS-A connector [31]. The verbose IS-A connector includes non-visual glue words such as “which” and “is”. These extra words require the VLM to process unnecessary grammatical structures that have no direct correspondence with the visual features. Furthermore, this formal grammatical structure creates a mismatch with the pre-training data of the model, which largely consists of concise captions rather than verbose structured sentences. Finally, the Non-Lexical connector that does not encode hier-archical semantic meaning exhibits insignificant performance differences from the IS-A connector. These results suggest that the inherent limitations of using hand-crafted connectors prevent these methods from being an optimal solution. In this paper, we propose interconnected hierarchical se-mantic representations (InterHier), a novel method that en-hances the representation of hierarchical semantic relation-ships. Instead of relying on fixed connectors, InterHier uti-lizes a prepended learnable context that globally guides the interpretation of the entire prompt. This global learnable con-text enables the self-attention mechanism of the text encoder to capture the complex hierarchical relationships between all categories. The framework of InterHier proceeds in two main stages. In the first stage, InterHier constructs the hierarchy-aware prompt by integrating super-/sub-categories and then prepending a learnable context. In the second stage, InterHier optimizes this learnable context to align the visual region em-beddings and their corresponding textual embeddings. Inter-Hier demonstrates consistently improved performance over methods that rely on fixed connectors. Moreover, InterHier is designed to seamlessly integrate into existing OVD models and allows its adoption across diverse hierarchical structures. To this end, we validate the effectiveness of InterHier through extensive experiments on multiple OVD benchmarks. The results on iNatLoc and the existing few-shot object detection (FSOD) benchmark [33] show that InterHier consistently im-proves hierarchical semantic representations. These findings highlight the adaptability of InterHier across varying levels of semantic granularity and supervision settings. Furthermore, InterHier achieves competitive performance on the open-vocabulary LVIS (OV-LVIS) [34] and the open-vocabulary COCO (OV-COCO) benchmarks [35]. These experiments demonstrate its effectiveness against other state-of-the-art methods. Additionally, we conduct a qualitative evaluation to verify the effectiveness of InterHier. These results confirm that InterHier enhances the discriminative representations Level 1 (coarsest) Level 2 Level 3 Level 4 Level 5 Level 6 (finest)                            
+
+> Levels
+> Concat Comma ANon-Lexical IS-A
+> 62.2 70.7 82.3 84.5 84.4 83.7 67.1 74.6 84.6 86.2 85.9 85.4 68.3 75.6 85.0 86.8 87.1 86.9 63.4 72.9 83.0 85.3 85.9 85.9 64.9 73.8 84.2 86.2 86.3 86.4 65 70 75 80 85 mAP50 Concat: "A scooter| motorcycle| vehicle"
+> Comma: "A scooter, motorcycle, vehicle"
+> A: "A scooter, a motorcycle, a vehicle"
+> Non-Lexical: "A scooter, xxxx a motorcycle, xxxx a vehicle"
+> IS-A: "A scooter, which is a motorcycle, which is a vehicle"
+> FIGURE 1. Comparative analysis of different fixed connectors for constructing hierarchy-aware prompts on iNatLoc [32]: (top) Performance comparison across six levels of semantic granularity, using mean average precision (mAP) computed at an intersection-over-union (IoU) threshold of 0.5 (mAP50) as the evaluation metric. The x-axis illustrates the granularity levels, from the coarsest (Level 1) to the finest (Level 6). The y-axis represents the five different fixed connector evaluated; (bottom) Detailed examples of how each fixed connector is used to integrate super-/sub-category relationships. The examples shown are based on the level 3 hierarchy (scooter, motorcycle, vehicle). The connectors are defined as: Concat: directly appends a string of one class to the end of a string of another class. Comma: separates two category names with a comma. A: separates two category names with “, a”. Non-Lexical: separates two category names with non-lexical. IS-A: separates two category names with “, which is a”.
+
+that fixed connectors fail to provide. In summary, our main contributions are as follows:  
+
+> •
+
+We propose InterHier, which utilizes a prepended learn-able context to globally guide the interpretation of hier-archical semantic relationships  
+
+> •
+
+InterHier is designed to seamlessly integrate into exist-ing OVD models, demonstrating its high versatility and robustness across diverse hierarchical structures.  
+
+> •
+
+InterHier achieves superior performance over various state-of-the-art methods on OVD benchmarks: iNatLoc, FSOD, OV-LVIS, OV-COCO. 
+
+II. RELATED WORKS 
+
+A. OPEN-VOCABULARY OBJECT DETECTION 
+
+OVD [36]–[38] focuses on localizing and classifying object instances from a set of categories unseen during training. This task distinguishes itself from standard zero-shot de-tectors [39] by associating visual region embeddings at the region level with textual embeddings. These embeddings are obtained from VLMs [18]–[20] that have been trained to associate images with corresponding textual descriptions. This association is performed by calculating the cosine similarity between the visual embedding of a region and the textual embedding of a potential class name. Region-text alignment methods [40]–[44] have been developed to mitigate the disparity between visual detection tasks and   
+
+> 2VOLUME 14, 2026 Y.-J. Kim et al. : InterHier: Learning Interconnected Hierarchical Semantics for Open-Vocabulary Object Detection
+
+textual class descriptions. These methods enhance zero-shot object detection capabilities and generalization to unseen novel classes. Building upon these region-text alignment methods, InterHier utilizes a pre-trained OVD model as its base detector and enhances its classification performance. 
+
+> B. SEMANTIC HIERARCHY
+
+Semantic hierarchy [45], [46] organizes conceptual labels into a relational structure. This structure often takes the form of a tree-like taxonomy [47]. Such hierarchies have been leveraged in computer vision to enhance various tasks [48]– [51]. Early works used the structure of WordNet [45] to define a semantic distance between categories. This method aided knowledge transfer in zero-shot learning and improved object classification. Recent work on large-scale datasets with built-in hierarchies [32] shows that appropriate la-bel granularity improves performance when training models for weakly supervised object localization. Building on this, SHiNe [31] applies a semantic hierarchy nexus classifier to pre-trained region-text aligned OVD detectors. This method relies on hand-crafted connectors that are not optimal for representing the relationships between super-/sub-categories. In contrast, InterHier utilizes a prepended learnable context to improve the representation of hierarchical semantic rela-tionships. 
+
+> C. PROMPT LEARNING
+
+Prompt learning [52] has been studied as a learning method designed to leverage the capabilities of pretrained large language models [53]–[55] or VLMs [18]–[20]. While conventional methods involved manually designed fixed prompts, recent research has explored methods that incor-porate prompts themselves as learnable parameters within the model. The prompt tuning methods [56]–[58] incorpo-rate learnable token embeddings into textual prompts. These methods enable task-specific fine-tuning for downstream tasks. CoOp [56] introduces context optimization, which for-mulates prompts as continuous embeddings. These embed-dings are updated through end-to-end training to automate the prompt engineering process. This automated process facilitates the adaptation of pretrained VLMs for downstream tasks. InterHier applies prompt learning to hierarchical se-mantic representation by prepending a learnable context. This learnable context is modeled as a continuous represen-tation that is optimized to globally guide the interpretation of the prompt. 
+
+> III. METHOD
+
+In this section, we describe InterHier, a method designed to enhance hierarchical semantic relationships in the OVD task. The framework of InterHier operates in two main stages. In the first stage, InterHier constructs the hierarchy-aware prompt by integrating super-/sub-categories and then prepending a learnable context. In the second stage, InterHier optimizes this learnable context to align the visual region embeddings and their corresponding textual embeddings. An overview is illustrated in Fig. 2. 
+
+> A. PRELIMINARY
+> 1) Problem formulation
+
+The primary goal of OVD is to detect objects from arbi-trary categories within an image using textual input. These categories are not limited to a predefined set. This task is performed in a zero-shot manner, without requiring any ad-ditional model training. Given an input image, a model aims to identify all foreground objects by estimating bounding box coordinates and corresponding class labels, represented as: 
+
+{bm, dm}Nd
+
+> m=1
+
+, (1) where Nd is the number of detected objects. Each bm ∈ R4
+
+denotes the bounding box coordinates for the m-th object. The corresponding class label dm is selected from Ctest ,which is the user-specified vocabulary set used at test time. 
+
+> 2) Open-vocabulary object detector
+
+Predominant OVD detectors [40], [42] are built upon a two-stage detection framework. This process begins with an input image. In the first stage, a region proposal network (RPN) processes the image to construct a set of Nr candidate region proposals. This step yields a collection of region of interest (RoI) feature embeddings, which we denote as {zj}Nr
+
+> j=1
+
+. In the second stage, each RoI feature embedding zj is processed by two separate heads for box regression and classification. The regression head refines the bounding box coordinates, while the classification head assigns a class label. For open-vocabulary capability, the weights of the classifier are derived from textual embeddings of the user-defined classes Ctest ,which are obtained from a pre-trained VLM. The classi-fication is determined by computing the cosine similarity between each visual RoI embedding zj and the textual em-bedding zc for every candidate class. The target class yielding the highest similarity score is assigned to the object. 
+
+> 3) Querying the semantic hierarchy
+
+To construct the hierarchy-aware classifier weights, our pro-cess begins by utilizing the semantic hierarchy, which pro-vides structured relationships between object categories. In this work, we derive this hierarchy directly from the ground-truth class taxonomies provided by the datasets [32], [33]. This hierarchy is utilized to process each target class c within the test vocabulary Ctest . The composition of this vocabulary 
+
+Ctest is dependent on the selected semantic granularity level. For each target class c within the test vocabulary Ctest , our process begins by identifying all finest-level categories that are sub-categories of c within the given taxonomy. We con-struct a hierarchical series for each of these identified finest-level categories. A valid traversal is defined as the process of constructing an ordered list of categories. This construction starts from a specific finest-level category. The traversal pro-ceeds upwards by following its super-category connections.   
+
+> VOLUME 14, 2026 3Y.-J. Kim et al. : InterHier: Learning Interconnected Hierarchical Semantics for Open-Vocabulary Object Detection Pre-trained
+> ROI Extractor
+
+Bounding Box 
+
+Regression 
+
+> Classification
+
+Input image 
+
+> Pre-trained
+> Text Encoder
+
+Retrieved hierarchical categories 
+
+Integrating each hierarchy-aware prompt 𝒕 𝒌 
+
+of the target class “Motorcycle” 
+
+by prepending Learnable Context 
+
+InterHier: Learning Interconnected Hierarchical Semantics for Open-vocabulary Object Detection  
+
+> [𝒗 𝟏 , 𝒗 𝟐 , … , 𝒗 𝑵 𝒍 ]
+
+scooter, a motorcycle, a vehicle  
+
+> [𝒗 𝟏 , 𝒗 𝟐 , … , 𝒗 𝑵 𝒍 ]
+
+replica, a motorcycle, a vehicle  
+
+> [𝒗 𝟏 , 𝒗 𝟐 , … , 𝒗 𝑵 𝒍 ]
+
+off-
+
+roader, a motorcycle, 
+
+a vehicle    
+
+> ⋯
+> Vehicle
+> Motorcycle
+> Scooter Replica Off-roader
+> ⋯
+> [𝒗 𝟏 , 𝒗 𝟐 , … , 𝒗 𝑵 𝒍 ]:
+> Learnable Context
+> Motorcycle
+
+ROI Proposals  {𝒛 𝒋 }𝒋=𝟏 𝑵 𝒓  
+
+> Aggregation
+> ⋯
+> FIGURE 2. Overview of the InterHier. The main idea is to construct hierarchy-aware prompt embeddings by prepending a set of learnable context vectors to prompts that represent the semantic hierarchy. These vectors integrate retrieved hierarchical categories into structured prompts and are optimized by minimizing the semantic alignment loss between visual and textual embeddings. The constructed prompts are encoded via a frozen text encoder, and the resulting embeddings are aggregated to form the hierarchy-aware classifier. The classifier is then used to assign semantic labels to the visual embeddings of the ROI proposals, which are combined with refined bounding box coordinates to yield the final detection.
+
+The list is complete when the traversal reaches the target class c, which is also included in the series. For instance, let the target class c be “vehicle” at level 3. One of its finest-level sub-categories is “scooter”. The valid traversal starting from “scooter” constructs the hierarchical series ( scooter ,
+
+motorcycle , vehicle ). This process is repeated for all other finest-level sub-categories of “vehicle”. This procedure yields a set of hierarchical series. Each hierarchical series is subsequently converted into a hierarchy-aware prompt, defined as tk. The construction of the hierarchy-aware prompt involves joining these category names with a specific textual connector. As shown in Fig. 1, the verbose IS-A connector [31] includes non-visual glue words such as “which” and “is”. These words require the VLM [18], [19] to process unnecessary grammatical struc-tures that have no direct correspondence with the visual features. Therefore, we adopt the simpler A connector for integrating the adjacent categories. For instance, the series of category names ( scooter , motorcycle , vehicle ) is converted into the prompt scooter, a motorcycle, a vehicle . The resulting prompts provide the structured input for InterHier. 
+
+B. INTERHIER 
+
+1) Hierarchical Prompt Learning 
+
+To improve the representation of these hierarchical rela-tionships, InterHier introduces a set of learnable context v,which is composed of a set of individual context vectors. The purpose of this learnable context is to globally guide the interpretation of the hierarchy-aware prompts. The learnable context v is defined as follows: 
+
+v = Concat (v1, v2, . . . , vNl ), (2) where Nl denotes the number of context vectors. To apply this learnable context v, we construct an input vector xk. We tokenize the hierarchy-aware prompt tk using the Tokenize (·) function adopted from CLIP [18], which converts the text into a sequence of token embeddings. The learnable context vectors v are prepended to the beginning of this sequence. The input vector xk is specified as follows: 
+
+xk = Concat (v, Tokenize (tk)) , (3) where xk is the concatenated sequence of the learnable con-text and the token embeddings. This input vector xk serves as a rich, hierarchy-aware representation for a single hierar-chical series. After constructing an input vector xk for each finest-level category, we group the resulting vectors into a set. The set of all input vectors Sc is represented as follows:   
+
+> 4VOLUME 14, 2026 Y.-J. Kim et al. : InterHier: Learning Interconnected Hierarchical Semantics for Open-Vocabulary Object Detection
+
+Sc =
+
+
+
+xk | k ∈ finest-level category index of the target class c
+
+
+
+. (4) Each input vector xk is passed through the pre-trained and frozen text transformer from CLIP, which is denoted as TextEncoder (·). To construct a single unified representation, we aggregate these resulting textual embeddings. Specifi-cally, we compute the arithmetic mean of all the constructed textual embeddings. The final hierarchy-aware textual em-beddings zc, which are defined as follows: 
+
+zc = 1
+
+n(Sc)
+
+X 
+
+> xk∈Sc
+
+TextEncoder (xk). (5) The final embedding zc serves as the hierarchy-aware clas-sifier weight for the target class c. The effectiveness of our method stems from the interaction between the learnable con-text and the self-attention mechanism of the text encoder. The prepended learnable context guides the model to interpret the sequence as a hierarchy. The self-attention layers consider all tokens in the sequence simultaneously. Therefore, the self-attention layers leverage this initial global context to infer the relationships between all category names. 
+
+2) Training and Inference 
+
+In the training phase, we optimize the learnable context vec-tors v. This optimization is achieved by aligning the result-ing class-level textual embedding zc with the corresponding visual RoI embeddings zj. Specifically, InterHier employs a contrastive loss function, similar to the one used in CLIP. For a given visual embedding zj belonging to a ground-truth class 
+
+c+, we design the loss to maximize its cosine similarity with the matching textual embedding zc+ . Simultaneously, the loss minimizes the similarity between zj and the embeddings of all other unrelated classes at that level. The total loss for the 
+
+Nr region proposals is the average of the individual losses, formulated as follows: 
+
+L = − 1
+
+NrNrX
+
+> j=1
+
+log exp( sim (zj, zc+ )/τ )
+
+PNc 
+
+> i=1
+
+exp( sim (zj, zci )/τ )
+
+!
+
+, (6) where sim (·, ·) denotes cosine similarity, Nc is the total number of training classes, zci is the textual embedding for the i-th class, and τ is a temperature hyperparameter. During this process, the visual encoder and detection head of the base model remain frozen. This prompt-tuning ensures that only the context vectors are updated. This method allows for efficient optimization while leveraging the pre-trained representations of the base detector. At inference time, the optimized context vectors are prepended to the hierarchy-aware prompts. These prompts are encoded via the frozen TextEncoder (·) to construct the textual embeddings zc for all classes at the desired evalua-tion levels. This set of embeddings forms the new classifier weight matrix. The classification of a region proposal with visual embedding zj is then performed by identifying the class with the highest cosine similarity, as follows: 
+
+ˆcj = arg max 
+
+> c∈C test
+
+(sim (zj, zc)) , (7) where ˆcj is the predicted class label for the j-th region pro-posal. The design of our method allows seamless integration into existing OVD models without requiring any architectural modifications to the base detector. 
+
+IV. EXPERIMENTS 
+
+A. DATASETS                             
+
+> TABLE 1. Evaluation dataset descriptions of iNatLoc [32] and FSOD [33]. Label granularity ranges from the coarsest (C) level to the finest (F) level.
+> Gran  iNatLoc FSOD Level Classes Sample Level Classes Sample C −−−−−−−→ F 6500 Felis catus 3200 Beer 5317 Felis 4184 Felidae 246 Drink 364 Carnivora 218 Mammalia 115 Liquid 15Chordata
+
+1) iNatLoc and FSOD 
+
+iNatLoc [32] and FSOD [33] offer ground-truth hierarchical annotations to support multi-level label granularity evalua-tion. iNatLoc is used for weakly supervised object local-ization and features a six-level biological taxonomy. This structure is organized from the coarsest level (“Phylum”) to the finest level (“Species”). As the hierarchy descends from coarser to finer levels, the intra-class variation decreases significantly. For instance, categories at the coarsest level contain broad, diverse objects, whereas categories at the finest level represent specific and visually consistent objects. For evaluation, iNatLoc provides bounding box annotations for its validation split. FSOD is a dataset curated for few-shot object detection, constructed by combining Open Im-ages [59] and ImageNet [60]. FSOD features a two-level hierarchical structure. For extended analysis, we use FSOD’s test split and directly adopt the three-level hierarchical struc-ture manually constructed in SHiNe [31]. Tab. 1 presents the number of label hierarchy levels and their corresponding category distributions for both datasets, supplemented with samples to highlight differences in semantic granularity. 
+
+2) OV-LVIS and OV-COCO 
+
+OV-LVIS [34] and OV-COCO [35] are designed to evaluate the ability of a model to generalize from a set of base training classes to novel classes. OV-LVIS is a benchmark that fea-tures a large vocabulary of over 1,000 object categories with a natural, long-tail distribution of instances per category. For the open-vocabulary task, the classes are partitioned based on their frequency of occurrence. The set of 866 common    
+
+> VOLUME 14, 2026 5Y.-J. Kim et al. : InterHier: Learning Interconnected Hierarchical Semantics for Open-Vocabulary Object Detection
+> TABLE 2. Detection results are evaluated on iNatLoc [32] across six label granularity levels, ranging from the coarsest (C) level to the finest (F) level, using ground-truth hierarchies. InterHier is directly integrated into the baseline without any architectural changes. ResNet-50 [1] and Swin-B [61] backbones are compared. Each backbone is evaluated under various supervision settings: LVIS [34], LVIS + IN-L [60], LVIS + IN-21k [60], and LVIS & COCO [35] + IN-21k. mAP50 is reported.
+
+ResNet-50 Backbone Swin-B Backbone iNatLoc LVIS LVIS + IN-L LVIS LVIS + IN-L LVIS + IN-21k LVIS & COCO + IN-21k Gran Lev SHiNe InterHier SHiNe InterHier SHiNe InterHier SHiNe InterHier SHiNe InterHier SHiNe InterHier C −−−−−−−−−−−→ F L6 48.4 54.3(+5.9) 57.1 60.8(+3.7) 76.7 80.9(+4.2) 83.8 87.3(+3.5) 86.3 88.6(+2.3) 86.4 89.1(+2.7) 
+
+L5 49.4 56.6(+7.2) 59.0 63.0(+4.0) 77.7 82.9(+5.2) 84.8 87.9(+3.1) 86.8 88.8(+2.0) 86.3 89.0(+2.7) 
+
+L4 51.5 58.3(+6.8) 61.4 64.6(+3.2) 76.6 83.2(+6.6) 84.4 88.4(+4.0) 87.7 89.5(+1.8) 86.2 89.0(+2.8) 
+
+L3 56.5 62.4(+5.9) 65.3 68.2(+2.9) 75.3 82.4(+7.1) 84.4 86.3(+1.9) 86.9 89.3(+2.4) 84.2 87.2(+3.0) 
+
+L2 45.0 51.5(+6.5) 53.7 56.2(+2.5) 62.1 70.2(+8.1) 73.1 76.6(+3.5) 78.1 82.6(+4.5) 73.8 77.6(+3.8) 
+
+L1 33.6 39.9(+6.3) 43.3 45.9(+2.6) 49.7 65.2(+15.5) 59.4 69.9(+10.5) 70.3 78.9(+8.6) 64.9 75.2(+10.3)  
+
+> TABLE 3. Detection results are evaluated on FSOD [33] across three label granularity levels, ranging from the coarsest (C) level to the finest (F) level, using ground-truth hierarchies. InterHier is directly integrated into the baseline without any architectural changes. ResNet-50 [1] and Swin-B [61] backbones are compared. Each backbone is evaluated under various supervision settings: LVIS [34], LVIS + IN-L [60], LVIS + IN-21k [60], and LVIS & COCO [35] + IN-21k. mAP50 is reported.
+
+ResNet-50 Backbone Swin-B Backbone FSOD LVIS LVIS + IN-L LVIS LVIS + IN-L LVIS + IN-21k LVIS & COCO + IN-21k Gran Lev SHiNe InterHier SHiNe InterHier SHiNe InterHier SHiNe InterHier SHiNe InterHier SHiNe InterHier C −−−→ F L3 52.1 52.2(+0.1) 53.6 53.9(+0.3) 61.1 61.6(+0.5) 62.7 63.2(+0.5) 66.7 66.8(+0.1) 66.4 67.1(+0.7) 
+
+L2 39.9 41.0(+1.1) 39.8 41.2(+1.4) 46.5 48.2(+1.7) 46.6 48.1(+1.5) 51.4 52.1(+0.7) 52.4 53.5(+1.1) 
+
+L1 34.3 36.2(+1.9) 31.4 33.5(+2.1) 38.5 42.2(+3.7) 35.9 39.2(+3.3) 42.2 44.3(+2.1) 42.5 45.5(+3.0) 
+
+and 405 frequent classes are used as the base categories for training, while the 337 rare classes are held out as the novel categories for evaluation. OV-COCO is a standard benchmark for object detection, featuring 80 common object categories found in complex, everyday scenes. For the open-vocabulary setting, the classes are partitioned into two distinct sets. These sets are composed of 48 base classes for training and 17 novel classes that are held out for testing. The evaluation is then conducted on a comprehensive validation set that includes images containing objects from both base categories and novel categories. 
+
+B. SETUP 
+
+1) Evaluation metrics 
+
+For our primary experiments on iNatLoc [32] and FSOD [33], we follow the cross-dataset transfer evaluation (CDTE) protocol [37] and use the mean average precision (mAP) at an intersection-over-union (IoU) threshold of 0.5 (mAP50). We also conduct additional experiments on OV-LVIS and OV-COCO, reporting both the overall average precision (AP) at IoU threshold of 0.5 (AP50) for these datasets. For OV-LVIS [34], we follow the open-vocabulary protocol [62] where the rare objects are defined as novel cat-egories. Our reported metric is the bounding box AP across IoUs from 0.5 to 0.95 for rare classes, which is denoted as AP r. For OV-COCO [35], we report AP50 and evaluate InterHier performance under three distinct and comprehen-sive settings: (1) predict and evaluate only novel categories (Novel), (2) predict and evaluate only base categories (Base), and (3) a generalized setting to predict and evaluate all categories (All). 
+
+2) Baseline 
+
+We adopt SHiNe [31] as our primary baseline method. Similar to InterHier, SHiNe is a method that focuses on improving OVD performance by integrating semantic hierar-chies into text prompts. Therefore, SHiNe serves as the most relevant and direct baseline for evaluating our contributions. We use the pre-trained Detic [40] as our baseline detector. Detic is a two-stage OVD detector built upon the Center-Net2 [63] framework. For classification, Detic employs an open-vocabulary classifier created using textual embeddings from the pre-trained CLIP [18] text encoder. Classification scores for each region are then calculated through cosine similarity between the visual and the textual embeddings. Detic leverages both detection and classification datasets with image-level supervision, assigning labels to the region proposals. As backbones for this framework, we adopt a ResNet-50 [1] and a Swin-B [61] pre-trained on ImageNet-21k-P [64].    
+
+> 6VOLUME 14, 2026 Y.-J. Kim et al. : InterHier: Learning Interconnected Hierarchical Semantics for Open-Vocabulary Object Detection
+> TABLE 4. Comparison of InterHier with state-of-the-art methods on OV-LVIS [34]. InterHier is presented with different backbones. The table is divided into two comparison groups: ResNet-50 [1] Comparison: provides a fair evaluation where all methods use the same backbone to isolate the performance of the proposed method. System-level Comparison: evaluates the overall system performance against other state-of-the-art models that utilize various backbones.
+
+Method Backbone AP r AP 
+
+ResNet-50 Comparison: 
+
+ViLD [62] RN50 (24M) 16.3 24.4 VL-PLM [65] RN50 (24M) 17.2 27.0 OV-DETR [66] RN50 (24M) 17.4 26.6 Detic [40] RN50 (24M) 17.8 26.8 F-VLM [67] RN50 (24M) 18.6 24.2 PromptDet [68] RN50 (24M) 19.0 21.4 BARON [69] RN50 (24M) 19.2 26.5 MM-OVOD [70] RN50 (24M) 19.3 30.6 DetPro [71] RN50 (24M) 19.8 25.9 OVMR [72] RN50 (24M) 21.2 30.0 OADP [73] RN50 (24M) 21.9 28.7 
+
+InterHier (Ours) RN50 (24M) 22.1 30.2 
+
+System-level Comparison: 
+
+RegionCLIP [41] RN50x4 (87M) 22.0 32.3 CondHead [74] RN50x4 (87M) 24.4 32.0 OWL-ViT [75] ViT-L/14 (307M) 25.6 34.7 F-VLM [67] RN50x4 (87M) 26.3 28.5 RO-ViT [76] ViT-B/16 (86M) 28.0 30.2 CORA [77] RN50x4 (87M) 28.1 -CFM-ViT [78] ViT-B/16 (86M) 28.8 32.0 CoDet [42] Swin-B (88M) 29.4 39.2 DITO [43] ViT-B/16 (86M) 32.5 34.0 Detic [40] Swin-B (88M) 33.8 40.7 OVMR [72] Swin-B (88M) 34.4 40.9 
+
+InterHier (Ours) Swin-B (88M) 36.1 42.6 
+
+3) Implementation details 
+
+All experiments are conducted on a single NVIDIA A100 GPU environment. During the training phase, only the learn-able context vectors are optimized, while the parameters of Detic [40] and the pre-trained CLIP [18] text encoder remain frozen. The number of learnable context vectors Nl is set to 4 for all experiments. 
+
+C. MAIN RESULTS 
+
+1) iNatLoc 
+
+Tab. 2 provides the detection performance of InterHier eval-uated across six label granularity levels on iNatLoc [32], uti-lizing its ground-truth hierarchical structures. To thoroughly examine the generalizability of InterHier, we compare its per-formance when directly integrated into baseline OVD mod-els. This comparison is conducted with two distinct backbone architectures (e.g., ResNet-50 [1] and Swin-B [61]). Each backbone is evaluated under various supervision settings, including LVIS [34], LVIS + IN-L [60], LVIS + IN-21k [60], and LVIS & COCO [35] + IN-21k. Under all supervision and backbone settings, InterHier consistently outperforms the baseline method across all levels of label granularity. With  
+
+> TABLE 5. Comparison of InterHier with state-of-the-art methods on OV-COCO [35]. InterHier is presented with a ResNet-50 [1] backbone against other state-of-the-art methods that use the same backbone architecture. Performance is reported as AP50 under three distinct settings: novel categories (Novel), base categories (Base), and all categories (All).
+
+Generalized (17 + 48) Method Backbone Novel Base All OVR-CNN [79] RN50 (24M) 22.8 46.0 39.9 PromptDet [68] RN50 (24M) 26.6 - 50.6 RegionCLIP [41] RN50 (24M) 26.8 54.8 47.5 ViLD [62] RN50 (24M) 27.6 59.5 51.2 Detic [40] RN50 (24M) 27.8 51.1 45.0 F-VLM [67] RN50 (24M) 28.0 - 39.6 OV-DETR [66] RN50 (24M) 29.4 61.0 52.7 OADP [73] RN50 (24M) 30.0 53.3 47.2 CoDet [42] RN50 (24M) 30.6 52.3 46.6 PB-OVD [80] RN50 (24M) 30.8 46.1 42.1 VLDet [81] RN50 (24M) 32.0 50.6 45.8 MEDet [82] RN50 (24M) 32.6 54.0 49.4 BARON [69] RN50 (24M) 34.0 60.4 53.5 VL-PLM [65] RN50 (24M) 34.4 60.2 53.5 CORA [77] RN50 (24M) 35.1 35.5 35.4 CCKT-Det [83] RN50 (24M) 38.0 - 35.0 
+
+InterHier (Ours) RN50 (24M) 37.4 58.7 53.1 
+
+the ResNet-50 backbone, InterHier not only demonstrates performance improvements at the coarsest granularity level (L1) but also maintains robust improvements at the finest granularity level (L6). With the Swin-B backbone, InterHier achieves superior performance across all granularity levels. In particular, InterHier excels at the coarsest granularity level (L1), with significant improvements up to 15.5% (LVIS). These results demonstrate the effectiveness of a prepended learnable context for aligning textual and visual embeddings across diverse semantic granularities. 
+
+2) FSOD 
+
+Tab. 3 presents the performance comparison of InterHier on FSOD [33], which is a dataset designed for few-shot object detection in an open-vocabulary setting. While In-terHier yields a slight improvement on FSOD compared to the enhancement on iNatLoc in Tab. 2, this difference is reflective of the less diverse hierarchical structure in FSOD. Specifically, iNatLoc provides a six-level taxonomy with rich hierarchical semantic relationships. In contrast, FSOD pro-vides a much simpler hierarchy of three levels. This structural characteristic provides fewer hierarchical semantic relation-ships, which limits the advantage of InterHier that is de-signed to leverage rich hierarchical structures. Despite these dataset characteristics, InterHier still demonstrates consistent performance improvements on FSOD. InterHier outperforms the baseline method across various backbone architectures and supervision configurations. These results suggest that InterHier is a robust and versatile method capable of improv-ing performance with a less diverse or limited hierarchical structure.            
+
+> VOLUME 14, 2026 7Y.-J. Kim et al. : InterHier: Learning Interconnected Hierarchical Semantics for Open-Vocabulary Object Detection 100 200 300 400 500 600 700 800 900 1000
+
+Iteration 
+
+> 60 65 70 75 80
+> mAP50
+
+Level 1 100 200 300 400 500 600 700 800 900 1000 
+
+Iteration 
+
+> 65 70 75 80
+> mAP50
+
+Level 2 100 200 300 400 500 600 700 800 900 1000 
+
+Iteration 
+
+> 80 82 84 86 88
+> mAP50
+
+Level 3 100 200 300 400 500 600 700 800 900 1000 
+
+Iteration 
+
+> 80 82 84 86 88 90
+> mAP50
+
+Level 4 100 200 300 400 500 600 700 800 900 1000 
+
+Iteration 
+
+> 80 82 84 86 88
+> mAP50
+
+Level 5 100 200 300 400 500 600 700 800 900 1000 
+
+Iteration 
+
+> 78 80 82 84 86 88
+> mAP50
+
+Level 6 LVIS LVIS + IN-L LVIS + IN-21k LVIS & COCO + IN-21k  
+
+> FIGURE 3. Performance comparison of InterHier with a Swin-B [61] backbone evaluated at different hierarchy levels (Level 1 to Level 6). mAP50 is plotted over training iterations (100 to 1,000). Each curve represents results obtained from models trained on various datasets: LVIS [34] (orange), LVIS + IN-L [60] (blue), LVIS + IN-21k [60] (brown), and LVIS & COCO [35] + IN-21k (green).
+
+3) OV-LVIS 
+
+Tab. 4 demonstrates the comparison of InterHier with state-of-the-art methods on OV-LVIS [34]. We follow a strict open-vocabulary setting [62], where novel categories are kept entirely unknown during the training phase. This ensures that the detector is not biased towards any specific set of novel classes. To ensure a fair comparison, Tab. 4 lists the backbone architecture, as this factor influences the results. Across all evaluated backbones and data settings, InterHier consistently outperforms other state-of-the-art methods. In the ResNet-50 comparison group, InterHier obtains an AP r of 22.1%, surpassing previous methods. In the System-level compari-son group, InterHier also outperforms all other state-of-the-art methods with a Swin-B backbone. InterHier achieves an AP r of 36.1%, which is the highest score in Tab. 4 and exceeds other OVD models using the same backbone, such as Detic [40] and OVMR [72]. These results confirm that InterHier shows not only robust performance but also high generalizability for the OVD task. 
+
+4) OV-COCO 
+
+Tab. 5 presents the comparison of InterHier with state-of-the-art methods on OV-COCO [35]. With a ResNet-50 backbone, InterHier achieves a competitive Novel AP50 of 37.4%. While CCKT-Det [83] currently achieves state-of-the-art on novel classes, its performance on all categories is significantly lower. In contrast, InterHier demonstrates superior performance on base and all categories, maintaining competitive performance against other state-of-the-art meth-ods. This performance trade-off stems from the OV-COCO dataset characteristics. If a hierarchy were constructed for OV-COCO by leveraging large language models to derive hierarchical semantics, we believe that InterHier shows im-proved performance on novel categories. Nonetheless, we maintained this single-level setup to ensure a fair comparison with other methods that do not employ external hierarchies on OV-COCO. Specifically, InterHier achieves a Base AP50 of 58.7% and an All AP50 of 53.1%. These results indicate that InterHier not only maintains competitive performance on novel classes but also demonstrates robust overall detection capabilities. 
+
+D. FURTHER ANALYSIS 
+
+1) Visualization of performance convergence 
+
+To analyze the convergence process of InterHier under differ-ent label granularities, we visualize the mAP50 performance of InterHier evaluated at diverse semantic granularity levels. Fig. 3 demonstrates the convergence trends across six hier-archical levels on iNatLoc [32]. These results are evaluated over training iterations from 100 to 1,000 with a Swin-B backbone. The evaluation is conducted with models trained on four different dataset configurations: LVIS [34], LVIS + IN-L [60], LVIS + IN-21k [60], and LVIS & COCO [35] + IN-21k. InterHier demonstrates performance improvements across all hierarchy levels throughout the training process. All models achieve rapid convergence with as few as 100 training iterations. We observe slight performance variations in several intermediate iterations. These variations are at- 
+
+> 8VOLUME 14, 2026
+
+Y.-J. Kim et al. : InterHier: Learning Interconnected Hierarchical Semantics for Open-Vocabulary Object Detection arana aurora  , arana  , arani dae  , aan ura  , aamphi bia  , achor data [EOS] 
+
+Key Position 
+
+> [SOS] arana aurora ,arana ,arani dae ,aan ura ,aamphi bia ,achor data [EOS]
+> Query Position
+
+(a) Baseline [v1][v2][v3][v4]rana aurora  , arana  , arani dae  , aan ura  , aamphi bia  , achor data [EOS] 
+
+Key Position 
+
+> [SOS] [v1][v2][v3][v4]rana aurora ,arana ,arani dae ,aan ura ,aamphi bia ,achor data [EOS]
+> Query Position
+
+(b) InterHier 
+
+FIGURE 4. Visualization of self-attention map from the final layer of the CLIP [18] text encoder, comparing the baseline model [40] using the A connector with InterHier on iNatLoc [32]. InterHier is trained on LVIS [34] & COCO [35] + IN-21k [60]. 
+
+tributed to the relatively small batch size and the limited size of the training dataset. Nonetheless, such variations are temporary in nature, and the overall convergence trend continues to improve consistently throughout training. These results demonstrate that InterHier not only enhances OVD performance with minimal training but also provides rapid convergence. 
+
+2) Visualization of self-attention map 
+
+To analyze the prepended learnable context guides the self-attention, we visualize the self-attention map from the final layer of the CLIP [18] text encoder in Fig. 4. We com-pare the self-attention patterns of the baseline model [40] using the A connector against InterHier for prompts at finest granularity level (Level 6). As shown in Fig. 4, Inter-Hier shows a changed self-attention pattern compared to the baseline model. The prepended learnable context vectors 
+
+[v1, v2, v3, v4] guide the model to focus on all hierarchical levels from the finest level class “Rana aurora” to the coarsest level class “Chordata”. Furthermore, InterHier redistributes the self-attention map in regions other than the learnable 
+
+TABLE 6. Ablation study on the learnable context connector. This table compares how mAP50 performance changes depending on how fixed connectors and learnable context are combined. The experiment is conducted using InterHier, which is built upon Detic [40] with a Swin-B [61] backbone and evaluated on iNatLoc [32]. [v] denotes the learnable context connector and the best result is highlighted in bold. 
+
+Prompt mAP50 #1 a [CLASS], which is a [CLASS], ... , which is a [CLASS] 64.9 #2 a [CLASS], a [CLASS], ... , a [CLASS] 68.3 #3 a [CLASS], [v] [CLASS], ... , [v] [CLASS] 70.2 #4 [v] [CLASS], [v] [CLASS], ... , [v] [CLASS] 69.3 #5 [v] [CLASS], a [CLASS], ... , a [CLASS] 75.2 1 2 4 8 16  
+
+> Number of Context Vectors Nl
+> 72.5 73.0 73.5 74.0 74.5 75.0 75.5
+> mAP50
+> 73.1 74.8 75.2 74.5 72.7
+> InterHier (LVIS & COCO + IN-21k)
+
+FIGURE 5. Ablation study on the number of learnable context vectors Nl . We report mAP50 on iNatLoc [32] as Nl is ranged from 1 to 16. InterHier is trained on LVIS [34] & COCO [35] + IN-21k [60]. 
+
+context. For example, the attention weight from the query position for “Rana aurora” to the key position for “Chordata” is higher under InterHier compared to the baseline model, indicating a strengthened relationship between super-/sub-categories. These results demonstrate that the learnable con-text allows the model to focus on the necessary hierarchical part of the interconnected structure by adjusting the original self-attention map. 
+
+3) Ablation study on the components of the hierarchical prompt 
+
+Tab. 6 presents an ablation study on the components of the hierarchical prompt, evaluating how different combinations of fixed text connectors and the learnable context affect mAP50 performance. First, we compare prompts composed of only fixed connectors (Rows #1 and #2). The result shows that the simpler A connector leads to a clear performance improvement over the IS-A connector. This finding suggests that for representing hierarchical relationships, simple and direct connections exhibit stronger semantic alignment than manually designed complex phrases. Subsequently, we an-alyze configurations that incorporate the learnable context. Replacing the fixed connectors with the learnable context (Rows #3 and #4) further boosts performance over the fixed connectors. The highest mAP50 of 75.2% is achieved when the learnable context is prepended to the entire prompt, which then uses the A connector for subsequent categories (Row  
+
+> VOLUME 14, 2026
+
+9Y.-J. Kim et al. : InterHier: Learning Interconnected Hierarchical Semantics for Open-Vocabulary Object Detection Level 1  Level 2  Level 3  Level 4  Level 5  Level 6 
+
+> SHiNe InterHier
+
+(a) Qualitative results for target object ranging from “Arthropoda” (Level 1) to “Callinectes sapidus” (Level 6). Level 1  Level 2  Level 3  Level 4  Level 5  Level 6 
+
+> SHiNe InterHier
+
+(b) Qualitative results for target object ranging from “Arthropoda” (Level 1) to “Callinectes sapidus” (Level 6).  
+
+> FIGURE 6. Qualitative comparison of the detection results between SHiNe [31] and InterHier. Both models are applied to Detic [40] with a Swin-B [61] backbone and evaluated on iNatLoc [32] across six different label granularity levels. Green boxes indicate correct classifications, while red boxes denote misclassifications. The absence of a bounding box signifies a detection failure by the model. All results are reported in terms of mAP50.
+
+#5). These results suggest that the learnable context provides superior performance when applied as a global, prepended prompt that contextualizes the entire hierarchical sequence. 
+
+4) Ablation study on learnable context vectors 
+
+Fig. 5 illustrates the results of the ablation study to determine the optimal number of learnable context vectors Nl in Eq. (2). To analyze its influence, we experiment with Nl from 1 to 16 and evaluate the mAP50 performance on iNatLoc [32]. InterHier is trained on LVIS [34] & COCO [35] + IN-21k [60]. The performance at Nl of 1 is the mAP50 of 73.1% and peaks at Nl of 4, which achieves the mAP50 of 75.2%. Increasing the number of context vectors beyond 4 leads to performance degradation, as seen with the mAP50 of 74.5% at Nl of 8 and 72.7% at Nl of 16. These results confirm that 
+
+Nl of 4 provides the optimal setting for our method. 
+
+E. QUALITATIVE RESULTS 
+
+Fig. 6 presents a detailed qualitative comparison of the de-tection results between SHiNe [31] and our proposed Inter-Hier. The comparison is conducted across six hierarchical levels on iNatLoc [32]. As shown in Fig. 4 (a), InterHier demonstrates superior detection performance over the base-line model, SHiNe, at coarser levels. For instance, at level 1, InterHier correctly classifies the object as “Arthropoda”, while SHiNe does not provide a prediction. These results indicate that InterHier performs robustly and generalizes even at broad semantic levels, which consist of a wide and highly diverse set of objects. Furthermore, as shown in Fig. 4 (b), InterHier correctly detects an object at finer levels that the baseline model misclassifies. For instance, at level 6, SHiNe incorrectly classifies the bird as “Cepphus columba”, whereas InterHier accurately identifies the object as “Anas platyrhynchos”. These results demonstrate InterHier’s ability to distinguish subtle visual differences and to detect objects accurately at fine-grained levels, where objects are specific and visually consistent. 
+
+V. CONCLUSION 
+
+In this paper, we propose InterHier, a novel method for modeling hierarchical semantic relationships. The existing methods are not an optimal solution due to their reliance on manually designed prompts with hand-crafted connec-tors. In contrast, InterHier addresses the limitations of pre-vious studies that rely on fixed connectors by prepending a global, learnable context. This context is optimized to align the resulting textual embedding of the prompt with the corresponding visual region embedding of the object. InterHier demonstrates consistently improved performance over methods that rely on fixed connectors. To this end, we validate the effectiveness of InterHier through extensive experiments on multiple OVD benchmarks. Across various   
+
+> 10 VOLUME 14, 2026 Y.-J. Kim et al. : InterHier: Learning Interconnected Hierarchical Semantics for Open-Vocabulary Object Detection
+
+backbones and supervision settings, InterHier consistently outperforms the baseline method, demonstrating its effec-tiveness and generalizability across diverse semantic gran-ularities and multiple training datasets. Moreover, InterHier achieves competitive performance against other state-of-the-art methods, demonstrating its effectiveness on large-scale OVD benchmarks. InterHier offers high versatility, allowing for seamless integration into existing OVD models. 
+
+REFERENCES 
+
+[1] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image recognition,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR) ,2016, pp. 770–778. [2] A. Dosovitskiy et al. , “An image is worth 16x16 words: Transformers for image recognition at scale,” in Int. Conf. Learn. Represent. (ICLR) , 2021. [3] H.-J. Kim, J.-H. Hong, H. Kong, and S.-W. Lee, “TE-TAD: Towards full end-to-end temporal action detection via time-aligned coordinate expres-sion,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) ,2024, pp. 18 837–18 846. [4] N. Wang et al. , “Weakly supervised image dehazing via physics-based decomposition,” IEEE Trans. Circuit Syst. Video Technol. , pp. 1–1, 2025. [5] D.-G. Lee, H.-I. Suk, S.-K. Park, and S.-W. Lee, “Motion influence map for unusual human activity detection and localization in crowded scenes,” 
+
+IEEE Trans. Circuit Syst. Video Technol. , vol. 25, no. 10, pp. 1612–1623, 2015. [6] Q. Peng et al. , “3d vision-language gaussian splatting,” in Int. Conf. Learn. Represent. (ICLR) , 2025. [7] M. Chouai and P. Dolezel, “CSU-Net: Contour semantic segmentation self-enhancement for human head detection,” IEEE Access , vol. 11, pp. 987–999, 2023. [8] M.-S. Lee, B.-W. Hwang, S. Sull, and S.-W. Lee, “Automatic video parsing using shot boundary detection and camera operation analysis,” in Proc. Int. Conf. Pattern Recognit. , vol. 2, 1998, pp. 1481–1483. [9] N. Wang et al. , “Large-scale hyperspectral image-projected clustering via doubly stochastic graph learning,” Remote Sens. , vol. 17, no. 9, p. 1526, 2025. [10] M.-C. Roh, T.-Y. Kim, J. Park, and S.-W. Lee, “Accurate object contour tracking based on boundary edge selection,” Pattern Recognit. , vol. 40, no. 3, pp. 931–943, 2007. [11] Q. Peng et al. , “NavigScene: Bridging local perception and global nav-igation for beyond-visual-range autonomous driving,” in Proc. ACM Int. Conf. Multimedia (ACM) , 2025, pp. 4193–4202. [12] D. Padilla Carrasco, H. A. Rashwan, M. Á. García, and D. Puig, “T-YOLO: Tiny vehicle detection based on YOLO and multi-scale convolutional neural networks,” IEEE Access , vol. 11, pp. 22 430–22 440, 2023. [13] Y. Su, N. Wang, Z. Cui, Y. Cai, C. He, and A. Li, “Real scene single image dehazing network with multi-prior guidance and domain transfer,” IEEE Trans. Multimedia , 2025. [14] J.-Y. Kim and J.-E. Ha, “MSF-NET: Foreground objects detection with fu-sion of motion and semantic features,” IEEE Access , vol. 11, pp. 145 551– 145 565, 2023. [15] N. Wang, Z. Cui, A. Li, Y. Xue, R. Wang, and F. Nie, “Multi-order graph based clustering via dynamical low rank tensor approximation,” 
+
+Neurocomputing , vol. 647, p. 130571, 2025. [16] Y. Lee, H.-J. Kim, and S.-W. Lee, “Text-infused attention and foreground-aware modeling for zero-shot temporal action detection,” Adv. Neural Inf. Process. Syst. (NeurIPS) , vol. 37, pp. 9864–9884, 2024. [17] N. Wang, Z. Cui, A. Li, R. Wang, and F. Nie, “Multi-view clustering based on doubly stochastic graph,” Sign. Proc. , vol. 238, p. 110144, 2025. [18] A. Radford et al. , “Learning transferable visual models from natural language supervision,” in Int. Conf. Mach. Learn. (ICML) , 2021, pp. 8748– 8763. [19] C. Jia et al. , “Scaling up visual and vision-language representation learning with noisy text supervision,” in Int. Conf. Mach. Learn. (ICML) , 2021, pp. 4904–4916. [20] J. Li, D. Li, C. Xiong, and S. Hoi, “BLIP: Bootstrapping language-image pre-training for unified vision-language understanding and generation,” in 
+
+Int. Conf. Mach. Learn. (ICML) , 2022, pp. 12 888–12 900. [21] O. Vinyals, A. Toshev, S. Bengio, and D. Erhan, “Show and Tell: A neural image caption generator,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2015, pp. 3156–3164. [22] X. Li et al. , “OSCAR: Object-semantics aligned pre-training for vision-language tasks,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2020, pp. 121– 137. [23] K. Cheng et al. , “CapArena: Benchmarking and analyzing detailed image captioning in the LLM era,” arXiv preprint arXiv:2503.12329 , 2025. [24] S. Antol et al. , “VQA: Visual question answering,” in Proc. Int. Conf. Comput. Vis. (ICCV) , 2015, pp. 2425–2433. [25] Y. Goyal, T. Khot, D. Summers-Stay, D. Batra, and D. Parikh, “Making the V in VQA Matter: Elevating the role of image understanding in visual question answering,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2017, pp. 6904–6913. [26] P. Anderson et al. , “Bottom-up and top-down attention for image caption-ing and visual question answering,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2018, pp. 6077–6086. [27] K.-H. Lee, X. Chen, G. Hua, H. Hu, and X. He, “Stacked cross attention for image-text matching,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2018, pp. 201–216. [28] Y.-C. Chen et al. , “UNITER: Universal image-text representation learn-ing,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2020, pp. 104–120. [29] W. Kim, B. Son, and I. Kim, “ViLT: Vision-and-language transformer without convolution or region supervision,” in Int. Conf. Mach. Learn. (ICML) , 2021, pp. 5583–5594. [30] J. Huang, J. Zhang, K. Jiang, and S. Lu, “Open-vocabulary object detection via language hierarchy,” in Adv. Neural Inf. Process. Syst. (NeurIPS) , 2024. [31] M. Liu, T. L. Hayes, E. Ricci, G. Csurka, and R. Volpi, “SHiNe: Semantic hierarchy nexus for open-vocabulary object detection,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2024, pp. 16 634–16 644. [32] E. Cole et al. , “On label granularity and object localization,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2022, pp. 604–620. [33] Q. Fan, W. Zhuo, C.-K. Tang, and Y.-W. Tai, “Few-shot object detection with attention-rpn and multi-relation detector,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2020, pp. 4013–4022. [34] A. Gupta, P. Dollar, and R. Girshick, “LVIS: A dataset for large vocabulary instance segmentation,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2019, pp. 5356–5364. [35] T.-Y. Lin et al. , “Microsoft COCO: Common objects in context,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2014, pp. 740–755. [36] J. Wu et al. , “Towards open vocabulary learning: A survey,” IEEE Trans. Pattern Anal. Mach. Intell. , vol. 46, no. 7, pp. 5092–5113, 2024. [37] C. Zhu and L. Chen, “A survey on open-vocabulary detection and segmen-tation: Past, present, and future,” IEEE Trans. Pattern Anal. Mach. Intell. ,vol. 46, no. 12, pp. 8954–8975, 2024. [38] Y. Li, Y. Wang, W. Wang, D. Lin, B. Li, and K.-H. Yap, “Open world object detection: A survey,” IEEE Trans. Circuits Syst. Video Technol. , vol. 35, no. 2, pp. 988–1008, 2025. [39] C. Tan, X. Xu, and F. Shen, “A survey of zero shot detection: Methods and applications,” Cogn. Robot. , vol. 1, no. 1, pp. 159–167, 2021. [40] X. Zhou, R. Girdhar, A. Joulin, P. Krähenbühl, and I. Misra, “Detecting twenty-thousand classes using image-level supervision,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2022, pp. 350–368. [41] Y. Zhong et al. , “RegionCLIP: Region-based language-image pretraining,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2022, pp. 16 793–16 803. [42] C. Ma, Y. Jiang, X. Wen, Z. Yuan, and X. Qi, “CoDet: Co-occurrence guided region-word alignment for open-vocabulary object detection,” Adv. Neural Inf. Process. Syst. (NeurIPS) , vol. 36, pp. 71 078–71 094, 2023. [43] D. Kim, A. Angelova, and W. Kuo, “Region-centric image-language pretraining for open-vocabulary detection,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2024, pp. 162–179. [44] Y. Xiao, Q. Fu, H. Tao, Y. Wu, Z. Zhu, and D. Hoiem, “TextRegion: Text-aligned region tokens from frozen image-text models,” arXiv preprint arXiv:2505.23769 , 2025. [45] C. Fellbaum, WordNet: An electronic lexical database . MIT press, 1998. [46] G. Van Horn et al. , “The inaturalist species classification and detection dataset,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) ,2018, pp. 4295–4304. [47] F. Wu, J. Zhang, and V. Honavar, “Learning classifiers using hierarchically structured class taxonomies,” in Int. Symp. on Abstr. Reformulation and Approx. , 2005, pp. 313–320. [48] J. Deng, A. C. Berg, K. Li, and L. Fei-Fei, “What does classifying more than 10,000 image categories tell us?” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2010, pp. 71–84. [49] A. Frome et al. , “DeViSE: A deep visual-semantic embedding model,” in 
+
+Adv. Neural Inf. Process. Syst. (NeurIPS) , 2013.   
+
+> VOLUME 14, 2026 11 Y.-J. Kim et al. : InterHier: Learning Interconnected Hierarchical Semantics for Open-Vocabulary Object Detection
+
+[50] J. Goodman, “Classes for fast maximum entropy training,” in Proc. IEEE Int. Conf. Acoust. Speech Signal Process. (ICASSP) , 2001, pp. 561–564. [51] L. Bertinetto, R. Mueller, K. Tertikas, S. Samangooei, and N. A. Lord, “Making Better Mistakes: Leveraging class hierarchies with deep net-works,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) ,2020, pp. 14 459–14 468. [52] P. Liu, W. Yuan, J. Fu, Z. Jiang, H. Hayashi, and G. Neubig, “Pre-train, prompt, and predict: A systematic survey of prompting methods in natural language processing,” ACM Comput. Surv. , vol. 55, no. 9, pp. 1–35, 2023. [53] J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova, “BERT: Pre-training of deep bidirectional transformers for language understanding,” in Conf. North Am. Chapt. Assoc. Comput. Linguist. (NAACL) , 2019, pp. 4171– 4186. [54] A. Radford et al. , “Language models are unsupervised multitask learners,” 
+
+OpenAI blog , vol. 1, no. 8, p. 9, 2019. [55] C. Raffel et al. , “Exploring the limits of transfer learning with a unified text-to-text transformer,” J. Mach. Learn. Res. , vol. 21, no. 140, pp. 1–67, 2020. [56] K. Zhou, J. Yang, C. C. Loy, and Z. Liu, “Learning to prompt for vision-language models,” Proc. Int. J. Comput. Vis. (IJCV) , vol. 130, no. 9, pp. 2337–2348, 2022. [57] C. Ju, T. Han, K. Zheng, Y. Zhang, and W. Xie, “Prompting visual-language models for efficient video understanding,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2022, pp. 105–124. [58] K. Zhou, J. Yang, C. C. Loy, and Z. Liu, “Conditional prompt learning for vision-language models,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2022, pp. 16 816–16 825. [59] A. Kuznetsova et al. , “The open images dataset v4: Unified image classifi-cation, object detection,” Proc. Int. J. Comput. Vis. (IJCV) , vol. 128, no. 7, pp. 1956–1981, 2020. [60] J. Deng, W. Dong, R. Socher, L.-J. Li, K. Li, and L. Fei-Fei, “ImageNet: A large-scale hierarchical image database,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2009, pp. 248–255. [61] Z. Liu et al. , “Swin Transformer: Hierarchical vision transformer using shifted windows,” in Proc. Int. Conf. Comput. Vis. (ICCV) , 2021, pp. 10 012–10 022. [62] X. Gu, T.-Y. Lin, W. Kuo, and Y. Cui, “Open-vocabulary object detection via vision and language knowledge distillation,” in Int. Conf. Learn. Represent. (ICLR) , 2022. [63] X. Zhou, V. Koltun, and P. Krähenbühl, “Probabilistic two-stage detec-tion,” arXiv:2103.07461, 2021. [64] T. Ridnik, E. Ben-Baruch, A. Noy, and L. Zelnik-Manor, “ImageNet-21K pretraining for the masses,” in Adv. Neural Inf. Process. Syst. (NeurIPS) ,2021. [65] S. Zhao et al. , “Exploiting unlabeled data with vision and language models for object detection,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2022, pp. 159–175. [66] Y. Zang, W. Li, K. Zhou, C. Huang, and C. C. Loy, “Open-vocabulary detr with conditional matching,” in Proc. Eur. Conf. Comput. Vis. (ECCV) ,2022, pp. 106–122. [67] W. Kuo, Y. Cui, X. Gu, A. Piergiovanni, and A. Angelova, “F-VLM: Open-vocabulary object detection upon frozen vision and language models,” in 
+
+Int. Conf. Learn. Represent. (ICLR) , 2023. [68] C. Feng et al. , “PromptDet: Towards open-vocabulary detection using uncurated images,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2022, pp. 701–717. [69] S. Wu, W. Zhang, S. Jin, W. Liu, and C. C. Loy, “Aligning bag of regions for open-vocabulary object detection,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2023, pp. 15 254–15 264. [70] P. Kaul, W. Xie, and A. Zisserman, “Multi-modal classifiers for open-vocabulary object detection,” in Int. Conf. Mach. Learn. (ICML) , 2023, pp. 15 946–15 969. [71] Y. Du, F. Wei, Z. Zhang, M. Shi, Y. Gao, and G. Li, “Learning to prompt for open-vocabulary object detection with vision-language model,” in 
+
+Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2022, pp. 14 084–14 093. [72] Z. Ma, S. Zhang, L. Wei, and Q. Tian, “OVMR: Open-vocabulary recogni-tion with multi-modal references,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2024, pp. 16 571–16 581. [73] L. Wang et al. , “Object-aware distillation pyramid for open-vocabulary object detection,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2023, pp. 11 186–11 196. [74] T. Wang, “Learning to detect and segment for open vocabulary object detection,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2023, pp. 7051–7060. [75] M. Minderer et al. , “Simple open-vocabulary object detection,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2022, pp. 728–755. [76] D. Kim, A. Angelova, and W. Kuo, “Region-aware pretraining for open-vocabulary object detection with vision transformers,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2023, pp. 11 144–11 154. [77] X. Wu, F. Zhu, R. Zhao, and H. Li, “CORA: Adapting clip for open-vocabulary detection with region prompting and anchor pre-matching,” in 
+
+Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2023, pp. 7031–7040. [78] D. Kim, A. Angelova, and W. Kuo, “Contrastive feature masking open-vocabulary vision transformer,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2023, pp. 15 602–15 612. [79] A. Zareian, K. D. Rosa, D. H. Hu, and S.-F. Chang, “Open-vocabulary object detection using captions,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2021, pp. 14 393–14 402. [80] M. Gao et al. , “Open vocabulary object detection with pseudo bounding-box labels,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2022, pp. 266–282. [81] C. Lin et al. , “Learning object-language alignments for open-vocabulary object detection,” in Int. Conf. Learn. Represent. (ICLR) , 2023. [82] P. Chen et al. , “Open vocabulary object detection with proposal mining and prediction equalization,” arXiv preprint arXiv:2206.11134 , 2022. [83] C. ZHANG, C. Zhu, P. Dong, L. Chen, and D. Zhang, “Cyclic contrastive knowledge transfer for open-vocabulary object detection,” in Int. Conf. Learn. Represent. (ICLR) , 2025. 
+
+YEONG-JIN KIM received the B.S. degree in computer engineering from Hongik University, Republic of Korea, in 2024. He is currently pur-suing the M.S. degree with the department of artificial intelligence, Korea University, Republic of Korea. 
+
+HO-JOONG KIM received the B.S. degree in the department of industrial management and engi-neering, and computer engineering from Hansung University, Republic of Korea, in 2021. He is cur-rently pursuing the Ph.D. degree with the depart-ment of artificial intelligence, Korea University, Republic of Korea. 
+
+SEONG-WHAN LEE (Fellow, IEEE) received the B.S. degree in computer science and statistics from Seoul National University, Seoul, Republic of Korea, in 1984, and the M.S. and Ph.D. degrees in computer science from Korea Advanced Insti-tute of Science and Technology, Seoul, Republic of Korea, in 1986 and 1989, respectively. He is currently a professor and head of the department of artificial intelligence, Korea University, Republic of Korea.
