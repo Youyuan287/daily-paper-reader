@@ -1,0 +1,412 @@
+Title: SGDet3D++: Geometry-Grounded Semantics for 4D Radar and Camera 3D Object Detection
+
+URL Source: https://arxiv.org/pdf/2609.27671v1
+
+Published Time: Thu, 24 Sep 2026 00:55:34 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+Published as a conference paper at ICLR 2027 
+
+# SGD ET 3D++: GEOMETRY -G ROUNDED SEMANTICS FOR 4D R ADAR –C AMERA 3D O BJECT DETECTION 
+
+Xiaokai Bai 1, Zhenyu Fan 1, Lianqing Zheng 2, Songkai Wang 1, Siyuan Cao 1, Hui-liang Shen 1
+
+> 1
+
+College of Information Science and Electronic Engineering, Zhejiang University 
+
+> 2
+
+School of Automotive Studies, Tongji University 
+
+email:shawnnnkb@gmail.com 
+
+ABSTRACT 
+
+4D radar complements dense image semantics with long-range geometry and ra-dial motion, but existing radar–camera detectors largely solve where to align the modalities while leaving whether a piece of evidence supports an evolving object hypothesis implicit. An image token may describe an occluder, a nearby radar return may belong to another object, and a pose-aligned memory slot may carry incompatible motion. We formulate hypothesis-conditioned evidence grounding ,which separates candidate access from evidence use: semantic, geometric, or tem-poral evidence is filtered or conditioned by the evolving 3D state before updating the corresponding query. SGDet3D++ instantiates this principle through Anchor-Grounded Semantic Retrieval (AGR), which conditions deformable image re-trieval on pooled anchor-consistent radar support; Geometry-Consistent Anchor Refinement (GCR), which attentively aggregates individual associated returns; and Doppler-Verified Correspondence (DVC), which replaces history only when current radial motion contradicts it. SGDet3D++ improves the strongest com-pared method by 3.82 mAP and 6.82 ODS on OmniHD-Scenes and by 6.82 mAP and 9.22 NDS on ManTruckScenes, while also leading the listed methods in the TJ4DRadSet test comparison. Mechanism-targeted evaluations show that AGR improves strict AP in every projected-occlusion bin, the yaw-aligned box gate raises target-return purity from 29.95% to 58.87%, and DVC preserves 96.11% of motion-consistent history while retaining 75.90% contradiction recall. Code will be released. 
+
+1 INTRODUCTION 
+
+Reliable 3D object detection must localize dynamic objects under changing visibility, range, and traffic density. Surround-view cameras provide dense appearance and category cues, but remain am-biguous along the viewing ray. 4D imaging radar provides metric range, elevation, return strength, and relative radial motion, and remains effective in rain, fog, and night scenes. Recent radar–camera detectors exploit camera–radar complementarity by aligning image features with radar pillars, BEV grids, or object queries (Zheng et al., 2023; Liu et al., 2025; Lin et al., 2024; Yang et al., 2025; Gu et al., 2025; Chu et al., 2025). Although the aligned features make complementary cues avail-able, scene-level alignment determines where evidence is placed in a shared representation but not 
+
+whether it is admissible for the same evolving 3D hypothesis. We argue that this second decision— evidence–hypothesis compatibility—should be explicit at every object-level read. Current fusion designs leave evidence–hypothesis consistency implicit. Dense BEV fusion projects both modalities into a shared ground-plane representation (Lin et al., 2024; Yang et al., 2025), while query- and proposal-level methods aggregate instance features after cross-modal association (Kim et al., 2023a; Chu et al., 2025; Zhong et al., 2025). Neither design verifies evidence against the evolving query’s 3D radar geometry. A nearby image token may describe an occluder or background, while a radar return may arise from multipath or a reflector outside the object. Projection and proximity alone therefore cannot determine which evidence supports the query. Unlike LiDAR, 4D radar provides sparse and noisy returns rather than dense object surfaces. Treat-ing radar returns as a dense semantic map can introduce false support, whereas ignoring their object 1arXiv:2609.27671v1 [cs.CV] 23 Sep 2026 Published as a conference paper at ICLR 2027 Multi-View 4D Radar       
+
+> Voxelize
+> Lift
+> BEV BEV
+> Dense Fused BEV
+> Implicitly
+> 3D Detect Head
+> Multi-View 4D Radar
+> 3D Detect Head
+> Geometry
+> Grounded Persp.
+> BEV
+> Feature Extractor Fusion and Decoder Feature Extractor Fusion and Decoder
+> Explicitly
+> Prior works detect object from implicitly fused BEV feature from scene We use anchor hypothesis and 4D radar geometry to explicitly ground semantics
+> (a) Framework Difference Illustration (b) Performance Comparison
+> L x 48.87 58.22 56.39 62.19
+
+Figure 1: Conceptual and empirical comparison of radar–camera fusion strategies. (a) Comparison between implicit BEV fusion and geometry-grounded semantics via hypothesis-conditioned evi-dence grounding in SGDet3D++. (b) The radar chart compares representative methods on OmniHD-Scenes and ManTruckScenes and places SGDet3D++ in their accuracy–efficiency landscape. structure discards useful geometry and motion. We instead treat each return as potential support for a specific anchor rather than as unrestricted scene context. This view separates candidate access from evidence admission: proximity proposes evidence, while compatibility with the current hypothesis determines how it may affect a decision. SGDet3D provides a useful starting point by combining radar-corrected depth, semantic radar pil-lars, and localization-aware object attention (Bai et al., 2025c). Yet its geometry and semantics are still coupled mainly through scene-level BEV features and projected supports. SGDet3D++ extends geometry-guided fusion through hypothesis-conditioned evidence grounding . Each sparse query uses its evolving 3D anchor to condition or verify radar evidence before semantic retrieval, geomet-ric refinement, and temporal inheritance. The same principle thus governs three decoder decisions rather than introducing three unrelated feature blocks. Figure 1(a) compares scene-level implicit BEV fusion with our hypothesis-conditioned design, in which each 3D anchor explicitly grounds the evidence retrieved by its query. Figure 1(b) compares the accuracy and efficiency of representative detectors on OmniHD-Scenes and ManTruckScenes. Figure 2 summarizes the SGDet3D++ architecture. AGR, GCR, and DVC ground semantic re-trieval, box refinement, and temporal inheritance, respectively. At each decision, the current anchor determines which radar evidence may influence the query. Our contributions are summarized below. • We formulate hypothesis-conditioned evidence grounding as a common object-decoder contract that separates candidate access from evidence admission: the evolving 3D state establishes se-mantic, geometric, or motion compatibility before evidence changes its query. • We instantiate the principle at three decision interfaces. AGR uses pooled anchor-consistent radar statistics to condition image retrieval, GCR reads individual object-owned returns for box refine-ment, and DVC admits pose-aligned history with current radial motion. • We validate accuracy and the proposed operating mechanism on three benchmarks. Controlled ablations isolate every module, while held-out decision-level diagnostics directly measure retrieval redistribution, return ownership, and motion-consistent memory inheritance. 
+
+2 RELATED WORK 
+
+2.1 4D R ADAR -B ASED 3D D ETECTION 
+
+Radar-only detectors encode sparse 4D-radar returns as points, voxels, or pillars. Point-feature aggregation and multi-view fusion improve local geometric descriptors (Xu et al., 2021; Yan & Wang, 2023; Bi et al., 2025; Wang et al., 2025), while pillar-oriented studies examine how sparse return support should be organized for detection (Palmer et al., 2023). Local–global interaction and stronger encoders further recover context from sparse measurements (Bai et al., 2025b; Xiao et al., 2026; Bai et al., 2025a). Radar nevertheless provides limited class semantics and incomplete object boundaries. We therefore use its range, reflectivity, and motion as object-level evidence rather than as a dense semantic substitute for images. 2Published as a conference paper at ICLR 2027 2.2 4D R ADAR AND CAMERA FUSION 3D D ETECTION 
+
+Radar–camera detectors commonly align the modalities in perspective space or a shared BEV rep-resentation. Projection and common BEV features complement image appearance with radar range (Long et al., 2023; Zheng et al., 2023; Kim et al., 2023b; Xiong et al., 2024; Kim et al., 2024; Baumann et al., 2024; Yan et al., 2026; Guan et al., 2025). Later methods strengthen BEV-level interaction with radar-aware fusion and multi-scale cross attention (Lin et al., 2024; Yang et al., 2025; Zhao et al., 2025; Wolters et al., 2025; Bai et al., 2026a). Other studies address radar sparsity through sampling, generation, and synchronization (Liu et al., 2025; Gu et al., 2025). CRAFT associates radar returns with image proposals (Kim et al., 2023a), RaCFormer samples instance-relevant image and BEV features with object queries (Chu et al., 2025), and CVFusion aggregates point, image, and BEV features for proposal refinement (Zhong et al., 2025). In contrast, SGDet3D++ explicitly associates each query with anchor-consistent radar geometry before semantic retrieval, return-level refinement, and Doppler-verified temporal inheritance, extending SGDet3D (Bai et al., 2025c) from scene-level fusion to explicit object-level decisions. 
+
+3 METHOD 
+
+3.1 OVERVIEW 
+
+For each frame indexed by t, the detector receives synchronized multi-view images, 4D radar returns, camera calibration, and ego poses. The detector predicts 3D boxes with class labels and planar velocities, while depth serves only as an auxiliary geometric signal for feature construction and training. We write the input as 
+
+Xt = {Ikt }Nc 
+
+> k=1
+
+∪ R t ∪ C t ∪ T t, Yt = {(bgt  
+
+> n
+
+, c n)}N gt 
+
+> t
+> n=1
+
+, (1) where Nc is the number of cameras and Ikt is the image from camera k. The sets Rt, Ct, and 
+
+Tt contain the 4D radar returns, camera calibration parameters, and ego poses and timestamps for frame t, respectively. The target set contains N gt  
+
+> t
+
+objects. For object n, bgt  
+
+> n
+
+specifies the 3D location, extent, yaw, and planar velocity of object n, and cn is its class label. SGDet3D++ realizes geometry-grounded semantics by associating radar support with each evolving hypothesis before semantic retrieval, geometric refinement, or temporal inheritance. As shown in Figure 2, SGDet3D++ builds on the semantic–geometric principle of SGDet3D (Bai et al., 2025c), replacing dense image-to-BEV refinement with sparse object queries that sample image features at box-conditioned supports. Corrected-depth painting (Zhang et al., 2025) enriches occupied radar pillars, which the radar encoder scatters into the BEV feature map F rt . The image encoder produces the multi-camera, multi-level feature pyramid F It . The front end couples image semantics with radar geometry, and the sparse object decoder grounds its evidence in the geometry of each object hypothesis. At layer ℓ, each anchor reads F It and F rt through box-conditioned supports and updates its state according to 
+
+(f ℓ+1  
+
+> i
+
+, b ℓ+1  
+
+> i
+
+) = Dℓ f ℓi , b ℓi , F It , F rt , Rt, Mt−1
+
+, (2) where f ℓi and bℓi are the feature and 3D box state of query i before layer ℓ, and Mt−1 is the object memory carried from the preceding frame. The operator Dℓ denotes the complete update performed by decoder layer ℓ from the query state, image and radar features, raw radar returns, and temporal memory shown in Eq. 2. AGR, GCR, and DVC perform semantic, geometric, and temporal ground-ing within the decoder update. For every operation, the current anchor defines radar support before the selected evidence modifies the object state. The decoder therefore selects evidence for each object instead of introducing another fused scene representation. 3.2 HYPOTHESIS -C ONDITIONED EVIDENCE GROUNDING 
+
+Let hℓi = ( f ℓi , b ℓi ) denote the feature and 3D state of hypothesis i. We define evidence grounding as an operation-specific map 
+
+em,ℓ i = Γ m
+
+ Emt ; hℓi
+
+ , m ∈ { sem , geo , temp }, (3) where Emt is the candidate evidence available to a semantic, geometric, or temporal decoder opera-tion. Unlike unrestricted feature fusion, Γm must expose a physical compatibility relation between 3Published as a conference paper at ICLR 2027 Multi-View 4D Radar        
+
+> 3D Detect Head
+> Geometry
+> Grounded
+> L x
+> Persp.
+> Explicitly
+> L x
+> Persp.
+> Explicitly
+> (AGR)
+> Feature
+> Multi-View 4D Radar
+> Depth Aggr.
+> Image Encoder Radar Depth
+> (a) Feature Extractor
+> Painting
+> Voxelize
+> encode
+> Semantic-rich Radar BEV
+> Init 3D hypothesis Instance Feature
+> Self-Attention Geometry Setup
+> Semantic Retrieval (Sampling)
+> ❎
+> ☑Pool
+> Anchor-owned
+> Radar returns
+> Multi-view Fusion
+> Anchor-Grounded Semantic Retrieval (AGR)
+> query
+> Reweight
+> Geometry -C onsistent Anchor Refinement (GCR)
+> Doppler check
+> update
+> Radial velocity K nearest
+> radar-token sequence
+> …
+> MHCA
+> attend
+> 3D Detection Results
+> Doppler -V erified
+> Correspondence (DVC)
+> Decode
+> (b) Fusion and Decoder
+> Anchor-consistent radar support
+
+Figure 2: SGDet3D++ grounds object-query decoding in sparse 4D-radar evidence. AGR uses anchor-consistent radar support to reweight image tokens at box-conditioned supports, GCR supplies query-weighted local return evidence for box refinement, and DVC uses current radial Doppler to verify whether a historical object slot should be retained or replaced. the candidate and the consuming hypothesis. AGR realizes Γsem by conditioning image-retrieval weights on anchor-consistent return statistics; GCR realizes Γgeo by retaining box-owned returns as individual tokens; and DVC realizes Γtemp by testing a history slot against current radial mo-tion. This shared decision interface supports evidence-specific operators under a common evidence– hypothesis compatibility contract. The decoder maintains Nq object hypotheses. At layer ℓ, hypothesis i has feature f ℓi and box state 
+
+bℓi = ( xℓi , y ℓi , z ℓi , w ℓi , l ℓi , h ℓi , θ ℓi , v ℓx,i , v ℓy,i ). The first three components define the box centre oℓi =(xℓi , y ℓi , z ℓi ). The next three give its width, length, and height, while the remaining components specify yaw and planar velocity. The current box generates 13 supports, including its centre, six fixed surface supports, and six learned object-relative supports. Let sj ∈ R3 be the normalized object-relative offset of support j, let R(θℓi ) be the rotation about the vertical axis defined by the current yaw, and let ⊙ denote element-wise multiplication. Each support location is 
+
+pℓij = oℓi + R(θℓi ) sj ⊙ (wℓi , l ℓi , h ℓi ), j = 1 , . . . , 13 . (4) 
+
+Figure 3: Qualitative AGR evidence in an occluded scene. (a–c) AGR reduces the target center error rela-tive to Base. (d) The yaw-aligned box and radius gates restrict returns by anchor extent and association range; their intersection defines the anchor-consistent radar support. (e–f) Gated support shifts retrieval mass from occluder-covered supports (triangles) to visible supports (circles). Color indicates signed change from decrease (blue) to increase (red), and marker area its magnitude. Each location pℓij samples multi-view FPN features and the radar BEV fea-ture map through deformable feature fu-sion. The subsequent self-attention, feed-forward, and refinement operations up-date both f ℓi and bℓi . Thus, the location and extent of an anchor determine the ac-cessible evidence rather than retrieving the same undifferentiated scene represen-tation for every query. The decoder’s self-attention blocks use decoupled multi-head attention. Query and key projections include anchor em-beddings, whereas value projections carry object features. Although decou-pled attention allows a current query to interact with other current queries and pose-aligned historical queries, the at-tention mechanism does not establish whether a particular radar return supports that query. AGR and GCR therefore ap-ply the association rule in Eq. 5 before image-feature retrieval and box refine-ment. 
+
+Anchor-Grounded Semantic Retrieval (AGR). AGR uses anchor-consistent 4Published as a conference paper at ICLR 2027 radar support to guide image retrieval. Figure 3 illustrates the effect of its two association gates. The yaw-aligned box gate removes returns outside the current anchor, and the radius gate prevents distant returns from entering the pooled radar descriptor (Figure 3(d)). Using the returns that pass both gates shifts retrieval mass from occluder-covered to visible supports in this case (Figure 3(e–f)) and yields the better-localized box in Figure 3(a–c). The aggregate evaluation quantifies retrieval redistribution and occlusion-stratified detection across the validation set. For an anchor bℓi , we write 
+
+r for the 3D position of a radar return and transform the return into the yaw-aligned local coordinate 
+
+erir = R(θℓi )⊤(r − oℓi ). Let uℓi = ( wℓi , l ℓi , h ℓi ) be the anchor extent. With anchor centre oℓi , margin δ,and radius ρ, AGR assigns return r to anchor i only if 
+
+Rℓi = r R(θℓi )⊤(r − oℓi ) ⪯ 12 uℓi + δ, ∥r − oℓi ∥2 ≤ ρ . (5) The absolute value and inequality ⪯ are applied component-wise, so the first condition is a two-sided membership test in the yaw-aligned 3D box. The extent gate excludes returns outside the current anchor, while the radius gate prevents large or uncertain anchors from collecting distant returns. We call the selected set anchor-consistent radar support .AGR pools the associated returns into an anchor-level evidence vector. For ni = |R ℓi | > 0, let 
+
+P be the input return budget and use an overbar for the mean over Rℓi . Let S(r), qual( r), and 
+
+age( r) denote the return strength, quality score, and sweep age of return r, respectively. The seven-dimensional descriptor, its D-dimensional embedding, and the resulting query update are 
+
+dℓi =
+
+"eri,x , eri,y , eri,z , log ni
+
+log P , S(r)max( ∥r∥2, 1 m) 2 , qual( r), age( r)
+
+#
+
+∈ R7,eℓi = Φ AGR (dℓi ) ∈ RD , bf ℓi = f ℓi + Φ q ([ f ℓi ∥eℓi ]) .
+
+(6) Here P = 768 is the maximum number of input returns and D = 256 is the decoder feature di-mension in all reported experiments. The symbol ∥ denotes feature concatenation, while ΦAGR 
+
+and Φq are learned MLPs that encode the pooled radar descriptor and compute its residual query update, respectively. The three local-coordinate means remain in metres. The count is logarithmi-cally normalized to [0 , 1] , and return strength S(r)—radar power on OmniHD-Scenes and RCS on ManTruckScenes—is normalized by the squared sensor range, clipped below at 1 m. The quality and sweep-age channels retain the shared loader’s native units and are zero-filled when unavailable. The stated normalization keeps each physical cue on a documented scale before embedding. The updated query bf ℓi reweights the projected image tokens without changing the 13 support loca-tions pℓij from Eq. 4. 
+
+ωicsjg = softmax (c,s,j )
+
+h
+
+Φω
+
+ bf ℓi + αℓi + γc
+
+i 
+
+> csjg
+
+
+
+. (7) Here c, s, j, and g index the camera, FPN level, anchor support, and feature group, respectively. The vectors αℓi and γc are the learned embeddings of anchor i and camera c, and Φω maps the combined query to one sampling logit for each (c, s, j, g ) tuple. For every feature group g, the softmax normalizes the logits over all camera–level–support triples (c, s, j ). AGR then aggregates the corresponding image features as 
+
+f I,ℓ i = X
+
+> g
+
+X
+
+> c,s,j
+
+ωicsjg Wg F Is,c 
+
+ πc(pℓij ) . (8) Here F Is,c is the image feature map from camera c at FPN level s, πc is the calibrated projection from a 3D point to camera c, and Wg projects the sampled feature into group g. AGR changes the contribution of each image token after anchor-consistent association while leaving the support locations fixed and introducing no dense radar branch or direct box correction. GCR then uses the same associated return set for box refinement while preserving selected returns as individual evidence. 
+
+Geometry-Consistent Anchor Refinement (GCR). After semantic retrieval, box refinement still faces sparse and noisy radar evidence. A valid object may produce only a few returns from different surfaces, with varying return strength and Doppler reliability. Even after the association gate in Eq. 5, not every retained return is equally useful for correcting the box. GCR therefore keeps several associated returns and lets the current object feature attentively select the radar evidence used for anchor refinement. 5Published as a conference paper at ICLR 2027 Table 1: OmniHD-Scenes 3D detection results from our adapted benchmark suite.                                                                                                                                                                          
+
+> Method Mod. mAP ODS mATE mASE mAOE mAVE Car Ped. Rider LVeh. FPS PointPillars’19 R23.82 37.21 0.6752 0.2447 0.3776 0.6789 52.74 0.69 28.57 13.29 62.2 RadarPillarNet’23 R24.88 37.81 0.6597 0.2389 0.3736 0.6982 52.99 2.06 29.45 15.02 60.3 BEVFormer’22 C29.17 30.54 1.1046 0.2346 0.4889 1.0797 53.64 14.48 33.55 15.01 11.4 PanoOcc’24 C29.17 28.55 1.1500 0.2446 0.6378 1.6066 51.58 15.82 35.02 14.26 5.5 BEVFusion’22 R+C 33.95 42.62 0.5730 0.2465 0.3814 0.7474 56.25 11.66 50.90 16.99 3.6 RCFusion’23 R+C 34.88 40.65 0.5676 0.2535 0.4011 0.9208 57.17 12.87 51.35 18.11 3.6 RCBEVDet’24 R+C 35.53 45.04 0.5138 0.2305 0.3914 0.6825 62.35 10.11 54.60 15.06 5.2 SGDet3D’25 R+C 41.73 47.70 0.5430 0.2369 0.3885 0.6849 63.30 19.00 58.30 26.30 3.4 RaGS’26 R+C 35.88 43.45 –––––––––Doracamom-S’26 R+C 37.60 41.31 0.6724 0.2329 0.4359 0.8579 58.94 17.84 52.72 20.89 4.8 Doracamom’26 R+C 39.12 46.22 0.6646 0.2331 0.3545 0.6151 61.12 19.83 53.35 22.18 4.2 4DR360 ◦’26 R+C 45.05 51.40 0.4705 0.2423 0.3762 0.6013 65.47 21.73 60.41 32.58 4.5 SGDet3D++ (ours) R+C 48.87 58.22 0.4298 0.1968 0.3355 0.3350 72.02 24.50 62.17 36.78 9.5
+
+Table 2: ManTruckScenes 3D detection results.                                                                                                                                                                          
+
+> Method Mod. mAP NDS mATE mASE mAOE mAVE Car LVeh. Trailer Obs. FPS RadarPillarNet’23 R26.61 37.73 0.5243 0.2413 0.1689 2.1915 44.43 30.66 28.65 2.68 64.2 LGDD’25 R29.83 40.49 0.4922 0.2328 0.1229 1.5775 48.90 36.20 32.40 1.80 20.1 BEVFormer’22 C28.30 35.47 0.7662 0.2583 0.1982 1.2747 39.56 28.10 19.66 25.87 10.7 PanoOcc’24 C28.82 35.72 0.7686 0.2653 0.1920 1.2623 40.12 28.22 21.73 25.20 6.3 BEVFusion’22 R+C 30.97 40.65 0.5168 0.2486 0.1249 2.1377 47.24 36.09 30.15 10.40 4.6 RCFusion’23 R+C 31.61 40.57 0.5652 0.2483 0.1155 2.0670 48.51 36.84 28.58 12.49 5.4 LXL’24 R+C 34.70 43.04 0.4972 0.2470 0.1174 1.9877 51.95 41.14 31.41 14.30 5.2 RCBEVDet’24 R+C 41.72 46.85 0.4500 0.2658 0.1543 1.0407 61.93 38.00 34.38 32.58 6.5 HGSFusion’25 R+C 43.90 48.23 0.4607 0.2272 0.1668 1.9479 58.76 43.64 35.43 37.77 5.1 SGDet3D’25 †R+C 41.37 47.50 0.4252 0.2159 0.1523 1.6112 60.82 47.38 26.94 30.29 3.0 Doracamom’26 R+C 41.98 46.36 0.4874 0.2411 0.1982 1.5566 61.62 42.71 34.45 29.15 5.2 4DR360 ◦’26 R+C 49.57 52.97 0.3613 0.2485 0.1571 0.9442 59.41 44.71 41.20 52.97 5.5 SGDet3D++ (ours) R+C 56.39 62.19 0.3637 0.2025 0.0814 0.5749 70.85 48.32 43.18 63.24 15.1
+
+Starting from Rℓi , GCR keeps up to Kr nearest associated returns as Kℓi . Each return is encoded with the cues needed for refinement. 
+
+hir = Φ ret 
+
+ erir /ρ ∥∥ erir ∥2/ρ 
+
+| {z }
+
+> anchor-local geometry
+
+∥ S(r)/d (r)2∥ qual( r)∥ age( r)∥ν(r)
+
+| {z }
+
+> signal and radial motion
+
+
+
+, r ∈ K ℓi . (9) Here Φret is the learned return encoder, ρ is the support radius, d(r) = ∥r∥2 is the sensor-to-return range, and ν(r) is the radial Doppler measurement. The quality and age functions have the same definitions as in Eq. 6. The anchor-local geometry indicates where the return lies with respect to the current box, while return strength, quality, sweep age, and Doppler describe the strength, reliability, recency, and radial motion of the measurement. Keeping the cues at the return level lets the model distinguish a strong surface return from a weak or motion-inconsistent return that passes the coarse association gate without agreeing with the current object state. The encoded returns form a radar-token sequence, and the anchor feature provides the query. 
+
+Tℓi = [ h⊤ 
+
+> ir 1
+
+, . . . , h ⊤ 
+
+> ir Kr
+
+]⊤, qℓi = Wq f ℓi , Kℓi = WkTℓi , Vℓi = Wv Tℓi . (10) Here Tℓi is the return-token matrix, and Wq , Wk, and Wv are learned query, key, and value projec-tions. The current object feature then aggregates the sparse radar-token sequence by attention. 
+
+βi = softmax 
+
+ qℓi (Kℓi )⊤
+
+√D + mi
+
+
+
+, gℓi = βiVℓi . (11) Here D is the feature dimension defined above. Element mir of mask mi is 0 for a valid selected re-turn and a large negative value for a padded slot. The attention weights βi let each anchor emphasize returns whose local geometry, signal strength, quality, and radial motion agree with its current ob-ject state, while suppressing less compatible returns. The resulting radar context gℓi is concatenated with f ℓi and injected before the ordinary box refiner, so radar influences centre, size, orientation, and velocity through the refinement representation. Return strength and Doppler are therefore used as learnable evidence fields, not as hard thresholds or direct box residuals. If no anchor-consistent radar support is available, the anchor follows the original refinement path. AGR uses pooled radar evidence for semantic retrieval, while GCR attends to individual returns for box refinement. 
+
+Doppler-Verified Correspondence (DVC). DVC verifies temporal memory with current Doppler evidence. The decoder stores high-confidence object features and anchors, then transforms historical 6Published as a conference paper at ICLR 2027 Front Left  Front  Front Right  SGDet3D++               
+
+> Front Left Front Front Right
+> Back Left Back Back Right
+> SGDet3D++
+> Front Left Front Front Right
+> Back Left Back Back Right
+> Front Left Front Front Right
+> Back Left Back Back Right
+> SGDet3D++
+> SGDet3D++
+> Back Left Back Back Right
+
+Figure 4: Qualitative visualization of SGDet3D++ on OmniHD-Scenes. Each example pairs multi-view image detections with BEV radar evidence colored by radial-speed magnitude. Red boxes denote ground truth and blue boxes denote predictions. anchors to the current frame using ego pose and timestamp. Although ego-pose transformation removes displacement caused by ego motion, a stale or incorrect memory slot may remain spatially close to a current query. DVC therefore checks whether nearby radar returns have relative radial 
+
+motion consistent with the motion predicted by the aligned historical anchor. All quantities below are expressed in the current ego frame. For a return at 3D position r, define its unit line-of-sight direction as bdr = r/ ∥r∥2. For a pose-aligned historical anchor a with centre 
+
+ca and ego-motion-compensated object velocity va = ( vx,a , v y,a ) resolved in the current ego axes, DVC first gathers current returns within a local support radius. 
+
+Qa = {r ∈ R t | ∥ r − ca∥2 ≤ ρDVC } . (12) When Qa is non-empty, DVC selects the spatially closest return r∗ 
+
+> a
+
+= arg min r∈Q a ∥r − ca∥2. DVC projects the anchor velocity onto the return direction as 
+
+bνa =
+
+D
+
+[vx,a , v y,a , 0] ⊤, bdr∗
+
+> a
+
+E
+
+. (13) The inner product ⟨· , ·⟩ in Eq. 13 projects the anchor’s planar velocity onto the selected return’s line of sight, yielding the predicted radial velocity bνa. The value ν(r∗
+
+> a
+
+) is the loader-provided, ego-motion-compensated radial velocity of the selected return. DVC therefore compares two ra-dial quantities rather than interpreting Doppler as an unconstrained BEV velocity. DVC marks a historical anchor as contradicted only when a nearby return exists and the radial-velocity mismatch exceeds threshold τv . The resulting test is 
+
+za = ⊮[Qa̸ = ∅ ∧ | bνa − ν(r∗
+
+> a
+
+)| > τ v ] . (14) where ⊮[·] is the indicator function and za = 1 denotes a contradiction. The memory contains M
+
+historical slots, which share bank indices with the first M current-query slots. If history slot k is contradicted, DVC substitutes the k-th freshly initialized current feature and anchor. Otherwise, DVC retains the history pair. The deterministic mapping uses neither nearest-object nor Hungarian matching. Missing radar evidence preserves history, and the update adds no learnable parameters while editing the existing temporal sequence without a second cache. 3.3 DETECTION OBJECTIVE 
+
+The detection head supervises classification, box regression, centre quality, yaw quality, and planar velocity at decoder refinement layers. With Ldet denoting the weighted detection objective and 
+
+Ldepth the multi-scale corrected-depth objective, the training loss is 
+
+L = Ldet + λdepth Ldepth . (15) 
+
+4 EXPERIMENTS 
+
+Datasets and metrics. We evaluate 3D detection on OmniHD-Scenes (Zheng et al., 2026b) and ManTruckScenes (Fent et al., 2024). OmniHD-Scenes pairs six cameras with 4D radar and reports mAP, object detection score (ODS), four error metrics, and class AP for car, pedestrian, rider, and 7Published as a conference paper at ICLR 2027 Front Left  Front Right    
+
+> Front Left Front Right
+> Back Left Back Right
+> Back Right Back Left
+> 3D Object Detection
+> Results on BEV
+> 3D Object Detection
+> Results on BEV SGDet3D
+> SGDet3D
+> SGDet3D ++
+> SGDet3D ++
+
+Figure 5: Qualitative evidence on ManTruckScenes. Left: SGDet3D++ aligns multi-view detections with radar-supported BEV predictions. Right: paired SGDet3D and SGDet3D++ outputs; green circles mark recovered detections and consolidated object boxes. Red boxes denote ground truth and blue boxes denote predictions. large vehicle. ManTruckScenes complements it with commercial-vehicle scenes and reports mAP, NDS, the same errors, and AP for car, large vehicle, trailer, and obstacle. 
+
+Implementation details. We train in MMDetection3D with AdamW and mixed precision on four RTX PRO 6000 GPUs. Within each dataset, all adapted methods share the validation split, synchro-nized inputs, spatial range, and official evaluator. The ManTruckScenes SGDet3D result marked 
+
+† is from 4DR360 ◦ (Bai et al., 2026b); the remaining SGDet3D results use our adapted control. “Base” disables AGR, GCR, and DVC. The SGDet3D benchmark row reports one designated run; the controlled Base result in Table 5 is instead the mean of three independent runs. 4.1 MAIN RESULTS 
+
+Table 3: Adverse-condition on OmniHD-Scenes. 
+
+Method Mod. mAP ODS PointPillars (Lang et al., 2019) R 28.63 40.70 RadarPillarNet (Zheng et al., 2023) R 29.78 41.00 LSS (Philion & Fidler, 2020) C 21.21 25.62 BEVFormer (Li et al., 2022) C 30.39 31.61 PanoOcc (Wang et al., 2024) C 26.09 27.16 BEVFusion (Liu et al., 2023) R+C 35.83 44.95 RCBEVDet (Lin et al., 2024) R+C 37.49 47.32 Doracamom (Zheng et al., 2026a) R+C 41.86 48.74 4DR360 ◦ (Bai et al., 2026b) R+C 44.18 51.57 SGDet3D++ R+C 49.95 58.86 
+
+Tables 1 and 2 compare 3D detection on both benchmarks, where SGDet3D++ performs best among the listed meth-ods. On OmniHD-Scenes, it raises the strongest R+C baseline (Bai et al., 2026b) from 45.05 to 48.87 mAP and from 51.40 to 58.22 ODS, improves all four classes, and reduces mATE, mAOE, and mAVE. On ManTruckScenes, it raises the strongest listed baseline from 49.57 to 56.39 mAP and from 52.97 to 62.19 NDS, with the largest class gain on obstacles. These semantic, localization, and motion gains match the complementary roles of AGR, GCR, and DVC. Figures 4 and 5 align predictions with BEV radar evidence; the latter also shows fewer missed or fragmented detections than SGDet3D. 4.2 ROBUSTNESS AND DECISION -L EVEL EVIDENCE 
+
+Adverse-condition detection. Table 3 evaluates the adverse OmniHD-Scenes subset. Radar-only methods remain competitive, radar–camera methods generally exceed camera-only detectors, and SGDet3D++ obtains the best mAP and ODS. AGR grounds image retrieval in radar support, while GCR and DVC retain anchor-local geometry and Doppler-validated memory. Under camera-extrinsic perturbations, SGDet3D++ also outperforms an independently trained SGDet3D control and degrades more slowly: at ±10 ◦ and ±1.0 m, it retains 41.70 mAP and 52.76 ODS, exceeding Control by 10.67 and 12.56 points. Table 4: Mechanism-targeted evidence for the three grounding decisions. Values are percentages. 
+
+Module Diagnostic Base Ground ∆
+
+AGR Heavy-occ. AP@1m ↑ 10.33 11.89 +1.56 Gate Target-return purity ↑ 29.95 58.87 +28.92 DVC Motion-conflict F1 ↑ 0.62 10.61 +9.99 
+
+Mechanism-level evidence. Table 4 re-ports targeted tests: AGR uses the complete Base/Base+AGR heavy-occlusion compar-ison, while the gate and DVC use the frozen 43-scene split. Relative to radius-only se-lection, the yaw-aligned box gate raises 8Published as a conference paper at ICLR 2027 target-return purity from 29.95% to 58.87% and lowers foreign returns from 7.15% to 1.16%. With conflicts comprising only 0.31% of eligible histories, DVC reaches 10.61% F1 while preserving 96.11% of consistent histories and retaining 75.90% conflict recall. AGR shifts 8.68% of retrieval probability and changes the maximum-weight camera–level–support route for 15.77% of feature groups. 4.3 ABLATION STUDY 
+
+Table 5: Overall ablations on OmniHD-Scenes.                                                
+
+> Base Overall Ablation mAP ↑ODS ↑
+> AGR GCR DVC
+> ✓40.43 ±0.28 47.82 ±0.54
+> ✓✓43.94 ±0.31 51.24 ±0.27
+> ✓✓44.56 ±0.16 52.07 ±0.22
+> ✓✓42.29 ±0.35 49.74 ±0.39
+> ✓✓✓45.68 ±0.23 54.59 ±0.20
+> ✓✓✓✓48.87 ±0.45 58.22 ±0.19
+
+Table 6: Class-averaged AP@1m by projected oc-clusion on OmniHD-Scenes. N is the GT count.                 
+
+> Method Light
+> <20%
+> Moderate
+> 20 –50%
+> Heavy
+> ≥50%
+> GT objects ( N)43,246 10,926 40,172 Base 41.15 15.67 10.33 Base w/ AGR 45.97 18.96 11.89 Full 51.24 23.15 16.74
+
+Table 7: Accuracy and resource comparison.                                                      
+
+> Method Resource Metrics Mem Lat. Param.GFLOPsmAP ↑NDS ↑
+> BEVFusion 3.7 217.4 41.5 782.2 30.97 40.65 RCFusion 3.8 185.2 36.3 684.8 31.61 40.57 LXL 4.6 192.3 41.5 782.2 34.70 43.04 SGDet3D †9.9 333.3 65.9 1187.1 41.37 47.50 RCBEVDet 5.1 153.8 86.7 1650.9 41.72 46.85 Doracamom 9.6 192.3 55.8 724.2 41.98 46.36 HGSFusion 8.2 196.1 44.7 976.7 43.90 48.23 4DR360 ◦15.4 181.8 140.1 1936.8 49.57 52.97
+> SGDet3D++ 4.2 66.2 60.7 306.3 56.39 62.19
+
+Component contribution. Table 5 reports the overall ablation of SGDet3D++. Ev-ery component improves mAP and ODS over Base, with GCR giving the largest isolated gain. AGR and GCR together add 5.25 mAP, and DVC adds another 3.19 mAP. Within GCR, jointly using local XYZ, RCS, and Doppler reaches 48.87 mAP and 58.22 ODS, the best result among the evaluated cue com-binations. To isolate the box gate in Equation 5, we remove only the yaw-aligned 3D box-membership test while keeping the radius threshold and all other settings fixed. The radius-only variant loses 1.89 mAP and 2.08 strict AP@1m, showing that box member-ship provides information beyond proximity. The default configuration reaches 48.87 mAP, 58.22 ODS, 42.28 strict AP@1m, and 0.3350 mAVE. 
+
+Detection under projected occlusion. Ta-ble 6 tests AGR under projected image oc-clusion. We stratify visible GT objects by the fraction of their multi-view projection oc-cluded by closer objects. With GCR and DVC disabled, AGR improves AP@1m in every stratum, by 4.82, 3.29, and 1.56 points in the light, moderate, and heavy bins, respectively. A fixed-capacity control isolates the effect of memory verification. At the same 600-slot budget, DVC improves mAP from 46.12 to 48.87 and reduces mAVE from 0.3820 to 0.3350, directly attributing the gain to Doppler verification. 
+
+Efficiency analysis. On one RTX A6000, Table 7 reports memory in GB, latency in ms, and pa-rameters in millions. SGDet3D++ attains the best mAP and NDS with 66.2 ms latency, 4.2 GB memory, 60.7 M parameters, and 306.3 GFLOPs; it also has the lowest latency and GFLOPs among the compared methods. 
+
+5 CONCLUSION 
+
+In this work, we present SGDet3D++, an object-level framework that grounds each query’s semantic retrieval, geometric refinement, and temporal inheritance in object-conditioned 4D radar evidence. At every stage, the current anchor selects radar evidence for the same object hypothesis, turning radar from a generic proximity cue into object-specific geometric and motion evidence. AGR retrieves radar-supported image features, GCR refines query geometry with anchor-local returns, and DVC retains only historical hypotheses consistent with current Doppler. Anchor-conditioned evidence use therefore links semantic discrimination, spatial correction, and temporal continuity within one decoding path. Across two benchmarks, SGDet3D++ improves detection, localization, and motion over the strongest baselines. Robustness and resource analyses further show reliable and efficient detection. Future work will extend object-level grounding to vision–language–action models. 9Published as a conference paper at ICLR 2027 
+
+AI U SE STATEMENT 
+
+Generative AI tools were used for literature organization, reviewer-style feedback, and language editing. The authors verified all citations, technical descriptions, analyses, and revisions, and take responsibility for the final content of this work. 
+
+REFERENCES 
+
+Xiaokai Bai, Jiahao Cheng, Songkai Wang, Yixuan Luo, Lianqing Zheng, Xiaohan Zhang, Si-Yuan Cao, and Hui-Liang Shen. SD4R: Sparse-to-Dense Learning for 3D Object Detection with 4D Radar. In IEEE International Conference on Intelligent Transportation Systems (ITSC) , pp. 4362– 4368, 2025a. doi: 10.1109/ITSC60802.2025.11423715. Xiaokai Bai, Qin Yang, Zili Zhou, Fuyi Zhang, Zhe Wu, Si-Yuan Cao, Lianqing Zheng, Beinan Yu, Fang Wang, Jie Bai, and Hui-Liang Shen. LGDD: Local-Global Synergistic Dual-Branch 3D Object Detection Using 4D Radar. In IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pp. 13318–13325. IEEE, 2025b. doi: 10.1109/IROS60139.2025.11246504. Xiaokai Bai, Zhu Yu, Lianqing Zheng, Xiaohan Zhang, Zili Zhou, Xue Zhang, Fang Wang, Jie Bai, and Hui-Liang Shen. SGDet3D: Semantics and Geometry Fusion for 3D Object Detection Using 4D Radar and Camera. IEEE Robotics and Automation Letters (RA-L) , 10(1):828–835, 2025c. doi: 10.1109/LRA.2024.3513041. Xiaokai Bai, Lianqing Zheng, Runwei Guan, Si-Yuan Cao, Songkai Wang, and Hui-Liang Shen. RC-GeoCP: Geometric Consensus for Radar-Camera Collaborative Perception. 
+
+arXiv:2603.00654 , 2026a. Xiaokai Bai, Lianqing Zheng, Runwei Guan, Songkai Wang, Siyuan Cao, and Hui-Liang Shen. 4DR360: State Reasoning for Joint 3D Detection and Occupancy Prediction in 4D Radar-Camera Full-Scene Perception. arXiv:2607.09629 , 2026b. Nicolas Baumann, Michael Baumgartner, Edoardo Ghignone, Jonas K¨ uhne, Tobias Fischer, Yung-Hsu Yang, Marc Pollefeys, and Michele Magno. CR3DT: Camera-RADAR Fusion for 3D De-tection and Tracking. In IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pp. 4926–4933. IEEE, 2024. doi: 10.1109/IROS58592.2024.10801848. Xin Bi, Caien Weng, Panpan Tong, Baojie Fan, and Arno Eichberge. MAFF-Net: Enhancing 3D Object Detection With 4D Radar via Multi-Assist Feature Fusion. IEEE Robotics and Automation Letters (RA-L) , 10(5):4284–4291, 2025. doi: 10.1109/LRA.2025.3550707. Xiaomeng Chu, Jiajun Deng, Guoliang You, Yifan Duan, Houqiang Li, and Yanyong Zhang. Racformer: Towards high-quality 3d object detection via query-based radar-camera fusion. In 
+
+IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 17081–17091, 2025. Felix Fent, Fabian Kuttenreich, Florian Ruch, Farija Rizwin, Stefan Juergens, Lorenz Lechermann, Christian Nissler, Andrea Perl, Ulrich Voll, Min Yan, and Markus Lienkamp. MAN TruckScenes: A Multimodal Dataset for Autonomous Trucking in Diverse Conditions. Advances in Neural Information Processing Systems (NeurIPS) , 37:62062–62082, 2024. doi: 10.52202/079017-1982. Zijian Gu, Jianwei Ma, Yan Huang, Honghao Wei, Zhanye Chen, Hui Zhang, and Wei Hong. HGS-Fusion: Radar-Camera Fusion with Hybrid Generation and Synchronization for 3D Object De-tection. In AAAI Conference on Artificial Intelligence (AAAI) , volume 39, pp. 3185–3193. AAAI, 2025. doi: 10.1609/aaai.v39i3.32328. Runwei Guan, Jianan Liu, Shaofeng Liang, Fangqiang Ding, Shanliang Yao, Xiaokai Bai, Daizong Liu, Tao Huang, Guoqiang Mao, and Hui Xiong. Wavelet-based multi-view fusion of 4d radar tensor and camera for robust 3d object detection. arXiv preprint arXiv:2512.22972 , 2025. Jisong Kim, Minjae Seong, Geonho Bang, Dongsuk Kum, and Jun Won Choi. RCM-Fusion: Radar-Camera Multi-Level Fusion for 3D Object Detection. In IEEE International Conference on Robotics and Automation (ICRA) , pp. 18236–18242. IEEE, 2024. 10 Published as a conference paper at ICLR 2027 Youngseok Kim, Sanmin Kim, Jun Won Choi, and Dongsuk Kum. CRAFT: Camera-Radar 3D Object Detection with Spatio-Contextual Fusion Transformer. In AAAI Conference on Artificial Intelligence (AAAI) , volume 37, pp. 1160–1168, 2023a. Youngseok Kim, Juyeb Shin, Sanmin Kim, In-Jae Lee, Jun Won Choi, and Dongsuk Kum. CRN: Camera Radar Net for Accurate, Robust, Efficient 3D Perception. In IEEE/CVF International Conference on Computer Vision (ICCV) , pp. 17615–17626, 2023b. doi: 10.1109/ICCV51070. 2023.01615. Alex H Lang, Sourabh Vora, Holger Caesar, Lubing Zhou, Jiong Yang, and Oscar Beijbom. Point-Pillars: Fast Encoders for Object Detection from Point Clouds. In IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 12697–12705, 2019. Zhiqi Li, Wenhai Wang, Hongyang Li, Enze Xie, Chonghao Sima, Tong Lu, Yu Qiao, and Jifeng Dai. BEVFormer: Learning Bird’s-Eye-View Representation from Multi-camera Images via Spa-tiotemporal Transformers. In European Conference on Computer Vision (ECCV) , pp. 1–18, 2022. Zhiwei Lin, Zhe Liu, Zhongyu Xia, Xinhao Wang, Yongtao Wang, Shengxiang Qi, Yang Dong, Nan Dong, Le Zhang, and Ce Zhu. RCBEVDet: Radar-Camera Fusion in Bird’s Eye View for 3D Object Detection. In IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 14928–14937. IEEE, 2024. doi: 10.1109/CVPR52733.2024.01414. Hongsi Liu, Jun Liu, Guangfeng Jiang, and Xin Jin. MSSF: A 4D Radar and Camera Fu-sion Framework With Multi-Stage Sampling for 3D Object Detection in Autonomous Driving. 
+
+IEEE Transactions on Intelligent Transportation Systems (T-ITS) , 26(6):8641–8656, 2025. doi: 10.1109/TITS.2025.3554313. Zhijian Liu, Haotian Tang, Alexander Amini, Xinyu Yang, Huizi Mao, Daniela L Rus, and Song Han. BEVFusion: Multi-Task Multi-Sensor Fusion with Unified Bird’s-Eye View Representation. In IEEE International Conference on Robotics and Automation (ICRA) , pp. 2774–2781, 2023. Yunfei Long, Abhinav Kumar, Daniel Morris, Xiaoming Liu, Marcos Castro, and Punarjay Chakravarty. RADIANT: Radar-Image Association Network for 3D Object Detection. In AAAI Conference on Artificial Intelligence (AAAI) , volume 37, pp. 1808–1816, 2023. Patrick Palmer, Martin Krueger, Richard Altendorfer, Ganesh Adam, and Torsten Bertram. Re-viewing 3D Object Detectors in the Context of High-Resolution 3+1D Radar. arXiv:2308.05478 ,2023. Jonah Philion and Sanja Fidler. Lift, Splat, Shoot: Encoding Images from Arbitrary Camera Rigs by Implicitly Unprojecting to 3D. In European Conference on Computer Vision (ECCV) , pp. 194–210, 2020. Xingzheng Wang, Jiahui Li, Jianbin Wu, Shaoyong Wu, and Lihua Li. DADAN: Dynamic-Augmented and Density-Aware Network for Accurate 3D Object Detection With 4D Radar. IEEE Sensors Journal (IEEE Sens. J.) , 25(6):10272–10286, 2025. doi: 10.1109/JSEN.2025.3528986. Yuqi Wang, Yuntao Chen, Xingyu Liao, Lue Fan, and Zhaoxiang Zhang. PanoOcc: Unified Occu-pancy Representation for Camera-Based 3D Panoptic Segmentation. In IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 17158–17168, 2024. Philipp Wolters, Johannes Gilg, Torben Teepe, Fabian Herzog, Anouar Laouichi, Martin Hofmann, and Gerhard Rigoll. Unleashing HyDRa: Hybrid Fusion, Depth Consistency and Radar for Uni-fied 3D Perception. In IEEE International Conference on Robotics and Automation (ICRA) , pp. 7467–7474. IEEE, 2025. doi: 10.1109/ICRA55743.2025.11127412. Yichun Xiao, Runwei Guan, Jin Jin, and Fangqiang Ding. HyperDet: 3D Object Detection with Hyper 4D Radar Point Clouds. arXiv:2602.11554 , 2026. Weiyi Xiong, Jianan Liu, Tao Huang, Qing-Long Han, Yuxuan Xia, and Bing Zhu. LXL: LiDAR Excluded Lean 3D Object Detection with 4D Imaging Radar and Camera Fusion. IEEE Transac-tions on Intelligent Vehicles (T-IV) , 9(1):79–92, 2024. doi: 10.1109/TIV.2023.3321240. 11 Published as a conference paper at ICLR 2027 Baowei Xu, Xinyu Zhang, Li Wang, Xiaomei Hu, Zhiwei Li, Shuyue Pan, Jun Li, and Yongqiang Deng. RPFA-Net: a 4D RaDAR Pillar Feature Attention Network for 3D Object Detection. In 
+
+IEEE International Conference on Intelligent Transportation Systems (ITSC) , pp. 3061–3066, 2021. Hang Yan, Peifeng Cheng, Xiaokai Bai, Luping Wang, and Wuming Wu. Disadet: Depth interaction and semantic alignment for 4d radar-camera 3d object detection. Displays , pp. 103666, 2026. Qiao Yan and Yihan Wang. MVFAN: Multi-View Feature Assisted Network for 4D Radar Object Detection. In International Conference on Neural Information Processing (ICONIP) , pp. 493– 511. Springer, 2023. Sheng Yang, Tong Zhan, Shichen Qiao, Jicheng Gong, Qing Yang, Jian Wang, and Yanfeng Lu. ZFu-sion: An Effective Fuser of Camera and 4D Radar for 3D Object Perception in Autonomous Driv-ing. In IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops (CVPRW) ,pp. 3807–3816, 2025. doi: 10.1109/CVPRW67362.2025.00362. Fuyi Zhang, Zhu Yu, Chunhao Li, Runmin Zhang, Xiaokai Bai, Zili Zhou, Si-Yuan Cao, Fang Wang, and Hui-Liang Shen. Structure-aware radar-camera depth estimation. In 2025 IEEE International Conference on Robotics and Automation , pp. 13028–13035. IEEE, 2025. Haocheng Zhao, Runwei Guan, Taoyu Wu, Ka Lok Man, Limin Yu, and Yutao Yue. UniBEVFusion: Unified Radar-Vision BEVFusion for 3D Object Detection. In IEEE International Conference on Robotics and Automation (ICRA) , pp. 6321–6327. IEEE, 2025. doi: 10.1109/ICRA55743.2025. 11128067. Lianqing Zheng, Sen Li, Bin Tan, Long Yang, Sihan Chen, Libo Huang, Jie Bai, Xichan Zhu, and Zhixiong Ma. RCFusion: Fusing 4-D Radar and Camera with Bird’s-Eye View Features for 3-D Object Detection. IEEE Transactions on Instrumentation and Measurement (TIM) , 72:1–14, 2023. doi: 10.1109/TIM.2023.3280525. Lianqing Zheng, Jianan Liu, Runwei Guan, Long Yang, Shouyi Lu, Yuanzhe Li, Xiaokai Bai, Jie Bai, Zhixiong Ma, Hui-Liang Shen, and Xichan Zhu. Doracamom: Joint 3D Detection and Occupancy Prediction with Multi-View 4D Radars and Cameras for Omnidirectional Perception. 
+
+IEEE Transactions on Circuits and Systems for Video Technology (TCSVT) , 36(6):7630–7645, 2026a. doi: 10.1109/TCSVT.2026.3657111. Lianqing Zheng, Long Yang, Qunshu Lin, Wenjin Ai, Minghao Liu, Shouyi Lu, Jianan Liu, Hongze Ren, Jingyue Mo, Xiaokai Bai, Jie Bai, Zhixiong Ma, and Xichan Zhu. OmniHD-Scenes: A Next-Generation Multimodal Dataset for Autonomous Driving. IEEE Transactions on Pattern Analysis and Machine Intelligence (TPAMI) , 48(6):7032–7049, 2026b. doi: 10.1109/TPAMI. 2026.3663672. Hanzhi Zhong, Zhiyu Xiang, Ruoyu Xu, Jingyun Fu, Peng Xu, Shaohong Wang, Zhihao Yang, Tianyu Pu, and Eryun Liu. CVFusion: Cross-View Fusion of 4D Radar and Camera for 3D Ob-ject Detection. In IEEE/CVF International Conference on Computer Vision (ICCV) , pp. 28188– 28197. IEEE, October 2025. doi: 10.1109/ICCV51701.2025.02617. 12
