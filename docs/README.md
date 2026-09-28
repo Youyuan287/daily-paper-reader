@@ -6,37 +6,44 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-27
-- 运行时间：2026-09-27 21:48:44 UTC
+- 最新运行日期：2026-09-28
+- 运行时间：2026-09-28 23:58:04 UTC
 - 运行状态：成功
-- 本次总论文数：4
-- 精读区：0
-- 速读区：4
+- 本次总论文数：7
+- 精读区：2
+- 速读区：5
 
 ### 今日简报（AI）
-今日速读4篇（精读0篇），选题集中在让视觉-语言-动作模型看懂3D的Bridge3D、单图生场景的分层智能体框架HARMONY，以及跨异构真实环境的提示鲁棒开放词汇视觉定位Pro-Bench。
-
-三篇速读均评为6.0分，其中Bridge3D和Pro-Bench更贴近"让模型在真实3D/异构环境中稳住表现"这条实用主线，值得优先翻看。
-
-普通读者可先从Bridge3D入手了解3D感知与动作结合的基本思路，再按需关注另两篇的场景生成与评测鲁棒性话题。
-- 详情：[/202609/27/README](/202609/27/README)
+- 今日共生成 7 篇推荐（精读 2 篇，速读 5 篇）
+- 精读：《TRACKGRAPH: Online Open-Vocabulary 3D Scene Graphs via Image-Space Tracking》（9.0/10）, 《GraphWrit3R: End-to-End 3D Scene Graph Writing》（8.0/10）
+- 速读：《Leveraging Vision-Based Point Cloud Map Priors for Camera-Based 3D Object Detection and Online Vectorized HD Mapping》（6.0/10）, 《SARFusion: Scene-Aware Routing Fusion for Robust Camera-LiDAR 3D Object Detection》（6.0/10）, 《From Mono to Stereo: Accelerating Binocular Gaussian Splatting via Reprojection and Selective Patching》（6.0/10）
+- 这些结果覆盖了当下较热的方向，建议先看精读区论文的关键问题与方法。
+- 详情：[/202609/28/README](/202609/28/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [TRACKGRAPH: Online Open-Vocabulary 3D Scene Graphs via Image-Space Tracking](/202609/28/2609.31005v1-trackgraph-online-open-vocabulary-3d-scene-graphs-via-image-space-tracking)  
+   标签：评分：9.0/10、query:open-vocab-d
+   evidence：融合视觉语言特征的在线开放词汇3D场景图
+2. [GraphWrit3R: End-to-End 3D Scene Graph Writing](/202609/28/2609.31595v1-graphwrit3r-end-to-end-3d-scene-graph-writing)  
+   标签：评分：8.0/10、query:open-vocab-d
+   evidence：从点云与高斯泼溅端到端生成三维场景图
 
 ### 速读区论文标签
-1. [Bridge3D: Enabling Vision-Language-Action Models to See and Act in 3D](/202609/27/2609.24525v1-bridge3d-enabling-vision-language-action-models-to-see-and-act-in-3d)  
+1. [Leveraging Vision-Based Point Cloud Map Priors for Camera-Based 3D Object Detection and Online Vectorized HD Mapping](/202609/28/2609.26325v1-leveraging-vision-based-point-cloud-map-priors-for-camera-based-3d-object-detection-and-online-vectorized-hd-mapping)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：用三维基础模型特征增强二维视觉token
-2. [HARMONY: Hierarchical Agentic Reasoning for MONocular Image-to-Scene Synthesis](/202609/27/2609.26793v1-harmony-hierarchical-agentic-reasoning-for-monocular-image-to-scene-synthesis)  
+   evidence：用DINOv3将视觉特征提升到点云地图先验
+2. [SARFusion: Scene-Aware Routing Fusion for Robust Camera-LiDAR 3D Object Detection](/202609/28/2609.29235v1-sarfusion-scene-aware-routing-fusion-for-robust-camera-lidar-3d-object-detection)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：层级推理用于组合式三维场景重建
-3. [Pro-Bench: Prompt-Robust Open-Vocabulary Visual Grounding Across Real-World Heterogeneous Environments](/202609/27/2609.27076v1-pro-bench-prompt-robust-open-vocabulary-visual-grounding-across-real-world-heterogeneous-environments)  
+   evidence：可靠性/不确定性感知的自适应多模态融合
+3. [From Mono to Stereo: Accelerating Binocular Gaussian Splatting via Reprojection and Selective Patching](/202609/28/2609.30741v1-from-mono-to-stereo-accelerating-binocular-gaussian-splatting-via-reprojection-and-selective-patching)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：开放词汇视觉定位基准
-4. [SGDet3D++: Geometry-Grounded Semantics for 4D Radar and Camera 3D Object Detection](/202609/27/2609.27671v1-sgdet3d-geometry-grounded-semantics-for-4d-radar-and-camera-3d-object-detection)  
+   evidence：面向多视角高斯渲染的可见性与遮挡感知重投影
+4. [Skip the Talk, Re-Focus on Vision: Latent Reasoning for Reasoning Segmentation in Multimodal Large Language Models](/202609/28/2609.30783v1-skip-the-talk-re-focus-on-vision-latent-reasoning-for-reasoning-segmentation-in-multimodal-large-language-models)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：假设条件下的证据筛选，在更新三维目标查询前过滤遮挡物与不兼容运动
+   evidence：多模态大模型细粒度推理分割的潜在推理
+5. [DepthEvidence: Unifying Metric Depth Prediction and Geometric Reasoning in Multimodal Language Models](/202609/28/2609.31103v1-depthevidence-unifying-metric-depth-prediction-and-geometric-reasoning-in-multimodal-language-models)  
+   标签：评分：6.0/10、query:open-vocab-d
+   evidence：将稠密深度提升为物体锚定几何令牌以支撑语言推理
 
 
 <div class="dpr-home-promo-card">

@@ -1,0 +1,351 @@
+Title: SARFusion: Scene-Aware Routing Fusion for Robust Camera-LiDAR 3D Object Detection
+
+URL Source: https://arxiv.org/pdf/2609.29235v1
+
+Published Time: Fri, 25 Sep 2026 00:47:45 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# SARFusion: Scene-Aware Routing Fusion for Robust Camera-LiDAR 3D Object Detection 
+
+Yuting Zhao 1,2, Ziyi Zheng 3, and Shuxiao Li 1⋆ 
+
+> 1
+
+Institute of Automation, Chinese Academy of Sciences, Beijing, China  
+
+> 2
+
+School of Artificial Intelligence, University of Chinese Academy of Sciences, Beijing, China  
+
+> 3
+
+Wuhan College, Wuhan, China 
+
+{zhaoyuting2023,shuxiao.li}@ia.ac.cn, 542197655@qq.com 
+
+Abstract. Camera-LiDAR fusion has become a prevailing paradigm for 3D object detection in autonomous driving. However, existing fusion de-tectors often establish strong inter-modality dependencies by decoding object queries from tightly coupled multimodal representations. Under corrupted driving conditions, such dependencies make the detector vul-nerable to unreliable modalities, where degraded observations may in-terfere with reliable modality-specific evidence and lead to suboptimal predictions. Moreover, modality reliability can vary across both global driving scenes and individual object queries, requiring adaptive fusion decisions at a finer granularity. To bridge this gap, we reformulate ro-bust camera-LiDAR fusion as a scene-aware branch routing problem and propose SARFusion, a robust 3D object detector. Instead of produc-ing detections from a single fused representation, SARFusion decouples object-query decoding into three parallel reasoning branches: a camera branch, a LiDAR branch, and a camera-LiDAR fusion branch. Guided by a Scene Reliability Prior estimated from the global driving context, SARFusion further incorporates object-level evidence to route each query to the most suitable branch. This query-wise routing strategy alleviates harmful cross-modal interference while preserving the benefits of multi-modal fusion when complementary cues are trustworthy. On the nuScenes test set, SARFusion achieves strong performance with 72.5 mAP and 74.4 NDS. Extensive analyses demonstrate its robustness under challenging conditions, including sensor corruptions and environmental changes. 
+
+Keywords: 3D Detection · Camera-LiDAR Fusion · Robust Perception 
+
+# 1 Introduction 
+
+Reliable 3D object detection is a fundamental capability for autonomous driving systems. Modern autonomous vehicles perceive their surroundings with multi-ple complementary sensors, among which cameras and LiDAR are two of the most widely used modalities. Cameras provide dense appearance and semantic  
+
+> ⋆
+
+Corresponding author: shuxiao.li@ia.ac.cn arXiv:2609.29235v1 [cs.CV] 24 Sep 2026 2 Y. Zhao et al. 
+
+information, which is beneficial for object recognition and distant-object per-ception. LiDAR directly measures depth and 3D geometry, providing accurate localization cues. By combining these complementary signals, camera-LiDAR fusion detectors have achieved strong performance on standard 3D detection benchmarks. [2, 9, 50] Despite this progress, robust multi-modal perception remains challenging in complex driving environments. Sensor observations can be degraded by adverse weather [3], illumination changes, motion blur, temporal inconsistency, spatial misalignment, camera failures, LiDAR beam dropping, incomplete echoes, and other corruptions [1,3,4,11,14,32]. Under such conditions, the reliability of each modality can change significantly. A modality that provides useful evidence in clean scenes may become noisy or misleading when degraded. If a detector always follows the same fusion pathway, unreliable modality information can be injected into the final prediction, leading to negative transfer and reduced robustness. A common limitation of existing fusion detectors is that they treat fusion behavior as largely fixed [2, 30]. This design implicitly assumes that the same sensor combination is suitable for all driving scenes. However, modality reliability is strongly scene-dependent. Weather, illumination, and sensor status can change the overall usefulness of camera and LiDAR cues. For example, low-light or adverse weather may weaken visual observations, while LiDAR corruptions can reduce geometric reliability. This motivates the need for scene-aware reliability modeling rather than condition-agnostic fusion. Moreover, modality reliability is not only scene-dependent but also object-dependent. In the same frame, different objects may have different observation quality due to distance, occlusion, visibility, and point density [11, 22, 46]. A distant pedestrian may have sparse LiDAR returns but still preserve recogniz-able image semantics, while a nearby vehicle may be better localized by LiDAR geometry. Therefore, a single scene-level fusion decision is insufficient: forcing all objects in a frame to use the same sensor combination may still propagate locally degraded evidence. Since object queries naturally represent candidate in-stances in transformer-based 3D detectors, query-level branch selection provides an appropriate granularity for reliable fusion [2, 27, 45, 48].. Motivated by these observations, we propose SARFusion, a scene-aware branch routing framework for robust camera-LiDAR 3D object detection. SARFusion explicitly maintains three candidate branches: a camera branch, a LiDAR branch, and a camera-LiDAR fusion branch. These branches provide different sensing paths for object queries under varying sensor conditions. To guide branch se-lection, SARFusion first estimates a Scene Reliability Prior from global driving conditions such as weather and time. During training, the scene prior is aligned with textual scene prompts [34]. It then performs Scene-Aware Branch Routing, which combines the scene prior with local feature evidence around each object query to select a reliable branch. This design allows different objects in the same scene to rely on different sensor combinations, reducing negative transfer from degraded modalities while preserving useful cross-modal complementarity. We evaluate SARFusion on clean and corrupted autonomous-driving benchmarks. SARFusion: Scene-Aware Routing Fusion 3
+
+In nuScenes [6], SARFusion achieves 71.1 mAP and 73.7 NDS on the validation split, and 72.5 mAP and 74.4 NDS on the test split. Under adverse nuScenes-C conditions [11, 16], SARFusion improves detection performance under adverse weather and illumination changes, including fog, snow, rain and strong sunlight. Ablation studies verify the effectiveness of our core components. Our main contributions are summarized as follows: 1. We propose SARFusion , a scene-aware branch routing framework for robust camera-LiDAR 3D object detection, which dynamically selects among cam-era, LiDAR, and camera-LiDAR fusion branches instead of relying on a fixed fusion pathway. 2. We introduce a Scene Reliability Prior to model scene-dependent modality reliability from global driving conditions, providing condition-aware guidance under degraded environments. 3. We design Scene-Aware Branch Routing, which combines the scene reliability prior with local object-level evidence to perform query-level branch selection. 4. SARFusion achieved SOTA performance among existing camera-LiDAR fu-sion methods under various sensor failure conditions and extreme weather scenarios. 5. The code will be publicly available. 
+
+# 2 Related Work 
+
+2.1 3D Object Detection 
+
+3D object detection estimates object categories and 3D bounding boxes from on-board sensor observations. Camera-based methods infer 3D layouts from monoc-ular, stereo, or surround-view images. Early methods rely on geometric priors, keypoints, or explicit depth estimation [5,8,29,43]. Recent surround-view detec-tors lift image features into 3D or bird’s-eye-view (BEV) space [15, 25, 26], or use 3D queries to aggregate multi-view image features [27, 45]. These methods benefit from dense appearance cues, but remain limited by depth ambiguity, especially for distant, occluded, or weakly textured objects. LiDAR-based detectors exploit point clouds with accurate depth and ge-ometry. Point-based methods operate on raw point sets [33, 37], while voxel-and pillar-based methods convert point clouds into regular representations for efficient feature extraction [23, 49, 51, 53]. Hybrid point-voxel methods further balance geometric precision and computational efficiency [36]. However, LiDAR points are sparse at long range and provide limited semantic appearance. They can also be degraded by adverse weather, beam sparsity, incomplete echoes, and sensor malfunction. These complementary limitations motivate camera-LiDAR fusion for more accurate and reliable 3D detection. 
+
+2.2 Multi-modal Sensor Fusion 
+
+Camera-LiDAR fusion combines dense image semantics with accurate LiDAR geometry. Point-level methods project image semantics or features onto LiDAR 4 Y. Zhao et al. 
+
+points to enrich point-cloud representations [40, 41, 52]. They improve detection performance, but usually depend on accurate calibration and are sensitive to projection errors, spatial misalignment, and LiDAR degradation. Recent methods fuse modalities in intermediate feature spaces. BEV-based methods transform camera and LiDAR features into a shared BEV represen-tation [30, 42], which provides an efficient fusion space but still relies on depth estimation and geometric projection. Other methods explore unified voxel rep-resentations, deformable feature alignment, and sparse multi-sensor representa-tions [9, 10, 24, 47]. Transformer-based methods use object queries or modality tokens for cross-modal interaction [2,48,50]. TransFusion refines LiDAR propos-als with image features, DeepInteraction performs iterative modality interaction, and CMT uses coordinate embeddings for implicit alignment. These methods achieve strong clean-set performance, but most of them use fixed fusion path-ways or predefined interaction patterns. They rarely adapt the fusion behavior to scene-dependent and object-dependent modality reliability. 
+
+2.3 Robust Multi-Modality Fusion 
+
+Robust multi-modal fusion has attracted increasing attention because 3D detec-tors can degrade severely under adverse weather, motion blur, temporal incon-sistency, spatial misalignment, missing cameras, beam dropping, and incomplete echoes [3, 17, 18, 22, 46]. These corruptions change modality reliability at differ-ent granularities. Weather and illumination often affect the whole scene, while occlusion, distance, point density, and local sensor failures may affect individual objects within the same frame. Existing methods improve robustness through data augmentation, modality dropout, decoupled representations, or adaptive fusion strategies [7, 12, 13, 16, 31, 35, 38, 42, 48]. CMT adopts masked-modal training to handle missing modal-ities [48]. MEFormer reduces negative fusion with modality-agnostic decoding and prediction ensemble [7]. Recent expert-based methods further explore rout-ing or selecting modality-specific experts under sensor failures [31]. These studies suggest that reducing rigid inter-modality dependence is important for robust perception. However, many existing robust fusion methods mainly focus on predefined corruptions, modality-level failures, or fixed robustness training strategies. Less attention has been paid to jointly modeling global scene reliability and query-level local observation quality. In realistic driving scenes, the reliable modality may vary not only with weather or illumination, but also across different objects due to distance, visibility, occlusion, and point density [20, 21, 39, 44]. Motivated by this observation, SARFusion formulates robust camera-LiDAR fusion as a scene-aware branch routing problem. It estimates a global scene reliability prior and combines it with local query evidence to select camera, LiDAR, or fusion branches for each object query [19, 28]. SARFusion: Scene-Aware Routing Fusion 5Scene Prompt          
+
+> A {weather condition} driving scene at {time of day} time
+> Multimodal Tokens
+> XCL
+> Object Query Vectors
+> Local Masked Attention Scene-Aware Branch Router Scene Prior Local Evidence
+> MLP Branch Selection
+> QCQLQC+L
+> Image Encoder
+> XC
+> LiDAR Encoder
+> XL
+> Multi-Branch Decoding
+> Object Detection Boxes
+> CXCC-Transformer Decoder
+> LXLL-Transformer Decoder
+> C+L C+L-Transformer Decoder
+> XCL
+> Scene Perception Module
+
+Fig. 1: Overall architecture of the proposed SARFusion. 
+
+# 3 Method 
+
+3.1 Overview 
+
+The overall framework of SARFusion is shown in Fig. 1. Given multi-view camera images I = {Iv }Vv=1 and a LiDAR point cloud P, SARFusion first extracts cam-era features and LiDAR features using modality-specific encoders. The camera features are flattened into image tokens XC ∈ RNC ×D , and the LiDAR features are encoded into BEV tokens XL ∈ RNL×D . We further concatenate them as multimodal context tokens XCL = [ XC ; XL].Instead of producing a single fused representation, SARFusion explicitly maintains three candidate decoding branches: a camera branch, a LiDAR branch, and a Camera-LiDAR fusion branch. These branches provide complementary representation choices under different sensing conditions. The camera branch decodes object queries using camera tokens, the LiDAR branch uses LiDAR to-kens, and the fusion branch attends to multimodal tokens. To adaptively select reliable branches, SARFusion first learns a Scene Reliability Prior from multi-modal context to encode global sensing conditions. Then, for each object query, a Scene-Aware Branch Router combines this scene prior with local observation evidence around the query reference point and predicts branch probabilities over the three decoding branches. The query is routed to the selected branch for final decoding and prediction. 
+
+3.2 Scene Reliability Prior 
+
+The reliability of camera and LiDAR observations is highly correlated with scene-level conditions, such as weather, illumination, sensor degradation, and 6 Y. Zhao et al. A {weather condition} driving scene at {time of day} time  
+
+> Scene Prompt
+> Text Tokenizer
+> Text Encoder
+> Qctx
+> Stack
+> Qtext
+> Multimodal Tokens
+> Transformer
+> Contrastive Loss
+> XCL Scene Prior
+
+Fig. 2: The illustration of SRP module 
+
+temporal-spatial disturbance. Therefore, we introduce a Scene Reliability Prior to provide global reliability guidance for branch routing. Given multimodal context tokens XCL , we use a lightweight Transformer to aggregate scene-level information. Specifically, a learnable scene token qs is prepended to the multimodal tokens, and the output scene token is projected to obtain the scene reliability prior: 
+
+cprior = LN (MLP (Transformer([ qs; XCL ]) 0)) , (1) where cprior ∈ RD summarizes the global sensing condition of the current scene. To encourage the scene prior to encode meaningful reliability-related infor-mation, we supervise it with textual scene prompts during training. For each training scene, a prompt describing the scene condition is constructed, e.g., 
+
+“A {weather condition} driving scene at {time of day}.”  (2) The prompt is encoded by a text encoder into a text embedding t. We then apply a symmetric contrastive loss between the scene prior and the text embedding: 
+
+Lsrp = Lc→t + Lt→c. (3) This supervision encourages cprior to preserve scene-level reliability cues. During inference, no text prompt or scene label is required; the scene prior is directly inferred from multimodal features. 
+
+3.3 Scene-Aware Branch Routing 
+
+While the Scene Reliability Prior captures global sensing conditions, modality reliability can also vary across object regions [11, 22, 46]. For example, LiDAR points may be sparse for distant objects, while camera observations may be locally occluded or corrupted. Therefore, SARFusion performs branch routing at the object-query level. For the i-th object query qi with reference point pref i = ( xi, y i, z i), we project the reference point onto the camera feature plane and the LiDAR BEV plane. SARFusion: Scene-Aware Routing Fusion 7Lidar Mask Camera Mask   
+
+> Q
+> K
+> V
+> Transformer Decoder Softmax Branch Selection
+> MLP
+> Local Evidence
+> QXCL
+> Scene Prior
+> QCQLQC+L
+
+Fig. 3: The illustration of SABR module. 
+
+Around each projected location, we construct a local attention window to collect nearby modality features. The union of camera and LiDAR local tokens forms a query-specific local region Ωi.We use a local attention mask Mi to restrict attention to Ωi:
+
+Mi(n) = 
+
+(
+
+0, n ∈ Ωi,
+
+−∞ , n / ∈ Ωi. (4) The local observation evidence for query qi is then computed by masked atten-tion: 
+
+elocal i = Softmax 
+
+ qiK⊤
+
+√D + Mi
+
+
+
+V, (5) where K and V are projected from multimodal context tokens XCL .The branch router combines local observation evidence with the global scene prior: 
+
+hi = [ elocal i ; cprior ], (6) and predicts branch probabilities: 
+
+πi = Softmax (MLP( hi)) , πi = [ πi,C , π i,L , π i,F ], (7) where C, L, and F denote the camera, LiDAR, and fusion branches, respectively. The selected branch is: 
+
+m∗ 
+
+> i
+
+= arg max   
+
+> m∈{ C,L,F }
+
+πi,m . (8) Accordingly, object queries are partitioned into three groups: 
+
+Qm = {qi | m∗ 
+
+> i
+
+= m}, m ∈ { C, L, F }. (9) Each group is decoded by its corresponding branch. This design allows different object queries in the same scene to select different reliable representations. 8 Y. Zhao et al. 
+
+3.4 Training Objective 
+
+Training SARFusion involves three objectives: branch-wise detection supervision, scene prior supervision, and routing supervision. First, to ensure that each branch has independent detection ability, we apply detection losses to all three branches: 
+
+Ldet = LCdet + LLdet + LFdet , (10) where each detection loss consists of classification and box regression terms. Second, the Scene Reliability Prior is supervised by the contrastive scene-prompt loss Lsrp defined above, which encourages the prior to encode global sensing conditions. Third, we supervise the branch router with reliability-aware routing targets. During training, modality degradation or dropout is applied to simulate unre-liable sensing conditions. The routing target encourages queries to select the branch corresponding to the reliable modality: the LiDAR branch when cam-era observations are degraded, the camera branch when LiDAR observations are unreliable, and the fusion branch when both modalities are informative. The routing loss is: 
+
+Lroute = − 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+X 
+
+> m∈{ C,L,F }
+
+yi,m log πi,m , (11) where yi,m is the routing target for query qi.The full training objective is: 
+
+L = λdet Ldet + λsrp Lsrp + λroute Lroute . (12) In practice, we adopt a staged training strategy. We first train the three decoding branches with branch-wise detection supervision, then learn the Scene Reliability Prior with prompt-based contrastive supervision, and finally optimize the router with reliability-aware routing supervision. This strategy stabilizes branch learning and prevents the router from degenerating into a fixed branch preference. 
+
+# 4 Experiments 
+
+4.1 Experimental Setup Dataset and metrics. We evaluate SARFusion on the nuScenes 3D object detection benchmark, which provides synchronized multi-view camera images and LiDAR point clouds for autonomous driving scenes. Following the official protocol, the dataset is divided into 700 training scenes, 150 validation scenes, and 150 test scenes. We report the official mean Average Precision (mAP) and nuScenes Detection Score (NDS). mAP measures localization and classification SARFusion: Scene-Aware Routing Fusion 9LiDAR-Only   
+
+> SARFusion (Ours) CMT
+> Camera+LiDAR Camera-Only
+> Fig. 4: Comparison of camera-LiDAR observations under degraded sensing conditions.
+
+accuracy, while NDS further summarizes multiple detection quality factors, in-cluding translation, scale, orientation, velocity, and attribute errors. 
+
+Robustness evaluation. Besides the standard clean validation and test sets, we further evaluate different methods under representative degraded sens-ing conditions, including snow, rain, fog, and strong sunlight. These conditions affect camera and LiDAR observations in different ways. Snow, rain, and fog may weaken image visibility and disturb point-cloud measurements, while strong sun-light mainly changes image appearance and reduces the reliability of visual cues. Unless otherwise specified, all models are trained on the original training set and directly evaluated under degraded validation conditions without condition-specific fine-tuning. This protocol is used to examine whether the fusion strategy itself can adapt to scene-dependent sensing reliability. 
+
+Implementation details. SARFusion follows a multi-branch camera-LiDAR detection framework. The camera stream extracts image features from surrounding-view images, and the LiDAR stream encodes point clouds into BEV features. Based on these representations, SARFusion maintains three candidate predic-tion branches: a camera branch, a LiDAR branch, and a camera-LiDAR fusion branch. The Scene Reliability Prior estimates global scene-level sensing condi-tions, while the Scene-Aware Branch Routing module combines this prior with local query evidence to select a suitable branch for each object query. All ab-lation experiments are conducted on the nuScenes validation split. We adopt a staged training strategy: the detection branches are first optimized to provide valid modality-specific and fused representations; the scene prior is then learned with scene-level supervision; finally, the routing module is jointly optimized with the detection objective. 
+
+4.2 Comparison with SOTA Methods Results on the clean benchmark. Table 1 compares SARFusion with repre-sentative camera-only, LiDAR-only, and camera-LiDAR fusion methods on the standard nuScenes validation and test sets. Camera-only methods are limited by the lack of explicit 3D geometry, while LiDAR-only methods provide stronger localization due to accurate depth and structure. Multi-modal methods further improve detection by combining image semantics with LiDAR geometry. 10 Y. Zhao et al.  
+
+> Table 1: Comparison with representative 3D object detection methods on the nuScenes validation and test sets. All results are reported in percentage.
+
+Modality Method Validation Test mAP NDS mAP NDS Camera FCOS3D [43] 34.3 41.5 35.8 42.8 PETR [27] 37.0 44.2 39.1 45.5 BEVDet [15] – – 42.2 48.2 LiDAR SECOND [49] 52.6 63.0 52.8 63.3 CenterPoint [51] 59.6 66.8 60.3 67.3 TransFusion-L [2] 65.1 70.1 65.5 70.2 Camera + LiDAR FUTR3D [9] 64.5 68.3 – –PointAugmenting [41] – – 66.8 71.0 UVTR [24] 65.4 70.2 67.1 71.1 AutoAlignV2 [10] 67.1 71.2 68.4 72.4 TransFusion [2] 67.5 71.3 68.9 71.6 MetaBEV [13] 68.0 71.5 – –BEVFusion [30] 68.5 71.4 70.2 72.9 DeepInteraction [50] 69.9 72.6 70.8 73.4 SparseFusion [47] 70.4 72.8 72.0 73.8 CMT [48] 70.3 72.9 72.0 74.1 Camera + LiDAR SARFusion 71.1 73.7 72.5 74.4 
+
+SARFusion achieves 71.1 mAP and 73.7 NDS on the validation set, and 72.5 mAP and 74.4 NDS on the test set. Compared with representative camera-LiDAR fusion methods, SARFusion obtains strong performance on clean scenes. The improvement on clean data is moderate but meaningful, since most clean samples already benefit from conventional fused representations. This indicates that the proposed scene-aware routing strategy improves robustness without sacrificing standard detection accuracy. 
+
+Results under degraded conditions. Table 2 reports the robustness com-parison under representative weather and lighting conditions. Compared with clean scenes, degraded scenes introduce stronger modality imbalance. Visual ap-pearance may become unreliable under rain, fog, or strong sunlight, while LiDAR observations can become sparse or noisy in adverse weather. These corruptions make tightly coupled fusion vulnerable, since degraded observations may inter-fere with reliable modality-specific evidence. SARFusion achieves the best performance under all evaluated clean and de-graded conditions. Compared with the strongest competing results, SARFusion improves mAP by 0.8 on clean scenes, 1.3 under snow, 3.2 under rain, 7.8 under fog, and 2.0 under strong sunlight. The advantage becomes more evident under degraded conditions, supporting our motivation that robust camera-LiDAR fu-SARFusion: Scene-Aware Routing Fusion 11 BEVFusion CMT SARFusion (Ours)  
+
+> Fig. 5: Qualitative detection results under representative adverse weather conditions, including fog, snow, and rain.
+
+sion should adapt to scene-level and object-level reliability rather than relying on a single fixed fused representation. 
+
+4.3 Ablation Study Effectiveness of each component. Table 3 studies the contribution of the main components in SARFusion. The single fusion branch baseline already achieves strong performance, since it benefits from both camera semantics and LiDAR geometry. However, directly introducing multiple branches without an effective routing mechanism leads to a significant performance drop. This shows that simply adding modality-specific branches is not sufficient. Without query-level routing, the detector cannot determine which representation should be respon-sible for each object, and the branch predictions are not properly coordinated. After introducing Scene-Aware Branch Routing, the performance recovers to the level of the single fusion branch baseline. This result indicates that query-level branch selection is essential for making the multi-branch design effective. Finally, adding the Scene Reliability Prior further improves both mAP and NDS, showing that global scene reliability provides useful context for object-level rout-ing decisions. 
+
+Effect of scene prior supervision. Table 4 evaluates the effect of super-vising the Scene Reliability Prior. Without scene-level supervision, the prior is 12 Y. Zhao et al.  
+
+> Table 2: Robustness comparison on the nuScenes validation set under representative weather and lighting conditions.
+
+Method Clean Snow Rain Fog Strong Sunlight FCOS3D [43] 23.9 2.0 13.0 13.5 17.2 DETR3D [45] 34.7 5.1 20.4 27.9 34.7 PointPillars [23] 27.7 27.6 27.7 24.5 23.7 CenterPoint [51] 59.3 55.9 56.1 43.8 54.2 BEVFusion [30] 68.5 62.8 66.1 54.1 64.4 TransFusion [2] 66.4 63.3 65.4 53.7 55.1 DeepInteraction [50] 69.9 62.3 66.5 54.8 64.9 FUTR3D [9] 64.2 52.7 58.4 53.2 57.7 CMT [48] 70.3 63.5 62.6 61.4 66.3 
+
+SARFusion 71.1 64.8 69.7 69.2 68.3 Table 3: Component ablation of SARFusion on the nuScenes validation set. Setting mAP NDS Single fusion branch 70.7 73.1 Multi-branch w/o routing 52.4 62.8 + Scene-Aware Branch Routing 70.8 73.1 + Scene Reliability Prior 71.1 73.7 
+
+learned only through the final detection objective. In this case, the scene rep-resentation may encode information useful for detection, but it is not explicitly encouraged to describe global sensing reliability. With scene prior supervision, SARFusion achieves higher mAP and NDS. This improvement shows that explicitly aligning the scene prior with global driving conditions makes the routing decision more stable. The prior does not replace local evidence; instead, it calibrates local query evidence with scene-level reliability context. 
+
+Effect of routing evidence. Table 5 compares different inputs for branch routing. Using only local query evidence already provides strong performance, because it captures object-level cues such as local image visibility, point density, and feature consistency around the query reference point. This is important for autonomous driving scenes, where degradation is often spatially non-uniform. Combining local evidence with the Scene Reliability Prior gives the best re-sult. The two types of evidence are complementary: local evidence describes the reliability of a specific object query, while the scene prior describes the global sensing condition shared by the whole frame. Their combination enables SAR-Fusion to make object-specific routing decisions under a scene-aware context. SARFusion: Scene-Aware Routing Fusion 13               
+
+> Table 4: Effect of scene prior supervision on the nuScenes validation set. Setting mAP NDS w/o scene prior supervision 69.6 72.1 w/ scene prior supervision 71.1 73.7 Table 5: Ablation of routing evidence on the nuScenes validation set. Routing Evidence mAP NDS Local evidence only 70.8 73.1 Scene prior + local evidence 71.1 73.7
+
+Effect of training strategy. Table 6 compares direct end-to-end training with the staged training strategy. Direct training gives much lower performance, indicating that joint optimization of branch specialization, scene prior learning, and routing selection is difficult from scratch. In the early training stage, the router may make unstable choices before each branch becomes a reliable detector, which further weakens branch learning and may lead to routing collapse. The staged strategy substantially improves performance. By first training the candidate branches, each branch learns a meaningful representation for de-tection. The scene prior is then learned as a reliability-aware condition signal. Finally, the routing module is optimized on top of already informative branches and a stable scene prior. 
+
+4.4 Qualitative Analysis Routing behavior under different scenes. To further understand how SAR-Fusion makes routing decisions, we analyze the distribution of selected branches under different sensing conditions. As shown in Figure 6, the fusion branch dom-inates in clean scenes, which is consistent with the strong performance of conven-tional fusion methods under normal conditions. This confirms that SARFusion does not unnecessarily avoid fusion when both modalities are reliable. When one modality becomes unreliable, the routing distribution changes ac-cordingly. Under LiDAR failure, most queries are routed to the camera branch, while under camera failure, most queries are routed to the LiDAR branch. Under adverse weather or illumination, the model does not simply switch to a single modality. Instead, it keeps a considerable portion of queries in the fusion branch while increasing the use of modality-specific branches. This behavior indicates that SARFusion learns a reliability-aware routing policy rather than a fixed modality preference. 
+
+Detection examples. Figure 5 presents qualitative comparisons under rep-resentative adverse weather conditions, including rain, fog, and snow. These conditions degrade image visibility and may disturb point-cloud observations, 14 Y. Zhao et al. 
+
+Table 6: Effect of training strategy on the nuScenes validation set. Training Strategy mAP NDS Direct training 65.7 69.6 Staged training 71.1 73.7 Clean Lidar Drop Camera Drop Snow Fog Strong Sunlight Rain Dark   
+
+> 80 7465 61 73 88 80 12 92 121 23 6748195 14 16 21 516
+> Camera+Lidar Camera Lidar
+
+Fig. 6: Branch routing visualization under different sensing conditions. 
+
+making tightly coupled camera-LiDAR fusion vulnerable to unreliable modal-ity features. Compared with BEVFusion and CMT, SARFusion produces more complete and accurately localized detection results across the degraded scenes. In particular, competing fusion methods may miss objects or generate less precise boxes when corrupted observations interfere with reliable modality-specific evidence. By routing object queries to camera, LiDAR, or fusion branches ac-cording to scene-level and object-level reliability, SARFusion alleviates harm-ful cross-modal interference while preserving useful complementary cues. These qualitative results further support the robustness of scene-aware routing fusion under adverse weather conditions. 
+
+# 5 Conclusions 
+
+We introduced SARFusion , a scene-aware branch routing framework for robust camera-LiDAR 3D object detection. Unlike fixed fusion methods, SARFusion maintains camera, LiDAR, and fusion branches, and combines a global Scene Reliability Prior with local query evidence to select reliable sensing paths for each object. This design reduces the influence of degraded modalities while pre-serving complementary semantic and geometric cues. Experiments on nuScenes and corrupted driving scenarios demonstrate the effectiveness of SARFusion: it achieves 72.5 mAP and 74.4 NDS on the nuScenes test set and consistently im-proves robustness under snow, rain, fog, and strong sunlight. Ablations further validate the benefits of scene reliability modeling and query-level routing. SARFusion: Scene-Aware Routing Fusion 15 
+
+# References 
+
+1. Albreiki, F., Abughazal, S., Lahoud, J., Anwer, R., Cholakkal, H., Khan, F.: On the robustness of 3d object detectors (2022), https://arxiv.org/abs/2207.10205 
+
+2. Bai, X., Hu, Z., Zhu, X., Huang, Q., Chen, Y., Fu, H., Tai, C.L.: Transfusion: Robust lidar-camera fusion for 3d object detection with transformers (2022), 
+
+https://arxiv.org/abs/2203.11496 
+
+3. Beemelmanns, T., Zhang, Q., Geller, C., Eckstein, L.: Multicorrupt: A multi-modal robustness dataset and benchmark of lidar-camera fusion for 3d object detection (2024), https://arxiv.org/abs/2402.11677 
+
+4. Bijelic, M., Gruber, T., Mannan, F., Kraus, F., Ritter, W., Dietmayer, K., Heide, F.: Seeing through fog without seeing fog: Deep multimodal sensor fusion in unseen adverse weather (2020), https://arxiv.org/abs/1902.08913 
+
+5. Brazil, G., Liu, X.: M3d-rpn: Monocular 3d region proposal network for object detection (2019), https://arxiv.org/abs/1907.06038 
+
+6. Caesar, H., Bankiti, V., Lang, A.H., Vora, S., Liong, V.E., Xu, Q., Krishnan, A., Pan, Y., Baldan, G., Beijbom, O.: nuscenes: A multimodal dataset for autonomous driving (2020), https://arxiv.org/abs/1903.11027 
+
+7. Cha, J., Joo, M., Park, J., Lee, S., Kim, I., Kim, H.J.: Robust multimodal 3d object detection via modality-agnostic decoding and proximity-based modality ensemble (2024), https://arxiv.org/abs/2407.19156 
+
+8. Chen, X., Kundu, K., Zhang, Z., Ma, H., Fidler, S., Urtasun, R.: Monocular 3d object detection for autonomous driving. In: Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) (June 2016) 9. Chen, X., Zhang, T., Wang, Y., Wang, Y., Zhao, H.: Futr3d: A unified sensor fusion framework for 3d detection (2023), https://arxiv.org/abs/2203.10642 
+
+10. Chen, Z., Li, Z., Zhang, S., Fang, L., Jiang, Q., Zhao, F.: Autoalignv2: Deformable feature aggregation for dynamic multi-modal 3d object detection (2022), https: //arxiv.org/abs/2207.10316 
+
+11. Dong, Y., Kang, C., Zhang, J., Zhu, Z., Wang, Y., Yang, X., Su, H., Wei, X., Zhu, J.: Benchmarking robustness of 3d object detection to common corruptions in autonomous driving (2023), https://arxiv.org/abs/2303.11040 
+
+12. Drews, F., Feng, D., Faion, F., Rosenbaum, L., Ulrich, M., Gläser, C.: Deepfusion: A robust and modular 3d object detector for lidars, cameras and radars (2022), 
+
+https://arxiv.org/abs/2209.12729 
+
+13. Ge, C., Chen, J., Xie, E., Wang, Z., Hong, L., Lu, H., Li, Z., Luo, P.: Metabev: Solving sensor failures for bev detection and map segmentation (2023), https: //arxiv.org/abs/2304.09801 
+
+14. Hahner, M., Sakaridis, C., Dai, D., Gool, L.V.: Fog simulation on real lidar point clouds for 3d object detection in adverse weather (2021), https://arxiv.org/ abs/2108.05249 
+
+15. Huang, J., Huang, G., Zhu, Z., Ye, Y., Du, D.: Bevdet: High-performance multi-camera 3d object detection in bird-eye-view (2022), https://arxiv.org/abs/ 2112.11790 
+
+16. Huang, Y., Yu, K., Guo, Q., Juefei-Xu, F., Jia, X., Li, T., Pu, G., Liu, Y.: Improving robustness of lidar-camera fusion model against weather corruption from fusion strategy perspective (2024), https://arxiv.org/abs/2402.02738 
+
+17. Ji, Y., Chi, C., Tan, H., Zhao, Y., Lyu, H., Zhou, E., Wang, P., Wang, Z., Zheng, X., Zhang, S.: From ill-posed to well-posed: A decomposition framework for reliable robot learning with foundation models. IEEE Transactions on Robotics (2026) 16 Y. Zhao et al. 18. Ji, Y., Liu, Y., Zhang, Z., Zhang, Z., Zhao, Y., Hao, X., Zhou, G., Zhang, X., Zheng, X.: Enhancing adversarial robustness of vision-language models through low-rank adaptation. In: Proceedings of the 2025 International Conference on Multimedia Retrieval. pp. 550–559 (2025) 19. Ji, Y., Liu, Y., Tan, H., Huang, X., Huang, F., Xu, Y., Chi, C., Zhao, Y., Lyu, H., Co, P., et al.: Prm-as-a-judge: A dense evaluation paradigm for fine-grained robotic auditing. arXiv preprint arXiv:2603.21669 (2026) 20. Ji, Y., Tan, H., Chi, C., Xu, Y., Zhao, Y., Zhou, E., Lyu, H., Wang, P., Wang, Z., Zhang, S., et al.: Mathsticks: A benchmark for visual symbolic compositional reasoning with matchstick puzzles. arXiv preprint arXiv:2510.00483 (2025) 21. Ji, Y., Wang, Y., Liu, Y., Hao, X., Liu, Y., Zhao, Y., Lyu, H., Zheng, X.: Visual-trans: A benchmark for real-world visual transformation reasoning. arXiv preprint arXiv:2508.04043 (2025) 22. Kong, L., Liu, Y., Li, X., Chen, R., Zhang, W., Ren, J., Pan, L., Chen, K., Liu, Z.: Robo3d: Towards robust and reliable 3d perception against corruptions (2023), 
+
+https://arxiv.org/abs/2303.17597 
+
+23. Lang, A.H., Vora, S., Caesar, H., Zhou, L., Yang, J., Beijbom, O.: Pointpillars: Fast encoders for object detection from point clouds (2019), https://arxiv.org/ abs/1812.05784 
+
+24. Li, Y., Chen, Y., Qi, X., Li, Z., Sun, J., Jia, J.: Unifying voxel-based representation with transformer for 3d object detection (2022), https://arxiv.org/abs/2206. 00630 
+
+25. Li, Y., Ge, Z., Yu, G., Yang, J., Wang, Z., Shi, Y., Sun, J., Li, Z.: Bevdepth: Acquisition of reliable depth for multi-view 3d object detection (2022), https: //arxiv.org/abs/2206.10092 
+
+26. Li, Z., Wang, W., Li, H., Xie, E., Sima, C., Lu, T., Yu, Q., Dai, J.: Bevformer: Learning bird’s-eye-view representation from multi-camera images via spatiotem-poral transformers (2022), https://arxiv.org/abs/2203.17270 
+
+27. Liu, Y., Wang, T., Zhang, X., Sun, J.: Petr: Position embedding transformation for multi-view 3d object detection (2022), https://arxiv.org/abs/2203.05625 
+
+28. Liu, Y., Shen, Y., Chen, R., Zhao, J., Tian, Y., Zhang, Y., Long, T., Yin, Z., Wang, Y., Qin, Z., et al.: Prm-as-a-judge 1.5: A toolkit for robot process assessment. arXiv preprint arXiv:2608.14284 (2026) 29. Liu, Z., Wu, Z., Tóth, R.: Smoke: Single-stage monocular 3d object detection via keypoint estimation (2020), https://arxiv.org/abs/2002.10111 
+
+30. Liu, Z., Tang, H., Amini, A., Yang, X., Mao, H., Rus, D., Han, S.: Bevfusion: Multi-task multi-sensor fusion with unified bird’s-eye view representation (2024), 
+
+https://arxiv.org/abs/2205.13542 
+
+31. Park, K., Kim, Y., Kim, D., Choi, J.W.: Resilient sensor fusion under adverse sensor failures via multi-modal expert fusion (2025), https://arxiv.org/abs/ 2503.19776 
+
+32. Pitropov, M., Garcia, D.E., Rebello, J., Smart, M., Wang, C., Czarnecki, K., Waslander, S.: Canadian adverse driving conditions dataset. The International Journal of Robotics Research 40 (4-5), 681–690 (Dec 2020). https://doi.org/10. 1177/0278364920979368 , http://dx.doi.org/10.1177/0278364920979368 
+
+33. Qi, C.R., Su, H., Mo, K., Guibas, L.J.: Pointnet: Deep learning on point sets for 3d classification and segmentation (2017), https://arxiv.org/abs/1612.00593 
+
+34. Radford, A., Kim, J.W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., Krueger, G., Sutskever, I.: Learning transferable visual models from natural language supervision (2021), https://arxiv.org/abs/ 2103.00020 SARFusion: Scene-Aware Routing Fusion 17 35. Sadeghian, R., Hooshyaripour, N., Joslin, C., Lee, W.: Reliability-driven lidar-camera fusion for robust 3d object detection (2025), https://arxiv.org/abs/ 2502.01856 
+
+36. Shi, S., Guo, C., Jiang, L., Wang, Z., Shi, J., Wang, X., Li, H.: Pv-rcnn: Point-voxel feature set abstraction for 3d object detection (2021), https://arxiv.org/abs/ 1912.13192 
+
+37. Shi, S., Wang, X., Li, H.: Pointrcnn: 3d object proposal generation and detection from point cloud (2019), https://arxiv.org/abs/1812.04244 
+
+38. Sural, S., Sahu, N., Rajkumar, R.: Contextualfusion: Context-based multi-sensor fusion for 3d object detection in adverse operating conditions (2024), https:// arxiv.org/abs/2404.14780 
+
+39. Tian, Y., Ji, Y., Zheng, X., Qin, Z., Wang, Y., Zheng, X., Liu, Y., Bai, S., Li, Z., Wang, L., et al.: Spatial intelligence from a cognitive map perspective: A survey (2026) 40. Vora, S., Lang, A.H., Helou, B., Beijbom, O.: Pointpainting: Sequential fusion for 3d object detection (2020), https://arxiv.org/abs/1911.10150 
+
+41. Wang, C., Ma, C., Zhu, M., Yang, X.: Pointaugmenting: Cross-modal augmentation for 3d object detection. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 11794–11803 (June 2021) 42. Wang, H., Tang, H., Shi, S., Li, A., Li, Z., Schiele, B., Wang, L.: Unitr: A unified and efficient multi-modal transformer for bird’s-eye-view representation (2023), 
+
+https://arxiv.org/abs/2308.07732 
+
+43. Wang, T., Zhu, X., Pang, J., Lin, D.: Fcos3d: Fully convolutional one-stage monoc-ular 3d object detection (2021), https://arxiv.org/abs/2104.10956 
+
+44. Wang, Y., Ji, Y., Cao, M., Shen, Y., Xiao, R., Lyu, H., Xie, S., Liu, E., Tian, K., Long, T., et al.: Orca: The world is in your mind. arXiv preprint arXiv:2606.30534 (2026) 45. Wang, Y., Guizilini, V., Zhang, T., Wang, Y., Zhao, H., Solomon, J.: Detr3d: 3d object detection from multi-view images via 3d-to-2d queries (2021), https: //arxiv.org/abs/2110.06922 
+
+46. Xie, S., Kong, L., Zhang, W., Ren, J., Pan, L., Chen, K., Liu, Z.: Robobev: Towards robust bird’s eye view perception under corruptions (2023), https://arxiv.org/ abs/2304.06719 
+
+47. Xie, Y., Xu, C., Rakotosaona, M.J., Rim, P., Tombari, F., Keutzer, K., Tomizuka, M., Zhan, W.: Sparsefusion: Fusing multi-modal sparse representations for multi-sensor 3d object detection (2023), https://arxiv.org/abs/2304.14340 
+
+48. Yan, J., Liu, Y., Sun, J., Jia, F., Li, S., Wang, T., Zhang, X.: Cross modal trans-former: Towards fast and robust 3d object detection (2023), https://arxiv.org/ abs/2301.01283 
+
+49. Yan, Y., Mao, Y., Li, B.: Second: Sparsely embedded convolutional detection. Sen-sors 18 (10) (2018). https://doi.org/10.3390/s18103337 , https://www.mdpi. com/1424-8220/18/10/3337 
+
+50. Yang, Z., Chen, J., Miao, Z., Li, W., Zhu, X., Zhang, L.: Deepinteraction: 3d object detection via modality interaction (2022), https://arxiv.org/abs/2208.11112 
+
+51. Yin, T., Zhou, X., Krähenbühl, P.: Center-based 3d object detection and tracking (2021), https://arxiv.org/abs/2006.11275 
+
+52. Yin, T., Zhou, X., Krähenbühl, P.: Multimodal virtual point 3d detection (2021), 
+
+https://arxiv.org/abs/2111.06881 
+
+53. Zhou, Y., Tuzel, O.: Voxelnet: End-to-end learning for point cloud based 3d object detection. In: Proceedings of the IEEE conference on computer vision and pattern recognition. pp. 4490–4499 (2018)
