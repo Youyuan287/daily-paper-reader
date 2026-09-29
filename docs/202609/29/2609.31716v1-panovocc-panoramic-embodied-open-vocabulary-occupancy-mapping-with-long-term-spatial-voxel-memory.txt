@@ -1,0 +1,509 @@
+Title: PanOVOcc: Panoramic Embodied Open-Vocabulary Occupancy Mapping with Long-term Spatial Voxel Memory
+
+URL Source: https://arxiv.org/pdf/2609.31716v1
+
+Published Time: Tue, 29 Sep 2026 00:08:43 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# PanOVOcc: Panoramic Embodied Open-Vocabulary Occupancy Mapping with Long-term Spatial Voxel Memory 
+
+Di Kuang 1, Mengfei Duan 1, Yuhang Wang 1, Weixing Peng 1,2,†, and Kailun Yang 1,2,†a Perspective-sequence mapping  b Single-panorama occupancy  c Ours: PanOVOcc 
+
+> Narrow
+> FoV
+> Panoramic
+> sequence
+> Incomplete
+> coverage
+
+?   
+
+> Unobserved
+> Bounded
+> local map
+> Open-vocab
+> query
+> Persistent
+> global map
+> Semantic occupancy Unobserved Shared trajectory Query match
+> Single observation
+
+? 
+
+> Unobserved
+> sofa
+> 360 °
+> window
+> Perspective FoV Panoramic FoV
+
+Fig. 1. Comparison of three mapping paradigms under a unified scene representation. (a) Perspective-sequence mapping integrates temporally ordered observations into a persistent global map, but suffers from incomplete spatial coverage. (b) Single-panorama occupancy mapping provides omnidirectional coverage, yet only produces a local map without persistent global memory. (c) In contrast, our proposed PanOVOcc continuously integrates a sequence of panoramic images into a globally consistent spatial memory, enabling both complete omnidirectional mapping and open-vocabulary semantic querying. 
+
+Abstract — Persistent semantic occupancy mapping is essen-tial for embodied scene understanding. However, perspective-based systems provide limited spatial coverage, while existing panoramic methods primarily predict local volumes from single observations. We introduce PanOVOcc, a training-free frame-work for persistent open-vocabulary semantic occupancy map-ping from panoramic sequences. PanOVOcc unifies panoramic SLAM, open-vocabulary perception, and long-term spatial voxel memory within an online architecture, continuously integrating geometric and semantic evidence into a global, language-queryable map. To facilitate systematic evaluation of this setting, we establish Pan-Replica and Pan-Holo360D, two benchmarks pairing continuous panoramic RGB-D sequences with scene-level semantic occupancy ground truth across syn-thetic and real-world scenes. Compared with the strongest eval-uated baseline for each metric, PanOVOcc improves occupancy IoU and semantic mIoU by absolute +20 .03 and +7 .06 on Pan-Replica, and by +43 .26 and +20 .16 on Pan-Holo360D, respec-tively. The source code and the established benchmarks will be available at https://github.com/bakereet/PanOVOcc .
+
+I. I NTRODUCTION 
+
+Embodied agents operating in unfamiliar indoor environ-ments require a persistent three-dimensional memory to sup-
+
+This work was supported in part by National Natural Science Foundation of China under Grant No. 62573181, No. 62293512, No. 62473139, and No. 62388101, in part by the Hunan Natural Science Foundation under Grant 2026JJ40061, in part by the Hunan Provincial Research and Development Project (Grant No. 2025QK3019), and in part by the State Key Laboratory of Autonomous Intelligent Unmanned Systems (the opening project number ZZKF2025-2-10). 
+
+> 1
+
+The authors are with the School of Artificial Intelligence and Robotics, Hunan University, China (email: kailun.yang@hnu.edu.cn). 
+
+> 2
+
+The authors are also with the National Engineering Research Center of Robot Visual Perception and Control Technology, Hunan University, China. 
+
+> †
+
+Corresponding authors: Weixing Peng and Kailun Yang. 
+
+port navigation, exploration, and interaction. Unlike surface reconstruction, semantic occupancy mapping jointly repre-sents occupied structures, traversable free space, unknown regions, and object semantics, providing a direct interface be-tween visual perception and embodied decision-making [1], [2], [3]. Recent methods have consequently moved beyond isolated local prediction toward progressively updating a global spatial memory from sequential observations [4], [5]. Nevertheless, most existing online systems are developed primarily for pinhole-camera streams. Due to their limited field of view, individual observations expose only a narrow sector of the environment, resulting in directional blind spots and sparse spatial evidence during exploration. Panoramic imaging alleviates this limitation by capturing nearly the entire surroundings in a single shot, offering denser spatial evidence around corners and through narrow passages. Recent panorama-based occupancy methods have demonstrated the value of such observations for closed-set semantic occupancy prediction [6], [7] and open-vocabulary occupancy inference [8]. Yet these methods primarily pre-dict a bounded local occupancy volume from an individual panorama, and do not maintain a persistent spatial memory as the agent moves through the environment. A practical embodied map should further support task-dependent semantic queries beyond fixed categories to accommodate long-tailed indoor objects. Open-vocabulary mapping enables this by transferring language-aligned knowledge from pretrained vision-language models into three-dimensional representations [9], [10], [11], [12]. As illustrated in Fig. 1, our work enables an embodied agent to continuously accumulate panoramic observations into a arXiv:2609.31716v1 [cs.CV] 21 Sep 2026 global map that can be queried according to downstream task requirements. However, ensuring global consistency remains challenging. Sequential data contain both cross-view incon-sistencies and substantial observational redundancy, while geometric or semantic errors in individual observations can accumulate over time, degrading the accuracy of the resulting global map [13], [14], [15], [16]. To address these challenges, we propose PanOVOcc ,a training-free framework for persistent open-vocabulary semantic occupancy mapping from sequential panoramic observations. PanOVOcc integrates panoramic SLAM, open-vocabulary semantic segmentation, and voxel-based map-ping into a unified online pipeline. As the agent explores, panoramic observations are continuously fused into a long-term spatial voxel memory that maintains a global scene representation. Geometry and language-aligned semantics are incrementally accumulated in this memory, enabling open-vocabulary queries over the evolving 3D environment. For systematic evaluation, we further introduce Pan-Replica and 
+
+Pan-Holo360D , two indoor semantic occupancy benchmarks built upon Replica [17] and Holo360D [18], combining continuous panoramic RGB-D sequences with scene-level semantic occupancy annotations across synthetic and real-world environments. Pan-Replica provides a controlled syn-thetic benchmark with high-fidelity geometry and dense semantic annotations, enabling systematic evaluation under panoramic observations. Compared to synthetic environ-ments, Pan-Holo360D offers larger spatial extents, multiple interconnected rooms, and more realistic sensing variations, posing greater challenges for long-term occupancy mapping. Comprehensive experiments on the Pan-Replica and Pan-Holo360D benchmarks demonstrate the effectiveness of the proposed method across synthetic and real-world set-tings. Notably, PanOVOcc achieves substantial gains un-der the shared eight-category evaluation, with particularly pronounced improvements on large structural categories. Specifically, the IoUs of ceiling and floor on Pan-Holo360D improve by 37 .97 and 36 .23 , respectively. Beyond the shared taxonomy, it also outperforms FreeOcc [2] on several addi-tional open-vocabulary categories. Qualitative comparisons further show that our method reconstructs more complete and coherent geometry in large multi-room scenes. Our main contributions are summarized as follows:  
+
+> •
+
+We introduce PanOVOcc , a training-free framework for persistent global open-vocabulary semantic occupancy mapping from panoramic sequences, combining omni-directional sensing with long-term spatial memory for embodied exploration.  
+
+> •
+
+We develop a geometry-aware persistent fusion scheme that integrates panoramic surface and free-space evi-dence with reliability-weighted multi-view semantics, while supporting reversible observation-level updates under pose refinement.  
+
+> •
+
+We introduce Pan-Replica and Pan-Holo360D , two continuous panoramic indoor semantic occupancy benchmarks spanning synthetic and real-world domains. II. R ELATED WORK 
+
+A. Panoramic Semantic Scene Understanding 
+
+Panoramic sensing [19] provides complete 360° obser-vations and broad spatial context, making it particularly suitable for embodied scene understanding. Existing studies have first established strong image-space semantics by ad-dressing equirectangular projection distortion [20], [21], [22] and extending panoramic segmentation toward foundation-model-based and open-vocabulary recognition [23], [24], [25]. Beyond image-space perception, increasing attention has been devoted to recovering 3D spatial information from panoramic observations, including depth and structural reconstruction [26], [27], [28], 3D semantic understand-ing [29], and scene reconstruction [30], [31], [32], [33]. More recently, panoramic perception has been extended to voxel-level scene representations for semantic occupancy predic-tion [6], [7] and open-vocabulary occupancy reasoning [8]. Despite these advances, existing methods mainly focus on reconstructing or predicting local 3D scene content, while persistent semantic mapping from long-horizon panoramic sequences remains underexplored. 
+
+B. Embodied Open-Vocabulary Occupancy Mapping 
+
+Occupancy maps explicitly represent occupied, free, and unknown space, providing a natural spatial representation for embodied navigation and exploration [34]. Early incremental systems explored the fusion of sequential observations into global geometric and semantic representations [35], while recent embodied occupancy methods extend this setting to progressive exploration, continuously updating scene occu-pancy as an agent observes an initially unknown environ-ment [1], [3], [4], [5], [36]. However, these methods largely rely on predefined semantic categories. In parallel, open-vocabulary 3D methods inject language-aligned features into scene representations for flexible querying [9], [10], [11], [12], [37]. Recent work extends this capability to occu-pancy prediction and mapping [2], [38], with training-free formulations avoiding task-specific 3D supervision and fixed taxonomies. Despite these advances, existing methods largely rely on perspective cameras with limited fields of view, re-quiring more viewpoints and fragmented-view integration to recover complete scene context. PanOVOcc instead explores panoramic sequences, incrementally integrating observations into a persistent, language-queryable voxel map. III. M ETHOD 
+
+A. Problem Formulation 
+
+Given a sequential stream of panoramic RGB-D obser-vations O1: T = (It, Dt)Tt=1 , where It ∈ RH×W ×3 and 
+
+Dt ∈ RH×W denote the RGB image and its depth at time t, together with an open-vocabulary category set C =
+
+{c1, c 2, . . . , c C }, our goal is to incrementally construct a persistent 3D semantic occupancy map as an embodied agent explores an initially unknown environment. At each time step, the map is updated as 
+
+Mt = F (Mt−1, It, Dt, C) , (1) where Mt is defined in a global coordinate frame and explicitly models the occupancy state of each voxel as occupied, free, or unobserved, together with its accumulated semantic evidence with respect to C.
+
+B. Overview of PanOVOcc 
+
+As illustrated in Fig. 2, PanOVOcc is a training-free framework for online open-vocabulary occupancy mapping from native panoramic sequences. Specifically, it consists of three main components. First, a panoramic SLAM backbone estimates camera poses in a global coordinate frame for map updates. Second, open-vocabulary segmentation operates in parallel to provide pixel-wise semantic priors for the input vocabulary. Third, an online fusion module integrates geo-metric and semantic evidence into a shared voxel memory. It accumulates surface and free-space evidence for occupancy estimation and consolidates multi-view semantics accord-ing to prediction reliability and geometric compatibility, and the memory is incrementally updated with reversible observation-level corrections. Together, these components continuously transform streaming panoramic observations into a globally aligned, language-queryable semantic occu-pancy map without task-specific 3D training. 
+
+C. Panoramic Geometric Mapping 
+
+Panoramic Spatial Representation. To incrementally fuse sequential panoramic observations into a global map, we employ ODGS-SLAM [32] as the pose-estimation backbone with native panoramic support. For estimated camera pose 
+
+Tt = ( Rt, tt) at observation t, a valid pixel p = ( u, v ) with radial depth rt,p and unit spherical direction dp is lifted as 
+
+xt,p = Rt(rt,p dp) + tt. We maintain a sparse voxel lattice with voxel size h, where each voxel i ∈ Z3 is centered at xi
+
+and its persistent geometric state is represented by 
+
+Vi = ( Ai, N i, F i, O i), (2) where Ai accumulates surface support, Ni counts the dis-tinct retained observations contributing to that support, Fi
+
+accumulates free-space evidence, and Oi records valid depth-comparison evidence. These quantities are stored in a spa-tially hashed block structure, and semantic evidence is asso-ciated with the same lattice as described in Sec. III-D. 
+
+Panoramic Signed Voxel Fusion. ERP measurements ex-hibit nonuniform spatial sampling, with tangential footprints varying by latitude and range. We model each observation using an anisotropic kernel aligned with its spherical viewing geometry. For latitude ϕ, the longitudinal, latitudinal, and radial scales are defined as 
+
+σt,p = [ r| cos ϕ|∆θ, r ∆ϕ, αr + β] . (3) For sampling stride s, the angular intervals are ∆θ =2πs/W and ∆ϕ = πs/H . The parameters α and β model range-dependent radial uncertainty. Let Et,p contain or-thonormal longitude, latitude, and ray directions transformed into the mapping frame. The corresponding covariance is 
+
+Σt,p = Et,p diag( σ2
+
+> t,p
+
+)E⊤
+
+> t,p
+
+, and the squared Mahalanobis distance is d2
+
+> t,p
+
+(i) = ( xi − xt,p )⊤Σ−1 
+
+> t,p
+
+(xi − xt,p ).Surface contributions are aggregated within each observa-tion before being written to the persistent map: 
+
+∆A(t) 
+
+> i
+
+= X
+
+> p∈P t(i)
+
+ω(ϕ, r ) exp  − 12 d2
+
+> t,p
+
+(i) Id2
+
+> t,p
+
+(i) ≤ κ2 .
+
+(4) Here, Pt(i) contains valid strided measurements whose bounded neighborhoods include voxel i, and I[·] is the indicator function. The weight ω models latitude-dependent sampling reliability and range-dependent depth uncertainty, and κ sets the Mahalanobis truncation radius. The view-support increment is ∆N (t) 
+
+> i
+
+= I[∆ A(t) 
+
+> i
+
+> 0] . Thus, multiple pixels from one panorama may increase surface support but contribute at most one view count. To incorporate free-space evidence, we project active voxel centers into the incoming panorama. Let ri,t denote the camera-to-voxel range and bri,t the observed radial depth at the projected pixel; each valid depth comparison contributes 
+
+∆O(t) 
+
+> i
+
+, and it additionally contributes ∆F (t) 
+
+> i
+
+when the local depth neighborhood is stable and ri,t < bri,t − ϵ(bri,t ),where ϵ(r) = ϵabs + ϵrel r accounts for absolute and range-dependent depth uncertainty. The accumulated geometric evidence yields the signed score 
+
+gi = Ai
+
+max {Ni, 1} − λf
+
+Fi
+
+max {Oi, 1} , (5) where λf controls the contribution of free-space evidence. The occupied set Ω is determined from gi. Given a strong surface threshold τs, a weaker threshold τw, and a maximum admissible free-space ratio γf , strong supported surfaces are accepted directly, whereas weaker surface responses are retained only if the free-space ratio does not exceed γf .
+
+Reversible Persistent Update. Pose refinement can change the spatial association of previously integrated measure-ments. RPU retains each observation’s geometric contribu-tion as a sparse delta ∆Vt, containing the voxel-indexed increments (∆ A(t) 
+
+> i
+
+, ∆N (t) 
+
+> i
+
+, ∆F (t) 
+
+> i
+
+, ∆O(t) 
+
+> i
+
+). For the currently retained observation set K, the geometric memory is repre-sented by V = P 
+
+> t∈K
+
+∆Vt. When the pose of observation 
+
+t is revised to T′
+
+> t
+
+, its stored contribution is removed and recomputed under the revised pose: 
+
+V ← V − ∆Vold  
+
+> t
+
++ ∆ Vnew  
+
+> t
+
+(T′
+
+> t
+
+). (6) Storing raw additive statistics permits these operations be-fore nonlinear occupancy decisions while preserving prove-nance for revising individual observations. The same princi-ple extends to semantic evidence, as detailed below. 
+
+D. Geometry-Aware Semantic Consolidation 
+
+Multi-Observation Semantic Evidence. Given a category set C = {c1, . . . , c C }, we employ Open Panoramic Seg-mentation [23] to obtain semantic observations directly from native ERP images. For observation t, the segmenter predicts a semantic logit vector ℓt(u, v ) ∈ RC for each pixel (u, v ),which is converted into a categorical distribution pt(u, v ) = softmax ( ℓt(u, v )) .
+
+Since panoramic observations exhibit spatially varying reliability, each semantic measurement is assigned a weight Panoramic Occ Benchmarks 
+
+> Input: Panoramic RGB-D Sequences
+
+... 
+
+... 
+
+> Evaluation: Scene-level Occupancy GT
+> RGB
+> Depth
+
+Panoramic SLAM 
+
+OV Segmentation     
+
+> Camera poses
+> z
+> y
+> x
+> Sequential observations
+> ...
+> Image OV prediction
+> chair table wall ceiling ...
+
+Online 3D Fusion          
+
+> Online integration
+> Streaming frames
+> GSC
+> semantic update
+> Geometric Evidence Semantic Evidence
+> PSVF
+> geometric update
+> OV Semantic Occupancy Map
+> Geometric prior
+> Semantic prior Pan-Replica Pan-Holo360D
+> Synthetic Real-world
+> Controlled Large range
+> Replica-based Multi-room chair
+> ceiling
+> table
+> wall
+> ...
+> zy
+> x
+> Depth + poses 3D points
+> chair
+> ceiling
+> table
+> wall
+> ...
+
+Fig. 2. Overview of the benchmarks and PanOVOcc framework. Pan-Replica and Pan-Holo360D provide panoramic RGB-D sequences as mapping inputs and scene-level semantic occupancy ground truth for evaluation. Given panoramic RGB-D sequences, PanOVOcc obtains geometric priors from SLAM-estimated camera poses, and semantic priors from open-vocabulary segmentation. These priors are incrementally integrated through online 3D fusion to construct a persistent open-vocabulary semantic occupancy map. Abbreviations: Occ: Occupancy; OV: Open-Vocabulary; GT: Ground Truth. TABLE I 
+
+COMPARISON WITH REPRESENTATIVE EMBODIED AND PANORAMIC OCCUPANCY BENCHMARKS . / : PERSPECTIVE / PANORAMIC OBSERVATIONS . I N. / O UT .: I NDOOR / O UTDOOR .                               
+
+> Benchmark Obs. Temporal Scope Domain
+> EmbodiedOcc-ScanNet [1] Sequence Scene In.-Real ReplicaOcc [2] Sequence Scene In.-Synth. QuadOcc [6] Single Local Out.-Real Human360Occ [6] Single Local Out.-Synth. PanoMMOcc [7] Single Local Out.-Real HIOcc [3] Both Local / Scene In.-Real HIOcc [3] Station-based Scene In.-Real
+> Pan-Replica Sequence Scene In.-Synth. Pan-Holo360D Sequence Scene In.-Real
+
+ηt,p = ct,p werp (ϕ) wrange (r), where ct,p is the maximum predicted class probability, and the remaining factors account for latitude-dependent and range-dependent reliability. Each voxel maintains raw semantic evidence Ei ∈ RC and total weight Si. The per-observation semantic contribution is 
+
+"
+
+∆E(t)
+
+> i
+
+∆S(t)
+
+> i
+
+#
+
+= X
+
+> p∈P t
+
+ηt,p 
+
+pt(p)1
+
+
+
+. (7) 
+
+Geometry-Aware Semantic Consolidation. Although multi-observation accumulation reduces temporal variability, ambiguous voxels may still remain in regions with inconsistent segmentation. We regularize these unaries on a sparse graph G = (Ω , E) whose vertices are occupied voxels. Candidate edges connect six-neighbor voxel pairs, restricting graph propagation to the reconstructed occupied support. For adjacent voxels, the affinity is defined as 
+
+Wij = κg (i, j ) κn(i, j ) κt(i, j ) κc(i, j ), (8) where the four terms encode geometric and appearance cues. Specifically, κg measures the consistency of the signed PSVF scores using an exponential penalty on |gi − gj |; κn favors aligned surface normals; κt suppresses connections along the local surface-normal direction and therefore encourages propagation within the tangent plane; and κc measures similarity between the accumulated mean RGB colors. The weights are row-normalized as ¯Wij = Wij / P  
+
+> l∈N (i)
+
+Wil ,where N (i) is the candidate neighborhood. Starting from 
+
+q(0)  
+
+> i
+
+= pi, GSC performs anchored diffusion: 
+
+q(k+1)  
+
+> i
+
+=
+
+ρipi + λs
+
+X 
+
+> j∈N (i)
+
+¯Wij q(k)
+
+> j
+
+ρi + λs
+
+X 
+
+> j∈N (i)
+
+¯Wij 
+
+, (9) where λs controls spatial regularization and ρi is an anchor strength derived from accumulated semantic weight and normalized entropy. Reliable observations therefore provide stronger anchors, whereas uncertain voxels receive greater relative influence from geometrically compatible neighbors. 
+
+Persistent Semantic Update. The semantic memory follows the same observation-level decomposition as the geomet-ric memory. Each frame retains a sparse semantic delta 
+
+∆St = (∆ Et, ∆St) together with the RGB, normal, and observation-count statistics used by GSC. When a pose revision changes voxel associations, the previous semantic contribution is subtracted, and a new contribution is inte-grated using the revised pose, following Eq. (6). The output assigns the maximum-probability semantic cat-egory only to occupied voxels. A bounded nearest-evidence transfer supplies labels where direct semantic support is absent; this output operation is shared by the raw and GSC variants. Occupied voxels without eligible semantic evidence remain semantically unknown. IV. E XPERIMENTS 
+
+In this section, we evaluate PanOVOcc with the aim of answering three questions:  
+
+> •
+
+Q1: How effectively do panoramic sequential observa-tions support scene-level occupancy mapping compared with existing methods? (Sec. IV-C)  
+
+> •
+
+Q2: How well does PanOVOcc generalize from con-trolled synthetic to real-world panoramic sequences without retraining? (Sec. IV-C)  
+
+> •
+
+Q3: What factors govern the performance of PanOVOcc, particularly with respect to its geometric and semantic components, and the quality of upstream predictions? (Sec. IV-D) TABLE II                                                                                 
+
+> QUANTITATIVE COMPARISON ON PAN -R EPLICA .PERSPECTIVE METHODS RECEIVE TWELVE DIRECTIONAL VIEWS GENERATED FROM EACH PANORAMIC OBSERVATION ,PROVIDING APPROXIMATELY 360 ◦HORIZONTAL COVERAGE .
+> Method Obs. Anno. Pose IoU mIoU
+> ■ ceiling
+> ■ floor
+> ■ wall
+> ■ wind.
+> ■ chair
+> ■ bed
+> ■ sofa
+> ■ table
+> Supervised learning
+> EmbodiedOcc [1] ✓✓18.02 5.58 3.19 6.34 10.05 3.44 4.26 7.78 6.81 2.76 EmbodiedOcc++ [4] ✓✓19.41 5.96 3.04 7.89 10.61 4.26 4.31 6.34 7.06 4.18 VEOcc [5] ✓✓20.83 17.02 19.08 12.42 13.83 7.96 21.26 8.96 34.29 18.41 GPOcc [39] ✓✓19.64 15.72 21.14 19.98 9.75 7.22 14.53 10.96 29.87 12.30
+> Training-free
+> FreeOcc (RGBD) [2] ✗✗55.60 29.93 39.57 41.83 39.77 20.55 17.43 29.81 38.05 12.45
+> PanOVOcc (Ours) ✗✗75.63 36.99 54.79 57.26 58.47 23.93 16.04 17.30 45.25 22.87
+> Fig. 3. Overview of Pan-Holo360D. Scene-level semantic occupancy GT for seven real-world indoor scenes selected from Holo360D [18].
+
+A. Benchmark 
+
+We evaluate PanOVOcc on two panoramic evalua-tion sets. Pan-Replica supports controlled evaluation of panoramic observations in synthetic environments, whereas 
+
+Pan-Holo360D assesses real-world generalization on native continuous panoramic sequences with newly constructed scene-level semantic occupancy annotations. Table I com-pares our evaluation sets with representative embodied and panoramic occupancy benchmarks. 
+
+Pan-Replica. We construct Pan-Replica as a panoramic evaluation variant of ReplicaOcc [2], retaining its camera trajectories [40] and scene-level occupancy ground truth. Using a rendering pipeline adapted from MatryODShka [41], we render panoramic RGB-D observations from the Replica assets. The resulting sequences retain the camera centers and temporal sampling of their perspective counterparts while providing omnidirectional observations at each viewpoint. 
+
+Pan-Holo360D. We further construct Pan-Holo360D using seven indoor scenes from Holo360D [18], which provide long, continuous panoramic RGB-D sequences with aligned camera poses, exhibiting substantially more realistic sens-ing noise and appearance variation than synthetic scenes. Following the scene-level occupancy construction protocol of ReplicaOcc [2], we aggregate depth observations from each complete sequence in the global coordinate system to construct a voxelized scene representation. Since Holo360D lacks semantic annotations suitable for occupancy evalua-tion, we manually annotate a sparse set of representative panoramic frames. We then lift the labels to the voxel grid using depth and camera poses, consolidate multi-view ob-servations, and inspect and correct the 3D semantic volume. As shown in Fig. 3, the selected sequences span house-scale environments with multiple interconnected rooms. 
+
+B. Experimental Setup 
+
+Setup and Metrics. Experiments are conducted on a sin-gle NVIDIA RTX 4090 GPU with a voxel resolution of 
+
+0.08 m for occupancy mapping. We evaluate on the Pan-Replica and Pan-Holo360D benchmarks using occupancy IoU and semantic mIoU. For compatibility with supervised baselines trained under a fixed semantic taxonomy, the main comparison follows the FreeOcc protocol [2] and evaluates semantic occupancy over the eight shared categories: ceiling ,
+
+floor , wall , window , chair , bed , sofa , and table . For open-vocabulary visualization and supplementary evaluation, the original fine-grained semantic annotations are retained. 
+
+Perspective Baseline Adaptation. Existing indoor occu-pancy methods are predominantly designed for perspective image sequences and cannot directly process equirectangular panoramas. To provide these methods with angular coverage comparable to the panoramic input, each panoramic frame is projected into twelve perspective views, comprising four azimuthal directions at each of the upper, middle, and lower elevation levels. Views with the same orientation form temporally continuous sequences that are processed independently. Predictions are expressed in the dataset’s global coordinate frame using the supplied camera poses; for FreeOcc, each independently estimated SLAM trajectory is aligned to the corresponding reference trajectory before transforming its Gaussian map. For voxel-based outputs, overlapping occupied predictions are combined by union, and semantic conflicts are resolved by class voting for dense outputs and maximum class confidence for sparse outputs. 
+
+C. Quantitative Comparison. 
+
+Synthetic-Scene Evaluation on Pan-Replica. As shown in Table II, PanOVOcc achieves the best overall performance on Pan-Replica, reaching an occupancy IoU of 75 .63 and a semantic mIoU of 36 .99 . Compared with the strongest TABLE III                                                                                        
+
+> QUANTITATIVE COMPARISON ON PAN -H OLO 360D. WE REPORT SEMANTIC OCCUPANCY PERFORMANCE ON EIGHT CATEGORIES SHARED WITH
+> PAN -R EPLICA AND FOUR ADDITIONAL OPEN -VOCABULARY CATEGORIES .
+> Overlap-8 Vocabulary Open-Vocabulary Method Obs. IoU mIoU (8)
+> ■ ceiling
+> ■ floor
+> ■ wall
+> ■ wind.
+> ■ chair
+> ■ bed
+> ■ sofa
+> ■ table
+> ■ curtain
+> ■ door
+> ■ tv
+> ■ lighti.
+> Supervised learning
+> EmbodiedOcc [1] 18.21 5.16 0.15 13.35 9.65 4.10 3.08 4.30 3.12 3.49 ✗✗✗✗
+> EmbodiedOcc++ [4] 18.02 4.99 0.16 13.21 10.15 3.07 2.81 3.81 2.95 3.74 ✗✗✗✗
+> VEOcc [5] 23.01 12.49 15.64 7.81 18.72 13.41 11.47 4.10 15.85 12.89 ✗✗✗✗
+> GPOcc [39] 22.03 14.56 29.20 11.15 17.24 12.88 8.54 8.20 21.51 7.76 ✗✗✗✗
+> Training-free
+> FreeOcc (RGBD) [2] 20.66 10.01 13.13 13.38 12.17 7.76 4.89 11.37 11.74 5.62 13.47 3.11 6.40 8.21
+> PanOVOcc (Ours) 66.27 34.72 67.17 49.61 42.33 20.03 12.52 29.40 42.93 13.80 50.33 20.65 31.04 18.81
+
+training-free baseline FreeOcc [2], PanOVOcc improves oc-cupancy IoU by 20 .03 points and mIoU by 7.06 points. The improvement is particularly pronounced for large structural categories, indicating that native panoramic observations provide effective spatial evidence for constructing complete scene-level geometry. Nevertheless, performance on small or visually ambiguous categories remains uneven, with chair and bed showing lower accuracy than several baselines. Overall, these results demonstrate that PanOVOcc provides a strong training-free solution for persistent scene-level oc-cupancy mapping, with substantial gains in both geometric reconstruction and semantic occupancy prediction. 
+
+Real-World Evaluation on Pan-Holo360D. Table III reports quantitative results on the real-world Pan-Holo360D bench-mark. PanOVOcc achieves an occupancy IoU of 66 .27 and semantic mIoU of 34 .72 under the eight-category evaluation protocol, outperforming both supervised and training-free baselines. Compared with FreeOcc [2], our method improves occupancy IoU by 45 .61 points and semantic mIoU by 24 .71 
+
+points, demonstrating robust scene-level mapping under real-world panoramic observations. Consistent with Pan-Replica, the gains are particularly pronounced for large structural categories, highlighting the advantage of panoramic obser-vations in recovering dominant scene geometry. Moreover, PanOVOcc achieves high accuracy on several additional open-vocabulary categories without task-specific 3D training. Overall, these results further demonstrate its effectiveness and generalizability for persistent open-vocabulary occu-pancy mapping in real-world indoor environments. 
+
+Spatial Coverage of Panoramic Observations. To char-acterize the spatial evidence provided by panoramic obser-vations independently of the mapping algorithm, we con-duct an observation-level coverage analysis under identical benchmark trajectories. Let Vsi denote the set of ground-truth occupied voxels directly observed at camera location i under observation setting s. We define the occupied coverage as 
+
+Cov( s) = 
+
+SNi=1 Vsi
+
+|V GT occ | , (10) where VGT occ denotes the set of ground-truth occupied voxels. Fig. 4 jointly presents matched-step coverage visualiza-tions and cumulative coverage curves. Results show that panoramic observations accumulate spatial evidence substan-tially faster than perspective observations. At the first camera location, panoramic coverage reaches 45 .15% , compared with 8.24% for perspective observations, illustrating the additional scene geometry exposed by the wider field of view. As the camera moves around the scene, this advantage trans-lates into more complete cumulative coverage. By N =110 ,the panoramic sequence observes 94 .29% of the ground-truth occupied voxels, whereas the perspective sequence covers only 67 .84% , leaving nearly one third unobserved. The corresponding visualizations also illustrate this contrast. Panoramic observations provide near-complete coverage of the occupied scene, while substantial regions remain unob-served under the perspective setting despite following the same trajectory. These results highlight an observation-level advantage of panoramic view, showing that the wider field of view provides more comprehensive spatial evidence. 
+
+D. Ablation Studies 
+
+We analyze both the internal components of PanOVOcc and its dependence on upstream perception modules. 
+
+Component Ablation. We first evaluate the contribution of the three main components. For ablation studies, we reuse the same SLAM trajectory while introducing predefined pose perturbations and corrections to evaluate the effect of each component under a consistent protocol. Since this setting differs from the default online mapping pipeline in the pose-update schedule and map-maintenance procedure, absolute scores are not directly compared with those in the main experiment; all component gains are assessed only within the ablation setting. Table IV summarizes the contribution of each component. Removing PSVF leads to the largest performance drop, reducing IoU and mIoU to 53 .02 and 
+
+23 .51 , respectively. GSC improves semantic performance from 31 .51 to 32 .09 mIoU without affecting occupancy IoU, while RPU further improves both occupancy and semantic results. These results confirm the complementary contribu-tions of PSVF, GSC, and RPU to geometric fusion, semantic consolidation, and persistent map maintenance. 
+
+Effect of Upstream Perception Modules. We evaluate how (a) Matched-progress mapping          
+
+> Perspective
+> 8.24% 53.22% 67.84%
+> Panoramic
+> 45.15% 81.58% 94.29%
+> N= 1 N= 80 N= 110
+
+(b) Coverage over the sequence                                              
+
+> Fig. 4. Observation-level spatial coverage. Perspective and panoramic observations are compared along the same trajectory circling the room in
+> Indoor_015 . (a) Cumulative coverage visualizations at matched observation steps N= 1 ,80 ,110 . (b) Cumulative coverage over the complete sequence. Vertical dotted lines and markers correspond to the snapshots in (a). TABLE IV COMPONENT ABLATION OF PAN OVO CC ON PAN -R EPLICA . PSVF, GSC, RPU DENOTE PANORAMIC SIGNED VOXEL FUSION , G EOMETRY -A WARE
+> SEMANTIC CONSOLIDATION ,AND REVERSIBLE PERSISTENT UPDATE .
+> Variant PSVF GSC RPU IoU ↑mIoU ↑
+> w/o PSVF ✗✓✓53.02 23.51 w/o GSC ✓✗✓76.75 31.51 w/o RPU ✓✓✗69.69 30.54
+> Full model ✓✓✓76.75 32.09
+
+the SLAM frontend and semantic predictor affect mapping performance by replacing each module separately. These ablations use controlled final-pose replay with fixed mapping frames and voxel coordinates. As this protocol differs from that of the main comparison, baseline scores may differ, and module effects are evaluated only within each matched ab-lation group. Table V (a) shows that ODGS-SLAM provides the highest geometric IoU among estimated-pose frontends on both benchmarks. On Pan-Replica, it outperforms Open-VSLAM and its dense fork by 17 .63 and 15 .59 in IoU, respectively. On Pan-Holo360D, the corresponding gains are 
+
+7.29 and 23 .97 points. These results support the importance of pose accuracy for aligning observations during geometric fusion. In contrast, replacing the semantic predictor leaves geometric IoU unchanged in Table V (b), indicating that frontend poses mainly govern geometric consistency, while the semantic predictor affects semantic occupancy quality. 
+
+E. Qualitative Analysis 
+
+We provide qualitative comparisons on Pan-Replica and Pan-Holo360D in Fig. 5 to complement the quantitative evaluation. On Pan-Replica, PanOVOcc reconstructs clearer room boundaries and furniture layouts, whereas existing methods exhibit varying degrees of occupancy noise and geo-metric distortion. This contrast becomes more pronounced in the larger real-world examples from Pan-Holo360D. Specif-ically, our method better preserves the sofa and surrounding floor layout in the upper row of Fig. 5 (b), as well as room partitions around the central connecting area in the lower-row multi-room example, where several baselines produce fragmented or distorted layouts. These examples suggest that preserving semantic targets and spatial context could support                                     
+
+> TABLE V EFFECT OF UPSTREAM PERCEPTION MODULES . T HE DEFAULT CONFIGURATION USES ODGS-SLAM [32] AND OOOPS [23].
+> Pan-Replica Pan-Holo360D Method IoU ↑mIoU ↑IoU ↑mIoU ↑
+> Default setting
+> ours 77.88 33.54 65.64 33.71
+> (a) SLAM variants
+> OpenVSLAM [42] 60.25 27.15 58.35 29.35 OpenVSLAM dense [43] 62.29 27.65 41.67 20.39 GT poses 77.77 34.16 65.86 32.60
+> (b) Predictor variants
+> CAT-Seg [44] 77.88 38.20 65.64 32.79 NACLIP [45] 77.88 29.32 65.64 31.82
+
+target localization and approach planning, while coherent room layouts could facilitate cross-room navigation. V. C ONCLUSION 
+
+In this work, we presented PanOVOcc, a training-free framework for persistent open-vocabulary semantic occu-pancy mapping from native panoramic RGB-D sequences. By integrating panoramic SLAM and open-vocabulary per-ception with long-term spatial voxel memory, PanOVOcc ex-tends panoramic occupancy mapping from isolated local pre-dictions to continuously updated, language-queryable global maps. Experiments on the proposed benchmarks demonstrate improved geometric and semantic occupancy accuracy over the evaluated baselines, with particularly strong gains on ma-jor structural categories. These findings highlight the value of combining omnidirectional sensing with persistent spatial memory for open-vocabulary embodied scene understanding. REFERENCES [1] Y. Wu et al. , “EmbodiedOcc: Embodied 3D occupancy prediction for vision-based online scene understanding,” in ICCV , 2025. [2] Z. Jiang et al. , “FreeOcc: Training-free embodied open-vocabulary occupancy prediction,” in RSS , 2026. [3] H. Zhu et al. , “GEM-Occ: From visual geometry evidence to embodied semantic occupancy memory,” arXiv:2607.05543 , 2026. [4] H. Wang et al. , “EmbodiedOcc++: Boosting embodied 3D occupancy prediction with plane regularization and uncertainty sampler,” in MM ,2025. EmbodiedOcc EmbodiedOcc++ VEOcc GPOcc FreeOcc Ours GT 
+
+(a) 
+
+EmbodiedOcc++ VEOcc GPOcc FreeOcc Ours GT 
+
+(b) 
+
+Fig. 5. Qualitative comparison of semantic occupancy mapping results on (a) Pan-Replica and (b) Pan-Holo360D. Compared with existing methods, 
+
+e.g. , EmbodiedOcc [1], EmbodiedOcc++ [4], VEOcc [5], GPOcc [39], and FreeOcc [2], our approach more accurately reconstructs scene geometry and maintains strong performance in larger-scale environments. For clearer visualization, top-layer voxels are removed to reduce occlusion. [5] R. Wang et al. , “VEOcc: Voxel-centric online semantic occupancy prediction for embodied scene understanding,” arXiv:2605.25059 ,2026. [6] H. Shi et al. , “OneOcc: Semantic occupancy prediction for legged robots with a single panoramic camera,” in CVPR , 2026. [7] G. Zhao et al. , “Panoramic multimodal semantic occupancy prediction for quadruped robots,” arXiv:2603.13108 , 2026. [8] M. Duan et al. , “O3N: Omnidirectional open-vocabulary occupancy prediction for embodied intelligent robotics,” arXiv:2603.12144 , 2026. [9] S. Peng et al. , “OpenScene: 3D scene understanding with open vocabularies,” in CVPR , 2023. [10] C. Huang et al. , “Visual language maps for robot navigation,” in ICRA ,2023. [11] K. M. Jatavallabhula et al. , “ConceptFusion: Open-set multimodal 3D mapping,” in RSS , 2023. [12] K. Yamazaki et al. , “Open-Fusion: Real-time open-vocabulary 3D mapping and queryable scene representation,” in ICRA , 2024. [13] L. Ma et al. , “Multi-view deep learning for consistent semantic mapping with rgb-d cameras,” in IROS , 2017. [14] J. M. C. Marques et al. , “On the overconfidence problem in semantic 3D mapping,” in ICRA , 2024. [15] A. Dai et al. , “BundleFusion: Real-time globally consistent 3D recon-struction using on-the-fly surface reintegration,” TOG , 2017. [16] D. Morilla-Cabello et al. , “Robust fusion for bayesian semantic mapping,” in IROS , 2023. [17] J. Straub et al. , “The replica dataset: A digital replica of indoor spaces,” arXiv:1906.05797 , 2019. [18] J. Ou et al. , “Holo360D: A large-scale real-world dataset with con-tinuous trajectories for advancing panoramic 3D reconstruction and beyond,” in ECCV , 2026. [19] S. Gao et al. , “Review on panoramic imaging and its applications in scene understanding,” TIM , 2022. [20] J. Guerrero-Viu et al. , “What’s in my room? Object recognition on indoor panoramic images,” in ICRA , 2020. [21] D. Cao Dinh et al. , “Geometric exploitation for indoor panoramic semantic segmentation,” in NeurIPS , 2024. [22] Z. Zheng et al. , “Complementary bi-directional feature compres-sion for indoor 360° semantic segmentation with self-distillation,” in 
+
+WACV , 2023. [23] J. Zheng et al. , “Open panoramic segmentation,” in ECCV , 2024. [24] D. Zhong et al. , “OmniSAM: Omnidirectional segment anything model for UDA in panoramic semantic segmentation,” in ICCV , 2025. [25] J. Jiang et al. , “Augmenting and contrasting distortion for open panoramic segmentation,” Science China Information Sciences , 2026. [26] F.-E. Wang et al. , “BiFuse: Monocular 360 depth estimation via bi-projection fusion,” in CVPR , 2020. [27] ——, “BiFuse++: Self-supervised and efficient bi-projection fusion for 360° depth estimation,” TPAMI , 2023. [28] C. Sun et al. , “HoHoNet: 360 indoor holistic understanding with latent horizontal features,” in CVPR , 2021. [29] Z. Wu et al. , “3D segmenter: 3D transformer based semantic segmen-tation via 2D panoramic distillation,” in ICLR , 2023. [30] Y. Guo et al. , “PanoVGGT: Feed-forward 3D reconstruction from panoramic imagery,” in CVPR , 2026. [31] S. Lee et al. , “ODGS: 3D scene reconstruction from omnidirectional images with 3D gaussian splattings,” in NeurIPS , 2024. [32] S. Spiss et al. , “ODGS-SLAM: Omnidirectional gaussian splatting SLAM,” in CVPR , 2026. [33] Z. Qiu and A. Wu, “Pano3DComposer: Feed-forward compositional 3D scene generation from single panoramic image,” in CVPR , 2026. [34] A. Hornung et al. , “OctoMap: An efficient probabilistic 3D mapping framework based on octrees,” Autonomous Robots , 2013. [35] S.-C. Wu et al. , “SCFusion: Real-time incremental scene reconstruc-tion with semantic completion,” in 3DV , 2020. [36] T. Wang et al. , “EmbodiedScan: A holistic multi-modal 3D perception suite towards embodied AI,” in CVPR , 2024. [37] Q. Gu et al. , “ConceptGraphs: Open-vocabulary 3D scene graphs for perception and planning,” in ICRA , 2024. [38] C. Zhou et al. , “Monocular open vocabulary occupancy prediction for indoor scenes,” in CVPR , 2026. [39] ——, “Generalizing visual geometry priors to sparse gaussian occu-pancy prediction,” in CVPR , 2026. [40] Z. Zhu et al. , “NICE-SLAM: Neural implicit scalable encoding for SLAM,” in CVPR , 2022. [41] B. Attal et al. , “MatryODShka: Real-time 6DoF video view synthesis using multi-sphere images,” in ECCV , 2020. [42] S. Sumikura et al. , “OpenVSLAM: A versatile visual slam frame-work,” in MM , 2019. [43] H. Surmann et al. , “PatchMatch-stereo-panorama, a fast dense recon-struction from 360° video images,” in SSRR , 2022. [44] S. Cho et al. , “CAT-Seg: Cost aggregation for open-vocabulary se-mantic segmentation,” in CVPR , 2024. [45] S. Hajimiri et al. , “Pay attention to your neighbours: Training-free open-vocabulary semantic segmentation,” in WACV , 2025.

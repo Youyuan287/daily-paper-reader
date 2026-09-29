@@ -6,44 +6,40 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-28
-- 运行时间：2026-09-28 23:58:04 UTC
+- 最新运行日期：2026-09-29
+- 运行时间：2026-09-29 23:17:31 UTC
 - 运行状态：成功
-- 本次总论文数：7
+- 本次总论文数：6
 - 精读区：2
-- 速读区：5
+- 速读区：4
 
 ### 今日简报（AI）
-- 今日共生成 7 篇推荐（精读 2 篇，速读 5 篇）
-- 精读：《TRACKGRAPH: Online Open-Vocabulary 3D Scene Graphs via Image-Space Tracking》（9.0/10）, 《GraphWrit3R: End-to-End 3D Scene Graph Writing》（8.0/10）
-- 速读：《Leveraging Vision-Based Point Cloud Map Priors for Camera-Based 3D Object Detection and Online Vectorized HD Mapping》（6.0/10）, 《SARFusion: Scene-Aware Routing Fusion for Robust Camera-LiDAR 3D Object Detection》（6.0/10）, 《From Mono to Stereo: Accelerating Binocular Gaussian Splatting via Reprojection and Selective Patching》（6.0/10）
-- 这些结果覆盖了当下较热的方向，建议先看精读区论文的关键问题与方法。
-- 详情：[/202609/28/README](/202609/28/README)
+今日更新6篇，精读2篇、速读4篇，EviSplat以10.0分领跑，PanOVOcc获9.0分，焦点集中在3D场景理解与开放词汇感知。  
+最值得看的是EviSplat“保留多视图证据”的3D高斯泼溅开放词汇分割，以及PanOVOcc用长期空间体素记忆做全景具身开放词汇占用建图。  
+普通读者建议先读这两篇精读，重点理解开放词汇分割与具身占用建图如何服务机器人、AR等真实场景。
+- 详情：[/202609/29/README](/202609/29/README)
 
 ### 精读区论文标签
-1. [TRACKGRAPH: Online Open-Vocabulary 3D Scene Graphs via Image-Space Tracking](/202609/28/2609.31005v1-trackgraph-online-open-vocabulary-3d-scene-graphs-via-image-space-tracking)  
+1. [EviSplat: Preserving Multi-View Evidence in 3D Gaussian Splatting for Open-Vocabulary Segmentation](/202609/29/2609.34853v1-evisplat-preserving-multi-view-evidence-in-3d-gaussian-splatting-for-open-vocabulary-segmentation)  
+   标签：评分：10.0/10、query:open-vocab-d
+   evidence：在3D高斯泼溅中保留多视角证据以做开放词汇分割
+2. [PanOVOcc: Panoramic Embodied Open-Vocabulary Occupancy Mapping with Long-term Spatial Voxel Memory](/202609/29/2609.31716v1-panovocc-panoramic-embodied-open-vocabulary-occupancy-mapping-with-long-term-spatial-voxel-memory)  
    标签：评分：9.0/10、query:open-vocab-d
-   evidence：融合视觉语言特征的在线开放词汇3D场景图
-2. [GraphWrit3R: End-to-End 3D Scene Graph Writing](/202609/28/2609.31595v1-graphwrit3r-end-to-end-3d-scene-graph-writing)  
-   标签：评分：8.0/10、query:open-vocab-d
-   evidence：从点云与高斯泼溅端到端生成三维场景图
+   evidence：免训练开放词汇语义占据建图与体素记忆
 
 ### 速读区论文标签
-1. [Leveraging Vision-Based Point Cloud Map Priors for Camera-Based 3D Object Detection and Online Vectorized HD Mapping](/202609/28/2609.26325v1-leveraging-vision-based-point-cloud-map-priors-for-camera-based-3d-object-detection-and-online-vectorized-hd-mapping)  
+1. [Learning to Reason with Persistent Object States for Video Instance Segmentation](/202609/29/2609.35539v1-learning-to-reason-with-persistent-object-states-for-video-instance-segmentation)  
+   标签：评分：7.0/10、query:open-vocab-d
+   evidence：遮挡感知的持久对象状态与稀疏状态-观测图用于视频实例分割
+2. [Toward Comprehensive 3D Grounding: Orientation Grounding through Vision-Language Models](/202609/29/2609.33109v1-toward-comprehensive-3d-grounding-orientation-grounding-through-vision-language-models)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：用DINOv3将视觉特征提升到点云地图先验
-2. [SARFusion: Scene-Aware Routing Fusion for Robust Camera-LiDAR 3D Object Detection](/202609/28/2609.29235v1-sarfusion-scene-aware-routing-fusion-for-robust-camera-lidar-3d-object-detection)  
+   evidence：通过视觉语言模型进行三维朝向定位，包含多视图查询
+3. [SceneScaffold: Active Scene-State Construction for Unified 3D Scene Understanding](/202609/29/2609.33518v1-scenescaffold-active-scene-state-construction-for-unified-3d-scene-understanding)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：可靠性/不确定性感知的自适应多模态融合
-3. [From Mono to Stereo: Accelerating Binocular Gaussian Splatting via Reprojection and Selective Patching](/202609/28/2609.30741v1-from-mono-to-stereo-accelerating-binocular-gaussian-splatting-via-reprojection-and-selective-patching)  
+   evidence：结构化场景状态的统一三维场景理解
+4. [Preference-Guided Adaptation for Open-Vocabulary Semantic Segmentation via Prompt Disagreement](/202609/29/2609.34528v1-preference-guided-adaptation-for-open-vocabulary-semantic-segmentation-via-prompt-disagreement)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：面向多视角高斯渲染的可见性与遮挡感知重投影
-4. [Skip the Talk, Re-Focus on Vision: Latent Reasoning for Reasoning Segmentation in Multimodal Large Language Models](/202609/28/2609.30783v1-skip-the-talk-re-focus-on-vision-latent-reasoning-for-reasoning-segmentation-in-multimodal-large-language-models)  
-   标签：评分：6.0/10、query:open-vocab-d
-   evidence：多模态大模型细粒度推理分割的潜在推理
-5. [DepthEvidence: Unifying Metric Depth Prediction and Geometric Reasoning in Multimodal Language Models](/202609/28/2609.31103v1-depthevidence-unifying-metric-depth-prediction-and-geometric-reasoning-in-multimodal-language-models)  
-   标签：评分：6.0/10、query:open-vocab-d
-   evidence：将稠密深度提升为物体锚定几何令牌以支撑语言推理
+   evidence：开放词汇语义分割适配
 
 
 <div class="dpr-home-promo-card">
