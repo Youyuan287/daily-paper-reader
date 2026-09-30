@@ -6,40 +6,24 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-29
-- 运行时间：2026-09-29 23:17:31 UTC
+- 最新运行日期：2026-09-30
+- 运行时间：2026-09-30 23:19:47 UTC
 - 运行状态：成功
-- 本次总论文数：6
-- 精读区：2
-- 速读区：4
+- 本次总论文数：1
+- 精读区：0
+- 速读区：1
 
 ### 今日简报（AI）
-今日更新6篇，精读2篇、速读4篇，EviSplat以10.0分领跑，PanOVOcc获9.0分，焦点集中在3D场景理解与开放词汇感知。  
-最值得看的是EviSplat“保留多视图证据”的3D高斯泼溅开放词汇分割，以及PanOVOcc用长期空间体素记忆做全景具身开放词汇占用建图。  
-普通读者建议先读这两篇精读，重点理解开放词汇分割与具身占用建图如何服务机器人、AR等真实场景。
-- 详情：[/202609/29/README](/202609/29/README)
+今日仅速读1篇：VGGT-Diff以视觉几何结合扩散模型，探索稀疏视角新视角合成。唯一可看方向是该论文6.0分的几何与扩散融合思路，但精读为零、证据有限。普通读者建议先观望，等更多验证或精读分析后再判断是否值得深入。
+- 详情：[/202609/30/README](/202609/30/README)
 
 ### 精读区论文标签
-1. [EviSplat: Preserving Multi-View Evidence in 3D Gaussian Splatting for Open-Vocabulary Segmentation](/202609/29/2609.34853v1-evisplat-preserving-multi-view-evidence-in-3d-gaussian-splatting-for-open-vocabulary-segmentation)  
-   标签：评分：10.0/10、query:open-vocab-d
-   evidence：在3D高斯泼溅中保留多视角证据以做开放词汇分割
-2. [PanOVOcc: Panoramic Embodied Open-Vocabulary Occupancy Mapping with Long-term Spatial Voxel Memory](/202609/29/2609.31716v1-panovocc-panoramic-embodied-open-vocabulary-occupancy-mapping-with-long-term-spatial-voxel-memory)  
-   标签：评分：9.0/10、query:open-vocab-d
-   evidence：免训练开放词汇语义占据建图与体素记忆
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Learning to Reason with Persistent Object States for Video Instance Segmentation](/202609/29/2609.35539v1-learning-to-reason-with-persistent-object-states-for-video-instance-segmentation)  
-   标签：评分：7.0/10、query:open-vocab-d
-   evidence：遮挡感知的持久对象状态与稀疏状态-观测图用于视频实例分割
-2. [Toward Comprehensive 3D Grounding: Orientation Grounding through Vision-Language Models](/202609/29/2609.33109v1-toward-comprehensive-3d-grounding-orientation-grounding-through-vision-language-models)  
+1. [VGGT-Diff: Visual Geometry Meets Diffusion for Sparse-View Novel View Synthesis](/202609/30/2609.33253v1-vggt-diff-visual-geometry-meets-diffusion-for-sparse-view-novel-view-synthesis)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：通过视觉语言模型进行三维朝向定位，包含多视图查询
-3. [SceneScaffold: Active Scene-State Construction for Unified 3D Scene Understanding](/202609/29/2609.33518v1-scenescaffold-active-scene-state-construction-for-unified-3d-scene-understanding)  
-   标签：评分：6.0/10、query:open-vocab-d
-   evidence：结构化场景状态的统一三维场景理解
-4. [Preference-Guided Adaptation for Open-Vocabulary Semantic Segmentation via Prompt Disagreement](/202609/29/2609.34528v1-preference-guided-adaptation-for-open-vocabulary-semantic-segmentation-via-prompt-disagreement)  
-   标签：评分：6.0/10、query:open-vocab-d
-   evidence：开放词汇语义分割适配
+   evidence：置信度与可见性感知的多视角几何路由
 
 
 <div class="dpr-home-promo-card">
