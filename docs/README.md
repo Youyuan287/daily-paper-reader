@@ -6,24 +6,30 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-30
-- 运行时间：2026-09-30 23:19:47 UTC
+- 最新运行日期：2026-10-01
+- 运行时间：2026-10-01 23:33:43 UTC
 - 运行状态：成功
-- 本次总论文数：1
+- 本次总论文数：3
 - 精读区：0
-- 速读区：1
+- 速读区：3
 
 ### 今日简报（AI）
-今日仅速读1篇：VGGT-Diff以视觉几何结合扩散模型，探索稀疏视角新视角合成。唯一可看方向是该论文6.0分的几何与扩散融合思路，但精读为零、证据有限。普通读者建议先观望，等更多验证或精读分析后再判断是否值得深入。
-- 详情：[/202609/30/README](/202609/30/README)
+今日速读3篇均分6.0的论文，聚焦视频分割、空间推理与室内SLAM。其中OPERA的多模态时空推理智能体和RRG-SLAM的反射感知高斯SLAM较有看点，分别面向指代视频分割与真实室内建图。普通读者可优先了解这两项技术如何让AI更懂动态画面和复杂反光环境。
+- 详情：[/202610/01/README](/202610/01/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [VGGT-Diff: Visual Geometry Meets Diffusion for Sparse-View Novel View Synthesis](/202609/30/2609.33253v1-vggt-diff-visual-geometry-meets-diffusion-for-sparse-view-novel-view-synthesis)  
+1. [OPERA: A Unified Omnimodal Progressive Spatio-Temporal Reasoning Agent for Referring Video Segmentation](/202610/01/2609.33338v1-opera-a-unified-omnimodal-progressive-spatio-temporal-reasoning-agent-for-referring-video-segmentation)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：置信度与可见性感知的多视角几何路由
+   evidence：指代视频分割中的语言与掩码区域对齐
+2. [Geometric Encoding for Spatial Reasoning in Vision-Language Models](/202610/01/2609.34148v1-geometric-encoding-for-spatial-reasoning-in-vision-language-models)  
+   标签：评分：6.0/10、query:open-vocab-d
+   evidence：将二维感知与深度提升为三维空间编码供视觉语言模型推理
+3. [RRG-SLAM: Real-time Reflection-aware Gaussian SLAM for Indoor Scenes](/202610/01/2609.34527v1-rrg-slam-real-time-reflection-aware-gaussian-slam-for-indoor-scenes)  
+   标签：评分：6.0/10、query:open-vocab-d
+   evidence：带反射掩码与深度剔除的反射感知高斯SLAM
 
 
 <div class="dpr-home-promo-card">
