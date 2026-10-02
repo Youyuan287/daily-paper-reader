@@ -1,0 +1,342 @@
+Title: Lang3DSeg: Annotation-Free Open-Vocabulary 3D Segmentation with Point Transformers
+
+URL Source: https://arxiv.org/pdf/2610.00855v1
+
+Published Time: Fri, 02 Oct 2026 00:42:45 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# Lang3DSeg: Annotation-Free Open-Vocabulary 3D Segmentation with Point Transformers 
+
+Cigdem Kokenoz 1, Amir Salarpour 2, Alkim Domeke 2,Christopher Salas 2, Pedram MohajerAnsari 2, Long Cheng 2,Mert D. Pes´ e2,and Bing Li 1
+
+Abstract — Accurate 3D semantic perception is critical for safe autonomous navigation. However, supervised LiDAR seg-mentation remains tied to closed taxonomies and to the cost of point-wise manual annotation. Open-vocabulary methods avoid that cost by projecting the output of 2D vision-language models onto LiDAR and distilling it into a 3D network. These methods rely almost exclusively on voxel-based sparse convolutions, and point transformers have so far been limited to indoor environments, where 3D data is dense and bounded. We present Lang3DSeg , which establishes a point trans-former as the backbone for annotation-free open-vocabulary segmentation of outdoor 3D LiDAR data, and is trained from scratch without geometric pre-training. This training paradigm necessitates addressing the inherent noise in 2D-to-3D label projections; specifically, naive projection often suffers from depth ambiguity, where points behind an object are erroneously assigned its semantic label. We therefore composite masks using an explicit class-priority rule and truncate each projected instance at the first gap in its depth distribution, correcting the projection error directly rather than averaging it over registered sequences. 
+
+Lang3DSeg achieves 52.8% mIoU on nuScenes validation and 41.4% on SemanticKITTI, the highest among published annotation-free methods on both benchmarks. Every 3D se-mantic segmentation is on a single LiDAR sweep, and inference operates in real-time without running vision-language models. 
+
+Index Terms — Deep Learning for Visual Perception, 3D Point Clouds, Autonomous 3D Recognition, Vision-Language Models, Open-Vocabulary Segmentation 
+
+I. I NTRODUCTION 
+
+Accurate 3D semantic perception underpins autonomous navigation safety in unstructured environments. Supervised point transformers reach high benchmark accuracy, but they depend on dense point-wise annotation and are bound to the closed taxonomy they were trained on. Both properties limit a robot that must operate around rare obstacles, unfamiliar vehicle types, or terrain the annotation schema never antici-pated to mark or label. Open-vocabulary distillation offers a way out. A 2D vision-language model labels camera images, those labels are projected onto the LiDAR sweep, and a 3D network 
+
+DISTRIBUTION STATEMENT A. Approved for public release; distri-bution is unlimited. [OPSEC 11142]. 
+
+> 1
+
+Department of Automotive Engineering, Clemson University, Greenville, SC, USA. Corresponding author: 
+
+ckokeno@clemson.edu .
+
+> 2
+
+School of Computing, Clemson University, Clemson, SC, USA. Submitted to the IEEE International Conference on Robotics and Automation (ICRA) 2027. Code will be released upon acceptance at 
+
+https://github.com/<org>/Lang3DSeg .bicycle car pedestrian traffic cone truck driveable surface other flat sidewalk manmade vegetation 0 20 40 60      
+
+> mIoU (%)
+> CLIP2Scene HICL CNS AdaCo Better Call SAL 3D-AVS OpenScene OV3D GGSD LOSC
+> Lang3DSeg (ours)
+> 20.8 23.0 26.8 31.2 33.9 36.2 42.1 44.6 46.1 49.3
+> 52.8
+> nuScenes val
+> 010 20 30 40 50
+> mIoU (%)
+> AdaCo Better Call SAL OV3D LOSC
+> Lang3DSeg (ours)
+> 25.7 28.7 31.2 35.2
+> 41.4
+> SemanticKITTI seq. 08
+
+Fig. 1. Lang3DSeg segments a single LiDAR sweep with no human annotation and no vision-language model at inference (top, predictions projected onto the front camera). A PointTransformerV3 backbone trained from scratch reports the highest mIoU among annotation-free methods on both nuScenes and SemanticKITTI (bottom). 
+
+learns from the result without human annotation. What has not changed across this literature is the 3D backbone: most methods in the setting, from CLIP2Scene [1] through Better Call SAL [2], OV3D [3], and GGSD [4], build on a voxel-based sparse convolutional network, which imposes a spatial quantization not present in the raw point measurements. Point transformers remove that constraint and have been adopted for open-vocabulary segmentation indoor environ-ments [5], where scenes are dense and bounded. Outdoor LiDAR is the opposite regime: sweeps are sparse, ring-structured, and span a hundred meters, and to our knowledge no point transformer has been trained for annotation-free open-vocabulary segmentation in it. 
+
+Lang3DSeg closes that gap with two components. We train a PointTransformerV3 [6] backbone from scratch on open-vocabulary supervision, with no geometric pre-training and no supervised initialization; and because a from-scratch backbone has no prior to fall back on and reproduces the arXiv:2610.00855v1 [cs.CV] 1 Oct 2026 errors present in the projected pseudo-labels, we pair it with an offline curation stage that corrects those errors at the projection step rather than compensating for them afterwards. Together they outperform every published annotation-free result on both driving benchmarks. Prior work treats the 2D-3D projection noise statistically, by temporal voting [7], adaptive label correction [8], or keeping a vision-language model in the loop at inference [9]. Each method introduces computation or memory cost that may be unsuitable for resource-constrained deployment, and much of the error is not statistical in the first place: a point behind a car is mislabeled identically from every similar viewpoint, so voting reinforces it. We instead remove these labels at the projection stage itself. A per-pixel occlusion test does not suffice, since a point behind an object typically lands on its own unoccupied pixel inside that object’s mask; we therefore test each mask instance as a whole for points that lie beyond the surface it describes. The contributions of this paper are as follows.  
+
+> •
+
+We create a new annotation-free open-vocabulary 3D learning framework , and validate its effectiveness through 3D LiDAR outdoor semantic segmentation task by training a point transformer from scratch without projected pseudo-label errors.  
+
+> •
+
+We identify and quantify occlusion bleed as a dom-inant and systematic error during 2D-to-3D label pro-jection, concentrated in the foreground categories that significantly matter for class-averaged accuracy.  
+
+> •
+
+We introduce a priority-ordered rasterization with an instance-wise depth approach to handle this error, re-quiring neither registration nor cross-frame voting.  
+
+> •
+
+We attain the SOTA annotation-free accuracy on both benchmarks, 52.8% mIoU on nuScenes and 41.4% on SemanticKITTI, while keeping the vision-language model out of the inference path. II. R ELATED WORK 
+
+Open-vocabulary 3D scene understanding largely proceeds by transferring knowledge from 2D vision-language mod-els [10]. We organize the relevant work by where the foun-dation model sits relative to inference, by the 3D backbone each method adopts, and how each handles projection noise. 
+
+A. Cross-Modal Distillation and Open-Vocabulary Frame-works 
+
+Early zero-shot methods keep the 2D model in the loop at test time. PointCLIP [11] and OpenScene [9] project point clouds onto image planes and aggregate CLIP [12] features during inference, and OpenMask3D [13] refines projected masks with SAM [14] before extracting free-form features. Accuracy is competitive, but evaluating a vision-language model across several cameras for every sweep is not viable on an embedded platform. Offline distillation removes that cost. ULIP [15] aligns points to text directly, while SLidR [16], Seal [17] and CLIP2Scene [1] learn correspondences across driving se-quences that can later be fine-tuned. Better Call SAL [2], OV3D [3], GGSD [4] and AFOV [18] generate pseudo-labels offline and distill them into 3D-native networks, which is the setting we adopt. AFOV additionally pre-trains the back-bone with a tri-modal contrastive objective, and LOSC [7] initializes from ScaLR [19]; both therefore depend on a self-supervised stage that we do not use. 
+
+B. Backbones for Open-Vocabulary LiDAR Segmentation 
+
+What has not varied across this literature is the 3D architecture. CLIP2Scene [1] and AdaCo [8] use Sparse Point-Voxel Convolution (SPVCNN) [20]; CNS [21], Open-Scene [9], Better Call SAL [2], 3D-AVS [22], OV3D [3], GGSD [4] and AFOV [18] use MinkowskiNet [23] or SparseConvNet; LOSC [7] uses WaffleIron [24]. Every one either voxelizes the sweep or projects it onto a dense grid. Point transformers instead attend over serialized neigh-borhoods of the raw points, and PointTransformerV3 [6] scales to the point counts a LiDAR sweep produces. The architecture has reached open-vocabulary segmentation in-door environments: SpaCeFormer [5] couples a space-curve transformer with sliding-window attention for instance seg-mentation and reports PointTransformerV3 as a strong base-line there. Its evaluation is on ScanNet200 and Replica indoor scenes, where scenes are dense, bounded and roughly uniformly sampled; outdoor LiDAR is the opposite regime, with point density falling off quadratically with range. To our knowledge, Lang3DSeg is the first to distill open-vocabulary supervision into a point transformer for outdoor LiDAR segmentation, and the first to do so from scratch. 
+
+C. Noise Mitigation and Geometric Consistency 
+
+The treatment of projection noise can substantially af-fect segmentation accuracy. Better Call SAL [2] applies DBSCAN [25] within individual frames to discard spatial outliers. LOSC [7] consolidates labels across a voxelized sequence by temporal voting, which suppresses per-frame flicker effectively and currently gives the strongest published results in this setting. AdaCo [8] corrects supervision during training through an adaptive label corrector, and AFOV [18] propagates labels through an approximate-flat interaction module that fills unobserved regions. These approaches primarily address projection noise as a stochastic quantity to be averaged or down-weighted, and much of it is neither. The label assigned to a point behind a car is wrong identically from every similar viewpoint, so temporal voting reinforces it; and the quantity that would reject it, its range along the camera ray, is available at projection time and discarded. Lang3DSeg filters at the source instead, cutting each projected instance at the first gap in its depth distribution and resolving the residual ground ambiguity with a per-sweep plane model, as Sec. III details. III. M ETHODOLOGY 
+
+The difficulty is not obtaining 2D masks but transferring them to LiDAR. A backbone trained from scratch has no prior with which to discount projection error, so we treat target curation as a first-class component and resolve that Surround-view RGB images SAM 3 prompt ensemble Priority-ordered rasterization Projection with depth di                        
+
+> Instance depth test Ground plane + label fill Curated targets
+> yi∈ { 1..K }
+> Single LiDAR sweep
+> [x, y, z, ι ],N≈34 k32 64 128 256 512 256 128 64 64 skip connections encoder, stride 2 decoder segmentation head
+> Z∈RN×K
+> embedding head
+> H∈RN×512
+> LCE
+> Llov
+> Ldist
+> CLIP text anchors
+> T∈RK×512
+> (1) Offline target curation — one sweep, no registration, no cross-frame voting (2) PointTransformerV3 from scratch — no vision-language model at inference (3) Objective
+
+Fig. 2. The Lang3DSeg framework. (1) Targets are curated offline. SAM 3 is prompted with a descriptive ensemble, masks are rasterized under an explicit class priority so that large background regions cannot overwrite small foreground objects, and each projected instance is cut at the first gap in its depth distribution di, discarding points that lie behind the mask that claimed them. A per-sweep RANSAC ground model then separates flat terrain from vertical vegetation, and unlabeled points are filled only where neighboring labels agree. (2) A PointTransformerV3 backbone is trained from scratch on these targets; numbers give the channel width of each encoder and decoder stage. (3) Training combines weighted cross-entropy, Lov´ asz-Softmax, and a cosine alignment term that draws the point embeddings toward frozen CLIP text anchors. The anchors supervise training only and never enter the forward path, so inference consumes one LiDAR sweep and no image data. 
+
+error offline, using only the information in one sweep. Fig. 2 summarizes the three stages. 
+
+A. Offline Target Curation 
+
+Descriptive prompting. We query SAM 3 [26] with a small ensemble of natural-language phrases per class rather than the dataset’s category string, since driving taxonomies contain labels such as other flat that no foundation model recognizes. Each phrase is issued as an independent concept query and its masks are collected separately. Prompt design is constrained by the benchmark definition rather than by intuition: nuScenes assigns parking lots to drivable surface 
+
+and plazas to sidewalk , so prompting for those under other flat removes points from two well-performing classes in exchange for an unreliable gain on a rare one. Our ensembles overlap with those published by LOSC [7] for the vegetation, terrain, trailer and construction categories, which we adopt directly. Table I lists every phrase and the projection priority of each class. SAM 3 operates in video mode over windows of five consecutive keyframes, which amortizes the cost of text grounding; this is 2D mask tracking only, and no point clouds are registered or merged at any stage. 
+
+Priority-ordered rasterization. Masks from all classes must be composited into a single 2D label image, and the com-positing order matters more than it appears. A drivable-surface mask covers most of the frame and carries a high confidence score, so a confidence-ordered rule erases the traffic cones and pedestrians standing on it. We instead assign each class c a fixed priority π(c), with thin and small foreground categories highest and the road surface lowest, and resolve every pixel by write ⇐⇒  π(c) > π ⋆ ∨  π(c) = π⋆ ∧ s > s ⋆, (1) where π⋆ and s⋆ are the priority and score currently stored at that pixel and s is the SAM 3 mask score. Priority decides between classes; confidence only breaks ties within a class. 
+
+Projection and occlusion rejection. Points are transformed into each camera frame, and we retain the depth di along the optical axis that the usual projection discards. Every point landing inside a mask inherits its class and instance identifier, so the set mixes the object with its background. A per-pixel depth buffer does not help, since the occluded point projects to a different pixel that is also inside the mask. We instead exploit the fact that a physical object is contiguous in depth while the surface behind it is separated by empty space. For each instance m we sort the depths of its points, d(1) ≤· · · ≤ d(n), and retain the prefix up to the first sufficiently large gap, 
+
+k⋆ = min { k : d(k+1) − d(k) > τ d }, Km = {(1) , . . . , (k⋆)},
+
+(2) keeping all points if no such gap exists. With τd = 2 .5 m this removes a wall several metres behind a car while leaving an extended object such as a bus or trailer intact, since its own depth extent is continuous. The test is applied to foreground classes only, as background regions are legitimately depth-extended. Points visible to several cameras are merged with the rule of Eq. 1, so overlapping views act as a weak ensemble. 
+
+Ground-plane purification. 2D segmenters confuse flat terrain with vertical vegetation, since a grass verge and a tree canopy can be indistinguishable in appearance; we resolve this geometrically. A plane (n, d ) with ∥n∥2 = 1 is fitted by RANSAC [27] to the points labeled drivable surface within 40 m, rejecting hypotheses with nz < 0.90 and refining TABLE I PROMPT ENSEMBLES ISSUED TO SAM 3 AND THE PROJECTION PRIORITY OF EACH CLASS . H IGHER PRIORITY WINS DURING RASTERIZATION ; TIES WITHIN A PRIORITY LEVEL ARE BROKEN BY MASK SCORE . T HE ORDERING FOLLOWS ONE RULE : A CATEGORY THAT OCCUPIES FEW PIXELS AND IS EASILY OVERWRITTEN SITS ABOVE ONE THAT COVERS LARGE CONTIGUOUS REGIONS , AND THE ROAD SURFACE IS THE BASE LAYER .                                  
+
+> Class Prompts Priority
+> traffic cone traffic cone; orange construction cone 160 pedestrian pedestrian; person 150 bicycle bicycle 145 motorcycle motorcycle 140 barrier barrier; barricade; guard rail 130 constr. vehicle excavator; bulldozer; crane; 125 concrete mixer truck trailer semi trailer; cargo container; 120 shipping container truck truck 115 bus bus 110 car car 105 manmade building; wall; pole; fence 60 vegetation tree; bush; shrub 55 other flat traffic island; raised median strip; 45 railroad tracks sidewalk sidewalk 40 terrain grass; grassland; lawn; terrain 35 drivable surface road; asphalt 10
+
+the consensus set by least squares. Each point then has a signed elevation ei = n⊤pi + d. A point labeled vegetation 
+
+is reassigned to terrain when it lies close to the ground and is not part of a vertical structure, 
+
+|ei| < τ e ∧ max    
+
+> pj∈N r(pi)
+
+zj − min    
+
+> pj∈N r(pi)
+
+zj < τ z , (3) with τe = 0 .35 m and τz = 0 .5 m over a radius-r neighbor-hood, r = 1 .0 m. The second condition protects tree trunks, whose bases sit near the ground but whose neighborhoods span several metres vertically. Within 15 m we additionally require local planarity. From the covariance Ci = |N r |−1 P  
+
+> pj∈N r(pi)
+
+(pj − ¯p)( pj − ¯p)⊤
+
+with eigenvalues λ1 ≥ λ2 ≥ λ3 and eigenvectors v1, v2, v3,we use planarity Pi = ( λ2 − λ3)/λ 1, surface variation vi =
+
+λ3/ P 
+
+> k
+
+λk and the normal v3, requiring Pi > 0.35 , vi <
+
+0.20 and |v3,z | > 0.80 .The near-field restriction follows from the sampling. On a 32-beam sensor at height h, a beam at depression angle 
+
+θ meets the ground at r = h/ tan θ, so consecutive rings are separated by ∆r ≈ h ∆θ/ sin 2 θ: about 1.3 m at 10 m range for h = 1 .84 m and ∆θ ≈ 1.33 ◦, but roughly 5 m at 20 m. Beyond that a ground point’s neighbors all lie along one ring whatever radius is chosen, Ci degenerates toward rank one, and both Pi and v3 stop carrying information. The range-independent elevation test of Eq. 3 therefore remains the primary signal. 
+
+Label completion. Camera coverage is incomplete, so part of each sweep receives no label. We fill an unlabeled point from its k nearest labeled neighbors within 0.4 m, and only when at least three are found and all agree. The step is strictly additive, never overwriting an existing label, which raises coverage without the churn unconstrained smoothing introduces. 
+
+B. Network 
+
+Backbone. We use PointTransformerV3 [6] initialized from scratch, with no geometric pre-training and no supervised initialization. Encoder channel widths are 
+
+(32 , 64 , 128 , 256 , 512) with depths (2 , 2, 2, 6, 2) and stride 
+
+2 between stages; the decoder widths are (64 , 64 , 128 , 256) ,and points are serialized on a 0.05 m grid using z-order and Hilbert curves. The network consumes one sweep and predicts dense logits Z ∈ RN ×K and embeddings H ∈
+
+RN ×512 .
+
+Input representation. Coordinates are centered in x and y
+
+only; the vertical axis is left in the sensor frame, because height above the ground separates the very classes this work targets and because mean-centering z introduces a train–test shift whenever the training sample is drawn differently from the full sweep used at inference. The per-point feature is 
+
+[ x′, y ′, z, ι ], with ι the normalized return intensity. 
+
+C. Objective 
+
+Semantic terms. We combine weighted cross-entropy with Lov´ asz-Softmax [28], which optimizes the IoU surrogate directly: 
+
+LCE = − 1
+
+|V| 
+
+X
+
+> i∈V
+
+wyi log exp( zi,y i )
+
+PKj=1 exp( zi,j ) , (4) over the set V of points carrying a curated label. Class weights use inverse square-root frequency, wc ∝ f −1/2 
+
+> c
+
+,normalized to unit mean and clipped to [0 .2, 8] , with fc mea-sured on the curated targets themselves. Inverse frequency without the square root over-weights rare classes enough to destabilize training when combined with Lov´ asz-Softmax, which is itself warmed up linearly over three epochs because it is poorly conditioned while the logits are near-uniform. 
+
+Cosine alignment. A light alignment term places the point embeddings in the CLIP text space, 
+
+Ldist = 1
+
+|V| 
+
+X
+
+> i∈V
+
+
+
+1 −
+
+ hi
+
+∥hi∥2
+
+, tyi
+
+ 
+
+, (5) with tyi the unit-norm anchor of the assigned class, taken from the frozen clip-vit-base-patch32 text encoder after its projection into the joint image–text space. The anchors enter training only through this term and are absent from the forward path, so inference requires no text en-coder. Beyond regularization the term makes the embeddings queryable by text: a class outside the training taxonomy can be scored by cosine similarity between H and any text embedding, without retraining. 
+
+Total. The objective is 
+
+L = λce LCE + λlov Llov + λdist Ldist , (6) with λce = λlov = 1.0 and λdist = 0.1, determined empirically. IV. E XPERIMENTS AND EVALUATION 
+
+A. Experimental Setup 
+
+Datasets. nuScenes [29] contains 1,000 scenes recorded with a 32-beam LiDAR and six surround-view cameras. We curate targets on the 700-scene training split and evaluate on all frames of the 150-scene validation split over 16 categories. 
+
+SemanticKITTI [30] provides 64-beam sequences with a single forward camera; we use sequences 00-07, 09 and 10 for training and sequence 08 for validation over 19 categories. No human annotation is used at any point in curation or training; ground truth is used only to compute the reported metrics. 
+
+Metrics. We report mean Intersection-over-Union over all classes. Points labeled as ignore are excluded, and on Se-manticKITTI the moving categories are mapped back to their static counterparts, following the single-scan benchmark protocol. 
+
+Implementation. Training uses AdamW with peak learn-ing rate 1 × 10 −4, weight decay 5 × 10 −3, a one-cycle schedule with 5% warmup and gradient clipping at 1.0, in full precision; mixed precision interacts badly with the fused attention kernel, since a single overflow enters the normalization statistics during the forward pass and cannot be undone by skipping the optimizer step. We train on full unsampled sweeps, with an effective batch of 12 on nuScenes and 16 on SemanticKITTI, augmenting by random rotation about the vertical axis, random x and y mirroring, anisotropic scaling in [0 .9, 1.1] , and per-point jitter with σ = 5 mm. At inference we average softmax outputs over four rotations about the vertical axis; latency is measured without this averaging. 
+
+B. Benchmark Comparison 
+
+Table II places Lang3DSeg against published annotation-free results. On nuScenes validation it reaches 52.8% mIoU 
+
+and on SemanticKITTI sequence 08 41.4% , the highest reported figures in this setting on both benchmarks. The comparison is favorable on cost as well as accuracy. LOSC reaches 49.3% by consolidating labels across registered se-quences, initializing from a self-supervised checkpoint [19], and retraining iteratively; AFOV reaches 47.7% with a tri-modal contrastive pre-training stage; OpenScene reaches 42.1% but evaluates a vision-language model across six cam-eras for every sweep. Consistent with existing counterparts, we did not benchmark our method against UniPLV [32] as it is not peer-reviewed. Table III gives the per-class breakdown against LOSC, the strongest published baseline. Lang3DSeg uses a single training run, no self-supervised initialization, and no image data at test time. The backbone column is worth reading alongside the accuracy. Every prior method in the table voxelizes the sweep or projects it onto a dense grid. Lang3DSeg is the only entry built on a point transformer, and the only one trained from scratch without a pre-training stage. We do not over-attribute the margin. We ran no controlled backbone substitution, so we cannot separate the contribution of the architecture from that of the curated targets. What we can measure is the effect of the curation, which Table IV isolates. 
+
+SemanticKITTI. A single forward-facing camera supervises only the frontal frustum, so most of each sweep carries no 2D label during training. Restricting evaluation to the frustum gives 47.8% mIoU against 41.4% over the full sweep; the gap measures how far the backbone extrapolates learned geometry into regions it never saw supervised. 
+
+Runtime. On a single NVIDIA H200, Lang3DSeg processes a complete 360 ◦ nuScenes sweep in about 52.6 ms , over 19 frames per second at batch size one without test-time augmentation and comfortably above the 10 Hz rotation rate of the sensor; the denser SemanticKITTI sweeps take about 88 ms. Methods that query a vision-language model at inference must additionally run it over every camera. 
+
+C. Ablation Studies 
+
+We ablate the curation pipeline directly on the labels it produces, scoring them against ground truth without training anything. Label quality can be evaluated in minutes rather than GPU-days, and it isolates the stage under study from the variance of a training run. 
+
+Target curation. Table IV isolates each stage. The occlusion depth test is the clear contributor, raising the quality of the labels it keeps by 2.3 points, and manmade absorbs most of the error it removes because walls and buildings frequently form background surfaces behind foreground objects. Per class it lifts car by 9.1 points, pedestrian by 7.2 and barrier 
+
+by 6.1, but is not uniformly beneficial: trailer loses 5.9, because a trailer is long enough that part of it occasionally falls beyond the depth gap. Ground-plane refinement is neutral on this metric, moving labeled mIoU by −0.1: it corrects a visually obvious failure, terrain labeled as vegetation, but the points involved are too few to register in a class-averaged score. Label completion trades 1.6 points of per-point accuracy for 3.7 points of coverage, gaining 3.3 on the metric that charges unlabeled points as errors. That is the correct trade for a student network that must predict every point, and the reason we report both columns. 
+
+Negative results. We also evaluated three additional de-sign choices that did not improve performance but may be reasonable alternatives for future implementations. Verifying every mask by comparing a CLIP crop embedding against the class ensembles rejected more than half of the correct foreground detections, because the ensemble mean for a visually diverse class such as manmade sits near the centroid of street-scene text embeddings. Concatenating per-mask CLIP features to the network input also degraded accuracy: the feature vector is null exactly where no pseudo-label exists, supplying a shortcut correlated with the loss mask rather than the geometry. Routing the text anchors into the backbone through a cross-attention branch, gated or otherwise, cost 1.6 to 1.9 mIoU against leaving the forward path purely geometric, which is why the network we report is an unmodified PointTransformerV3: the alignment term already supplies the benefit provided by the anchors, and nuScenes scene-0018  Camera context Ground truth Ours (BEV) Ours (ego view) Errors 
+
+> nuScenes scene-0018 SemanticKITTI 08/000040 SemanticKITTI 08/001240
+> nuScenes: barrier bicycle bus car construction vehicle motorcycle pedestrian traffic cone truck driveable surface other flat sidewalk terrain manmade vegetation SemanticKITTI: car bicycle motorcycle truck other vehicle person bicyclist road parking sidewalk other ground building fence vegetation trunk terrain pole traffic sign
+
+Fig. 3. Qualitative results on nuScenes validation (top two rows) and SemanticKITTI sequence 08 (bottom two rows). Left to right: camera context; ground-truth annotations; the Lang3DSeg prediction in bird’s-eye view; the same prediction in an ego-centric perspective view; and an error map with misclassified points in red, correctly classified points in grey and unannotated points in white. Lang3DSeg is trained without any human annotation and consumes no image data at inference. 
+
+the branch adds parameters a from-scratch backbone must fit from noisy supervision. Finally, initializing from a self-supervised checkpoint trained predominantly on indoor scans gave no improvement over training from scratch, in contrast with the gain LOSC reports from an initialization learned on driving data [19], suggesting the benefit of pre-training here is domain-specific rather than generic. 
+
+D. Qualitative Results 
+
+Fig. 3 shows predictions on both benchmarks against ground truth, in bird’s-eye and ego-centric views, with an error map isolating misclassified points. Two patterns are visible. Boundaries between continuous ground surfaces and vertical structure are clean, which is what the ground-plane refinement is for even though it does not move the aggregate metric. Errors concentrate on small and thin objects at range and along the boundaries between co-planar ground classes, where neither geometry nor a single sweep provides enough evidence to separate them; we return to both in Sec. V. V. L IMITATIONS AND FUTURE WORK 
+
+Extended objects defeat the depth test. The occlusion test assumes an object is contiguous in depth while the surface behind it is separated by empty space. That holds for a car in front of a wall and fails when an object’s own extent exceeds the threshold, which is why Table IV shows trailer losing 5.9 IoU where car gains 9.1: a sparse return pattern along a long vehicle can itself contain a gap wider than τd. One threshold cannot serve a traffic cone and an articulated trailer TABLE II ANNOTATION -FREE 3D SEMANTIC SEGMENTATION ON NU SCENES VALIDATION AND SEMANTIC KITTI SEQUENCE 08. VLM-free INDICATES THAT NO VISION -LANGUAGE MODEL IS EVALUATED AT TEST TIME . Pre-train INDICATES A SELF -SUPERVISED INITIALIZATION OF THE 3D BACKBONE . E VERY PRIOR METHOD USES A VOXEL -BASED OR PROJECTION -BASED BACKBONE .
+
+Method Venue VLM-free Pre-train 3D backbone Backbone type nuScenes SemanticKITTI Fully supervised upper bound (trained from scratch) 
+
+PTv3 [6] CVPR’24 – – PTv3 point transformer 80.4 70.8 
+
+Annotation-free methods 
+
+CLIP2Scene [1] CVPR’23 ✓ – SPVCNN sparse voxel 20.8 –HICL [31] CVPR’24 ✓ – SPVCNN sparse voxel 23.0 –CNS [21] NeurIPS’23 ✓ – MinkowskiNet sparse voxel 26.8 –AdaCo [8] AAAI’25 ✓ – SPVCNN sparse voxel 31.2 25.7 Better Call SAL [2] ECCV’24 ✓ – MinkowskiNet sparse voxel 33.9 28.7 3D-AVS [22] CVPR’25 ✓ – MinkowskiNet sparse voxel 36.2 –OpenScene [9] CVPR’23 – – MinkowskiNet sparse voxel 42.1 –OV3D [3] CVPR’24 ✓ – MinkowskiNet sparse voxel 44.6 31.2 GGSD [4] ECCV’24 ✓ – MinkowskiNet sparse voxel 46.1 –AFOV [18] AAAI’25 ✓ ✓ MinkowskiNet sparse voxel 47.7 –LOSC [7] 3DV’26 ✓ ✓ WaffleIron projection 49.3 35.2 
+
+Lang3DSeg (ours) ✓ – PTv3 point transformer 52.8 41.4 
+
+TABLE III PER -CLASS IOU (%) ON NU SCENES VALIDATION . LOSC IS THE STRONGEST PUBLISHED ANNOTATION -FREE BASELINE ; ∆ IS OUR MARGIN OVER IT .
+
+Class LOSC [7] Lang3DSeg ∆
+
+barrier 5.2 50.2 +45 .0
+
+bicycle 21.3 8.8 −12 .5
+
+bus 80.5 69.0 −11 .5
+
+car 67.5 73.9 +6 .4
+
+construction vehicle 10.6 27.6 +17 .0
+
+motorcycle 64.1 46.4 −17 .7
+
+pedestrian 72.7 64.5 −8.2
+
+traffic cone 46.3 27.5 −18 .8
+
+trailer 0.0 25.9 +25 .9
+
+truck 58.2 67.0 +8 .8
+
+drivable surface 90.1 90.4 +0 .3
+
+other flat 0.0 23.3 +23 .3
+
+sidewalk 51.0 55.9 +4 .9
+
+terrain 61.5 54.1 −7.4
+
+manmade 77.6 78.6 +1 .0
+
+vegetation 81.7 81.8 +0 .1
+
+mIoU 49.3 52.8 +3 .5
+
+equally, and making τd class-dependent would reintroduce the circularity the curation stage exists to avoid. 
+
+Sparse and unobserved regions. Two limits follow from using one sweep and the cameras that saw it. Per-class accuracy trails methods that consolidate across a registered sequence on motorcycle , traffic cone and pedestrian , because a pedestrian at 30 m returns too few points in a single sweep to separate from the structure behind it; consolidation accumulates many views and gains real signal from doing so. And on SemanticKITTI a single forward camera supervises only the frontal frustum, which the 47.8% against 41.4% gap of Sec. IV quantifies. The backbone extrapolates into unobserved regions, but on geometric regularity rather than linguistic grounding, so novel objects in the blind spots remain out of reach. 
+
+TABLE IV QUALITY OF THE CURATED TARGETS , MEASURED AGAINST GROUND TRUTH ON 1,586 VALIDATION FRAMES WITHOUT ANY TRAINING .
+
+Labeled SCORES ONLY POINTS THAT CARRY A PSEUDO -LABEL ; all 
+
+> CHARGES UNLABELED POINTS AS ERRORS AND THEREFORE REFLECTS COVERAGE AS WELL AS CORRECTNESS
+
+.
+
+Curation stage mIoU, labeled mIoU, all Coverage 
+
+Projection with class priority 56.4 40.6 46.1 + occlusion depth test 58.7 41.1 45.5 + ground-plane refinement 58.6 41.1 45.5 + label completion 57.1 44.4 49.2 
+
+Co-planar ambiguity. The ground model separates vertical structure from flat ground because those differ in elevation, but cannot separate two surfaces sharing a plane. An other flat concrete island offers no differential geometric cue against the drivable surface beside it, and the decision falls back on the 2D embedding, which is sensitive to lighting and shadow. Our elevation banding recovers raised islands but not flush ones. 
+
+Curation cost and closed-set inference. Decoupling the foundation models from inference moves the cost rather than removing it: curating nuScenes takes on the order of 270 NVIDIA H200 GPU-hours before a single training step. Even though this curation cost is paid only once and never at deployment, it rules out adapting the vocabulary on-board. The deployed network also emits logits over a fixed set of classes; the alignment term places the embeddings in the CLIP text space, so a novel category could in principle be scored against any text embedding, but we have not evaluated that and make no claim about it. 
+
+Experimental scope. Controlled backbone substitution and margin divisions between the point transformer and the curated targets in Table II are considered out of scope for this study. The variants in Sec. IV use a single seed each, so differences of about a point are not meaningful. The prompt ensembles are written by hand, as is standard here [7], and must be rewritten for a new taxonomy. 
+
+Future work. Making τd adaptive to each mask’s spatial ex-tent would address the trailer case without class dependence; synthesizing prompt ensembles with a language model would remove the manual step; and relaxing the single-sweep con-straint selectively, for sparse instances only, would recover much of what consolidation offers at a fraction of its cost. VI. C ONCLUSION 
+
+We present Lang3DSeg, an annotation-free open-vocabulary framework for 3D semantic segmentation built on a point transformer. We show that a PointTransformerV3 backbone trains from scratch on open-vocabulary supervision for outdoor LiDAR and sets a new bar on both driving benchmarks. Lang3DSeg achieves the state-of-the-art performance 52.8% mIoU on nuScenes validation and 41.4% on SemanticKITTI sequence 08, without self-supervised initialization, sequence-level consolidation or iterative retraining. Every 3D operation acts on a single sweep, and the deployed network consumes only coordinates and intensity, processing a full 360 ◦ scan in about 50 ms. By keeping the visual-language foundation models entirely offline, the framework offers a practical basis for open-world perception for real-time 3D semantic segmentation. ACKNOWLEDGMENT 
+
+This work was supported by Clemson University’s Vir-tual Prototyping of Autonomy Enabled Ground Systems (VIPR-GS), under Cooperative Agreement W56HZV-21-2-0001 with the US Army DEVCOM Ground Vehicle Systems Center (GVSC). REFERENCES [1] R. Chen, Y. Liu, L. Kong, X. Zhu, Y. Ma, Y. Li, Y. Hou, Y. Qiao, and W. Wang, “Clip2scene: Towards label-efficient 3d scene understanding by clip,” in 2023 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2023, pp. 7020–7030. [2] A. Oˇ sep, T. Meinhardt, F. Ferroni, N. Peri, D. Ramanan, and L. Leal-Taix´ e, “Better call sal: Towards learning to segment anything in lidar,” in European Conference on Computer Vision . Springer, 2024, pp. 71– 90. [3] L. Jiang, S. Shi, and B. Schiele, “Open-vocabulary 3d semantic segmentation with foundation models,” in 2024 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2024, pp. 21 284–21 294. [4] P. Wang, Y. Wang, S. Li, Z. Zhang, Z. Lei, and L. Zhang, “Open vo-cabulary 3d scene understanding via geometry guided self-distillation,” in European Conference on Computer Vision . Springer, 2024, pp. 442–460. [5] C. Choy, J. Lee, C. Park, M. Cho, and J. Kautz, “Spaceformer: Fast proposal-free open-vocabulary 3d instance segmentation,” 2026. [6] X. Wu, L. Jiang, P.-S. Wang, Z. Liu, X. Liu, Y. Qiao, W. Ouyang, T. He, and H. Zhao, “Point transformer v3: Simpler, faster, stronger,” in 2024 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2024, pp. 4840–4851. [7] N. Samet, G. Puy, and R. Marlet, “Losc: Lidar open-voc segmentation consolidator,” in 2026 International Conference on 3D Vision (3DV) .IEEE, 2026, pp. 1640–1649. [8] P. Zou, S. Zhao, W. Huang, Q. Xia, C. Wen, W. Li, and C. Wang, “Adaco: Overcoming visual foundation model noise in 3d semantic segmentation via adaptive label correction,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 39, no. 10, 2025, pp. 11 086–11 094. [9] S. Peng, K. Genova, C. Jiang, A. Tagliasacchi, M. Pollefeys, and T. Funkhouser, “Openscene: 3d scene understanding with open vo-cabularies,” in 2023 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2023, pp. 815–824. [10] J. Zhang, J. Huang, S. Jin, and S. Lu, “Vision-language models for vision tasks: A survey,” IEEE transactions on pattern analysis and machine intelligence , vol. 46, no. 8, pp. 5625–5644, 2024. [11] R. Zhang, Z. Guo, W. Zhang, K. Li, X. Miao, B. Cui, Y. Qiao, P. Gao, and H. Li, “Pointclip: Point cloud understanding by clip,” in 2022 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2022, pp. 8542–8552. [12] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark et al. , “Learning transferable visual models from natural language supervision,” in International conference on machine learning . PmLR, 2021, pp. 8748–8763. [13] A. Takmaz, E. Fedele, R. W. Sumner, M. Pollefeys, F. Tombari, and F. Engelmann, “Openmask3d: Open-vocabulary 3d instance segmen-tation,” arXiv preprint arXiv:2306.13631 , 2023. [14] A. Kirillov, E. Mintun, N. Ravi, H. Mao, C. Rolland, L. Gustafson, T. Xiao, S. Whitehead, A. C. Berg, W.-Y. Lo et al. , “Segment anything,” in 2023 IEEE/CVF international conference on computer vision (ICCV) . IEEE, 2023, pp. 3992–4003. [15] L. Xue, M. Gao, C. Xing, R. Mart´ ın-Mart´ ın, J. Wu, C. Xiong, R. Xu, J. C. Niebles, and S. Savarese, “Ulip: Learning a unified representation of language, images, and point clouds for 3d understanding,” in 2023 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2023, pp. 1179–1189. [16] C. Sautier, G. Puy, S. Gidaris, A. Boulch, A. Bursuc, and R. Marlet, “Image-to-lidar self-supervised distillation for autonomous driving data,” in 2022 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2022, pp. 9881–9891. [17] Y. Liu, L. Kong, J. Cen, R. Chen, W. Zhang, L. Pan, K. Chen, and Z. Liu, “Segment any point cloud sequences by distilling vision foun-dation models,” Advances in Neural Information Processing Systems ,vol. 36, pp. 37 193–37 229, 2023. [18] B. Sun, Y. Liu, X. Wang, B. Tian, L. Chen, and F.-Y. Wang, “3d annotation-free learning by distilling 2d open-vocabulary segmentation models for autonomous driving,” in Proceedings of the AAAI Confer-ence on Artificial Intelligence , vol. 39, no. 7, 2025, pp. 7078–7086. [19] G. Puy, S. Gidaris, A. Boulch, O. Sim´ eoni, C. Sautier, P. P´ erez, A. Bur-suc, and R. Marlet, “Three pillars improving vision foundation model distillation for lidar,” in 2024 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2024, pp. 21 519– 21 529. [20] H. Tang, Z. Liu, S. Zhao, Y. Lin, J. Lin, H. Wang, and S. Han, “Search-ing efficient 3d architectures with sparse point-voxel convolution,” in 
+
+European conference on computer vision . Springer, 2020, pp. 685– 702. [21] R. Chen, Y. Liu, L. Kong, N. Chen, X. Zhu, Y. Ma, T. Liu, and W. Wang, “Towards label-free scene understanding by vision foun-dation models,” Advances in Neural Information Processing Systems ,vol. 36, pp. 75 896–75 910, 2023. [22] W. Wei, O. ¨Ulger, F. K. Nejadasl, T. Gevers, and M. R. Os-wald, “3d-avs: Lidar-based 3d auto-vocabulary segmentation,” in 2025 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2025, pp. 8910–8920. [23] C. Choy, J. Gwak, and S. Savarese, “4d spatio-temporal convnets: Minkowski convolutional neural networks,” in 2019 IEEE/CVF con-ference on computer vision and pattern recognition (CVPR) . IEEE, 2019, pp. 3070–3079. [24] G. Puy, A. Boulch, and R. Marlet, “Using a waffle iron for automotive point cloud semantic segmentation,” in ICCV , 2023. [25] K. Khan, S. U. Rehman, K. Aziz, S. Fong, and S. Sarasvady, “Dbscan: Past, present and future,” in The fifth international conference on the applications of digital information and web technologies (ICADIWT 2014) . IEEE, 2014, pp. 232–238. [26] N. Carion, L. Gustafson, Y.-T. Hu, S. Debnath, R. Hu, D. Suris Coll-Vinent, C. Ryali, K. V. Alwala, H. Khedr, A. Huang et al. , “Sam 3: Segment anything with concepts,” in International conference on learning representations , 2026. [27] R. Schnabel, R. Wahl, and R. Klein, “Efficient ransac for point-cloud shape detection,” in Computer graphics forum , vol. 26, no. 2. Wiley Online Library, 2007, pp. 214–226. [28] M. Berman, A. R. Triki, and M. B. Blaschko, “The lov´ asz-softmax loss: A tractable surrogate for the optimization of the intersection-over-union measure in neural networks,” in 2018 IEEE/CVF Conference on Computer Vision and Pattern Recognition . IEEE, 2018, pp. 4413– 4421. [29] H. Caesar, V. Bankiti, A. H. Lang, S. Vora, V. E. Liong, Q. Xu, A. Kr-ishnan, Y. Pan, G. Baldan, and O. Beijbom, “nuscenes: A multimodal dataset for autonomous driving,” in 2020 IEEE/CVF conference on computer vision and pattern recognition (CVPR) . IEEE, 2020, pp. 11 618–11 628. [30] J. Behley, M. Garbade, A. Milioto, J. Quenzel, S. Behnke, C. Stach-niss, and J. Gall, “Semantickitti: A dataset for semantic scene un-derstanding of lidar sequences,” in Proceedings of the IEEE/CVF international conference on computer vision , 2019, pp. 9297–9307. [31] X. Kang, L. Chu, J. Li, X. Chen, and Y. Lu, “Hierarchical intra-modal correlation learning for label-free 3d semantic segmentation,” in 2024 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2024, pp. 28 244–28 253. [32] Y. Wang, P. Liu, S. Wang, Z. Zhang, X. Lu, C. Cai, H. Li, F. Liu, P. Jia, and X. Lang, “Uniplv: Towards label-efficient open-world 3d scene understanding by regional visual language supervision,” arXiv preprint arXiv:2412.18131 , 2024.

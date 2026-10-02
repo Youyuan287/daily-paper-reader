@@ -1,0 +1,424 @@
+Title: NeuronEye: Query-Guided Visual Concept Activation for Vision-Language Reasoning
+
+URL Source: https://arxiv.org/pdf/2609.38098v1
+
+Published Time: Wed, 30 Sep 2026 02:31:47 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# NeuronEye: Query-Guided Visual Concept Activation for Vision-Language Reasoning 
+
+Ruiyu Yan 1 Bowen Chen 2 Shaowen Wan 2 Lin Zhao 21New York University 2New Jersey Institute of Technology 
+
+lin.zhao.1@njit.edu 
+
+Abstract 
+
+Current vision-language models (VLMs) encode visual information in dense hid-den states where object identity, spatial layout, and local attributes are implicitly entangled rather than explicitly disentangled, limiting their ability to isolate and modulate the specific visual evidence required by a given language query. Inspired by sparse population coding and top-down modulation in biological vision, we introduce NeuronEye , a plug-in framework that constructs a sparse, concept-level neuron vocabulary from intermediate VLM representations and selectively activates query-relevant visual concepts during inference. NeuronEye decomposes vision-token states into an overcomplete sparse basis organized by concept-level clusters, uses the language query to activate relevant clusters and localize the patches where selected concepts are expressed, and injects the focused evidence back into vision tokens. A complementary suppression mechanism attenuates dominant perceptual directions to preserve weaker but relevant cues. All operations run in a single forward pass over a frozen VLM backbone. On Qwen2.5-VL-7B, NeuronEye raises CV-Bench overall accuracy by +3.1 with gains of +9.5 on Distance, and im-proves BLINK Multi-view by +8.3, with similar trends on LLaVA-1.6-7B. These results suggest that sparse neuron vocabularies can serve not only as post-hoc interpretability tools but also as active interfaces for concept-level visual reasoning. Sparse Neuron Space 
+
+> VLM
+> Human Neuron Cluster Apparel Neuron Cluster
+
+## None 
+
+Answer 
+
+> Human Face Focus Clothing Focus
+> Question
+> How many people are wearing a red shirt?
+
+Figure 1: NeuronEye overview. Given an image and a language query, NeuronEye decomposes intermediate VLM representations into a sparse neuron vocabulary and identifies query-relevant concept clusters (e.g., Human and Apparel ). Each cluster localizes its corresponding visual evidence in the image, and the focused activations are injected back into the VLM to guide reasoning. 
+
+1 Introduction 
+
+Modern vision-language models (VLMs) align image and text by jointly processing visual and language tokens through learned attention-based multimodal fusion [1, 2, 3]. Although effective 
+
+> Preprint. arXiv:2609.38098v1 [cs.AI] 29 Sep 2026
+
+on a wide range of tasks, this paradigm encodes visual information in dense hidden states where object identity, spatial layout, local attributes, and background context are not explicitly disentangled. Recent work has shown that VLMs exhibit multi-object reasoning failures remarkably similar to those caused by representational interference in human rapid feedforward vision [4], and that the bottleneck in spatial reasoning often lies in integrating visual information rather than in perceiving it [5, 6]. These findings suggest that dense visual representations may be insufficient for isolating and selectively modulating individual visual concepts according to the question at hand. The biological visual system addresses this difficulty through two complementary mechanisms. Neu-rons in primary visual cortex represent natural scenes via sparse population codes, where any stimulus activates only a small subset of neurons while the majority remain silent [7, 8]. At higher cortical levels, this sparsity becomes even more selective: concept cells in the human medial temporal lobe respond to specific persons or landmarks regardless of viewpoint or input modality [9, 10], suggesting that the brain organizes visual information into a sparse, concept-level neural vocabulary whose entries can be independently addressed. Then, top-down attention selectively modulates this vocab-ulary according to task demands. Treisman’s feature integration theory established that separately processed visual features require focused attention to be correctly bound into object percepts [11, 12], and neurophysiological studies have confirmed that prefrontal top-down signals enhance task-relevant neural responses while suppressing competing representations [13, 14]. Together, these mechanisms implement a two-stage strategy: decompose visual input into a sparse concept-level vocabulary, then selectively modulate task-relevant entries to guide downstream perception and reasoning. Inspired by this perspective, we introduce NeuronEye , a framework that constructs a sparse, concept-level neuron vocabulary from intermediate VLM representations and uses language queries to selectively activate relevant visual concepts during inference (Fig. 1). NeuronEye has three core components. Sparse Neuron Space (SNS) projects vision-token states into an overcomplete sparse basis via a sparse autoencoder (SAE) and groups the resulting neurons into concept-level clusters, forming an addressable visual concept vocabulary. Neuron-guided Visual Focus (NVF) uses the language query, together with image-side evidence, to activate relevant neuron clusters, locate the patches where the selected concepts are expressed, and inject the activated evidence back into the corresponding vision tokens. Perceptual Concept Suppression (PCS) complements NVF by attenuating dominant perceptual directions at a later layer, preventing focused activation from suppressing weaker but relevant cues. All operations run in a single forward pass with the VLM backbone and SAE frozen. We evaluate NeuronEye on four vision-centric benchmarks, demonstrating that it consistently im-proves structured visual reasoning. Applied to Qwen2.5-VL-7B, NeuronEye raises CV-Bench overall accuracy from 78.5 to 81.6 (+3.1), with gains of +9.5 on Distance and +2.3 on Relation, and improves BLINK Multi-view by +8.3. The method also transfers to LLaVA-1.6-7B with similar trends on spatial and relational sub-tasks. Compared with vision-token reduction and representation-level intervention baselines under the same controlled evaluation protocol, NeuronEye achieves the best overall performance on both CV-Bench and BLINK without additional finetuning. Our contributions are summarized as follows: • We propose NeuronEye, a concept-level selective modulation framework that decomposes dense visual representations into a sparse neuron vocabulary organized by visual concepts, and activates query-relevant neuron clusters to modulate visual evidence for VLM reasoning. • NeuronEye operates as a plug-in module over a frozen VLM backbone. It requires only a one-time sparse autoencoder training on intermediate vision-token activations, and all inference is completed in a single forward pass. • We show that sparse autoencoder features, which have been used exclusively as a post-hoc interpretability tool, can serve as a structured vocabulary for concept-level visual reasoning, extending their role from passive interpretation to actively improving model performance. • We evaluate NeuronEye on four vision-centric benchmarks across two VLM backbones, demonstrating consistent improvements on spatial and localization-sensitive tasks. 22 Related Works 
+
+2.1 Visual Representation Modulation 
+
+Prior work has explored visual representation modulation to focus VLM reasoning on relevant visual evidence. Methods such as FastV [15], SparseVLM [16], PruMerge [17], and PyramidDrop [18] remove, merge, or retain patch tokens based on attention or importance scores, determining where 
+
+the model attends. However, each retained token remains a dense unit carrying all visual concepts together; selecting a token retains all its encoded information, including information irrelevant to the query. Representation-level methods such as VISTA [19] adjust what is represented by steering dense hidden states, but these modifications are applied uniformly and do not select which visual concept to enhance for a given query. NeuronEye operates at a finer granularity. Rather than selecting which patch tokens to keep or uniformly steering dense hidden states, it decomposes vision-token representations into a sparse concept-level neuron vocabulary and uses the language query to activate relevant concept subsets within localized patches for targeted modulation. 
+
+2.2 Sparse Autoencoders in Multimodal Models 
+
+Sparse autoencoders (SAEs) have been widely adopted to decompose superposed activations into sparse, interpretable latent features [20, 21]. In this post-hoc setting, SAE features serve as a lens for understanding model internals, revealing human-interpretable directions that correspond to recognizable concepts in the representation space [22, 23]. More recently, several works have moved beyond interpretation toward active intervention, using SAE features to steer model behavior. By amplifying or suppressing selected latent directions, these methods bias model outputs toward desired content or away from undesired behavior [24, 25]. In the multimodal setting, SAVE [26] and SSL [27] apply this steering paradigm to VLMs, using SAE features to identify hallucination-related directions and globally suppress them during generation. While effective for hallucination mitigation, these methods identify a fixed set of SAE features offline and apply them without conditioning on the specific query, and do not organize features into structured groups for selective routing. They therefore do not target query-specific visual reasoning or fine-grained evidence selection. NeuronEye goes beyond steering by organizing SAE-derived visual features into concept-level neuron clusters, selecting relevant clusters conditioned on the language query, and activating them within localized image patches, turning the sparse feature basis into a structured vocabulary for visual reasoning. 
+
+3 Method 
+
+NeuronEye operates through three stages. Given an image–question pair, Sparse Neuron Space 
+
+(SNS, Section 3.1) first decomposes intermediate visual representations into an overcomplete sparse basis and organizes the resulting neurons into concept-level clusters, forming an addressable visual concept vocabulary. Neuron-guided Visual Focus (NVF, Section 3.2) then uses the language query and image-side evidence to activate relevant neuron clusters, localize the patches where selected concepts are expressed, and inject the activated evidence back into the corresponding vision tokens at layer ℓ. Finally, Perceptual Concept Suppression (PCS, Section 3.3) attenuates dominant perceptual directions at a later layer ℓ′ to preserve representational diversity after focused activation. 
+
+3.1 Sparse Neuron Space (SNS) Sparse Neuron Extraction. Given an image–question pair, we pass the visual input and textual query through the frozen VLM and extract the hidden representation of each image patch token at a designated intermediate layer ℓ, denoted as xi,p ∈ Rd, where i indexes the image and p indexes the patch token. We use a SAE to decompose each patch representation into a set of neuron activations (Fig. 2): the SAE projects xi,p into an overcomplete latent space RD with D = αd (α ≫ 1) using a linear encoder followed by ReLU activation, where each latent dimension corresponds to a neuron .A deterministic Top-k operator then retains only the k largest activations and zeros out the rest, producing a sparse code zi,p with fixed ℓ0 = k sparsity: 
+
+zi,p = Top k
+
+ ReLU( Wenc xi,p ). (1) The representation is thus sparse because only k out of D neurons are active for any given patch, and each active neuron carries a scalar activation indicating how strongly that visual concept is 3… 
+
+> … …
+> Rock
+> Bicycles
+> Hand
+> … …
+> Neuron Clusters
+> Encoder
+> …
+> Decoder Image Token
+> Layer 1 Layer 2
+> …
+> Layer l
+> …
+> Layer L
+> NVF Sparse Neuron Space
+> Neurons
+
+Figure 2: Construction of Sparse Neuron Space. Intermediate vision-token states are encoded by a sparse autoencoder, whose activated neurons are visualized through top-activating patches and grouped into concept-level neuron clusters. expressed at that patch location. The patch representation is reconstructed as ˆxi,p = Wdec zi,p ,where decoder columns are ℓ2-normalized to prevent scale degeneracy. Training minimizes a patch-level reconstruction objective augmented by an ℓ1 activation penalty: 
+
+LSAE = 1
+
+|B| 
+
+X
+
+> (i,p )∈B
+
+∥xi,p − ˆxi,p ∥22 + λs ∥zi,p ∥1 , (2) where B denotes a minibatch of image patch tokens. Since the Top-k operator fixes the number of active coordinates, the ℓ1 term mainly regularizes the magnitude of selected activations. 
+
+Neuron Filtering and Neuron Cluster Construction. Not all neurons in the overcomplete latent space are useful. Many are rarely activated across images or respond to visually inconsistent patterns. We therefore filter unreliable neurons and group the remaining ones into neuron clusters. We run the frozen VLM with the trained SAE over the training set and collect patch-level sparse activations zi,p,j ,where j indexes the neuron. Neurons activated on fewer than Mmin distinct images are discarded. For each retained neuron j, we aggregate its activations across patches within each image, select the top-N images where neuron j is most strongly activated, and localize the highest-activating patches by their spatial positions. The resulting patch regions Sj summarize the visual evidence associated with neuron j. We assign each neuron a short concept label by prompting an external model to summarize the shared visual pattern in Sj (see Appendix A), then encode labels into text embeddings and apply hierarchical clustering to group neurons into K concept-level clusters {C k}Kk=1 . These labels are used only for cluster construction; after clustering, each cluster is represented only by its index and the corresponding set of neurons, forming the sparse neuron vocabulary used by NVF. 
+
+3.2 Neuron-guided Visual Focus 
+
+Given the sparse neuron vocabulary constructed by SNS, NVF uses the language query to activate relevant visual concepts for the current image–question pair. It first predicts which neuron clusters are query-relevant, then localizes the patches where the selected concepts are most strongly expressed, and finally injects the activated evidence back into the corresponding vision tokens. 
+
+Query-Guided Neuron Cluster Activation. Each neuron cluster is represented by an index 
+
+k ∈ { 1, . . . , K } and corresponds to a set of neurons. We obtain a query representation by pooling the textual hidden states and use a lightweight router gq (·) to produce query-side cluster scores αq
+
+(Fig. 3A). To reduce reliance on language-only priors, a vision-side scorer gv (·) produces image-grounded cluster scores αv from visual hidden states: 
+
+αq = σ(gq (Pool( Htext ))) ∈ [0 , 1] K , αv = σ(gv (Pool( Hvision ))) ∈ [0 , 1] K . (3) At inference time, NVF selects the top-Ksel clusters according to αq . During training, we obtain supervision labels y ∈ { 0, 1}K by prompting an LLM annotator to identify which neuron clusters are relevant to each text query, based on the cluster descriptions constructed in Section 3.1. The router gq
+
+is then supervised with binary cross-entropy over y, and a per-dimension symmetric divergence term 4Image Token 
+
+> Text Hidden States
+> Local Cross Attention
+
+Layer l 
+
+> Query
+> SNS Decoder
+> Activated Image Patches Activated Neuron Cluster
+> Query-Conditioned
+> QK, V
+
+…
+
+> Text Hidden State Later Layer i
+
+Layer l+1 
+
+> SNS Encoder
+> Activation & Mask Image Patches Image Patches
+> Neuron Clusters
+> Activated SNS Neuron
+
+A. NVF: Query-Guided Region Selection via Neuron Clusters 
+
+B. NVF: Local Reasoning with Focused Visual Evidence 
+
+C. PCS: Dominant Concept Suppression  
+
+> Vision-token hidden States Top Dominant Directions
+> …
+> -=
+> Suppress Dominant Component
+> Subsequent Layers
+> v1
+> v2
+> vr
+> Dominant Component
+> Inactivated Neuron Cluster
+> Vision Router Query Router Only Training
+
+…Figure 3: NVF and PCS. NVF selects query-relevant neuron cluster indices and active patches for local cross-attention, while PCS suppresses dominant perceptual components at a later layer. aligns αq with αv to ensure that the selected clusters are grounded in image evidence: 
+
+Lalign = 12
+
+KX
+
+k=1 
+
+
+
+αvk log αvk
+
+αqk
+
++ αqk log αqk
+
+αvk
+
+
+
+. (4) The final routing objective is Lrouter = LBCE (αq , y) + λalign Lalign , which encourages selected cluster indices to be both query-relevant and visually supported. 
+
+Local Reasoning with Focused Visual Evidence. For each selected cluster c, let Fc denote its set of neuron indices. NVF measures how strongly cluster c is expressed at each patch token by summing the activations of its neurons: a(c)
+
+p = P
+
+j∈F c zp,j , where zp,j is the activation of neuron j at patch token p. The top-n patches with the highest a(c)
+
+p are selected as active visual evidence for cluster c
+
+(Fig. 3B). On these patches, we construct a cluster-specific sparse code zcluster by retaining only the neurons in Fc and masking all others. A query-conditioned refinement module then predicts a gated residual update: 
+
+∆z = βref · W∆ (σ(Wg zcluster ) ⊙ MLP( qlast )) , (5) where qlast is the hidden state of the last textual token at layer ℓ, and βref is a learnable scalar controlling the refinement magnitude. The refined sparse code is ezcluster = zcluster + ∆ z. Each refined code is decoded back to the dense space via the frozen SAE decoder, weighted by its query-side score αqc , and summed across selected clusters into Ractive .Finally, NVF injects Ractive into the selected active tokens through localized cross-attention: 
+
+H′
+
+active = Hactive + γinj · LN 
+
+
+
+Wosoftmax 
+
+ Qatt K⊤
+
+att 
+
+√d
+
+
+
+Vatt 
+
+
+
+, (6) where Qatt = Wq Hactive , Katt = WkRactive , Vatt = Wv Ractive , and γinj is a learnable injection scale. Only selected tokens are updated; all other vision tokens remain unchanged. 
+
+3.3 Perceptual Concept Suppression 
+
+PCS addresses a side effect of focused activation. While NVF enhances query-relevant concepts, it may also concentrate vision-token representations along dominant directions, weakening cues such as spatial relations or fine-grained attributes. PCS mitigates this effect at a later layer ℓ′ > ℓ by estimating and attenuating these directions from vision-token geometry (Fig. 3C). Let H ∈ RN ×d denote the vision-token hidden states at layer ℓ′. We mean-center the tokens as 
+
+¯H = H − 1μ⊤, where μ = 1
+
+N
+
+PNi=1 Hi ∈ Rd, to isolate directional structure from the global 5mean. We then compute a low-rank decomposition ¯H ≈ UΣV ⊤ and take the top-r right singular vectors Vr ∈ Rd×r as the dominant perceptual directions. The projected dominant component is 
+
+P = ¯HV r V⊤ 
+
+> r
+
+, and PCS suppresses it by: 
+
+H′ = H − ηpcs P, (7) where ηpcs = softplus( ηparam ) is a learnable non-negative scalar initialized near zero, allowing the model to learn the appropriate suppression strength during training. PCS complements NVF: NVF activates query-relevant concepts at layer ℓ, while PCS preserves representational diversity at layer ℓ′
+
+by attenuating dominant directions that may suppress weaker visual cues. 
+
+4 Experiments 
+
+4.1 Dataset Training data. All training data are drawn exclusively from VQAv2 [28] and are disjoint from the evaluation benchmarks. The SAE for SNS is trained on the full VQAv2 training split. For lightweight NVF modules and the PCS scalar, we construct three independent supervision sets, each with 5K image–question pairs sampled without replacement from VQAv2 training split to together with cluster-index labels. These labels are obtained by prompting an LLM annotator to identify query-relevant neuron clusters (Appendix A). For each backbone, we report the mean and standard deviation across the three resulting NeuronEye models. 
+
+Evaluation benchmarks. We evaluate on four vision-centric reasoning benchmarks covering spatial understanding, counting, relational perception, localization, and real-world visual reasoning. CV-Bench [5] serves as the primary benchmark, comprising Count, Depth, Distance, and Relation sub-tasks that directly assess structured visual reasoning. BLINK [6] evaluates multi-view reasoning and spatial localization. RealWorldQA [29] and MMStar [30] provide complementary coverage of general visual question answering. No evaluation data are used during NeuronEye training. 
+
+4.2 Implementation Details 
+
+We use Qwen2.5-VL-7B and LLaVA-1.6-7B as the base models, which are frozen throughout. NeuronEye constructs SNS at layer ℓ = 8 with K = 64 neuron clusters, applies NVF at the same layer, and applies PCS at a later layer ℓ′ = 20 . After SNS construction, neuron-cluster assignments are kept fixed, and only the lightweight NVF and PCS scalar modules are updated. The NVF training procedure and hyperparameters are provided (Appendix B). We use greedy decoding for all generation-based evaluations. Experiments are conducted on NVIDIA RTX PRO 6000 GPUs. 
+
+4.3 Benchmark Results across VLM Backbones 
+
+Table 1 reports results across CV-Bench, BLINK, RealWorldQA, and MMStar. The upper block lists representative VLM baselines for reference; the lower block applies NeuronEye to Qwen2.5-VL-7B and LLaVA-1.6-7B to assess backbone portability. On Qwen2.5-VL-7B, NeuronEye improves CV-Bench overall by +3.1 and BLINK overall by +0.7, with the strongest gains on Distance (+9.5), 
+
+Multi-view (+8.3), and Localization (+3.3). On LLaVA-1.6-7B, improvements follow a similar pattern on spatial and relational sub-tasks, including Distance (+6.9), Relation (+12.1), Multi-view (+7.7), and Localization (+8.1), though performance decreases on Count (-8.3) and Depth (-3.3). This mixed pattern likely reflects backbone architectural differences in visual tokenization and patch granularity, which affect how patch-level sparse activations map to localized visual evidence. Across both backbones, the gains are consistently strongest on spatial, relational, and localization-sensitive tasks, aligning with the design of NeuronEye as a concept-level selective activation mechanism. 
+
+4.4 Comparison with Visual Representation Modulation Methods 
+
+Table 2 compares NeuronEye with vision-token reduction and representation-level methods on Qwen2.5-VL-7B under the same evaluation protocol. NeuronEye achieves the best overall perfor-mance on both CV-Bench and BLINK, with especially large gains on CV-Bench Distance (+9.5) and BLINK Multi-view (+8.3). Token reduction methods show consistent degradation on structure-sensitive sub-tasks, likely because discarding or merging patches eliminates visual evidence that 6Table 1: Benchmark results across VLM backbones. The upper block lists representative VLMs for reference. The lower block shows NeuronEye applied to LLaVA-1.6-7B and Qwen2.5-VL-7B, with 
+
+∆ denoting the improvement over each base model.                                                                                                                                               
+
+> CV-Bench BLINK Other Benchmarks Model Overall Count Depth Dist. Rel. Overall MV. Loc. RealWorldQA MMStar
+> Representative VLM backbones
+> DeepSeek-VL1 [31] 61.6 59.0 63.2 58.2 68.5 38.1 50.4 37.7 50.5 38.9 Idefics3-8B-Llama3 [32] 67.7 60.5 72.8 67.2 73.4 42.7 45.9 50.8 62.0 49.3 Phi-4 Multimodal [33] 71.7 68.5 74.2 70.8 75.1 49.7 48.1 56.6 61.8 59.7 InternVL3-8B [34] 81.3 70.9 84.8 83.1 89.7 51.3 51.1 58.2 68.2 59.4 Llava-OneVision [3] 76.0 67.3 80.3 78.5 80.8 46.2 57.1 54.9 66.7 68.3
+> NeuronEye applied to different backbones
+> LLaVA-1.6-7B [35] 64.3 63.3 77.8 54.5 63.3 36.6 40.7 38.0 61.6 36.9
+> +NeuronEye 65.7 ±0.5 55.0 ±0.2 74.5 ±1.0 61.4 ±0.9 75.4 ±0.5 37.2 ±0.7 48.4 ±1.9 46.1 ±0.6 60.7 ±0.7 36.9 ±0.1
+> ∆+1.4 -8.3 -3.3 +6.9 +12.1 +0.6 +7.7 +8.1 -0.9 +0.0 Qwen2.5-VL-7B [2] 78.5 67.1 87.2 76.2 87.2 52.1 55.6 53.3 68.5 58.8
+> +NeuronEye 81.6 ±0.3 67.9 ±0.6 87.0 ±0.4 85.7 ±0.8 89.5 ±0.5 52.8 ±0.2 63.9 ±0.4 56.6 ±0.9 68.8 ±0.4 59.3 ±0.5
+> ∆+3.1 +0.8 -0.2 +9.5 +2.3 +0.7 +8.3 +3.3 +0.3 +0.5
+
+cannot be recovered downstream. Representation-level methods maintain near-baseline performance but offer limited improvement, suggesting that uniform dense-state shifts lack the specificity needed for spatially demanding queries. NeuronEye’s gains are concentrated precisely on these structure-sensitive tasks, supporting the hypothesis that concept-level selective activation provides finer control over which visual evidence is enhanced for a given query. Table 2: Comparison with visual representation modulation methods on Qwen2.5-VL-7B. All methods are evaluated under the same protocol. 
+
+CV-Bench BLINK Other Benchmarks Model Overall Count Depth Dist. Rel. Overall MV. Loc. RealWorldQA MMStar 
+
+Vision-token reduction methods 
+
+FastV [15] 75.9 64.0 83.5 74.5 85.5 48.4 55.6 49.2 68.8 55.1 SparseVLM [16] 69.8 54.3 74.7 68.8 86.3 46.9 55.6 59.0 50.9 53.8 PruMerge [17] 71.6 55.2 78.0 74.0 83.2 46.8 54.9 51.6 64.3 50.6 MustDrop [36] 73.7 58.6 81.5 74.8 83.9 47.2 55.6 52.5 65.1 53.0 PyramidDrop [18] 72.5 60.2 78.7 70.8 84.2 49.1 55.6 52.5 62.2 50.3 
+
+Representation-level intervention methods 
+
+SSL [27] 77.6 66.2 84.5 76.0 87.9 51.3 55.6 52.5 69.5 58.1 SAVE [26] 77.9 66.2 85.7 76.5 87.2 52.3 55.6 54.9 69.0 59.2 VISTA [19] 78.0 66.0 85.8 76.2 88.0 51.7 55.6 53.3 69.4 59.6 
+
+NeuronEye 81.6 ±0.3 67.9 ±0.6 87.0 ±0.4 85.7 ±0.8 89.5 ±0.5 52.8 ±0.2 63.9 ±0.4 56.6 ±0.9 68.8 ±0.4 59.3 ±0.5 
+
+4.5 Visualization of Sparse Neurons and Visual Focus 
+
+We visualize sparse neuron selectivity and query-guided visual focus to examine how NeuronEye localizes concept-level evidence. 
+
+(a) Human-face feature (b) Tower feature (c) Flag feature 
+
+Figure 4: Neuron-level feature visualization. Each subfigure shows top-activating patches for one SAE neuron, with non-activating regions masked. 
+
+Neuron-level features. Fig. 4 shows that individual SNS neurons activate consistently on semantically coherent regions, such as faces, towers, and flags. These examples support using SNS neurons as a sparse visual vocabulary for concept-level organization. Additional neuron visualizations are provided in the appendix (Appendix C). 7Input Image Overall Focus Neuron Cluster 44 Neuron Cluster 27 Neuron Cluster 9 (a) Is there organic food in this store? Input Image Overall Focus Neuron Cluster 30 Neuron Cluster 58 
+
+(b) Are all the players wearing black shirts? Input Image Overall Focus Neuron Cluster 19 Neuron Cluster 63 (c) Is the small elephant touching the big elephant? 
+
+Figure 5: Question-guided visual focus examples. Each shows the input image, overall focus map, and individual neuron cluster activations. Fig. 5 visualizes the spatial focus produced by NVF. Given a question, the router selects a small set of neuron clusters and actively triggers the corresponding neurons within these clusters. Their patch-level activations highlight localized image regions expressing the selected sparse features. For the query “Is there organic food in this store?”, NVF focuses on shelves and packaged items; for “Are all the players wearing black shirts?”, it shifts toward clothing and human-body regions; and for “Is the small elephant touching the big elephant?”, it emphasizes the two elephants and their contact region. The resulting focus maps are sparse and localized, indicating that NVF operates through query-selected neuron clusters and patch-level activations rather than global image reweighting. Additional focus examples are provided in the appendix (Appendix D). 
+
+4.6 Ablation Studies 
+
+Table 3: Ablation study on component contributions. 
+
+CV-Bench BLINK Setting Overall Count Depth Dist. Rel. Overall MV. Loc. Baseline (Qwen2.5-VL-7B) 78.5 67.1 87.2 76.2 87.2 52.1 55.6 53.3 Baseline + FT 76.5 ±0.3 66.6 ±0.2 86.7 ±0.3 69.8 ±0.9 86.5 ±0.6 51.1 ±0.1 55.6 ±1.9 55.7 ±0.4 
+
++ Dense Cross-Attn + PCS 79.4 ±0.3 66.2 ±0.6 87.0 ±0.4 79.5 ±1.2 88.8 ±0.3 51.3 ±0.3 55.6 ±1.9 54.9 ±1.8 
+
++ Random SNS + NVF 78.6 ±0.4 67.6 ±0.5 86.5 ±0.6 76.6 ±1.0 86.4 ±0.6 51.6 ±0.3 55.6 ±1.5 54.9 ±1.0 
+
++ PCS only 78.6 ±0.4 67.3 ±0.4 86.8 ±0.3 76.8 ±1.4 87.2 ±0.6 51.3 ±0.2 55.6 ±1.9 54.9 ±0.4 
+
++ SNS + NVF 80.9 ±0.1 66.8 ±0.6 87.2 ±0.5 84.0 ±0.4 89.5 ±0.5 53.0 ±0.3 55.6 ±2.2 55.7 ±3.0 
+
++ NeuronEye 81.6 ±0.3 67.9 ±0.6 87.0 ±0.4 85.7 ±0.8 89.5 ±0.5 52.8 ±0.2 63.9 ±0.4 56.6 ±0.9 
+
+Table 3 summarizes the contribution of each component. Direct fine-tuning of the lightweight modules without sparse intervention (Baseline + FT) does not improve performance and substantially reduces CV-Bench Distance, suggesting that limited VQA fine-tuning alone is insufficient to produce the observed spatial reasoning gains. Replacing semantically organized neuron clusters with random assignments (Random SNS + NVF) yields near-baseline performance, indicating that the gains do not come merely from added parameters or reconstructed-feature injection. Rather, structured clusters are needed to route sparse visual evidence meaningfully. PCS alone produces only marginal changes, suggesting that attenuating dominant directions is insufficient without query-guided feature selection. SNS + NVF improves CV-Bench Overall and Distance, while the full NeuronEye configuration further improves Distance and BLINK Multi-view. Together, these results support the complementary design of NeuronEye: NVF activates localized query-relevant sparse features, while PCS later attenuates dominant directions to preserve representational diversity and weaker cues. Table 4 demonstrates the effect of the NVF insertion layer. Performance peaks at layer 8, especially on CV-Bench Distance and BLINK Multi-view. Earlier insertion at layer 4 remains competitive but is slightly weaker, suggesting that the representation may not yet provide sufficient semantic abstraction for reliable cluster routing. Deeper layers from 12 to 20 degrade toward the baseline, likely because spatial details have become increasingly compressed. 8Table 4: Effect of insertion layer. Layer 8 achieves the best results, suggesting a balance between low-level perceptual features and high-level semantic abstraction. 
+
+CV-Bench BLINK Layer ℓ Overall Count Depth Dist. Rel. Overall MV. Loc. 4 80.5 ±0.1 67.3 ±0.2 87.0 ±0.6 83.0 ±0.4 88.5 ±0.3 51.6 ±0.3 57.2 ±1.2 56.6 ±1.1 
+
+8 81.6 ±0.3 67.9 ±0.6 87.0 ±0.4 85.7 ±0.8 89.5 ±0.5 52.8 ±0.2 63.9 ±0.4 56.6 ±0.9 
+
+12 78.3 ±0.4 65.2 ±0.8 85.7 ±0.8 79.5 ±1.2 86.3 ±0.3 51.3 ±0.2 55.6 ±0.1 54.1 ±0.1 
+
+16 79.0 ±0.3 67.7 ±0.6 87.2 ±0.2 76.9 ±0.5 87.7 ±0.6 51.8 ±0.5 56.9 ±1.9 56.3 ±0.5 
+
+20 78.6 ±0.4 66.8 ±0.3 86.8 ±0.4 77.0 ±1.1 86.9 ±0.6 51.7 ±0.1 55.6 ±1.9 55.7 ±1.3 
+
+Table 5: Effect of the number of neuron clusters K. Too few clusters conflate functionally distinct neurons, while too many fragment coherent functional groups and complicate routing. 
+
+CV-Bench BLINK Clusters Overall Count Depth Dist. Rel. Overall MV. Loc. 32 80.4 ±0.2 68.4 ±0.5 86.1 ±0.4 82.1 ±1.2 88.2 ±0.5 52.0 ±0.2 57.2 ±1.5 53.9 ±2.6 
+
+64 81.6 ±0.3 67.9 ±0.6 87.0 ±0.4 85.7 ±0.8 89.5 ±0.5 52.8 ±0.2 63.9 ±0.4 56.6 ±0.9 
+
+128 80.3 ±0.1 66.4 ±1.1 87.1 ±0.4 82.8 ±0.7 88.1 ±0.4 51.7 ±0.3 57.8 ±1.7 58.3 ±1.3 
+
+Table 5 examines the effect of the number of neuron clusters. K = 64 achieves the best overall trade-off, with the strongest results on CV-Bench Distance and BLINK Multi-view. With fewer clusters ( K = 32 ), neurons corresponding to different visual concepts may be grouped together, reducing routing specificity. With more clusters ( K = 128 ), neurons corresponding to the same or closely related concept may be split across multiple clusters, making cluster prediction less stable and reducing the coherence of concept-level activation. 
+
+5 Discussion 
+
+Limitations. NeuronEye improves tasks that rely on localized spatial or relational evidence, but its effectiveness depends on the coverage of the learned neuron vocabulary. Since the SAE and neuron clusters are trained on VQAv2 and then frozen, the sparse neuron vocabulary reflects general-domain visual concepts and may lack coverage of domain-specific ones. This limitation is evident on a medical domain VQA dataset (Appendix E), OmniMedVQA-Mini [37], where NeuronEye reduces overall accuracy from 65.30% to 63.10%, with larger drops on disease diagnosis (-2.80), lesion grading (-2.18), and other biological attributes (-5.51). NeuronEye also relies on LLM-generated cluster-index labels for routing supervision at scale. We manually verified approximately 20% of the generated labels, but misalignment between query intent and selected neuron clusters may persist in the remainder, potentially degrading the model’s performance. Additionally, NeuronEye introduces approximately 20% inference latency overhead and 42% peak memory increase relative to the base model, primarily due to frozen SAE encoding and localized cross-attention (Appendix F). 
+
+Future directions. Future work could expand the sparse neuron space using larger and more diverse training corpora, or construct domain-specific neuron vocabularies for specialized settings such as medical imaging. Extending sparse routing across multiple layers may enable coordinated modulation across levels of visual abstraction. Learning neuron clusters directly from data could further reduce reliance on offline concept labeling and improve robustness under distribution shift. 
+
+6 Conclusion 
+
+We presented NeuronEye, a plug-in framework that decomposes dense VLM representations into a sparse, concept-level neuron vocabulary and selectively activates query-relevant visual concepts at inference, without modifying or retraining the VLM backbone. Experiments across four benchmarks and two backbones demonstrate consistent improvements on spatial, relational, and multi-view reasoning. Our results suggest that sparse autoencoder features can serve not only as interpretability tools but as active interfaces for modulating concept-level visual reasoning. 9References 
+
+[1] Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Visual instruction tuning. In 
+
+Advances in Neural Information Processing Systems , volume 36, 2023. [2] Shuai Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Sibo Song, Kai Dang, Peng Wang, Shijie Wang, Jun Tang, Humen Zhong, Yuanzhi Zhu, Mingkun Yang, Zhaohai Li, Jianqiang Wan, Pengfei Wang, Wei Ding, Zheren Fu, Yiheng Xu, Jiabo Ye, Xi Zhang, Tianbao Xie, Zesen Cheng, Hang Zhang, Zhibo Yang, Haiyang Xu, and Junyang Lin. Qwen2.5-VL technical report. 
+
+arXiv preprint arXiv:2502.13923 , 2025. [3] Bo Li, Yuanhan Zhang, Dong Guo, Renrui Zhang, Feng Li, Hao Zhang, Kaichen Zhang, Peiyuan Zhang, Yanwei Li, Ziwei Liu, and Chunyuan Li. LLaVA-OneVision: Easy visual task transfer. 
+
+arXiv preprint arXiv:2408.03326 , 2024. [4] Declan Campbell, Sunayana Rane, Tyler Giallanza, Nicolò De Sabbata, Kia Ghods, Amogh Joshi, Alexander Ku, Steven M Frankland, Thomas L Griffiths, Jonathan D Cohen, et al. Understanding the limits of vision language models through the lens of the binding problem. 
+
+Advances in Neural Information Processing Systems , 37:113436–113460, 2024. [5] Shengbang Tong, Ellis Brown, Penghao Wu, Sanghyun Woo, Manoj Middepogu, Sai Charitha Akula, Jihan Yang, Shusheng Yang, Adithya Iyer, Xichen Pan, Austin Wang, Rob Fergus, Yann LeCun, and Saining Xie. Cambrian-1: A fully open, vision-centric exploration of multimodal LLMs. In Advances in Neural Information Processing Systems , 2024. [6] Xingyu Fu, Yushi Hu, Bangzheng Li, Yu Feng, Haoyu Wang, Xudong Lin, Dan Roth, Noah A. Smith, Wei-Chiu Ma, and Ranjay Krishna. BLINK: Multimodal large language models can see but not perceive. In Proceedings of the European Conference on Computer Vision (ECCV) ,2024. [7] Bruno A Olshausen and David J Field. Emergence of simple-cell receptive field properties by learning a sparse code for natural images. Nature , 381(6583):607–609, 1996. [8] William E Vinje and Jack L Gallant. Sparse coding and decorrelation in primary visual cortex during natural vision. Science , 287(5456):1273–1276, 2000. [9] R Quian Quiroga, Leila Reddy, Gabriel Kreiman, Christof Koch, and Itzhak Fried. Invariant visual representation by single neurons in the human brain. Nature , 435(7045):1102–1107, 2005. [10] Rodrigo Quian Quiroga. Concept cells: the building blocks of declarative memory functions. 
+
+Nature Reviews Neuroscience , 13(8):587–597, 2012. [11] Anne M Treisman and Garry Gelade. A feature-integration theory of attention. Cognitive psychology , 12(1):97–136, 1980. [12] Anne Treisman. Feature binding, attention and object perception. Philosophical Transactions of the Royal Society of London. Series B: Biological Sciences , 353(1373):1295–1306, 1998. [13] Robert Desimone, John Duncan, et al. Neural mechanisms of selective visual attention. Annual review of neuroscience , 18(1):193–222, 1995. [14] Behrad Noudoost, Mindy H Chang, Nicholas A Steinmetz, and Tirin Moore. Top-down control of visual attention. Current opinion in neurobiology , 20(2):183–190, 2010. [15] Liang Chen, Haozhe Zhao, Tianyu Liu, Shuai Bai, Junyang Lin, Chang Zhou, and Baobao Chang. An image is worth 1/2 tokens after layer 2: Plug-and-play inference acceleration for large vision-language models. In Proceedings of the European Conference on Computer Vision ,2024. [16] Yuan Zhang, Chun-Kai Fan, Junpeng Ma, Wenzhao Zheng, Tao Huang, Kuan Cheng, Denis A. Gudovskiy, Tomoyuki Okuno, Yohei Nakata, Kurt Keutzer, and Shanghang Zhang. Sparsevlm: Visual token sparsification for efficient vision-language model inference. In Proceedings of the International Conference on Machine Learning , 2025. 10 [17] Yuzhang Shang, Mu Cai, Bingxin Xu, Yong Jae Lee, and Yan Yan. Llava-prumerge: Adaptive token reduction for efficient large multimodal models. In Proceedings of the IEEE/CVF International Conference on Computer Vision , 2025. [18] Long Xing, Qidong Huang, Xiaoyi Dong, Jiajie Lu, Pan Zhang, Yuhang Zang, Yuhang Cao, Conghui He, Jiaqi Wang, Feng Wu, and Dahua Lin. Conical visual concentration for efficient large vision-language models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 14593–14603, 2025. [19] Zhuowei Li, Haizhou Shi, Yunhe Gao, Di Liu, Zhenting Wang, Yuxiao Chen, Ting Liu, Long Zhao, Hao Wang, and Dimitris N. Metaxas. The hidden life of tokens: Reducing hallucination of large vision-language models via visual information steering. In Proceedings of the International Conference on Machine Learning , pages 35799–35819, 2025. [20] Robert Huben, Hoagy Cunningham, Logan Smith, Aidan Ewart, and Lee Sharkey. Sparse autoencoders find highly interpretable features in language models. In International Conference on Learning Representations , 2024. [21] Mateusz Pach, Shyamgopal Karthik, Quentin Bouniot, Serge Belongie, and Zeynep Akata. Sparse autoencoders learn monosemantic features in vision-language models. In Advances in Neural Information Processing Systems (NeurIPS) , 2025. [22] T. Bricken et al. Towards monosemanticity: Extracting interpretable features from base models, 2023. Transformer Circuits Thread. [23] Kaichen Zhang, Yifei Shen, Bo Li, and Ziwei Liu. Large multi-modal models can interpret features in large multi-modal models. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 2025. [24] A. Zou et al. Representation engineering: A top-down approach to ai transparency. In 
+
+International Conference on Learning Representations (ICLR) , 2024. [25] Nina Rimsky, Nick Gabrieli, Julian Schulz, Meg Tong, Evan Hubinger, and Alexander Matt Turner. Steering Llama 2 via contrastive activation addition. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics , pages 15504–15522, 2024. [26] Sangha Park, Seungryong Yoo, Jisoo Mok, and Sungroh Yoon. SAVE: Sparse autoencoder-driven visual information enhancement for mitigating object hallucination. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision , 2026. [27] Zhenglin Hua, Jinghan He, Zijun Yao, Tianxu Han, Haiyun Guo, Yuheng Jia, and Junfeng Fang. Steering lvlms via sparse autoencoder for hallucination mitigation. In Findings of the Association for Computational Linguistics: EMNLP 2025 , 2025. [28] S. Antol, A. Agrawal, J. Lu, M. Mitchell, D. Batra, C. L. Zitnick, and D. Parikh. Vqa: Visual question answering. In Proceedings of the IEEE International Conference on Computer Vision (ICCV) , pages 2425–2433, 2015. [29] xAI. RealWorldQA: Evaluating real-world spatial understanding. https://huggingface. co/datasets/xai-org/RealWorldQA , 2024. Dataset. Accessed: May 4, 2026. [30] Lin Chen, Jinsong Li, Xiaoyi Dong, Pan Zhang, Yuhang Zang, Zehui Chen, Haodong Duan, Jiaqi Wang, Yu Qiao, Dahua Lin, and Feng Zhao. Are we on the right way for evaluating large vision-language models? In Advances in Neural Information Processing Systems (NeurIPS) ,2024. [31] Haoyu Lu, Wen Liu, Bo Zhang, Bingxuan Wang, Kai Dong, Bo Liu, Jingxiang Sun, Tongzheng Ren, Zhuoshu Li, Hao Yang, Yaofeng Sun, Chengqi Deng, Hanwei Xu, Zhenda Xie, and Chong Ruan. DeepSeek-VL: Towards real-world vision-language understanding. arXiv preprint arXiv:2403.05525 , 2024. [32] Hugo Laurençon, Andrés Marafioti, Victor Sanh, and Léo Tronchon. Building and bet-ter understanding vision-language models: Insights and future directions. arXiv preprint arXiv:2408.12637 , 2024. 11 [33] Abdelrahman Abouelenin, Atabak Ashfaq, Adam Atkinson, Hany Awadalla, Nguyen Bach, Jianmin Bao, Alon Benhaim, Martin Cai, Vishrav Chaudhary, Congcong Chen, et al. Phi-4-Mini technical report: Compact yet powerful multimodal language models via mixture-of-LoRAs. 
+
+arXiv preprint arXiv:2503.01743 , 2025. [34] Jinguo Zhu et al. Internvl3: Exploring advanced training and test-time recipes for open-source multimodal models. arXiv preprint arXiv:2504.10479 , 2025. [35] Haotian Liu, Chunyuan Li, Yuheng Li, Bo Li, Yuanhan Zhang, Sheng Shen, and Yong Jae Lee. Llava-next: Improved reasoning, ocr, and world knowledge, January 2024. [36] Ting Liu, Liangtao Shi, Richang Hong, Yue Hu, Quanjun Yin, and Linfeng Zhang. Multi-stage vision token dropping: Towards efficient multimodal large language model. arXiv preprint arXiv:2411.10803 , 2024. [37] Yutao Hu, Tianbin Li, Quanfeng Lu, Wenqi Shao, Junjun He, Yu Qiao, and Ping Luo. Omnimed-vqa: A new large-scale comprehensive evaluation benchmark for medical lvlm. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024. 12 A Offline Interpretation Prompts 
+
+Figure 6 shows the offline prompts used for sparse-neuron interpretation and cluster-index supervision. We use Claude 3.7 Sonnet, a multimodal model with vision capabilities accessed through the Anthropic API, as an external annotator. The first prompt assigns short concept labels to sparse neurons based on representative image regions that strongly activate each neuron. The second prompt maps training questions to relevant cluster indices using the offline cluster inventory. The resulting annotations are used only before training to construct neuron clusters and generate cluster-index labels; they are not provided to the router, the VLM backbone, or any inference-time component. prompt = ( f"These are images showing the regions most strongly activating " f"Sparse neuron space feature of a vision-language model. " "In each image, only the patches with the strongest activation are visible; " "the rest are blacked out. " "Based on the visible regions across all images, " "what visual concept or semantic pattern does this feature likely represent? " "Please give a concise label of 1-5 words only, no explanation." )prompt = ( f"A visual question answering model needs to answer this question:\n\n" f"Question: {question}\n\n" f"The following visual concept are available:\n\n" f"{candidate_str}\n\n" f"Which clusters are most relevant to answering this question?\n\n" f"Requirements:\n" f"- Select 1 to 3 cluster IDs most relevant to the question\n" f"- Think about what visual concepts the question is asking about\n" f"- Return ONLY a JSON array of integers, no explanation\n\n" f"Example: [3, 7]" )
+
+Prompt for Sparse Neuron Feature Labeling LLM Prompt for Focus Cluster Annotation 
+
+Figure 6: Offline prompts used for sparse neuron interpretation and cluster-index supervision. 13 B Training, Inference, and Hyperparameter Details 
+
+Training follows a two-stage schedule. In Stage 1, the router and vision-side scorer are trained using frozen hidden states, optimizing the cluster-index prediction loss and the query–vision alignment loss before any feature injection is introduced. This stage stabilizes the query-to-cluster mapping. In Stage 2, the full NeuronEye pipeline is enabled: NVF performs sparse feature localization, query-conditioned refinement, and localized injection, while PCS suppresses dominant directions at the later layer. The lightweight components are optimized with the combined objective 
+
+L = LLM + λrouter Lrouter .
+
+Throughout both stages, the VLM backbone, pretrained SAE, and neuron-cluster assignments remain fixed. Only the lightweight NVF modules and the PCS scalar are updated. At inference time, NeuronEye runs in a single modified forward pass. NVF selects neuron clusters, localizes and refines the corresponding sparse features, and injects localized updates at layer ℓ, while PCS suppresses dominant directions at layer ℓ′. No external annotator, retrieval module, parameter update, or multi-pass decoding is used during inference. Table 6: Hyperparameter settings for all experiments. 
+
+Component Hyperparameter Value 
+
+Sparse Neuron Space Expansion ratio α 32 Sparsity level k 32 Sparsity coefficient λs 0.05 Min. image threshold Mmin 3Neuron-guided Visual Focus Top-n patches per cluster 60 Top-Ksel clusters 5
+
+γinj init 0.75 Bottleneck dim 128 
+
+βref init −3.0
+
+PCS Suppressed directions r 2
+
+ηparam init −3.0
+
+Training Learning rate 1 × 10 −4
+
+Gradient accumulation 6Training samples 5K 
+
+λrouter 0.5 
+
+λalign 0.3 14 C Additional Sparse Neuron Visualizations 
+
+Figures in this section provide additional examples of individual SNS neurons and their top-activating patches. Each visualization shows image regions that strongly activate one sparse latent dimension, with non-activating regions masked. These examples illustrate that many retained neurons correspond to localized and semantically coherent visual patterns, supporting their organization into concept-level neuron clusters.        
+
+> (a) Vehicle feature (b) Building feature
+> (c) Snow feature (d) Rocky terrain feature
+> (e) Street signs feature (f) Sky and sun feature
+> (g) Fruit feature (h) Hands feature
+> (i) Water sports feature (j) Elephant feature
+> (k) Grass feature (l) Bicycle feature
+> (m) Textual information feature (n) Flowers feature
+
+Figure 7: Additional sparse neuron visualizations. Each subfigure shows the top-activating patches for a single SNS neuron across multiple images, with non-activating regions masked. 15 D Additional Question-Guided Focus Examples 
+
+Figure 8 provides additional examples of query-guided visual focus produced by NVF. In each case, NVF selects a small set of query-relevant neuron clusters and increases the activation of neurons within these clusters, yielding cluster-specific activation maps that highlight localized image regions relevant to answering the question. Input Image Overall Focus Neuron Cluster 1 Neuron Cluster 21 
+
+(a) How many people are wearing a red shirt? Input Image Overall Focus Neuron Cluster 44 Neuron Cluster 42 Neuron Cluster 58 
+
+(b) Did the person hit the ball? Input Image Overall Focus Neuron Cluster 47 Neuron Cluster 21 Neuron Cluster 58 
+
+(c) Where is the man looking at? Input Image Overall Focus Neuron Cluster 19 Neuron Cluster 21 Neuron Cluster 24 
+
+(d) How many people are on the elephant? Input Image Overall Focus Neuron Cluster 30 Neuron Cluster 8 
+
+(e) Are there passengers waiting to board? 
+
+Figure 8: Additional question-guided visual focus examples. 16 E Additional Domain-Shift Evaluation 
+
+Table 7: Performance comparison on OmniMedVQA-Mini by overall accuracy and question type. 
+
+Evaluation Setting Base Qwen2.5-VL NeuronEye Difference 
+
+Overall Accuracy 65.30% 63.10% -2.20 Anatomy Identification 48.52% 48.10% -0.42 Disease Diagnosis 63.74% 60.94% -2.80 Lesion Grading 57.61% 55.43% -2.18 Modality Recognition 97.57% 96.18% -1.39 Other Biological Attributes 71.72% 66.21% -5.51 Table 7 evaluates NeuronEye under medical-domain shift on OmniMedVQA-Mini. NeuronEye decreases overall accuracy from 65.30% to 63.10%, with larger drops on disease diagnosis, lesion grading, and other biological attributes. This result suggests that a sparse neuron vocabulary con-structed from general-domain VQAv2 activations may not fully cover specialized medical visual concepts. It supports the limitation discussed in Section 3.3 and motivates domain-specific SNS construction for specialized applications. 
+
+F Efficiency and Overhead 
+
+Table 8: Inference overhead relative to the base Qwen2.5-VL model.                     
+
+> Configuration Latency (s) Lat. ∆(%) Peak Mem. (MB) Mem. ∆(%) Base (Qwen2.5-VL) 0.382 –16,857 –+ SNS + NVF 0.456 +19.4 23,933 +42.0 + SNS + NVF + PCS 0.457 +19.7 23,933 +42.0
+
+Table 8 summarizes the inference overhead relative to the base model. NeuronEye introduces a moderate latency increase ( ≈20%), mainly due to frozen SAE encoding and localized cross-attention. The memory increase mainly comes from intermediate activations, routing buffers, and the frozen SAE, rather than additional trainable components. PCS adds negligible extra latency and no additional peak memory in this setting. Table 9: Parameter breakdown of the added components. Percentages are relative to the 7.6B-parameter base model. 
+
+Module Component Params % of Base Stage 1 Stage 2 
+
+SNS SAE 822.08M 10.79% Train Frozen Neuron Clusters – – Built Frozen NVF Router 6.54M 0.09% Train Train Vision-Side Scorer 6.54M 0.09% Train Train Projection Layers 12.85M 0.17% – Train Localized Cross-Attention 51.39M 0.67% – Train Refinement Module 29.84M 0.39% – Train PCS ηparam 1 ≈0% – Train 
+
+Trainable modules 107.16M 1.41% – –Table 9 reports the parameter breakdown of the added components. The 1.41% parameter overhead refers only to trainable modules. The SAE is trained once for constructing SNS and then kept frozen during lightweight module training and inference. Thus, the frozen SAE contributes non-trainable parameters and memory overhead, while the trainable adaptation cost remains limited to the router, vision-side scorer, projection layers, localized cross-attention, refinement module, and PCS scalar. 17
