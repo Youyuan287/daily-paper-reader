@@ -1,0 +1,69 @@
+{
+  "label": "2026-10-03",
+  "date": "2026-10-03",
+  "generated_at": "2026-10-03T21:59:24",
+  "count": 4,
+  "papers": [
+    {
+      "paper_id": "202610/03/2609.37123v1-evivit-evidence-adaptive-vision-transformers-for-fine-grained-perception",
+      "section": "quick",
+      "title_en": "EviViT: Evidence-Adaptive Vision Transformers for Fine-Grained Perception",
+      "authors": "Yaoxin Niu, Zhangquan Chen, Yang Zhang, Xiang An, Zhumei Wang, Chih-Ting Liao, Hongkun Cao, Ruqi Huang",
+      "date": "2026-09-29",
+      "pdf": "https://arxiv.org/pdf/2609.37123v1",
+      "score": "6.0",
+      "evidence": "以问题条件证据密度引导区域级重读，实现细粒度感知",
+      "tldr": "高分辨率细粒度感知中，整图放大处理会把视觉 token 花在无关区域，孤立裁剪又可能丢失解释证据所需的上下文。EviViT 是轻量附件，以人类视觉搜索轨迹监督问题条件证据密度，引导从原始像素进行区域重读并分配视觉 token。稀疏且坐标感知的桥接把区域特征连回全局场景，让冻结宿主主干在上下文中解读精确证据，并可复用于兼容的后训练后代。在九种宿主上平均细粒度准确率一致提升，匹配预算下每个 token 上限均优于仅全局处理且使用更少 token。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "Fine-grained visual perception enables vision-language models to distinguish subtle attributes and ground their answers in visual evidence. In high-resolution scenes, processing the whole image at greater resolution spends visual tokens on irrelevant content, while isolated crops can lose the context needed to interpret the selected evidence. We introduce EviViT, a lightweight attachment that learns where a pretrained vision transformer should acquire detail. Human visual-search traces supervise a question-conditioned evidence density, which guides regional re-reading from the original pixels and the allocation of visual tokens. A sparse, coordinate-aware bridge then connects the regional features to the global scene, allowing the host to interpret precise evidence in context. Learned with the host backbone frozen, the attachment serves both the base model and compatible post-trained descendants without refitting. Experiments across nine hosts show consistent gains in average fine-grained accuracy. Matched-budget comparisons further show that EviViT outperforms global-only processing at every tested token ceiling while using fewer visual tokens.",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    },
+    {
+      "paper_id": "202610/03/2609.37685v2-paiq-patch-aligned-semantic-injection-via-residual-rotation",
+      "section": "quick",
+      "title_en": "PAIQ: Patch-Aligned Semantic Injection via Residual Rotation",
+      "authors": "Pinze Ren, Yuwei Zhang, Hao Chen, Linghao Meng, Chang Li, Qiankun Li",
+      "date": "2026-09-29",
+      "pdf": "https://arxiv.org/pdf/2609.37685v2",
+      "score": "6.0",
+      "evidence": "语言对齐与自监督特征的块级融合",
+      "tldr": "语言对齐与自监督视觉编码器各有优势，但融合时易损失局部细节或混淆语义相近的patch。PAIQ以DINOv3 patch特征为空间基底，通过跨编码器匹配聚合SigLIP特征，并用共享正交变换Q注入残差差异，在保持残差范数与夹角的同时调整更新方向。在多个语言骨干上，它提升图像描述与VQA的正确性并降低幻觉，2B/9B Qwen上平均超最强基线约2.9个正确率点。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "Language-aligned and self-supervised visual encoders offer complementary strengths in semantic abstraction and spatial detail. Harnessing this complementarity requires enriching local features while retaining distinctions between semantically related patches. We introduce PAIQ, a patch-aligned semantic injection framework that combines content-based cross-encoder matching with orthogonally constrained residual updates. Using DINOv3 patch features as the spatial base, PAIQ aggregates complementary SigLIP features through joint source allocation and injects the aggregate--base differences through a shared orthogonal transformation Q. This rotation adapts update directions while preserving residual norms and pairwise angles. For fixed projected features, we derive conditions for patch separability under similar semantic aggregates and show that rotation adds a nonnegative separation term over direct interpolation when the aggregate is shared. Only the projection and fusion parameters are trained; both visual encoders and the language model remain frozen, and fusion retains 196 visual tokens. Across diverse language backbones, PAIQ yields broad gains in judge-assessed correctness and reductions in hallucination severity over single-encoder interfaces on image description and visual question answering. On the 2B and 9B Qwen backbones, this compact interface outperforms the strongest evaluated fusion or token-compression baselines by about 2.9 correctness points on average.",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    },
+    {
+      "paper_id": "202610/03/2609.38177v1-imagine3d-llm-teaching-mllms-to-imagine-3d-scenes-before-answering",
+      "section": "quick",
+      "title_en": "Imagine3D-LLM: Teaching MLLMs to Imagine 3D Scenes Before Answering",
+      "authors": "Jaewoo Jung, Hyeonseo Yu, Honggyu An, Jisang Han, Mungyeom Kim, Minkyeong Jeon, Heeseong Shin, Wonjun Moon, Federico Tombari, Daniel Barath, Marc Pollefeys, Seungryong Kim, Sunghwan Hong",
+      "date": "2026-09-29",
+      "pdf": "https://arxiv.org/pdf/2609.38177v1",
+      "score": "6.0",
+      "evidence": "多模态大模型从多视图图像进行三维场景理解与跨视图物体推理",
+      "tldr": "多视角3D空间推理仍是MLLM短板，现有方法依赖像素级跨视角对应或3D几何特征融合，仍逊于人类。受人类先识别跨视角物体、推断视角关系、再拼出粗略3D布局启发，Imagine3D-LLM在图像token后加入可学习summary token，将其解码为紧凑3D高斯泼溅表示，并以光度重建损失与下一词预测联合训练。仅summary token受重建监督，但该目标仍增强图像特征的跨帧对应。模型在多个空间推理与3D理解基准上超越先前方法，表明先想象场景比直接输入像素级几何更有效。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "Reasoning about the 3D world from multi-view images remains a fundamental challenge for Multimodal Large Language Models (MLLMs). While modern MLLMs handle single-image inputs effectively, they struggle to integrate evidence across viewpoints into a coherent 3D understanding. A growing body of work attempts to close this gap by injecting 3D awareness into MLLMs, either by boosting fine-grained pixel-level cross-view correspondence or by fusing features from 3D geometry foundation models, yet a substantial gap to human reasoning persists. In this work, we revisit human spatial reasoning, which suggests that rather than relying on fine-grained geometry cues, humans roughly identify common objects across views, infer the relative geometry between viewpoints, and assemble a coarse 3D layout of the scene. Inspired by this process, we introduce Imagine3D-LLM, an MLLM that learns to assemble a similar compact 3D representation of the scene and conditions its answer on this representation. Concretely, we append a small set of learnable summary tokens after the image tokens, decode them into a compact 3D Gaussian Splatting representation supervised by a photometric reconstruction loss, and train jointly with the standard next-token prediction objective. Notably, although only the summary tokens receive direct reconstruction supervision, this objective also induces stronger cross-frame correspondence within the LLM's underlying image features, suggesting that learning to reconstruct propagates 3D-aware signals throughout the model. As a result, Imagine3D-LLM consistently outperforms prior approaches across multiple spatial reasoning and 3D understanding benchmarks, suggesting that imagining the scene can be more effective than being told its pixel-wise geometry.",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    },
+    {
+      "paper_id": "202610/03/2610.01589v1-pager-partial-to-global-alignment-via-geometric-and-relational-distillation",
+      "section": "quick",
+      "title_en": "PAGER: Partial-to-global Alignment via Geometric and Relational Distillation",
+      "authors": "Akira-Miranda Adeyomi Adeniran-Lowe, Binod Singh, Lars Arnold Dethlefsen, Lazaros Nalpantidis, Theodora Kontogianni",
+      "date": "2026-10-01",
+      "pdf": "https://arxiv.org/pdf/2610.01589v1",
+      "score": "6.0",
+      "evidence": "部分三维观测、ScanNet指标与三维编码器对齐",
+      "tldr": "预训练3D编码器多在全局重建场景上学习，而具身系统需从相机坐标下的部分观测推理，二者存在严重表示错配：冻结Sonata在完整ScanNet上达72.47 mIoU，单帧输入仅2.57。PAGER提出无标签适配方法，用配对的部分/全局几何学习轻量适配模块，通过匹配点特征对齐与关系蒸馏，将部分视图特征对齐到冻结的全局语义空间。结果超越有标签PEFT，零样本ScanNet→ScanNet++迁移53.93 mIoU，优于全量微调Sonata的48.09。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "Pretrained 3D encoders are typically developed on globally reconstructed scenes expressed in a consistent world coordinate frame, whereas embodied systems must reason from partial, viewpoint-dependent observations in camera coordinates. We show that this shift from globally learned 3D feature spaces to realistic partial observations exposes a severe representation mismatch, which we find consistently across representative state-of-the-art encoders, including Sonata and Concerto. A frozen Sonata encoder with a global linear probe achieves 72.47 mIoU on full ScanNet scenes, but 2.57 mIoU on single-frame camera-coordinate inputs. Training-free gravity alignment recovers performance to 41.64 mIoU, showing that coordinate-frame mismatch is a dominant source of degradation but cannot be fully resolved through canonicalization alone. We introduce PAGER, a label-free adaptation method that aligns partial-view features with a frozen global 3D semantic space using only paired partial/global geometry. It learns lightweight adaptation modules while keeping the pretrained encoder and global segmentation probe frozen. Matched-point feature alignment anchors partial features to their global counterparts, while relational supervision preserves their similarity structure with respect to the global representation. Global geometry provides supervision only during training. Inference operates directly on the partial observation. Without partial-view labels, PAGER outperforms label-supervised PEFT on both Sonata and Concerto, and in zero-shot ScanNet$\\rightarrow$ScanNet++ transfer surpasses fully fine-tuned Sonata ($53.93$ vs.\\ $48.09$ mIoU), suggesting that preserving the frozen global representation can improve cross-dataset transfer.",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    }
+  ],
+  "errors": []
+}
