@@ -1,0 +1,287 @@
+Title: Yggdrasil: a Layer-First 3D Scene Graph for Real-Time Querying
+
+URL Source: https://arxiv.org/pdf/2609.38640v1
+
+Published Time: Thu, 01 Oct 2026 00:31:13 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# Yggdrasil: a Layer-First 3D Scene Graph for Real-Time Querying 
+
+Arshia Akhavan 1, Ermanno Bartoli 2, Afnan Algharbi 1,Alireza Hoseinpur 3, Iolanda Leite 2, and Bryan Donyanavard 1
+
+Abstract — Robotic agents use 3D scene graphs (3DSG) to perform tasks ranging from scene understanding to scene interaction. Although an extensive body of work addresses scene graph generation, little attention has been paid to optimizing the graph for consumption, which leaves state-of-the-art perception pipelines to work around their own scene graph and to pay a latency cost that does not fit the real-time budget a perception loop runs on. We present Y GGDRASIL , the first 3D scene graph designed to be efficient for both generation and consumption: a layer-first hierarchical graph built from generic nodes, edges, and layers, which expresses the representations existing pipelines already produce, indoor or outdoor, flat or hierarchical, while natively answering the positional and semantic queries downstream tasks issue. Against a published DSG baseline, YGGDRASIL answers queries up to 121 × faster, and every query we measure falls between 2 and 127 μs, three to five orders of magnitude inside the 200 ms keyframe budget a 3DSG consumer lives in, on both a workstation and embedded class device. We integrate YGGDRASIL into three published pipelines spanning human trajectory prediction, object-goal navigation, and human-aware motion planning, where it removes up to 99% of the time each spends on its scene graph. The implementation, benchmark harness, and all three integrations are available online [1]. 
+
+Index Terms —3D scene graph, spatial perception, robotic perception, hierarchical representation, spatial indexing, query processing, SLAM. I. I NTRODUCTION 
+
+Robots operating in real environments must build a model of their surroundings and interrogate it fast enough to act on what they find. That model draws on the geometric maps produced by SLAM pipelines [2] and the semantic content associated with them [3], and the structure holding all of it together is commonly called a 3D scene graph (3DSG) [4]. A 3DSG sits between two very different halves of the pipeline: upstream , a construction stage that populates 3DSG from raw sensor data, and downstream , applications that consume it to plan, navigate, or answer questions about the scene. 3DSG’s purpose is to hand the downstream task actionable information [4], [5], a contract expressed in practice as the queries that application runs against it, such as the nearest object, the observable sub-scene, the objects carrying a given label, and the shortest path query. 
+
+> 1
+
+Department of Computer Science, San Diego State University {aakhavan3824, aalgharbi5447, bdonyanavard}@sdsu.edu 
+
+> 2
+
+Division of Robotics, Perception and Learning, KTH Royal Institute of Technology {bartoli, iolanda}@kth.se 
+
+> 3
+
+Department of Computer Science, University of Illinois Chicago 
+
+ahose@uic.edu      
+
+> scene-graph fragments
+> Room 1 Room 2 Next To Places UnClaimed Claimed Thing 1
+> Human Mesh TV Mesh Next to
+> typed query interface, answered in place Building Layer Semantic Layer Path Layer Point Clouds Object Layer Point Clouds
+
+Fig. 1: Y GGDRASIL ’s layer-first architecture: a DAG of lay-ers, each an isolated graph, with nesting relations connecting nodes across layers that share an edge in the DAG. A typed query interface answers semantic and spatial queries against this store in place, with no intermediate conversion. A large body of work addresses the upstream side [6]– [9], designing representations that perception pipelines can populate accurately and in real time. Far less attention has gone to the downstream, where the graph would have to be designed around the queries and information retrieval. Downstream pipelines therefore have to route around their scene graph. Some serialize it for a language model to delegate the query [10], which works but is slow relative to the control loop [11], [12] and can face a context win-dow bottleneck for large scenes [13], [14]. Others keep the query algorithmic but re-materialize the graph inside a general-purpose library such as NetworkX [15] and query the copy [16], [17]. That presumes an immutable graph: when the scene is updated while navigation or planning runs, the conversion is re-paid on every frame, and the copy discards the layering and grounding that distinguish a 3DSG from a generic graph. Both are workarounds for the same missing piece, a scene graph that serves upstream construction while natively answering what downstream robotics asks of it. Recent work has begun to name the gap [18] and to propose exposing 3DSGs through a structured query interface for tool-augmented reasoning [19]; we pursue that goal one level lower, at the storage substrate, so that constructors and consumers share a single queryable graph instead of each building its own. We present Y GGDRASIL , the first 3D scene graph designed to be efficient for both generation and consumption (Fig. 1). arXiv:2609.38640v1 [cs.RO] 29 Sep 2026 Built from generic nodes, edges, and layers, it expresses the representations existing pipelines already produce, indoor or outdoor, flat or hierarchical, while natively answering the semantic and spatial queries downstream applications issue, at practical latency and with no intermediate conversion step. This paper contributes: 1) A scene graph designed for consumption , in which the layer hierarchy is a directed acyclic graph rather than a stack, paired with a query API spanning pat-tern matching, nearest neighbour, field of view, and traversal, backed by per-layer and per-node spatial in-dexes that Y GGDRASIL maintains automatically (Sec-tions III, IV). 2) Three integrations spanning the perception pipeline , in published tools for human trajectory prediction, object-goal navigation, and human-aware motion planning, covering diverse use cases such as: downstream-only use, construction and consumption together inside a control loop, and augmentation of an existing graph (Section VI). II. R ELATED WORK AND BACKGROUND 
+
+A. 3D Scene Graphs: Definitions, Hierarchy, and Layering 
+
+Although no single definition of a 3DSG is universally agreed upon [6], [20], the term consistently denotes the stor-age backbone of a perception pipeline. A recent survey [20] unifies the competing formulations as sets of nodes and edges plus a grounding that anchors each node to the metric map, 
+
+feature maps that attach arbitrary attributes, and an optional 
+
+labeling function sorting nodes into hierarchical layers . A graph lacking the labeling function is considered flat. In a 3DSG, nodes are spatial concepts, most often objects, and edges are the relationships between them [20]. Nodes carry geometric attributes (centroid, bounding box, shape) and semantic ones (labels, materials, embeddings). Flat de-signs such as the 3D semantic scene graph (3DSSG) [7] and ConceptGraphs [21] stop there and invest in richer attributes, whereas hierarchical ones add layers of increasing abstraction, commonly geometry → objects → places →
+
+rooms → building [4], [22]–[24]. Hierarchy both mirrors the human mental model of an environment [25], [26] and aids inference by narrowing the search span along ancestry [27], since an object in one room need not be sought among those of another. Within this family, the DSG line [9], [22], [25], [27] adds dynamic entities such as humans, S-Graphs [23], [26], [28] couples the hierarchy to SLAM optimization, and OpenGraph [29] adapts the layering to large-scale outdoor 
+
+environments. 
+
+B. Scene Graph Construction and Consumption 
+
+Work on 3DSGs falls into two threads. Construction (upstream) , called generation in robotics and learning in computer vision [20], builds the graph from sensor data, and spans learned semantic prediction from point clouds and RGB-D [7], [8], open-vocabulary variants [21], [30], and real-time, SLAM-coupled construction of layered graphs [9], [29], [31]; its output is the graph itself. Consumption (downstream) instead uses an existing graph to solve a task: embodied question answering (GraphEQA [32]), LLM-based task and motion planning (SayPlan [10], Taskography [33], DELTA [34]), object-goal navigation (SG-Nav [35], HOV-SG [24], OSG [16]), and predictive or interactive tasks such as human-trajectory prediction [17] and interactive object search [36]. Neither thread designs the store around the queries run against it. Y GGDRASIL does, and answers them in place rather than from a converted copy. III. C ORE DESIGN 
+
+YGGDRASIL is a layer-first hierarchical 3D scene graph built from generic nodes, edges, and layers. Because none of the three is bound to a predefined vocabulary, a single YGGDRASIL graph can express the representations that ex-isting pipelines already produce, indoor or outdoor, flat or hierarchical, while still scoping a query to a single room. Architecturally, Y GGDRASIL is a cluster of graphs. Each graph is a layer , and the layers together form a directed acyclic graph (DAG). Layers are almost pairwise isolated, in that no edge joins nodes from different layers; the single exception is the nesting relationship described below. Each layer represents one level of abstraction over the entire scene and holds one kind of information: a physical layer may carry positional data, a semantic layer the attributes of each object, and a human-interaction layer only the interactions taking place between the people in the scene. Nodes represent different aspects of an object, ranging from physical representations such as a point in a point cloud or a surface in a mesh, to semantic ones such as its type. Edges represent a relationship between two abstractions: an edge between the physical nodes of a human and a mug might encode closeness , while an edge between their semantic nodes might encode an action such as holding .Where two layers share a directed edge in the DAG, the source layer encompasses the destination and sits at a higher level of abstraction. This licenses the one cross-layer relation Y GGDRASIL admits: node n1 in layer l1 may nest 
+
+node n2 in layer l2 exactly when l1 encompasses l2 .Some form of nesting appears in every 3D scene graph that exposes hierarchy through layers [22]. What distinguishes YGGDRASIL is that prior work treats the layer hierarchy as a stack , with l1 the parent of l2 , l2 the parent of l3 , and so on, whereas Y GGDRASIL ’s DAG lets a layer parent more than one child. This matters most where a stack cannot express the scene at all. In outdoor graphs two layers often cannot be ranked, because neither stands above the other. OpenGraph [29] keeps one layer for the road lane graph and another for object instances; under a stack schema one of them must be placed above the other even though no parent-child relationship holds between a lane and an object. Y GGDRASIL ’s DAG materializes the true relationship by letting both descend from a common parent, which in OpenGraph’s case is the segment layer that partitions the environment by lane connectivity. The same freedom pays off indoors in two further ways, both of which Section V quantifies. Objects that are categor-ically the same but semantically distinct can be separated: the same level of abstraction for objects in different rooms can live in one layer per room, so that an object in one room need never be compared against nodes in another and a query’s search span is bounded by the room rather than by the building. The finer granularity also means more layers holding fewer nodes each, which shortens query time [27] and admits layer-specific optimizations that a single, heavily populated layer cannot support: because Y GGDRASIL builds indexes per layer and per node rather than globally, afrequently queried room can be indexed on its own. A single scene captures all three. Consider an office with one inventory room, where positional queries and object detection matter, and meeting rooms where they do not. A conventional hierarchical 3DSG models the whole office’s physical extent in one layer; Y GGDRASIL can give each room’s point cloud a layer of its own, so object detection in the inventory is constrained to the inventory’s objects rather than the entire building. And knowing that the inventory is queried often, one can pay a small memory price there for faster queries, which was previously unavailable because the cost of such an optimization scaled with the physical layer of every object in the building. Two derived notions recur throughout the paper. The 
+
+sub-scene graph over a node set N of a scene graph sg 
+
+is the graph containing every node in N, all edges and nesting relations among them, and all layers of sg , retained even when empty, since preserving the layers matters for operations such as merging and conflict resolution. The sub-tree of a node is then the sub-scene graph over the nodes nested under it, directly or through a chain of nesting, and usually captures an entire object across levels of abstraction: in Fig. 1, the sub-tree of Room 1 holds the room and every object in it. Nodes are generic in that, unlike scene graph technologies offering a fixed set of node types [16], [17], [22], they can encode any kind of information: each carries a list of features and an optional field for geometric coordinates . A node may also track its bounding box , the smallest axis-aligned cuboid containing every coordinate in its sub-tree, which is useful for quick spatial estimates and is relied upon by several downstream applications [21], [37]. Bounding boxes are disabled by default, because Y GGDRASIL keeps every enabled box current as the graph changes, so enabling one costs a small penalty on each update within that node’s sub-tree. Edges are generic in the same sense, bound to no predefined vocabulary, directed, and carrying the source and destination of the relation they encode. IV. Q UERY API S
+
+YGGDRASIL comes with a rich set of semantic and spatial queries suited to the variety of scenarios downstream applications present. 
+
+A. Pattern Matching 
+
+Each node carries a set of features, essentially key-value pairs, while each edge carries a source, a des-tination, and a description of the relationship between the two. YGGDRASIL exposes nodes_matching and 
+
+nodes_having to retrieve nodes by a specific list of features or by feature keys alone, and edges_from ,
+
+edges_to , and edges_matching to filter edges on any of those three attributes. Every one of these queries can be run either over the entire scene graph or over a single layer. 
+
+B. Spatial and Traversal Queries 
+
+The nearest-neighbor family, central to navigation and path planning, comes in three flavors: nearest_nodes 
+
+returns at most m nodes closest to a given coordinate c,
+
+nodes_within_radius restricts those to the ones lying within a radius r of c, and nearest_in_subtree re-stricts them instead to the sub-tree of a root node r. The first two run over the whole scene graph or over a single layer, while the third is an inter-layer query by definition and so runs only over the graph. Because these queries are issued frequently, Y GGDRASIL 
+
+can build indexes for them, trading memory for runtime. Layer-level indexing tracks every coordinate stored in a frequently queried layer and serves the first two flavors, while node-level indexing tracks the coordinates in a node’s sub-tree and serves the third. Y GGDRASIL maintains these indexes itself and updates them whenever the graph changes in a way that concerns them, which is also why enabling one imposes a small runtime penalty on updates. Both are backed by a kd-tree [38], [39]. The field-of-view query serves downstream tasks that perform traversal or object detection. Given an observer, YGGDRASIL runs a fast frustum check over the nodes lying in the sub-tree of a root node r, which lets a caller confine the result to the room an agent currently occupies rather than the whole scene. Where node-level indexing is available, the executor opts into the index-based implementation. Beyond these scene-graph–specific queries, Y GGDRASIL 
+
+supports ordinary graph traversal and allows any standard algorithm, such as shortest path or breadth- and depth-first search, to be run over the graph. It also exposes a subgraph 
+
+query, which returns the subgraph rooted at a given node r.V. E VALUATION 
+
+We evaluate Y GGDRASIL by porting a published DSG scene graph into it and measuring the cost of the queries a downstream application issues against it. The evaluation is an ablation ladder : each target adds one Y GGDRASIL feature to the one before it, so that implementation, layer-first design, and live spatial indexes can be credited separately, along with what each of them costs in memory. 
+
+A. Dataset 
+
+All measurements use the uHumans2 office scene graph distributed with Spark-DSG [40]: a single-story office built by Hydra [9], [27] and semantically segmented against the (a) Example 3DSG in the DSG format.                       
+
+> (b) The same scene graph in YG-
+> GDRASIL ’s layer-oriented hierarchy.
+> Spark-DSG NetworkX copy
+> +KD-tree LP2 queries rebuilt every iteration:
+> 2 681 ms build +7 747 ms queries Yggdrasil NetworkX copy
+> +KD-tree LP2 queries answered natively:
+> 35 ms build +31 ms queries
+> 10.4 s →66 ms per trajectory ( 158 ×)
+> (c) The LP2 case study: Y GGDRASIL removes the NetworkX and KD-tree mirror that the baseline rebuilds every iteration.
+
+Fig. 2: Porting a scene graph into Y GGDRASIL . (a) and (b) show the same office scene in the DSG format and in YGGDRASIL ’s layer-oriented hierarchy (each color presents a layer); (c) shows what the change buys downstream in LP2. ADE20K label set [41]. It holds 3,532 nodes and 11,012 edges across four DSG layers, one building, nine rooms, 1,130 places and 1,472 mesh-places, 705 agent poses, and 215 objects, beside a side array of 354,885 mesh vertices into which each object indexes to claim its own geometry. Two properties of the data shape the experiments that follow. First, most of the mesh is unclaimed, with 313,522 vertices (88.3%) belonging to no object and a further 7.89% claimed by more than one, so recovering an object from its geometry needs a tie-breaking rule, for which we take the smallest object id to keep the output reproducible. Sec-ond, the stored bounding boxes are unreliable as geometric bounds: 126 of the 215 objects have claimed vertices lying 
+
+outside their own box. That divergence is most likely a consequence of maintaining the boxes separately from the graph itself, which Y GGDRASIL avoids by keeping every enabled box truthful on each update. 
+
+B. Targets 
+
+The evaluation uses five targets: the published baseline, and four ports into Y GGDRASIL that each differ from their predecessor in a single respect. 1) dsg : the baseline scene graph as provided by the office dataset. Its scene consists of four semantic layers, hold-ing objects and agents, places and structures, rooms, and the building, together with a mesh array that holds the mesh representation of the entire scene outside the scene graph. 2) vanilla : the naive port of DSG into YGGDRASIL ,with no change to the internal design of the scene graph, which isolates Y GGDRASIL ’s non-architectural differences such as implementation language (DSG’s C++ against Y GGDRASIL ’s Rust) and other runtime factors. Since Y GGDRASIL is a single scene graph, DSG’s separate mesh array could not be ported; we instead gave each object a node in a mesh layer holding its mesh group. 3) chocolate : the smart port, in which we redesign the scene graph into a YGGDRASIL -friendlier one (Fig. 2), and which therefore isolates the benefit of YGGDRASIL ’s new concepts, namely the DAG of layers and the finer node hierarchy. Because practical queries are typically scoped to a single room, and because the unclaimed mesh of Section V-A adds noise to queries that should retrieve objects, we allocate four layers per room: room , claimed-object , claimed-mesh , and unclaimed-mesh . Each room layer holds two nodes, claimed and unclaimed , both nested under that room’s node in the building layer. Unclaimed meshes go into the unclaimed-mesh layer, nested under the 
+
+unclaimed node of their room, while objects go into 
+
+claimed-object under the claimed node, each nesting its own mesh node in claimed-mesh . The building layer is unchanged from vanilla and dsg .4) mint : structurally identical to chocolate , differing only in that indexes are enabled, node indexing for each object’s semantic node and layer indexing for each room’s claimed-mesh layer. This target isolates the benefit of Y GGDRASIL ’s live spatial indexes. 5) saffron : inherits mint and differs only in the granularity of the physical layer, giving every point of the mesh its own node rather than one node holding an object’s whole mesh array. This isolates the cost of a fine-grained physical representation. 
+
+C. Query Workload 
+
+We run three families of queries (Q1-3), with several flavors within each, to expose the trade-offs that come with each implementation. Every spatial query is issued from 64 reference points per room, drawn from a fixed seed, for each of the nine rooms. Throughout, dsg and vanilla use the brute-force implementation, scanning every candidate in scope, while chocolate , mint , and saffron call the corresponding YGGDRASIL API scoped to the room the reference point falls in, which the index serves on mint and saffron . On all 576 spatial queries per configuration, all Y GGDRASIL ’s flavors return exactly the answer the dsg returns, so the latencies below compare identical results. TABLE I: Static cost of each target on the uHumans2 office graph.                      
+
+> target nodes memory (MB) update latency (μ s)
+> dsg 3,532 †40.3 7.54
+> vanilla 3,746 25.6 7.01
+> chocolate 3,778 33.7 6.91
+> mint 3,778 70.9 12.7
+> saffron 361,980 144.6 129
+> †plus the 354,885-vertex mesh array, which dsg stores outside the graph.
+
+Q1a asks which object lies at minimum Euclidean distance from a given 3D point, using only the geometry stored in the graph and breaking ties toward the smaller node id. Q1b 
+
+retrieves every object with a point within a given distance of a reference point, at radii of 0.25, 0.5, 1, 2, and 4 m, the largest of which covers almost all of the smaller rooms. Q2 
+
+asks what subset of the graph is visible to an observer, each of the 64 per room given a half-angle field of view between 
+
+30 ◦ and 70 ◦ and a range between 0.3 and 8 m. Q3 returns every object carrying a given label, where dsg allows one label per node and Y GGDRASIL a set of them; the dataset holds 27 labels with frequencies from 1 to 40, and we query one from each of four classes: frequent (light , 40), mid (shelf ,the median at 5), rare (bulletin , once), and absent , a label occurring nowhere. 
+
+D. Experimental Setup 
+
+Experiments were run on two platforms: a 32-core AMD Ryzen Threadripper PRO 3975WX workstation with 251 GiB of memory, and an NVIDIA Jetson Orin Nano Super devel-oper kit with six Arm Cortex-A78AE cores and 7.4 GiB of unified memory in the uncapped MAXN_SUPER power mode. Each query is run five times on each machine for each target and we report the average. 
+
+E. Results 
+
+Fig. 3 reports per-query latency for all five targets and Table I the static cost of each. The two rows have essentially the same shape, indicating that Y GGDRASIL ’s improvements are a property of the design rather than of the host, and that they survive on a platform as constrained as the Jetson. On Q1a and Q2, every rung of the ladder pays. Porting DSG unchanged into Y GGDRASIL is already 1.8–2.3 × faster on nearest-object and 6.7–7.6 × on visibility, before any design change, which credits Y GGDRASIL ’s data structures and packed memory layout. Redesigning the graph adds a further 4.8 × on Q1a and about 3 × on Q2, purely from reduced search span, since chocolate gives every room its own isolated stack of layers. The indexes buy another 5– 10 × on Q1a and 2.4 × on Q2 by running the search against the kd-tree rather than over raw points. End to end, the fully featured targets answer Q1a in about 2 μ s on both machines, 50 × faster than dsg on the Threadripper and 121 × on the Jetson, and cut Q2 by 52 ×.Q1b is the one query on which the layer redesign buys nothing: it must touch every point in scope regardless, so room isolation prunes nothing while the extra layers are still walked, leaving chocolate marginally slower than 
+
+vanilla at the larger radii. Here the indexes are the whole story, and their benefit falls with the radius, from 23–31 ×
+
+over chocolate at 0.25 m to 1.1–1.7 × at 4 m, the expected behaviour once the query ball covers the whole room. Q3 flattens the ladder altogether. All four Y GGDRASIL tar-gets are indistinguishable and constant across the frequency classes, each about twice as fast as dsg , since label matching is invariant to the design changes that separate them. saffron 
+
+is the interesting case, holding 96 × more nodes (Table I) yet staying in the same range, because the geometric nodes it adds carry no labels by construction, which lets Y GGDRASIL 
+
+skip those layers altogether. 
+
+F. Discussion 
+
+Table I shows what each rung costs to hold. vanilla is not only faster than dsg but also 36% smaller, and chocolate ’s per-room layer stacks still fit below the dsg baseline at 33.7 MB. The two features that do cost memory are the live indexes, which add 37.2 MB to mint over chocolate , and 
+
+saffron ’s point-level physical layer, which brings the total to 144.6 MB, 3.6 × the dsg baseline. Aside from vanilla , an ablation baseline, the three remain-ing Y GGDRASIL implementations answer queries well inside the real-time bounds of state-of-the-art perception pipelines. Systems that run end to end, from raw sensor data through to a downstream task, report explicit cycle budgets. Hydra, which builds a 3DSG online from RGB-D data, targets keyframe rate (5 Hz), which as its authors state “implies a limit of 200 ms for any of these processes” [27]; on an Nvidia Xavier NX, and on the same uHumans2 office scene we evaluate on, it reports 75 ± 35 ms for objects, 33 ± 6 ms for places, and 55 ±41 ms for rooms [9]. Kimera reports per-frame meshes in under 20 ms and a global metric-semantic mesh at roughly 0.1 s per keyframe [25]. Among systems whose graph feeds a downstream task directly, S-Graphs+ reports a 74–263 ms back-end while driving navigation [28], which S-Graphs 2.0 brings down to an average of 34 ms [26], and Clio builds a task-driven 3DSG at 0.26–0.31 s per frame on a laptop carried by a quadruped [37]. On the pure SLAM side, the tracking thread of ORB-SLAM2 runs in 26–49 ms per frame [42] and that of ORB-SLAM3 in 22–33 ms, the latter reporting that it “is able to run in real time at 30-40 frames and at 3-6 keyframes per second” with a mapping thread that takes 159–267 ms per keyframe [43]. Two budgets therefore bound the space these numbers describe, the 25 ms per-frame budget of a SLAM front end and the 200 ms keyframe period in which a 3DSG consumer actually lives. Every query we measure on chocolate , mint ,and saffron falls between 2.06 μ s and 126.3 μ s, which is two to five orders of magnitude below either figure. The most expensive of them consumes 0.5% of a 25 ms tracking frame and 0.06% of the 200 ms keyframe budget, leaving room for 
+
+10 3 to 10 4 queries per cycle. It is this margin, rather than the cost of a single query, that matters in practice: one query fits every budget above, dsg ’s included, and what changes 110 100            
+
+> Threadripper latency (μs) (a) Q1a nearest object / Q2 visibility
+> 113.3 162.1 62.7 24.1 13.0 7.59 2.88 3.13 2.24 3.25
+> 110 100
+> (b) Q1b objects within radius
+> 107.7 109.1 112.7 110.0 120.2 44.2 48.7 47.7 46.7 49.3 48.3 47.2 48.3 51.1 55.8 2.12 2.63 5.78 20.3 51.8 2.33 2.82 5.97 20.41 55.2
+> 025 50 75
+> (c) Q3 semantic retrieval
+> 56.6 55.4 56.7 56.7 27.3 27.2 22.8 23.9 30.6 28.9 24.4 22.9 30.8 28.4 23.9 23.5 29.94 29.53 24.4 23.39
+> Q1a nearest obj. Q2 visibility 110 100
+> Jetson Orin latency (μs)
+> 250.2 350.3 107.8 46.3 22.65 16.01 2.17 6.68 2.06 7.02
+> 0.25 0.5 124
+> query radius (m)
+> 110 100
+> 250.2 249.5 249.5 250.1 250.3 108.2 108.1 108.6 110.1 112.3 111.0 112.1 114.9 120.9 126.3 3.56 3.64 6.87 24.1 73.3 3.98 4.23 6.9 25.4 75.3
+> frequent mid rare absent
+> label frequency class
+> 050 100 150
+> 124.0 123.2 121.7 122.0 65.2 62.5 62.6 62.1 71.7 67.0 66.7 66.3 69.9 65.6 65.4 65.1 68.01 67.8 67.02 66.37
+> DSG (baseline) vanilla chocolate mint sa ff ron
+
+Fig. 3: Query latency in μ s on the uHumans2 office scene graph, averaged over five runs, every value printed on its bar. Columns are query families; rows are the two machines of Section V-D, each with its own vertical scale. Note the logarithmic axis in (a) and (b). Bars follow the legend order. is how many fit. A consumer that probes visibility at one thousand candidate poses per cycle spends 6.7 ms on mint 
+
+but 350 ms on dsg on the Jetson, the latter exhausting the keyframe budget on its own before any perception work is accounted for [44], [45]. Each Y GGDRASIL implementation also offers a distinct set of trade-offs a user can choose from. chocolate balances low memory consumption against reasonably fast query times, while mint and saffron buy further speed at the price of mem-ory. The choice between those two concerns the upstream as much as the downstream: saffron ’s fine-grained physical layer allows easier integration with graph generation, since a single point can be modified without rewriting an array, whereas mint keeps a memory footprint on par with dsg but lacks that precision for operations such as graph update and graph merge. The cost of that precision is visible in update latency, where a single update takes 6.91 μ s on chocolate ,12.7 μ s on mint , and 129 μ s on saffron .VI. C ASE STUDIES 
+
+We integrated Y GGDRASIL into three published robotic and perception projects. The three span the perception pipeline rather than one side of it. LP2 is purely downstream, reading a graph that is built once and never changes. OSG exercises both halves at once, constructing its graph and querying it inside the same loop that chooses the robot’s next action. S3DSG sits between them, overlaying a second, human-centric layer onto a graph that already exists and then querying the result. They differ equally in what Y GGDRASIL 
+
+displaces: the conversion step in LP2, the entire store in OSG, and a hand-rolled family of spatial indexes in S3DSG. In each project we replaced only the scene-graph inter-action and left the application logic untouched, then ran both configurations so that the Y GGDRASIL version could be checked against the original. What that check can consist of differs with the project, and we report it in each; what we are after is the performance difference, that is, how much computation a scene graph designed for consumption removes from a pipeline that was not built around one. 
+
+A. LP2: Long-Term Human Trajectory Prediction 
+
+LP2 [17] predicts a distribution over a person’s position up to 60 seconds ahead, using an LLM to guess upcoming human-object interactions and a 3D scene graph to ground them in space. It only ever reads its graph, making it the clean downstream case. 
+
+a) Setup : LP2 ships with two scenes: the office graph used in Section V, with 45 trajectories, and a home graph of 861 waypoints, 110 objects, and 31 trajectories. We compare its original backend, a mix of DSG [22], [27] and NetworkX [15], against an Y GGDRASIL one. Because LP2 queries an LLM internally, we recorded every response from 
+
+gpt-5.6-luna [46] on a first run so that later runs replay them rather than calling a live model, and each configuration then runs five times per scene. Correctness holds at all three levels we check: Y GGDRASIL stores every node, edge, and relation the original does, the two variants produce byte-identical LLM prompts, and the predicted trajectory distributions match on every run. 
+
+b) Performance : Overall, Y GGDRASIL removes 99.6% of the time LP2 spends on its scene graph in the office scene and 98.8% in the home scene (Table II). Two distinct factors account for it. The first is query runtime. The clearest case is the waypoint-to-room query, which at over 1.7 M calls on the office scene is by a wide margin the most frequent in the pipeline, and which Y GGDRASIL answers 873 × faster there and 636 × faster on the home scene. The reason is structural: YGGDRASIL holds that relationship as a nesting edge and reads it as a single parent pointer, whereas the original must TABLE II: Scene-graph query cost in LP2, pooled over five repetitions per scene. The five query rows are median per-call latencies in μ s; the two aggregate rows below them are per-run totals in ms . The original builds its NetworkX copy and KD-tree at startup and rebuilds the KD-tree on every iteration, whereas Y GGDRASIL builds its indexes once and maintains them incrementally. 
+
+office home 
+
+query orig. Y GGDRASIL orig. Y GGDRASIL 
+
+room of a waypoint 987 1.13 725 1.14 
+
+nearest waypoint 169 5.7 134 5.3 waypoints within 0.5 m 8,420 79 5,981 69 shortest-path lookup 0.50 0.63 0.50 0.65 grounding distances 20 23 14 14 build time 2,681 35 1,355 27 
+
+total graph time 7,747 31 1,752 21 
+
+iterate the entire edge list to find the edge joining a waypoint to its room. The original’s cost therefore scales with the graph while Y GGDRASIL ’s does not, and the gap widens as the scene grows. Y GGDRASIL ’s indexing does the same for spatial queries, answering radius queries 107 × (office) and 87 × (home) faster and nearest-waypoint queries 30 ×
+
+and 25 × faster. The second factor is the removal of the second represen-tation the original must build before it can ask one. DSG cannot answer the queries LP2 needs, so the pipeline re-materializes its graph as a NetworkX copy and rebuilds a KD-tree every iteration from the upstream 3DSG for the radius queries. Building those structures costs 2681 ms per run on the office scene and 1355 ms on the home scene, against 35 ms and 27 ms for Y GGDRASIL . The saving is worth more than the milliseconds: conversion is viable only while the graph stays frozen, and on a deployed robot, where the graph is updated while a downstream task runs, it must be repaid after every update. 
+
+B. OSG: Zero-shot LLM-Guided Object-Search Navigation 
+
+Open Scene Graph (OSG) [16] performs object-goal nav-igation, with an LLM reasoning over a scene graph built progressively as the agent explores and yields the next action. Unlike LP2, OSG builds and queries the graph in the same iteration, which makes it the case where upstream construction and downstream consumption meet inside the control loop. 
+
+a) Setup : We compare the original OSG backend against a vanilla YGGDRASIL backend over 400 episodes, 20 in each of 20 Habitat-simulated HM3D indoor scenes [47], in ground-truth mode where object detection is provided by the simulator’s semantic mesh. As with LP2 we cached the responses of the LLM that OSG queries, 
+
+gpt-5.6-luna [46], keyed by prompt content, so that the two backends stay comparable despite the stochasticity of live feedback. Because the graph state at step n depends on the action taken at step n − 1, correctness here means             
+
+> OSG: flat graph
+> Floor Room Entrance Object
+> contains connects to contains is near
+> YGGDRASIL : layered
+> L3 Floor L2 Place – connects to – Entrance L1 Object L0 entr_phy –is near –obj_phy
+> parent of parent of parent of parent of
+
+Fig. 4: OSG’s flat scene graph (left) and the same scene in Y GGDRASIL ’s layers (right); the is near relation moves down to the shadow nodes in the physical layer. the full sequence of actions and positions matching step by step; across all 400 episodes there was zero divergence, with identical mean success, SPL, and step count. 
+
+b) Structure : OSG keeps its graph in NetworkX, which gives a flat representation designed with undirected and un-weighted edges and whose nodes may carry several relations at once: an entrance node connects to rooms through a 
+
+connects to relation and to objects through is near . Y G-
+
+> GDRASIL
+
+’s structure is stricter, and mapping OSG onto it required one accommodation. Fig. 4 shows the result, a four-layer design of floor, place and entrance, object, and physical layers. Because an Y GGDRASIL edge must join two nodes in the same layer, the is near relation between an entrance and an object cannot be expressed directly; each entrance and object node therefore carries a shadow node in the physical layer, created lazily on first use and nested under its owner, and the relation is held between the two shadow nodes. 
+
+c) Performance : Mean total graph latency falls from 
+
+488 .1 ms to 229 .3 ms and memory from 147.9 MB to 134.5 MB (Table III). The gain concentrates in the read-heavy operations a typed, layered store is built for: retriev-ing nodes by type is 26 .7× faster and checking a node’s type 14 .0×. One operation is slower. Inserting an edge costs 0.49 ×, because Y GGDRASIL ’s edges are primitively directed, so each of OSG’s undirected connects to and is near relations requires two calls into the engine. TABLE III: Performance comparison between OSG and Yggdrasil. 
+
+Operation OSG (ms) Yggdrasil (ms) Result Total graph-update time 488.117 229.312 2.13 ×
+
+Serialize graph to prompt 144.310 20.622 7.00 ×
+
+Get nodes by type 59.451 2.223 26.74 ×
+
+Check node type 39.903 2.860 13.95 ×
+
+Add node 83.763 54.467 1.54 ×
+
+Count instances 158.920 145.510 1.09 ×
+
+Add Edge 1.770 3.630 0.49 ×
+
+Memory 147.9 MB 134.5 MB 9% less 
+
+C. S3DSG: Social 3D Scene Graphs for Human-Aware Rea-soning 
+
+Social 3D Scene Graphs (S3DSG) [48] augment a con-ventional 3DSG with humans and the activities relating them to objects and to one another. The resulting graph answers spatial, activity, and functional queries, and drives a socially-aware motion-planning task in which an identified interaction between two people becomes a cost field the planner must avoid crossing. S3DSG overlays a second, human-centric layer of nodes and activity edges onto an already-populated 3DSG, precisely the kind of layer YGGDRASIL is designed to add without disturbing the ones beneath it (Section III). Its three query categories map onto YGGDRASIL ’s API directly: spatial queries to nearest_nodes 
+
+and nodes_within_radius , activity queries to 
+
+edges_matching and nodes_having , and occlusion estimator with Y GGDRASIL ’s field-of-view query. 
+
+a) Setup : Since the original pipeline already maintains its own spatial indexes, what this case study isolates is Y G-
+
+> GDRASIL
+
+’s layer indexing, measured against a hand-rolled external equivalent. The scene is a reconstructed apartment of 83 object nodes and 84 relation edges. The original keeps it in NetworkX [15] with a Open3D [49] cloud on every node and one SciPy [50] cKDTree per object plus one over the floor, while Y GGDRASIL expresses the same scene as three position-indexed metric layers of one node per point, nested beneath a semantic layer of 80 object nodes carrying the activity edges. Evaluating the cost field issues 2 115 650 
+
+nearest-neighbour queries; the store itself is not under test, since traversing its 84 edges costs 41 μs. Both versions agree on the cost field to within 3.2 × 10 −6.
+
+b) Performance : YGGDRASIL evaluates the cost field in 4936 ms against 6885 ms for the original, a speedup of 
+
+1.39 that holds to within two percent across runs, and it reuses the metric layer it already stores rather than rebuilding the renderable cloud on each evaluation, saving a further 
+
+1343 ms . The layer decomposition accounts for the gap, since both rely on kd-trees. Because Y GGDRASIL ’s metric data is partitioned by layer, one index per layer suffices and a query descends a single tree, whereas the original, whose indexes are keyed by object, must probe one tree per object and reduce the answers to a minimum, so its cost grows with the number of indexed objects while Y GGDRASIL ’s does not. The margin is modest, and deliberately so. S3DSG is the case in which the original already does by hand what YGGDRASIL does internally, maintaining a family of kd-tree indexes over the metric data and keeping them in step with the scene. It is thus close to the best an external, hand-rolled indexing layer can do, and a large speedup was never the outcome to expect. What it shows is that even against that best case, moving the indexes inside the scene graph gains performance rather than costing it, and does so while the application writes and maintains none of the indexing code and the indexes stay live as the graph is updated. VII. C ONCLUSION 
+
+We presented Y GGDRASIL , a layer-first 3D scene graph built from generic nodes, edges, and layers, in which the layer hierarchy is a directed acyclic graph rather than a stack and a typed query interface serves semantic and spatial queries in place, without an intermediate conversion. We in-tegrated it into three published pipelines spanning human tra-jectory prediction, object-goal navigation, and human-aware motion planning, which between them cover downstream-only use, construction and consumption together inside a control loop, and augmentation of a graph that already exists. YGGDRASIL is compatible with the common generation frameworks perception pipelines already rely on, but com-patibility is not optimization. Two gaps remain: chocolate ’s per-room schema was designed by hand, and Y GGDRASIL 
+
+has no concurrency control, since every measurement here is single-threaded. Tuning update and merge paths to the access patterns construction actually produces, inferring schemas automatically, and supporting concurrent readers and writers are our directions for future work. REFERENCES [1] “Yggdrasil: implementation, benchmark, and integration artifacts,” Figshare, 2026, https://github.com/brdsdsu/yggdrasil. [2] C. Cadena, et al. , “Past, present, and future of simultaneous lo-calization and mapping: Toward the robust-perception age,” IEEE Transactions on Robotics , vol. 32, no. 6, pp. 1309–1332, 2016. [3] S. Garg, et al. , “Semantics for robotic mapping, perception and interaction: A survey,” Foundations and Trends in Robotics , vol. 8, no. 1–2, pp. 1–224, 2020. [4] I. Armeni, et al. , “3d scene graph: A structure for unified semantics, 3d space, and camera,” in 2019 IEEE/CVF International Conference on Computer Vision, ICCV 2019, Seoul, Korea (South), October 27 -November 2, 2019 . IEEE, 2019, pp. 5663–5672. [Online]. Available: https://doi.org/10.1109/ICCV.2019.00576 [5] U.-H. Kim, et al. , “3-d scene graph: A sparse and semantic represen-tation of physical environments for intelligent agents,” IEEE Trans. on Cybernetics , 2019. [6] J. Bae, et al. , “A survey on 3d scene graphs: Definition, generation and application,” Robot Intelligence Technology and Applications , 2022. [7] J. Wald, et al. , “Learning 3d semantic scene graphs from 3d indoor reconstructions,” in IEEE Conf. on Computer Vision and Pattern Recognition (CVPR) , 2020. [8] S.-C. Wu, et al. , “Scenegraphfusion: Incremental 3d scene graph prediction from rgb-d sequences,” in IEEE Conf. on Computer Vision and Pattern Recognition (CVPR) , 2021. [9] N. Hughes, Y. Chang, and L. Carlone, “Hydra: A Real-time Spatial Perception System for 3D Scene Graph Construction and Optimiza-tion,” in Proceedings of Robotics: Science and Systems , New York City, NY, USA, June 2022. [10] K. Rana, et al. , “Sayplan: Grounding large language models using 3d scene graphs for scalable robot task planning,” in Proceedings of The 7th Conference on Robot Learning , ser. Proceedings of Machine Learning Research, J. Tan, M. Toussaint, and K. Darvish, Eds., vol. 229. PMLR, 06–09 Nov 2023, pp. 23–72. [Online]. Available: https://proceedings.mlr.press/v229/rana23a.html [11] I. Mahdi, et al. , “Relational semantic reasoning on 3d scene graphs for open world interactive object search,” 2026. [12] X. Zhou, et al. , “Fsr-vln: Fast and slow reasoning for vision-language navigation with hierarchical multi-modal scene graph,” 2025. [13] S. Linok, et al. , “Beyond bare queries: Open-vocabulary object grounding with 3d scene graph,” in IEEE Intl. Conf. on Robotics and Automation (ICRA) , 2025. [14] A. Werby, et al. , “Keysg: Hierarchical keyframe-based 3d scene graphs,” in IEEE Intl. Conf. on Robotics and Automation (ICRA) , 2026. [15] A. A. Hagberg, D. A. Schult, and P. J. Swart, “Exploring network structure, dynamics, and function using NetworkX,” in Proceedings of the 7th Python in Science Conference (SciPy) , G. Varoquaux, T. Vaught, and J. Millman, Eds., Pasadena, CA, USA, 2008, pp. 11–15. [16] J. Loo, Z. Wu, and D. Hsu, “Open scene graphs for open-world object-goal navigation,” The International Journal of Robotics Research ,2025. [17] N. Gorlo, L. Schmid, and L. Carlone, “Long-term human trajectory prediction using 3d dynamic scene graphs,” IEEE Robotics and Automation Letters , 2024. [18] Y. Chang, et al. , “D-lite: Navigation-oriented compression of 3d scene graphs for multi-robot collaboration,” IEEE Robotics and Automation Letters , 2023. [19] A. Ray, et al. , “Structured interfaces for automated reasoning with 3d scene graphs,” 2025. [20] D. Rotondi, et al. , “3d scene graphs: Open challenges and future directions,” 2026. [21] Q. Gu, et al. , “Conceptgraphs: Open-vocabulary 3d scene graphs for perception and planning,” in IEEE International Conference on Robotics and Automation, ICRA 2024, Yokohama, Japan, May 13-17, 2024 . IEEE, 2024, pp. 5021–5028. [Online]. Available: https://doi.org/10.1109/ICRA57147.2024.10610243 [22] A. Rosinol, et al. , “3D Dynamic Scene Graphs: Actionable Spatial Perception with Places, Objects, and Humans,” in Proceedings of Robotics: Science and Systems , Corvalis, Oregon, USA, July 2020. [23] H. Bavle, et al. , “Situational graphs for robot navigation in structured indoor environments,” IEEE Robotics and Automation Letters , 2022. [24] A. Werby, et al. , “Hierarchical open-vocabulary 3d scene graphs for language-grounded robot navigation,” Robotics: Science and Systems (RSS) , 2024. [25] A. Rosinol, et al. , “Kimera: From SLAM to spatial perception with 3d dynamic scene graphs,” Int. J. Robotics Res. , vol. 40, no. 12-14, pp. 1510–1546, 2021. [Online]. Available: https: //doi.org/10.1177/02783649211056674 [26] H. Bavle, et al. , “S-graphs 2.0 – a hierarchical-semantic optimization and loop closure for slam,” IEEE Robotics and Automation Letters ,2025. [27] N. Hughes, et al. , “Foundations of spatial perception for robotics: Hierarchical representations and real-time systems,” Int. J. Robotics Res. , vol. 43, no. 10, pp. 1457–1505, 2024. [Online]. Available: https://doi.org/10.1177/02783649241229725 [28] H. Bavle, et al. , “S-graphs+: Real-time localization and mapping lever-aging hierarchical representations,” IEEE Robotics and Automation Letters , 2023. [29] Y. Deng, et al. , “Opengraph: Open-vocabulary hierarchical 3d graph representation in large-scale outdoor environments,” IEEE Robotics and Automation Letters , 2024. [30] S. Koch, et al. , “Open3dsg: Open-vocabulary 3d scene graphs from point clouds with queryable objects and open-set relationships,” in 
+
+IEEE Conf. on Computer Vision and Pattern Recognition (CVPR) ,2024. [31] E. Bartoli, et al. , “Gesto: Human-centric spatio-temporal memory for reasoning in dynamic scenes,” arXiv preprint arXiv:2608.10886 , 2026. [32] S. Saxena, et al. , “Grapheqa: Using 3d semantic scene graphs for real-time embodied question answering,” in Proceedings of The 9th Conference on Robot Learning , ser. Proceedings of Machine Learning Research, J. Lim, S. Song, and H.-W. Park, Eds., vol. 305. PMLR, 27–30 Sep 2025, pp. 2714–2742. [Online]. Available: https://proceedings.mlr.press/v305/saxena25a.html [33] C. Agia, et al. , “Taskography: Evaluating robot task planning over large 3d scene graphs,” in Conf. on Robot Learning (CoRL) , 2021. [34] Y. Liu, et al. , “Delta: Decomposed efficient long-term robot task planning using large language models,” in IEEE Intl. Conf. on Robotics and Automation (ICRA) , 2025. [35] H. Yin, et al. , “Sg-nav: Online 3d scene graph prompting for llm-based zero-shot object navigation,” Advances in Neural Information Processing Systems (NeurIPS) , 2024. [36] D. Honerkamp, et al. , “Language-grounded dynamic scene graphs for interactive object search with mobile manipulation,” IEEE Robotics and Automation Letters , 2024. [37] D. Maggio, et al. , “Clio: Real-time task-driven open-set 3d scene graphs,” IEEE Robotics Autom. Lett. , vol. 9, no. 10, pp. 8921–8928, 2024. [Online]. Available: https://doi.org/10.1109/LRA.2024.3451395 [38] J. L. Bentley, “Multidimensional binary search trees used for asso-ciative searching,” Communications of the ACM , vol. 18, no. 9, pp. 509–517, 1975. [39] J. H. Friedman, J. L. Bentley, and R. A. Finkel, “An algorithm for finding best matches in logarithmic expected time,” ACM Transactions on Mathematical Software , vol. 3, no. 3, pp. 209–226, 1977. [40] MIT SPARK Lab, “Spark-DSG: A library for dynamic scene graphs,” https://github.com/MIT-SPARK/Spark-DSG, 2022, open-source soft-ware; distributes the uHumans2 office example scene graph. Accessed 2026-09-09. [41] B. Zhou, et al. , “Scene parsing through ADE20K dataset,” in IEEE Conf. on Computer Vision and Pattern Recognition (CVPR) , 2017. [42] R. Mur-Artal and J. D. Tardós, “ORB-SLAM2: An open-source SLAM system for monocular, stereo, and RGB-D cameras,” IEEE Transactions on Robotics , vol. 33, no. 5, pp. 1255–1262, 2017. [43] C. Campos, et al. , “ORB-SLAM3: An accurate open-source library for visual, visual-inertial, and multimap SLAM,” IEEE Transactions on Robotics , vol. 37, no. 6, pp. 1874–1890, 2021. [44] V. K. Viswanathan, et al. , “Spade: Towards scalable path planning architecture on actionable multi-domain 3d scene graphs,” in IEEE/RSJ Intl. Conf. on Intelligent Robots and Systems (IROS) , 2025. [45] S. Ejaz, et al. , “Situationally-aware path planning exploiting 3d scene graphs,” 2025. [46] OpenAI, “GPT-5.6: Frontier intelligence that scales with your ambition,” https://openai.com/index/gpt-5-6/, 2026, model 
+
+gpt-5.6-luna ; accessed 2026-08-28. [47] S. K. Ramakrishnan, et al. , “Habitat-matterport 3d dataset (HM3d): 1000 large-scale 3d environments for embodied AI,” in Thirty-fifth Conference on Neural Information Processing Systems Datasets and Benchmarks Track , 2021. [Online]. Available: https://arxiv.org/abs/ 2109.08238 [48] E. Bartoli, et al. , “Social 3d scene graphs: Modeling human ac-tions and relations for interactive service robots,” arXiv preprint arXiv:2509.24966 , 2025, accepted at IROS 2026. [49] Q.-Y. Zhou, J. Park, and V. Koltun, “Open3d: A modern library for 3d data processing,” 2018. [Online]. Available: https: //arxiv.org/abs/1801.09847 [50] P. Virtanen, et al. , “SciPy 1.0: Fundamental algorithms for scientific computing in Python,” Nature Methods , vol. 17, no. 3, pp. 261–272, 2020. [Online]. Available: https://doi.org/10.1038/s41592-019-0686-2

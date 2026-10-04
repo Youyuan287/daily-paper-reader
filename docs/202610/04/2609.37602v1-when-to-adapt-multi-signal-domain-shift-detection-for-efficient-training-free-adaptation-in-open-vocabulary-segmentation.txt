@@ -1,0 +1,279 @@
+Title: When to Adapt: Multi-Signal Domain Shift Detection for Efficient Training-Free Adaptation in Open-Vocabulary Segmentation
+
+URL Source: https://arxiv.org/pdf/2609.37602v1
+
+Published Time: Wed, 30 Sep 2026 02:18:12 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# When to Adapt: Multi-Signal Domain Shift Detection for Efficient Training-Free Adaptation in Open-Vocabulary Segmentation 
+
+Michele Antonazzi ∗† , Alejandra C. Hernandez ∗‡ , Jos´ e Araujo ‡, Olov Andersson †, Patric Jensfelt †
+
+Abstract — Robust and reliable perception is essential for autonomous robots operating in real-world environments, par-ticularly in long-term missions where environmental conditions may change significantly over time. Although recent advances in Visual Foundation Models (VFMs) have improved open-vocabulary semantic segmentation, these models can still suffer from domain shift, which can significantly degrade performance if they are not adapted to the current environment. Training-free domain adaptation is a relevant paradigm for adaptation, consisting of adjusting the model online using lightweight adapters. Recent approaches apply this on a per-frame basis, which is impractical for deployments on resource-constrained robotic hardware. To tackle this, we propose a multi-signal domain shift detection method for training-free continual test-time adaptation (TF-CTTA) in open-vocabulary segmentation. Our method leverages temporal coherence across consecutive frames by monitoring and combining complementary aspects of domain shift (visual change, adapter mismatch, and semantic drift) to trigger adaptation only when needed. We validate our approach on a benchmark including indoor and outdoor envi-ronments and using real robotic data. We demonstrate that our approach maintains segmentation accuracy while substantially reducing adaptations, making training-free adaptation practical and feasible for long-term, real-world robotic deployments. 
+
+I. I NTRODUCTION 
+
+For autonomous robots operating in real-world environ-ments, robust perception is essential, especially during long-term missions such as last-mile delivery, service robotics, or mobile assistance [1]. In these scenarios, a robot must navigate and understand scenes reliably across multiple and changing environments (e.g., alternating indoor and out-door scenarios, new buildings, and varying illumination and weather). Such variability generates the well-known domain shift , which causes performance degradation if the model is not adapted to the current operational environment [2]. Recent advances in Visual Foundation Models (VFMs), particularly for open-vocabulary semantic segmentation [3], have significantly improved robustness and generalization in out-of-distribution settings. Despite these zero-shot capabili-ties, VFMs can still suffer notable performance degradation under domain shift. Changes in scene type, appearance, lighting, or layout can lead to a noticeable decrease in the model’s accuracy, making adaptation necessary during deployment [4].         
+
+> ∗Authors that contributed equally (randomly ordered).
+> †EECS and Digital Futures, KTH Royal Institute of Technology, Stock-holm, Sweden. Corresponding author’s e-mail: micant@kth.se .
+> ‡Ericsson Research, Ericsson AB, Stockholm, Sweden. Email:
+> name.surname@ericsson.com .This work was partially supported by the Wallenberg AI, Autonomous Systems and Software Program (WASP) funded by the Knut and Alice Wallenberg Foundation.
+> Fig. 1. Multi-signal domain shift detection for training-free continual test-time adaptation.
+
+Although domain adaptation for semantic segmentation has been widely explored, a core challenge still remains: how to adapt models online without introducing computational burden (e.g., operational cost or system complexity) while maintaining task performance. A potential solution is to rely on Continual Test-Time Adaptation (CTTA) approaches [5], [6], consisting of fine-tuning the model online after each inference step. However, this paradigm can be impracti-cal in real-world robotic deployments because online fine-tuning via backpropagation introduces computational over-head, latency, and memory demands on resource-constrained devices. A promising alternative is training-free adaptation in which the model is adjusted at inference time without gradient-based updates. This paradigm has recently been introduced by SemLA [7], which proposes to dynamically fuse low-rank adapters into the model at test time, based on their proximity to the target domain. In this paper, we analyze SemLA for real-world robotic deployments, finding important practical limitations. The method requires per-frame adapters retrieval and model up-dates, thus increasing energy consumption and introducing substantial runtime overhead, affecting real-time operation. Furthermore, evaluations have mostly focused on general-arXiv:2609.37602v1 [cs.RO] 29 Sep 2026 purpose datasets, leaving evaluation on sequential robot data largely unexplored. To avoid per-frame overhead, we propose a multi-signal domain-shift detector for identifying significant visual and semantic changes in image streams to trigger adaptation only when needed. While previous approaches relying on a single indicator (prediction entropy [8] or feature statistics [9]) tend to saturate quickly and miss gradual changes, our approach detects shifts by monitoring three complementary aspects: (i) visual change, which captures abrupt scene transitions, (ii) adapter mismatch, which determines if the loaded adapters become inadequate for the current domain, and (iii) semantic drift, which identifies the appearance of novel semantic content. These signals are combined through a hierarchical fusion strategy that triggers adaptation only when multiple signals detect a domain shift. Our framework, illustrated in Fig. 1, integrates domain shift detection into a training-free continual test-time adap-tation (TF-CTTA) pipeline for open-vocabulary segmentation used by mobile robots operating across indoor and outdoor environments. Rather than swapping adapters every frame like SemLA [7], our solution exploits temporal coherence across consecutive frames, triggering adaptation only when a domain shift is detected. This reduces adaptation events by two orders of magnitude while maintaining segmentation accuracy, making training-free adaptation practical for long-term robotic deployment. In summary, our contributions are as follows:  
+
+> •
+
+We analyze the performance of SemLA [7] on real-world robotic sequences, with a focus on indoor and alternating indoor-outdoor scenarios, identifying practi-cal limitations of per-frame adaptation.  
+
+> •
+
+We introduce a domain shift detector that combines three complementary signals to guide the adaptation, reducing the overhead caused by per-frame adaptation while maintaining semantic segmentation quality.  
+
+> •
+
+We propose a continual test-time adaptation benchmark tailored to robotics, capturing alternating and temporally correlated domain shifts 1. Using this, we provide a comprehensive evaluation comparing our method for TF-CTTA with relevant baselines.  
+
+> •
+
+We demonstrate our approach on real-world sequences acquired with a robotic sensor across indoor and outdoor environments and benchmark inference on NVIDIA Jetson hardware. II. R ELATED WORK 
+
+Continual test-time adaptation (CTTA) is a challenging task that focuses on enabling models to adapt in real-time to dynamic, changing environments, without access to the source data. This task was initially introduced in the seminal work of [6], where a neural network is fine-tuned online with the supervision of a teacher, which is updated as an exponen-tial moving average of the student’s weights. EcoTTA [10] improves the teacher-student framework using lightweight 
+
+> 1The code and the benchmark will be released upon publication.
+
+meta networks that are attached to the original frozen model, while ViDA [11] leverages visual domain adapters added to a source-pretrained model. Moving toward more realistic deployment scenarios, [12] studies multi-modality test-time adaptation for semantic segmentation, leveraging multiple sensing modalities to improve robustness under domain shifts and highlighting the relevance of methods tailored for robotic perception. Despite attractive, the aforementioned solutions present important limitations for real-world deployment, in terms of both inference speed and memory consumption, as they require backpropagation and weight sharing for EMA accumulations between two large architectures. 
+
+Training-free continual test-time adaptation (TF-CTTA) is a different paradigm that avoids expensive pa-rameter updates by combining pretrained models relevant to the current domain, avoiding any additional training. [13] proposes a model merging technique, including pa-rameter and buffer merging for multi-target domain adap-tation tasks, applicable to any single-target domain adap-tation model. Most closely related to our work, [7] intro-duces SemLA, a training-free test-time framework for open-vocabulary segmentation that leverages a library of LoRA-based adapters indexed with Contrastive Language-Image Pretraining (CLIP) embeddings [14]. The CLIP embeddings guide adapter selection, and subsequently, the most relevant adapters are merged based on their proximity to the target domain in the embedding space. Despite being intriguing, updating the model every frame strongly compromises real-time inference, remaining not practical for real-world robotic deployments. 
+
+Domain shift detection represents a valuable technique for reducing the model updates by identifying substantial changes in the robot’s perception stream that can cause performance degradation. In continual test-time adaptation, a natural solution is to leverage the discrepancy between the teacher-student predictions. The works of [5] and [15] compare the consistency loss between teacher and student accumulated with EMA with a variable threshold. [16] models domain shift directions via Concept Activation Vec-tors (CAVs) and incorporates domain shift and class shift controllers to prevent category drifting. Other approaches detect domain shifts by performing uncertainty estimation using a model trained on the source domain. In ViDA [11], each sample is processed multiple times using dropout in the linear layers, and uncertainty is calculated as the variance across the outputs. Similarly, [17] computes a threshold using an EMA by aggregating the maximum confidence values for each pixel calculated using multiple versions of the same sample obtained with data augmentation. The approaches of [18] and [19] estimate uncertainty using the average class-wise confidence of a source model accumulated in a sliding window with athreshold to identify domain changes. Teacher-student and source-model uncertainty methods are impractical in our scenario, as deploying an additional segmentation model or running multiple forward passes for uncertainty estimation significantly compromises computational and memory effi-ciency. Domain shifts can also be detected by monitoring features or prediction statistics directly, with no secondary model. [9] proposes a domain shift signal based on the cosine distance between mean feature representations of consecutive batches from the source model, triggering when the signal exceeds a multiple of its moving average. More recently, [8] targets resource-constrained embodied devices, monitor-ing prediction entropy via EMA and adapting only when en-tropy deviates past a threshold. Despite being more efficient, these methods are not robust enough for long-term sequences of robotic perceptions. Relying on a single indicator, they tend to saturate quickly as they cannot differentiate between types of domain shift. Our method, instead, combines mul-tiple complementary signals for capturing different types of shifts and, relying on CLIP features, is specifically designed for the training-free domain adaptation framework of [7]. 
+
+Positioning our work. Our work brings training-free con-tinual test-time adaptation (TF-CTTA) to real-world robotic deployments. Considering the sequential image streams per-ceived by robots in the wild, we propose a multi-signal domain shift detector that leverages temporal coherence to trigger adaptation only when a domain shift is detected, im-proving efficiency while maintaining segmentation accuracy. III. P RELIMINARIES 
+
+A. Problem formulation 
+
+In this paper, we consider a robot performing open-vocabulary semantic segmentation from images. More for-mally, this task can be defined as Y ∗ = fθp (I), where a neural network f correlates an image I to a dense mask 
+
+Y ∗, where each pixel is assigned to an object category. The network’s parameters θp are pre-trained using a labeled 
+
+source dataset P = ( Ip, Yp, Op) containing a list of images (Ip) and their corresponding ground truth masks ( Yp), where object categories come from Op. Inside the same mission, a robot needs to operate in a sequence of target environments 
+
+T = [ Et | t = 1 , . . . , T ] that can be both indoor or outdoor. Inside each environment Et = {It, Ot}, the robot is tasked to segment a sequence of RGB images It using a specific set of object categories Ot. Note that we are working in open-vocabulary settings, so the classes used for initializing the models and those required at deployment time may differ. Training-free continual test-time adaptation (TF-CTTA) aims to adapt the neural network fθp , initially pre-trained on the source dataset P, to a sequence of target datasets T ,thus obtaining a new model fθt with improved performance in the domains seen by the robot during deployment. This process is constrained by three main challenges: (i) ground-truth labels of the target data are unavailable, (ii) the model must evolve online using the stream of images in T , and (iii) the adaptation must be training-free, meaning that fine-tuning using backpropagation is not allowed. Fig. 2 presents a general overview of the approach we propose for enabling training-free continual test-time adapta-tion in mobile robots. The framework builds on the training-free approach of SemLA [7], summarized in Section III-B. The core of our contribution, detailed in Section IV-A, is a domain shift detection method based on CLIP features to identify when adaptation is needed. By preventing unnecessary adaptation, our method reduces the number of adaptations while preserving segmentation performance, making the approach more efficient and practical for long-term, real-world deployments. 
+
+B. Training-free adaptation via adapters merging 
+
+Our domain shift detection method adapts the training-free adaptation proposed by SemLA [7] to online robotic deployment. SemLA encodes domain-specific knowledge in adapters and dynamically merges the most relevant ones based on proximity in CLIP’s [14] embedding space. Let us consider a pre-trained model fθp and a set S =
+
+{Ss | Ss = {Is, Ys, Os}} Ss=1 containing S source datasets. SemLA is a library of adapters formally described as 
+
+L = {(Cs, θ s) | s = 1 , . . . , S },
+
+where Cs is the descriptor for the dataset Ss (i.e., the average of the CLIP features from the images Is), while θs denotes the weights of a low-rank adapter [20] trained on Ss. At deployment time, for each environment Et ∈ T and each image Ii ∈ It, SemLA first computes the CLIP embedding 
+
+Fi for the test image. Then, this embedding is used to retrieve the top-K most relevant adapters from the library L, namely those adapters whose centroids are closest to the image’s embedding in terms of Euclidean distance. The distances between the image and the adapters descriptors are then normalized using a softmax function and used to scale the adapters weights, that are then merged and attached to the pre-trained model before inference on Ii.IV. M ULTI -S IGNAL DOMAIN SHIFT DETECTION 
+
+The main limitation of applying SemLA on mobile robots is its per-frame adaptation. We observed that this requirement significantly compromises computational efficiency, as the model needs to be dynamically updated every iteration. Since robotic perceptions operating in an environment are highly correlated, we overcome this limitation by proposing a multi-signal domain shift detection to trigger adaptation only when needed. Specifically, our method monitors three signals capturing complementary aspects of domain shift: the visual change ( S1), whether the loaded adapters still match the current domain ( S2), and the drift in the semantic objects appearing in the stream ( S3). The signals are fused hierarchically to trigger adaptation only when substantial evi-dence is detected across them, thus avoiding costly per-frame adaptation and making training-free adaptation practically deployable in robotic hardware. 
+
+A. Visual change signal ( S1)
+
+The visual change signal S1 captures global appearance changes by monitoring how CLIP embeddings of incoming frames diverge from the current domain representation. It answers the question: has the environment changed visually? Fig. 2. General overview of the framework for training-free continual test-time adaptation, incorporating SemLA [7] and our domain shift detector. 
+
+Consider the ordered stream of images contained in all the target environments of T , defined as IT , with length 
+
+|IT | = PTt=1 |It| equal to the sum of the number of images of all environments Et ∈ T .At each frame i, we use CLIP to compute a feature embedding Fi for the image Ii and measure its proximity to a feature memory Fi−1, which encodes the visual appearance of the image stream up to step i − 1. The memory is updated using an exponential moving average (EMA) of the incoming features until the latest step i − 1, formally 
+
+Fi−1 = (1 − α)Fi−2 + αF i−1, where α = 10 −2. The proximity score between the memory Fi−1 and the current feature Fi is calculated as Pi = 1 − cos (Fi−1, F i), where cos (·, ·) is the cosine similarity. The signal works by tracking the temporal evolution of 
+
+Pi over time: an increasing trend suggests a domain change, while a decreasing trend indicates a stable domain. Let P1...i 
+
+denote the proximity scores from the first to the current frame i. At first, we apply a low-pass filter to obtain a smoothed signal, formally ˜P1...i = G(σ,w ) ∗ P1...i , where 
+
+(∗) is the convolution operation and G(σ,w ) is a Gaussian kernel with standard deviation σ = 6 and amplitude w. Then, at the current frame i, we compute the derivative of ˜Pw...i 
+
+considering only the last i − w + 1 frames. It is calculated as Di = S(w) ∗ ˜Pw...i , where S(w) is a Sobel kernel applied in window w. Since single derivatives are noisy, the trend is encoded in a memory variable D, which accumulates derivatives using EMA (with α = 10 −2). The trend of the signal is monitored using the derivative memory Di−1 until the last frame i − 1. When the domain is changing, two conditions must be satisfied. First, the memory must be positive ( Di−1 > 0), indicating an increasing trend. Secondly, the current derivative must substantially exceed the memory, i.e., Di > ρ Di−1, where ρ is a sensitivity hyperparameter (fixed to ρ = 10 ). Instead of triggering the signal immediately, we wait until the derivative memory becomes negative ( Di−1 < 0), indicating that the signal trend is decreasing. The visual change S1 ∈ { 0, 1} is then a binary signal. 
+
+B. Adapter mismatch signal ( S2)
+
+A visual change does not necessarily mean that the active adapters are inadequate: a scene may change in appearance while remaining within the adapters’ competence. Con-versely, gradual shifts in layout or viewpoint can cause an adapter mismatch without any detectable visual change. S2
+
+asks: do the active adapters still match the current domain? To tackle this, we introduce an adapter mismatch signal that monitors how far the current domain has moved from the active adapters’ competence regions. This score is formally computed as δi = min Kk=1 1 − cos ( ¯Fi, C k), i.e., the lowest inverse cosine distance score between the representation of the current domain ¯F (the average of the CLIP features from the last w frames) and the top-K loaded adapters. The rationale is that if δi is low, then there is at least one adapter well aligned with the current domain, while it increases only when all the adapters become unsuitable. We record the 
+
+δbase = δi at the first frame after each adaptation and we define S2(i) = δi 
+
+> δbase
+
+> τ 2. When S2(i) > τ 2, the adapters no longer cover the current domain as well as they did right after being loaded. Normalizing by δbase makes τ2 independent of absolute embedding distances, so the same threshold works across environments. 
+
+C. Semantic drift dignal ( S3)
+
+S1 and S2 operate on CLIP image embeddings and ignore the model’s predictions. Two visually distinct scenes may share the same semantic composition, while two visually similar ones may differ in object content. S3 answers a different question: has the semantic content changed relative to what the active adapters were trained for? For each frame i, we compute a semantic descriptor 
+
+si = norm 2(c⊤ 
+
+> i
+
+E), where norm 2(·) is L2-normalization, 
+
+ci ∈ R|O| is the vector of normalized pixel frequencies for each object class in O for the prediction i, while 
+
+E ∈ R|O|× d is the matrix of pre-computed L2-normalized CLIP text embeddings for the object categories O (d is the embedding dimension). We maintain a memory bank 
+
+M = {(sm, Om)}Mm=1 storing the semantic context of M
+
+adaptation events (we fix M = 50 ). Each entry consists of: (i) a semantic descriptor sm computed as the mean of the Ws
+
+semantic scores after adaptation, and (ii) a class set Om, the union of the kc most frequent predicted classes from each frame over Ws. Aggregating a few frames after adaptation improves stability. We set Ws = kc = 5 .The signal combines two sub-signals. Embedding drift 
+
+demb (i) measures how far the current content is from relevant past contexts. Given ¯si as the mean of the last Ws semantic scores, 
+
+demb (i) = 1
+
+|N (¯ si,M)|
+
+X 
+
+> sj∈N (¯ si,M)
+
+
+
+1 − cos  ¯si, sj 
+
+,
+
+where N(¯ si,M) denotes the J-nearest memory entries. Using 
+
+J-nearest neighbors rather than the global minimum prevents saturation in long sequences. Class novelty dnov (i) detects object categories absent from relevant past contexts. Let Oi be the union of the top-kc
+
+predicted classes across the current window: 
+
+dnov (i) = Oi \ {O j |(sj , Oj ) ∈ N (¯ si,M)}
+
+|O i| .
+
+The final semantic drift signal combines both: S3(i) = min 
+
+
+
+1, 12
+
+ demb (i)+ dnov (i)
+
+. When S3 > τ 3, the semantic content has diverged enough from known contexts, indicating that the adapters are likely inadequate. 
+
+D. Hierarchical Fusion 
+
+The three aforementioned signals are combined in a hier-archical logic defined as: 
+
+H(S1, S 2, S 3) = 
+
+((S2 > τ 2) ∨ (S3 > τ 3) if S1 = 1 (S2 > τ 2) ∧ (S3 > τ 3) if S1 = 0 
+
+The rationale behind this formulation is that S1 is binary and highly sensitive, as minor variations in the CLIP embeddings immediately activate the signal (e.g., a person approaching the camera). To tackle this, when S1 fires, a confirmation from at least another signal is required. Conversely, when it is silent (no abrupt visual change), both S2 and S3 must agree. Upon triggering, we retrieve the top-K adapters using the mean CLIP embeddings over the last w frames, which is more robust than SemLA’s single-frame descriptor. V. E XPERIMENTAL EVALUATION 
+
+A. Experimental setup and benchmark design 
+
+To evaluate our TF-CTTA approach in open-vocabulary semantic segmentation under domain shift, we design a benchmark that combines a variety of widely used indoor and outdoor datasets. The benchmark covers diverse scene types, label sets, and environmental changes (e.g., weather condi-tions) to better reflect long-term robotic perception under evolving domain shifts. In addition, we perform evaluation on real-world robotic data. 
+
+Datasets. Our benchmark is constructed from two indoor and two outdoor datasets. We use Scannet [21] and Scannet++ [22], two large-scale indoor scene understanding datasets with diverse sensing modalities in multiple environment types, such as 
+
+apartment , office , classroom , bedroom , etc. As in previous works [23], [24], each environment is treated as a separate domain, resulting in 707 and 906 unique domains for Scannet and Scannet++, respectively. For evaluation, we use the NYU40 label space [25] for Scannet and the top-100 
+
+classes for Scannet++. For outdoor contexts, we use ACDC [26] and MUSES [27], two popular driving datasets where domains are represented by different weather and illumination conditions. More precisely, ACDC defines 5 domains: sun ,
+
+night , rain , fog , and snow . MUSES extends this to 8 domains: 4 weather conditions ( clear , rain , fog , snow )in 2 different light conditions ( day , night ). Both datasets are evaluated using their 19 standard object categories. 
+
+Implementation details. We use SED [3] as the base model for open-vocabulary semantic segmentation. Following [7], we attach a LoRA [20] adapter to each linear layer of the model (except the text encoder), training one adapter per domain (1626 total adapters, ∼10 MB each). Each adapter is trained until convergence. Since Scannet++ provides data from two hardware configurations (iPhone and DSLR cam-era), we train adapters using only iPhone data. 
+
+Evaluation protocol and metrics. To validate our approach, we propose a benchmark in which the model is tested through a sequence of domains, reflecting our continual test-time scenario described in Section III-A. We define a sequence T alternating 16 domains Et ran-domly chosen from the 4 indoor/outdoor datasets. We com-pose a new label space containing all the object categories needed by the 4 datasets (removing repetitions). This reflects a real-world deployment where the model is prompted with all the objects a robot can find while operating. Inside the sequence T , we evaluate in a leave-one-out fashion: when running in Et, the corresponding adapter trained in Et is discarded, so the model is always tested on unseen scenes. This is a common setup in domain adaptation [23], [24] where each environment is considered a different domain. To ensure fairness, the evaluation is repeated over 50 randomly sampled sequences. Segmentation accuracy is computed using mIoU, while efficiency is measured considering, for each domain, how often the adaptation is triggered (N A). Minimizing this indicator directly improves inference speed as the adaptation cost is avoided. 
+
+Hyper-parameters. The parameters of the signals intro-duced in Section IV are set to w = 21 , τ2 = 2 .0, τ3 = 0 .15 ,and J = 10 , and remain fixed across all datasets. 
+
+Comparative methods. To evaluate our approach for domain shift detection in TF-CTTA, we compare with the following strategies for triggering adaptation:  
+
+> •
+
+Zero-shot: the base model SED [3] without adaptation. TABLE I PERFORMANCE COMPARISON IN TRAINING -FREE CONTINUAL TEST -TIME ADAPTATION SETTINGS                                                                                                                                                                                                                                                         
+
+> t−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−→
+> Test Scannet →ACDC Scannet++ →ACDC Scannet →MUSES Scannet++ →MUSES All Condition EI1EI2EI3EO4EI5EI6EI7EO8EI9EI10 EI11 EO12 EI13 EI14 EI15 EO16 Mean
+> Zero-shot mIoU 39.0 39.3 39.9 43.1 37.9 36.8 36.3 43.8 38.5 39.0 38.7 35.6 37.5 37.7 36.4 37.6 38.6
+> NA00000000000000000Entropy [8] mIoU 44.6 43.4 41.5 42.0 36.4 35.0 35.0 42.3 38.6 38.3 39.9 33.4 36.7 35.7 36.3 35.4 38.4
+> NA21100000000000000.3 DSS [9] mIoU 44.8 42.6 40.8 48.5 40.1 37.5 37.1 50.7 42.2 43.2 41.5 41.7 40.0 37.2 38.0 43.5 41.8
+> NA10011001100110010.5 Periodic mIoU 45.2 44.7 43.3 50.6 42.2 40.8 40.6 51.0 42.7 45.6 44.2 42.5 42.8 41.2 41.3 43.5 43.9
+> NA33346684223277724.3 Multi-signal (ours) mIoU 45.6 46.3 43.0 52.1 43.2 41.2 41.9 52.6 44.0 45.1 44.8 44.6 43.9 41.7 40.8 45.6 44.8
+> NA43337672323166613.9 Per-frame [7] mIoU 46.1 47.6 45.3 53.4 44.0 42.1 42.3 54.1 45.9 47.4 46.0 47.1 44.5 42.4 42.6 48.7 46.2
+> NA294 325 350 520 761 773 964 488 302 279 312 185 840 886 807 202 518 Results are averaged over 50 sequences of environments, where EItand EOtrefer to indoor and outdoor scenes randomly chosen in the considered datasets. The best and second best mIoU performance are evaluated without considering per-frame because of its inefficiency.
+> •
+
+Entropy [8]: adapts when the exponential moving av-erage of the prediction entropy deviates from a post-adaptation baseline beyond a threshold.  
+
+> •
+
+DSS [9]: triggers adaptation when a domain shift signal (cosine distance between mean feature representations of consecutive batches of images) exceeds a multiple of its moving average. We keep the threshold of the original paper but lower the batch size to 50 frames to make the method more reactive.  
+
+> •
+
+Periodic: adaptation is triggered every ∆f = 120 
+
+frames, tuned to match the average number of domain changes (N A) found by our method.  
+
+> •
+
+SemLA [7]: the adaptation process is triggered at each frame, with no mechanisms for domain shift detection. 
+
+B. Results on training-free continual adaptation 
+
+Table I reports the results of our method and the baselines tested in a continual test-time manner. Overall, our method achieves segmentation accuracy (mIoU) close to the SemLA approach that, by performing a per-frame adaptation, repre-sents a performance plateau. At the same time, our approach is substantially more efficient in terms of the number of triggered adaptations (N A). With only a marginal drop of 1.4 mIoU points compared to SemLA, our method triggers adaptation only 0.8% of the time. Compared to all these baselines, our method achieves the best performance in terms of segmentation accuracy in the majority of the splits (13 out of 16), except for EI3, EI10 ,and EI15 , in which Periodic leads by a margin of 0.3–0.5 mIoU. This demonstrates that our approach is capable of identifying domain shifts in a stream of robotic sensor data for effectively triggering adaptation. Notably, our method triggers roughly the same number of adaptations as Periodic but achieves higher segmentation accuracy, as it fires at actual domain transitions instead of fixed intervals. This confirms that when to adapt is as important as how often. It is also important to specify that this is an unrealistic baseline, as the frequency for adaptation has been set to mimic the efficiency reached by our method in this specific benchmark. 
+
+TABLE II PERFORMANCE IN OUT -OF -DISTRIBUTION SETTINGS 
+
+t −−−−−−−−−−−−−−−−−−→
+
+Test Scannet++ → ACDC All Condition EI1 EI2 EI3 EO4 Mean 
+
+Zero-shot mIoU 33.6 36.0 34.0 43.0 36.6 
+
+NA 0 0 0 0 0Multi-signal (ours) mIoU 36.8 38.9 36.2 51.9 41.0 
+
+NA 5 3 3 2 3.2 Per-frame [7] mIoU 36.9 39.4 36.2 53.1 41.4 
+
+NA 1084 1066 1202 488 960 Results are averaged over 50 sequences, where EIt and EOt refer to indoor and outdoor scenes. 
+
+The results also demonstrate a substantial improvement of our method over the baselines for domain shift detection, which show poor performance on long-term sequences of robotic perception. Specifically, Entropy [8] triggers adapta-tion a few times at the beginning but saturates quickly. This is because entropy is not a reliable signal in a training-free adaptation setting: since there is no online fine-tuning, the model does not progressively gain confidence on the current data, and a single peak in entropy can prevent subsequent adaptation. In contrast, DSS [9] identifies clear domain shifts, such as transitions from indoor to outdoor environments and vice versa, but it completely misses smaller domain shifts occurring within the same environment type, which our method captures by combining multiple signals. We perform an additional evaluation in out-of-distribution settings, namely when testing involves a camera model different from those used to train the adapters. This reflects real-world robotic deployment, where the robot’s camera often differs from the one used during training. We set up a library of adapters trained on Scannet and Scannet++ with iPhone data, with MUSES as the only outdoor dataset, and test them on Scannet++ using DSLR data (rectified images from a fisheye camera), and on ACDC for outdoor scenes. The results, shown in Table II, first confirm that training-free adaptation remains beneficial in out-of-distribution deploy-ments (+4.4 mIoU over zero-shot). Furthermore, our method achieves performance comparable to per-frame adaptation, Fig. 3. Our multi-signal domain shift detector on a real-world sequence from a robot sensor (Odin) on our university campus, covering indoor and outdoor environments (2735 frames, 12 confirmed adaptations out of 42 S1 activations). Each image pair covers consecutive adaptation events: the first frame is where adaptation is triggered, the second is from the stable period before the next trigger, showing that the domain remains consistent in between. 
+
+with a drop of only 0.4 mIoU, while triggering adaptation for a small fraction of the time (3.2 vs 960). 
+
+C. Signal analysis 
+
+Fig. 4 shows the accuracy trade-off of individual signals and their combinations. Performance is evaluated as above, averaging over 50 sequences composed of 8 domains in-stead of 16. Individually, S1 and S3 detect shifts frequently (NA = 10 .8 and 12.4, mIoU 44.9 and 45.3), while S2 barely triggers ( NA = 1 , mIoU 43.2), as adapter mismatch builds gradually and needs corroboration from the other signals. Pairwise combinations expose the role of each signal and how they complement one another. S1 + S2 is the most conservative combination ( NA = 1, mIoU 42.9), and is dominated by S2 alone, without S3 the gradual semantic drift is never caught. S1 + S3 triggers more often ( NA =3.1) but obtains only a marginal improvement (mIoU 43.5). 
+
+S2 + S3 achieves the highest mIoU (45.5) but over-triggers (NA = 14 .4) since visual change is not considered. Our full system achieves the best accuracy-to-adaptation trade-off ( NA = 4.1, mIoU 44.7), staying within 1.3 mIoU of per-frame adaptation (46.0) while triggering 3.5 × fewer adaptations than S2 + S3. This confirms that the signals are individually sensitive but jointly selective, discarding spurious triggers while preserving detection coverage. 
+
+D. Real-World Deployment 
+
+We profile the pipeline on an NVIDIA Jetson AGX Orin (32GB, NVMe SSD) mounted on our Spot robot, com-paring per-frame adaptation (SemLA) against our triggered adaptation. Both are tested at two power levels (60W and 30W) and two model sizes to reflect different deployment scenarios. The image size is set to 224 ×224 and 384 ×384 for CLIP and SED, respectively. Table III reports the per-component latency: domain navigation computed using CLIP (Domain nav.), the inference with the segmentation model (Seg. model), and adaptation cost (Adapt. cost). The do-main shift signals introduce no additional model inference,   
+
+> Fig. 4. Trade-off between segmentation accuracy and number of adapta-tions, averaged over 50 sequences, counting 8 domains each. For each point, we report the signals involved and the values of mIoU and NA.
+
+operating on embeddings and predictions already available in the pipeline. The results clearly show that adaptation is the bottleneck. While inference time can be reduced using smaller backbones, the adaptation cost is harder to cut as it is bounded by weight loading and merging. Even with our optimized adapter loading procedure compared to the original implementation [7], which directly swaps adapters without creating new layers for storing them, each adaptation still takes on average 550ms at full power and 700ms at low power, more than CLIP and SED inference combined (except for the configuration with large models and low power). As a result, per-frame adaptation cuts throughput by 1.6–3.3 ×, i.e., from 2.6 to 1.1 FPS at full power and from 0.8 to 0.5 FPS at low power with the large model. Since this cost is largely architecture-independent, minimizing the number of adaptations is a necessary condition for real-time deployment: with our triggered adaptation and the small model, the pipeline reaches 4.2 FPS at full power (3.2 × faster compared to the per-frame). We deploy our method on a real-world sequence captured TABLE III LATENCY OF THE PER -FRAME VS . OURS ADAPTATIONS (N A = 4 )                      
+
+> Power mode Models dim. Domain nav. Seg. model Adapt. cost FPS (per-frame) FPS (N A= 4 )High Large 150ms 230ms 550ms 1.1 2.6
+> Small 90ms 140ms 550ms 1.3 4.2
+> Low Large 350ms 840ms 700ms 0.5 0.8
+> Small 110ms 490ms 700ms 0.7 1.7
+> Performance evaluated on a Jetson AGX Orin using two power modalities: 60W (High) and 30W (Low).
+
+using the Odin sensor [28] while navigating indoor/outdoor in our university campus. The adapter library is trained on the benchmark datasets, and all signal parameters remain identical to the benchmark experiments, except τ2 = 1 .5
+
+(lowered from 2.0), as the Odin image embeddings lie further from all adapters, raising δbase so that the adapter mismatch signal never triggers at the default value. The camera captures at 10 FPS, but as the pipeline throughput on Jetson is 4.2 FPS (Table III), we subsample the stream by 2, processing 2735 frames to simulate real-time operation. Fig. 3 shows S1 and the adaptation events over the full sequence. S1 alone triggers 42 times (red dashed), but the hierarchical fusion confirms only 12 (green), rejecting 71% 
+
+of S1 activations as false positives during stable periods. S3
+
+(semantic drift) confirms most triggers, while S2 (adapter mismatch) confirms them when the active adapters become inadequate for the current scene. The confirmed adaptations correspond to visually distinct domain transitions: corridor changes, indoor-to-outdoor passages, and room type shifts (office, cinema, and laboratory). On the Jetson hardware, 12 adaptations add only 7s of overhead compared to 25 minutes under per-frame adaptation. This experiment validates that the detector generalizes to unseen environments and a dif-ferent sensor with a single parameter change, complementing the quantitative out-of-distribution evaluation in Table II, whose test images are of the same type as the Odin ones (rectified from a fisheye camera). VI. C ONCLUSIONS 
+
+In this paper, we propose a pipeline for training-free do-main adaptation with a multi-signal domain shift detector to trigger adaptation only when needed, substantially improving efficiency (3.3 × FPS) while maintaining accuracy. In future work, we plan to investigate new strategies for indexing and merging adapters to improve segmentation accuracy and further reduce adaptation cost. REFERENCES [1] L. Kunze, N. Hawes, T. Duckett, M. Hanheide, and T. Krajn´ ık, “Artificial intelligence for long-term robot autonomy: A survey,” IEEE ROBOT AUTOM LETT , vol. 3, no. 4, pp. 4023–4030, 2018. [2] M. Schwonberg, J. Niemeijer, J.-A. Term¨ ohlen, J. P. sch¨ afer, N. M. Schmidt, H. Gottschalk, and T. Fingscheidt, “Survey on unsupervised domain adaptation for semantic segmentation for visual perception in automated driving,” IEEE Access , vol. 11, pp. 54 296–54 336, 2023. [3] B. Xie, J. Cao, J. Xie, F. S. Khan, and Y. Pang, “Sed: A simple encoder-decoder for open-vocabulary semantic segmentation,” in Proc. of CVPR , June 2024, pp. 3426–3436. [4] M. Wortsman, G. Ilharco, J. W. Kim, M. Li, S. Kornblith, R. Roelofs, R. G. Lopes, H. Hajishirzi, A. Farhadi, H. Namkoong, and L. Schmidt, “Robust fine-tuning of zero-shot models,” in Proc. of CVPR , June 2022, pp. 7959–7971. [5] H. Park, H. Park, J. Ko, and D. Min, “Hybrid-tta: Continual test-time adaptation via dynamic domain shift detection,” in Proc. of ICCV ,October 2025, pp. 2877–2886. [6] Q. Wang, O. Fink, L. Van Gool, and D. Dai, “Continual test-time domain adaptation,” in Proc. of CVPR , 2022, pp. 7191–7201. [7] R. Qorbani, G. Villani, T. Panagiotakopoulos, M. B. Colomer, L. H¨ arenstam-Nielsen, M. Segu, P. L. Dovesi, J. Karlgren, D. Cremers, F. Tombari, and M. Poggi, “Semantic library adaptation: Lora retrieval and fusion for open-vocabulary semantic segmentation,” in Proc. of CVPR , June 2025, pp. 9804–9815. [8] X. Ma, Y. D. Kwon, and D. Ma, “Emboditta: Resource-efficient test-time adaptation for embodied visual systems,” 2025. [9] G. Chakrabarty, M. Sreenivas, and S. Biswas, “A simple signal for domain shift,” in Proc. of ICCVW , 2023, pp. 3569–3576. [10] J. Song, J. Lee, I. S. Kweon, and S. Choi, “Ecotta: Memory-efficient continual test-time adaptation via self-distilled regularization,” in Proc. of CVPR , 2023, pp. 11 920–11 929. [11] J. Liu, S. Yang, P. Jia, R. Zhang, M. Lu, Y. Guo, W. Xue, and S. Zhang, “Vida: Homeostatic visual domain adapter for continual test time adaptation,” in Proc. of ICLR , B. Kim, Y. Yue, S. Chaudhuri, K. Fragkiadaki, M. Khan, and Y. Sun, Eds., 2024, pp. 48 396–48 417. [12] Y. Liu, H. Zhu, Y. Zhang, Y. Lei, and Y. Guo, “Multi-modality test-time adaptation for semantic segmentation in robotic perception,” in 
+
+Proc. of ICRA , 2025, pp. 16 963–16 969. [13] W. Li, H.-a. Gao, M. Gao, B. Tian, R. Zhi, and H. Zhao, “Training-free model merging for multi-target domain adaptation,” in Proc. of ECCV . Springer, 2024, pp. 419–438. [14] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark, G. Krueger, and I. Sutskever, “Learning transferable visual models from natural language supervi-sion,” in Proc. of ICML , vol. 139, 2021, pp. 8748–8763. [15] M. B. Colomer, P. L. Dovesi, T. Panagiotakopoulos, J. F. Carvalho, L. H¨ arenstam-Nielsen, H. Azizpour, H. Kjellstr¨ om, D. Cremers, and M. Poggi, “To adapt or not to adapt? real-time adaptation for semantic segmentation,” in Proc. of ICCV , October 2023, pp. 16 548–16 559. [16] Z. Shi, F. Lyu, Y. Liu, F. Shang, F. Hu, W. Feng, Z. Zhang, and L. Wang, “Controllable continual test-time adaptation,” in Proc. of ICME . IEEE, 2025, pp. 1–6. [17] Y. Wang, J. Hong, A. Cheraghian, S. Rahman, D. Ahmedt-Aristizabal, L. Petersson, and M. Harandi, “Continual test-time domain adaptation via dynamic sample selection,” in Proc. of WACV , 2024. [18] T. Panagiotakopoulos, P. L. Dovesi, L. H¨ arenstam-Nielsen, and M. Poggi, “Online domain adaptation for semantic segmentation in ever-changing conditions,” in Proc. of ECCV . Springer, 2022. [19] Y. Tian, K. Li, T. He, L. Wan, P.-A. Heng, and W. Feng, “Dual domain-attribute learning framework with asynchronous adapters for continual test-time adaptation,” IEEE Transactions on Image Processing , vol. 35, pp. 376–387, 2026. [20] E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, W. Chen et al. , “Lora: Low-rank adaptation of large language models.” in Proc. of ICLR , vol. 1, no. 2, 2022, p. 3. [21] A. Dai, A. X. Chang, M. Savva, M. Halber, T. Funkhouser, and M. Niessner, “Scannet: Richly-annotated 3d reconstructions of indoor scenes,” in Proc. of CVPR , July 2017. [22] C. Yeshwanth, Y.-C. Liu, M. Nießner, and A. Dai, “Scannet++: A high-fidelity dataset of 3d indoor scenes,” in Proc. of ICCV , October 2023, pp. 12–22. [23] J. Frey, H. Blum, F. Milano, R. Siegwart, and C. Cadena, “Continual adaptation of semantic segmentation using complementary 2d-3d data representations,” IEEE ROBOT AUTOM LETT , 2022. [24] M. Antonazzi, L. Signorelli, M. Luperto, and N. Basilico, “Instance-guided unsupervised domain adaptation for robotic semantic segmen-tation,” in Proc. of ICRA , 2026. [25] N. Silberman, D. Hoiem, P. Kohli, and R. Fergus, “Indoor segmen-tation and support inference from rgbd images,” in Proc. of ECCV .Springer, 2012, pp. 746–760. [26] C. Sakaridis, D. Dai, and L. Van Gool, “Acdc: The adverse conditions dataset with correspondences for semantic driving scene understand-ing,” in Proc. of ICCV , October 2021, pp. 10 765–10 775. [27] T. Br¨ odermann, D. Bruggemann, C. Sakaridis, K. Ta, O. Liagouris, J. Corkill, and L. Van Gool, “Muses: The multi-sensor semantic perception dataset for driving under uncertainty,” in Proc. of ECCV .Springer, 2024, pp. 21–38. [28] M. Tech. Manifold odin 1. [Online]. Available: https://www.manifoldtech.cn/products/Odin1

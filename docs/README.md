@@ -6,35 +6,36 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-10-03
-- 运行时间：2026-10-03 21:59:18 UTC
+- 最新运行日期：2026-10-04
+- 运行时间：2026-10-04 22:20:39 UTC
 - 运行状态：成功
-- 本次总论文数：4
+- 本次总论文数：5
 - 精读区：0
-- 速读区：4
+- 速读区：5
 
 ### 今日简报（AI）
-- 今日共生成 4 篇推荐（精读 0 篇，速读 4 篇）
-- 速读：《EviViT: Evidence-Adaptive Vision Transformers for Fine-Grained Perception》（6.0/10）, 《PAIQ: Patch-Aligned Semantic Injection via Residual Rotation》（6.0/10）, 《Imagine3D-LLM: Teaching MLLMs to Imagine 3D Scenes Before Answering》（6.0/10）
-- 这些结果覆盖了当下较热的方向，建议先看精读区论文的关键问题与方法。
-- 详情：[/202610/03/README](/202610/03/README)
+今日速读5篇论文但无精读，焦点落在开放词汇分割、ERP稠密匹配与3D场景图查询。最值得看的是7.0分的《When to Adapt》提出的多信号域偏移检测，以及《Yggdrasil》面向实时查询的层级优先3D场景图。普通读者可先读这两篇的摘要与方法图，判断是否与自己的任务相关，再决定是否深入。
+- 详情：[/202610/04/README](/202610/04/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [EviViT: Evidence-Adaptive Vision Transformers for Fine-Grained Perception](/202610/03/2609.37123v1-evivit-evidence-adaptive-vision-transformers-for-fine-grained-perception)  
+1. [When to Adapt: Multi-Signal Domain Shift Detection for Efficient Training-Free Adaptation in Open-Vocabulary Segmentation](/202610/04/2609.37602v1-when-to-adapt-multi-signal-domain-shift-detection-for-efficient-training-free-adaptation-in-open-vocabulary-segmentation)  
+   标签：评分：7.0/10、query:open-vocab-d
+   evidence：面向开放词汇分割的免训练适应与域偏移检测
+2. [SCCM: Spherically Consistent Coarse Matching for ERP Dense Feature Correspondence](/202610/04/2609.36545v1-sccm-spherically-consistent-coarse-matching-for-erp-dense-feature-correspondence)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：以问题条件证据密度引导区域级重读，实现细粒度感知
-2. [PAIQ: Patch-Aligned Semantic Injection via Residual Rotation](/202610/03/2609.37685v2-paiq-patch-aligned-semantic-injection-via-residual-rotation)  
+   evidence：多视图稠密匹配中的共视门控与可见性估计
+3. [Yggdrasil: a Layer-First 3D Scene Graph for Real-Time Querying](/202610/04/2609.38640v1-yggdrasil-a-layer-first-3d-scene-graph-for-real-time-querying)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：语言对齐与自监督特征的块级融合
-3. [Imagine3D-LLM: Teaching MLLMs to Imagine 3D Scenes Before Answering](/202610/03/2609.38177v1-imagine3d-llm-teaching-mllms-to-imagine-3d-scenes-before-answering)  
+   evidence：面向实时查询的层优先层次化三维场景图
+4. [Event-Driven Refresh and Recurrence Memory to Reduce Stale Grounding in Referring Video Object Segmentation](/202610/04/2609.38758v1-event-driven-refresh-and-recurrence-memory-to-reduce-stale-grounding-in-referring-video-object-segmentation)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：多模态大模型从多视图图像进行三维场景理解与跨视图物体推理
-4. [PAGER: Partial-to-global Alignment via Geometric and Relational Distillation](/202610/03/2610.01589v1-pager-partial-to-global-alignment-via-geometric-and-relational-distillation)  
+   evidence：面向指代视频目标分割的一致性与记忆定位
+5. [HierGF: Hierarchical Gaussian Fields via Geometry-perception Message Passing for Sparse-view 3D Reconstruction](/202610/04/2610.01056v1-hiergf-hierarchical-gaussian-fields-via-geometry-perception-message-passing-for-sparse-view-3d-reconstruction)  
    标签：评分：6.0/10、query:open-vocab-d
-   evidence：部分三维观测、ScanNet指标与三维编码器对齐
+   evidence：层次高斯场与多视图一致性
 
 
 <div class="dpr-home-promo-card">
