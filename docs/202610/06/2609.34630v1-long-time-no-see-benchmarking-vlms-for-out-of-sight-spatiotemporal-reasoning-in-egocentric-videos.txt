@@ -1,0 +1,664 @@
+Title: Long Time No See: Benchmarking VLMs for Out-of-Sight Spatiotemporal Reasoning in Egocentric Videos
+
+URL Source: https://arxiv.org/pdf/2609.34630v1
+
+Published Time: Tue, 29 Sep 2026 03:41:47 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# Long Time No See: Benchmarking VLMs for Out-of-Sight Spatiotemporal Reasoning in Egocentric Videos 
+
+## Fangzhou Ma ∗1 Ivo Alexander Ban ∗1 Eren Homburg ∗1 Gabriele Goletto 2 R´ emi Pautrat 2
+
+## Mahdi Rad 2 Chiara Plizzari 3 Marc Pollefeys 1,21ETH Zurich 2Microsoft Spatial AI Lab 3Bocconi University 
+
+{fangma, ivoban, ehomburg }@student.ethz.ch 
+
+ Project Page · § Code · õ BEYOND 3D Benchmark 
+
+Figure 1. Visual illustration of the B EYOND 3D benchmark. We propose a benchmark that evaluates whether VLMs can follow interacted objects and reason about their location once they leave view. As an object (here, the box of eggs) is moved by the person, the benchmark poses eight questions that progressively probe the reasoning needed to recover its state once it gets out of sight. Answering them requires VLMs to track actively manipulated objects, update their spatial state after relocation, and recall that state once the objects leave view. 
+
+## Abstract 
+
+Real-world AI systems must reason about objects that are no longer visible: an AR assistant guiding a user back to an object used earlier, a household robot retrieving an item someone put away. This requires not just recalling where an object was last seen, but updating its state when it is moved and retaining that update once it leaves view. We refer to this as out-of-sight spatiotemporal reasoning . We intro-duce BEYOND 3D , the first VQA benchmark to isolate this 
+
+> *Equal contribution.
+
+ability in dynamic egocentric video: every query targets an object that has been relocated and has since left the field of view. We create our questions from HD-EPIC annotations, building a visibility track for each dynamic object from its 3D position, the camera pose, and the scene geometry to understand at each moment whether it is visible, occluded, or out of view. BEYOND 3D comprises 9,000 questions in eight types over 135 videos from nine participants, orga-nized as one reasoning chain: visual grounding (is the tar-get observable now), temporal grounding (when it was last visible and last placed), scene localization (which fixture anchors that location), and 3D spatial perception (where it 
+
+1arXiv:2609.34630v1 [cs.CV] 28 Sep 2026 lies relative to the current viewpoint or another object in the scene). We benchmark nine general-purpose and spatially specialized VLMs. The best model reaches 42.2% against 29.7% chance and text-only baselines reaching 31.9%, with the largest failures in recovering when an object was last visible, showing that tracking object movement out of sight remains far from solved for current VLMs. 
+
+## 1. Introduction 
+
+For an embodied system, understanding only what is cur-rently visible is not enough. Humans can remember and reason about previously seen objects even after they leave sight [4, 26]. Similarly, an AR assistant may need to guide a user back to an object handled earlier, while a household robot may need to retrieve an item after it has been moved out of sight. In such cases, the system must identify the interactions that established the object’s latest location and retain that state as the scene evolves. This is particularly challenging in egocentric video, where objects are manipu-lated and relocated as the viewpoint continuously changes. We refer to this ability to reason about the evolving spatial state of objects beyond the current field of view as out-of-sight spatiotemporal reasoning .Recent vision-language models (VLMs) are increasingly capable of recognizing, describing, and answering ques-tions about visual content [29, 30]. However, it remains unclear whether they can maintain coherent spatial repre-sentations of dynamic environments and reason about out-of-sight objects. Existing benchmarks cover related aspects of memory, temporal reasoning, and 3D scene understand-ing, but do not directly test if models retain the updated spa-tial state of a relocated object after it leaves view (Table 1). We introduce B EYOND 3D, a Visual Question Answer-ing (VQA) benchmark designed to isolate out-of-sight spa-tiotemporal reasoning in dynamic egocentric video. We build on HD-EPIC [25], which captures unscripted cook-ing and everyday activities with detailed annotations of object movements and 3D scene reconstructions. From these recordings, we identify interactions in which objects are picked up, carried, and relocated across counters, cup-boards, drawers, etc. For each relocated object, we con-struct a geometry-aware visibility track combining its 3D location with the camera pose, field of view, and scene ge-ometry to determine whether it is visible , occluded , or out-side the camera view at each time step. These tracks allow us to follow the object’s spatial state as the wearer contin-ues interacting with the environment and, crucially, to place queries only after the object is no longer observable. BEYOND 3D comprises eight question types covering vi-sual grounding , temporal grounding , scene localization ,and 3D spatial perception . Together, they trace the reason-ing chain in Fig. 1, from identifying the relevant event and recovering the object’s last location to reasoning about its spatial relationships after it leaves the field of view. Our contributions are threefold: • A new problem. We formulate out-of-sight spatiotempo-ral reasoning : tracking the spatial state of objects after they leave the field of view, a fundamental capability for reasoning in dynamic, embodied environments. • A large-scale benchmark. We introduce B EYOND 3D, comprising 9,000 questions on visual and temporal grounding, scene localization, and 3D spatial perception. Geometry-aware visibility tracks combine object loca-tions, camera poses, fields of view, and occlusion reason-ing to determine object visibility over time. • A systematic evaluation of current VLMs. We bench-mark nine general-purpose and spatially specialized VLMs and analyze their failure modes. Temporal re-trieval and spatial-state maintenance remain major bottle-necks, while substantial 3D reasoning errors persist even when upstream uncertainty is controlled. 
+
+## 2. Related Work 
+
+Persistent dynamic world modeling in egocentric per-ception. Operating in dynamic environments requires rea-soning beyond what is currently visible. In cognitive sci-ence, this relates to object permanence [3]: understanding that objects continue to exist when unseen. In machine per-ception, it means maintaining object representations after they leave the field of view [33]. In interactive environ-ments, however, persistence alone is insufficient because manipulation and relocation can change object state. The Event Calculus [19] captures this by treating world state as persistent until an event changes it. A coherent visual world model must therefore retain information about unseen ob-jects and update their state when interactions alter it. Egocentric video makes this particularly challenging: wearer motion changes visibility while interactions change object locations. Recent methods increasingly address this by persistent world-state representations. AMEGO [14] stores past interactions and visited locations in queryable memory. OSNOM [26] maintains persistent 3D locations of active objects, while Whareformer [6] replaces this engi-neered state maintenance with learned updates to persistent object representations and 3D positions over time. 
+
+Vision language models (VLMs). Recent general-purpose VLMs have expanded toward longer video inputs and stronger temporal modeling [1, 2, 10, 21, 29, 30, 34], but ex-plicit 3D spatial modeling is typically not their primary ob-jective. Spatially specialized VLMs introduce spatial struc-ture through targeted supervision [5, 7, 40, 41], learned ge-ometry representations [13, 16, 17, 28, 37, 42, 44, 46], or explicit 3D inputs such as depth and camera pose [8, 9, 23]. 
+
+Comparison with existing benchmarks. Related bench-marks differ in the states that models must recover at 2Table 1. Comparison with related spatial and memory bench-marks. ✓: explicitly evaluated; ◦: partially covered or not sys-tematically enforced; –: not explicitly targeted. Ego. : egocentric input; 3D : explicit 3D spatial reasoning; Tem-Loc. : temporal lo-calization; Spa-Upd. : spatial-state update; Diag. : multi-level di-agnostic decomposition; Upd-OOS. : updated target queried after loss of visibility; Geo-Vis. : geometry-aware visibility.                                                                                   
+
+> Benchmark Ego. 3D Tem-Loc. Spa-Upd. Diag. Upd-OOS Geo-Vis.
+> (A) Temporal and object memory
+> EgoTempo [27] ✓–◦◦–––EgoMemReason [36] ✓–◦◦–––
+> (B) Static 3D spatial reasoning
+> VSI-Bench [39] ✓✓–––––
+> (C) Dynamic spatial state reasoning
+> EOC-Bench [43] ✓–✓✓–––HD-EPIC [25] ✓✓✓✓–––EgoDynamic4D [18] ✓✓◦✓–––UCS-Bench [35] ✓✓◦◦◦◦–SCP-Bench [45] –––◦◦––Ego4D-VQ3D [15] ✓✓✓––––SpaMEM [22] –✓✓✓✓◦◦
+> BEYOND 3D (Ours) ✓✓✓✓✓✓✓
+
+query time (Table 1). Temporal and object memory benchmarks test event timing or past observations with-out grounding memory in 3D [27, 36], while static 3D benchmarks focus on scene geometry and layout [39]. Dy-namic spatial-state benchmarks capture changing config-urations, including object relocations [18, 25, 35, 43, 45] and user-centric relation changes [35], but do not enforce target invisibility, allowing current-frame shortcuts. SCP-Bench [45] instead infers unseen past or future states from partial video. Others also consider out-of-sight reason-ing: Ego4D-VQ3D [15], which retrieves previously ob-served stationary object locations without tracking updates, and SpaMEM [22], which evaluates spatial-state revision in synthetic environments. Our benchmark B EYOND 3D re-quires both relocation and loss of visibility in unscripted real-world video, with visibility verified geometrically. 
+
+## 3. Out-of-Sight Spatiotemporal Reasoning 
+
+3.1. Problem Formulation 
+
+Task setting. We consider active objects that the cam-era wearer manipulates and relocates. Given an egocentric video up to Tq and such a target object o, the task is to track its status while visible, update it upon relocation, and recall it once o leaves view. 
+
+Object state and query anchor. At each time t, the object has a 3D location ℓo(t) ∈ R3 ∪ {⊥} , where ⊥ marks an unannotated relocation interval and any other value means 
+
+o is stationary. Each stationary location is associated with a semantic fixture fo(t) that supports or contains the object, such as a counter, drawer, or appliance. A binary state vo(t) ∈ { 0, 1} records whether o is vis-ible in the frame at time t. An object may be not visible because it lies outside the camera view or is occluded by a hand, another object, or a cabinet door. We query objects through anchors (o, T q ) for which o has been relocated be-fore Tq and is stationary but not visible at query time, so that 
+
+ℓo(Tq )̸ = ⊥ and vo(Tq ) = 0 . We call ℓo(Tq ) and fo(Tq ) the 
+
+last known location and fixture of the target. The out-of-sight horizon measures the time since o was last visible, 
+
+h(o, T q ) = Tq − max {t ≤ Tq | vo(t) = 1 }.
+
+Reference-object questions use a distinct object r̸ = o that is stationary and visible at Tq , providing a scene-relative reference whose distance to o is to ego-motion invariant and whose direction is invariant to ego-translation. 
+
+3.2. BEYOND 3D Q&A Formulation 
+
+Given a query anchor (o, T q ), consisting of a target ob-ject o and query time Tq , we define eight diagnostic ques-tion types organized into four complementary capabilities: 
+
+visual grounding , temporal grounding , scene localization ,and 3D spatial perception . As illustrated in Fig. 1, these questions probe successive stages of out-of-sight reasoning: determining whether the target is currently observable, re-trieving the events that established its latest status, ground-ing its remembered location in the scene, and reasoning about that location in 3D. The exact natural-language tem-plates and answer choices are provided in Supp. 8.1. 
+
+Visual Grounding. We test whether the model recog-nizes the target and determines its visibility at query time:  
+
+> 1
+
+Visibility Check: Is o visible at Tq ?
+
+Temporal Grounding. We test whether the model can re-trieve the events defining the target’s latest status: 2 Last Visible Time: When was o last visible before Tq ? 3 Last Placement Time: When was o last placed before Tq ?
+
+Scene Localization. We test whether the model can up-date the target’s spatial status and anchor its last known lo-cation to the scene: 4 Nearest Fixture: Which fixture is closest to the last known location of o?
+
+3D Spatial Perception. We test whether the model can reason about the remembered target location relative to the camera and other objects: 5 Object–Camera Direction: 
+
+Where is o relative to the camera at Tq ? 6 Object– Camera Distance: How far is o from the camera at Tq ? 
+
+> 7
+
+Object–Object Direction: Where is o relative to refer-ence object r at Tq ? 8 Object–Object Distance: How far is o from r at Tq ?3Figure 2. BEYOND 3D benchmark construction. (1) Visibility tracks are inferred through view, occlusion, and detection checks.  
+
+> (2) Valid out-of-sight anchors are converted into 9,000 questions.
+
+## 4. Benchmark Construction 
+
+We build B EYOND 3D on HD-EPIC [25] in two stages as shown in Fig. 2: (i) infer per-object visibility tracks, (ii) select balanced out-of-sight query anchors, and finally gen-erate questions per anchor for VLM evaluation. 
+
+4.1. Visibility Tracks 
+
+HD-EPIC [25] annotates object relocations in egocentric kitchen videos. For each movement, it provides the start and end times and, at both endpoints, the object’s 2D bounding box, mask, 3D center, and supporting or containing fixture 
+
+(e.g., a counter or drawer). It also provides a reconstructed 3D digital twin of each kitchen. Since locations are anno-tated only at movement endpoints, we assume each object remains at its last annotated location until the next move-ment begins and mark movement intervals as in motion .Using these annotations, the digital twins, and video frames, we construct a 1 fps visibility track for each object o, record-ing its location ℓo(t) and visibility state vo(t) over time. 
+
+Determining visibility. We determine the visibility of each stationary object in three stages (Fig. 2): 
+
+Stage 1: Camera field of view. We first determine whether the object projects into the current camera view. From its most recent annotated bounding box, we choose the center point, the four corners, and the four edge mid-points to approximate the object’s spatial extent. These points are back-projected to the 3D scene at the depth of the object’s last known position and then reprojected into the current frame using the relative camera pose and the FISH-EYE624 fisheye camera model of Project Aria [12]. Fig. 3 llustrates this back-projection and re-projection procedure across two camera viewpoints. Because Aria images are fisheye and vignetted, we con-   
+
+> Figure 3. Cross-view object projection. An Knife’s annotated image footprint in Camera View 1 is back-projected to its last known 3D depth and reprojected into Camera View 2 using the relative camera pose. The projected footprint approximates the object’s spatial extent under the new viewpoint.
+
+sider only the usable circular region inscribed in the square frame. We mark an object as out of view when fewer than half of its projected footprint points fall inside this re-gion. All remaining samples proceed to Stage 2. 
+
+Stage 2: Geometric occlusion. For each footprint point, we cast a ray from the camera to its corresponding 3D lo-cation and intersect it with the static kitchen mesh. As in Stage 1, we use a majority heuristic and mark the object as 
+
+occluded when at least half of the rays are blocked. To mitigate annotation inaccuracies, we require the first inter-section to lie at least δ = 10 cm in front of the target. An object may be blocked only by the fixture it currently occupies. The static meshes do not capture if fixtures like drawers or cupboards are open or closed which is why we mark these cases as fixture ambiguous . All samples which are not occluded proceed to Stage 3. 
+
+Stage 3: Detection-based confirmation. The static mesh does not capture transient occlusions by hands, movable ob-jects, or clutter. We verify samples passing the geomet-ric tests in the video using the open-vocabulary detector OWLv2 [24]. Further details are provided in Supp. 10.2. As in the previous stages, we use a majority heuris-tic, marking an interval detected visible if the ob-ject is detected in at least half of the tested frames and visually unconfirmed otherwise. fixture ambiguous states are instead marked occluded after negative detection. 
+
+Track assembly. Consecutive samples sharing the same stage-1/stage-2 outcome are merged into intervals, which Stage 3 then labels as a whole, forming the final visibil-ity tracks. These tracks distinguish visible , out of view , occluded , visually unconfirmed , and in motion states. The binary visibility of Sec. 3.1 follows as 
+
+vo(t) = 1 for visible samples and vo(t) = 0 otherwise. 
+
+Validation. We visually inspected the inferred visibility tracks using an independent human annotation pass. Across 40 100 200 300 400 500 600 010 20 30 40 50 60 70 80                                                   
+
+> EARLY ·MID ·LATE Early (333) Mid (333) Late (334)
+> Query time (s) Number of query anchors
+> (a) Out-of-sight anchors
+> 010 20 30 40 50 60 70 80 90 020 40 60 80 100 120
+> SHORT ·MEDIUM ·LONG MEMORY Short (333) Medium (333) Long (334)
+> Out-of-sight horizon (s) Number of query anchors
+> (b) Out-of-sight horizon
+> 12345678910 11 0100 200 300 400
+> TARGET MOVES BEFORE QUERY
+> 392 308 155 64 40 19 65452
+> Number of target moves before query Number of query anchors
+> (c) Target moves
+> 0100 200 300 400 500 600 010 20 30 40 50 60 70 80
+> EARLY ·MID ·LATE Early (333) Mid (333) Late (334)
+> Query time (s) Number of query anchors
+> (d) Visible anchors
+
+Figure 4. Evaluation-set statistics. Distribution of the 1,000 out-of-sight query anchors over query time ( a), out-of-sight horizon ( b), and number of times the target was moved before the query ( c), together with the query-time distribution of the 1,000 visible control anchors (d). Dashed lines mark the temporal and horizon stratification boundaries used for sampling. 
+
+4,102 scored object marks from 344 frames spanning 30 
+
+videos, the tracks achieved 83 .5% accuracy, with most er-rors arising from the visually unconfirmed state. Full validation details are provided in Supp. 11. 
+
+4.2. Q&A Generation and Statistics 
+
+Candidate query anchor selection. As summarized in the bottom panel of Fig. 2, we first select valid query an-chors and then instantiate them into Q&A pairs. From the constructed visibility tracks, we enumerate valid query an-chors (o, T q ) only when the target is explicitly labeled out of view or occluded at Tq . We exclude visually unconfirmed states, which often arise from transient dy-namic occlusions by hands or other objects, to favor stable out-of-sight periods that more directly test retention of the target’s latent spatial state. We retain anchors whose target has a unique, human-readable name. 
+
+Q&A instantiation. For a retained query anchor (o, T q ),we instantiate all question types using fixed natural-language templates with placeholders. For example, “At 
+
+[TIME] , is the previously moved [OBJECT] visible in the current frame?” where [OBJECT] denotes o and 
+
+[TIME] denotes Tq . The complete templates are provided in Supp. 8.1. Each question is formatted as multiple choice, we then derive the ground-truth answer from visibility tracks, ob-ject annotation, and camera poses, and construct distrac-tors using task-specific rules. Temporal distractors are sam-pled from bins at increasing temporal distances from the ground truth: near ( ±1–2 s), medium ( ±3–4 s), far ( ±5– 6 s), and very far ( ±7–30 s), prioritizing timestamps asso-ciated with other visibility or movement events. For scene-localization questions, distractors are plausible alternative locations. Since 63.2% of placements occur on counters, using a single counter category would make many ques-tions too coarse and heavily skew the answer distribution. We therefore use fixture categories directly in general, but when the target was last placed on a counter, we instead dis-tinguish counter areas using nearby landmarks (e.g. counter area next to the microwave). For 3D spatial questions, the predefined direction and distance categories directly de-fine the answer options. Full construction details are in Supp. 8.2. 
+
+Evaluation-set selection and statistics. From the candi-date pool, we select 1,000 out-of-sight query anchors span-ning diverse participants, videos, objects, out-of-sight dura-tions and causes, and answer classes. We prioritize anchors with clear object relocations and reliable visibility evidence. We approximately balance the anchors across a 3 × 3
+
+stratification defined by query time Tq (early : 0–149 s, 
+
+middle : 150 –299 s, late : 300 –600 s) and out-of-sight hori-zon h(o, T q ) (short : 2–10 s, medium : 11 –30 s, long : >
+
+30 s). Figs. 4a and 4b show the balanced marginal distribu-tions over query time and out-of-sight horizon, respectively. Fig. 4c further characterizes spatial-update complexity by the number of target relocations before Tq : 70% of anchors involve one or two target moves, while the long tail extends to 11 moves. The resulting set spans 135 videos, nine participants, nine kitchens, 581 target instances, and 561 reference-object instances. At query time, 900 targets are outside the camera’s field of view and 100 are geometrically occluded. Expanding each anchor into eight question types produces 
+
+8,000 out-of-sight questions, with balanced answer classes for the four 3D spatial question types. Because these anchors all have negative visibility labels, we additionally sample 1,000 visible anchors as positive controls for the visibility question. These anchors con-tain previously moved objects that are visible at Tq and are also evenly distributed across the early, middle, and late query-time groups. Their query-time distribution is shown in Fig. 4d. The final evaluation set contains 9,000 questions. 
+
+Quality control. We manually inspect all 1,000 sampled out-of-sight anchors, verifying from the relevant video evi-dence that the target is out of sight at query time and that the ground truth can be determined reliably. Ambiguous sam-ples are discarded and replaced from the candidate pool. 5Table 2. VLM accuracy (%) on B EYOND 3D. Performance of VLMs across question types under Text only , Video + Text and Last Frame Only + Text input settings. Bold entries indicate the best-performing model for the respective question type. 
+
+Model Size Macro Avg. Visual Grounding Temporal Grounding Scene Localization 3D Spatial Perception Visibility Check Last Visible Time Last Placement Time Nearest Fixture Object–Camera Direction Object–Camera Distance Object–Object Direction Object–Object Distance 
+
+No. of questions 9000 2000 1000 1000 1000 1000 1000 1000 1000 
+
+Random guessing – 29.7 50.0 20.0 20.0 22.7 25.0 33.3 33.3 33.3 
+
+Text Only 
+
+General-Purpose Models 
+
+Qwen-3.6 [30] 35B-A3B 31.0 50.0 20.9 21.2 33.4 24.6 32.5 32.6 33.0 Qwen-3.6 [30] 27B 31.7 49.5 17.8 19.0 40.2 25.0 33.6 34.3 34.1 Qwen-3.5 [29] 9B 31.5 50.0 21.1 21.8 36.5 25.9 32.6 32.0 32.1 Qwen-3-VL [1] 8B 30.2 50.4 19.5 20.4 25.1 25.6 33.8 34.0 32.7 InternVL-3.5 [34] 8B 30.8 50.2 21.5 20.3 27.2 25.2 33.2 35.9 32.8 
+
+Specialized 3D Models 
+
+VLM-3R [13] 7B 31.0 50.0 21.3 19.4 34.5 24.6 31.8 33.7 33.0 Spatial-MLLM [37] 6B 30.0 49.4 22.4 19.8 22.2 25.1 32.7 34.1 34.0 Cambrian-P [40] 7B 31.9 51.1 19.7 18.0 41.3 25.0 33.4 33.5 33.3 SenseNova-SI [5] 8B 29.0 51.2 18.0 18.1 20.7 26.0 33.7 31.3 33.1 
+
+Last Frame Only + Text 
+
+General-Purpose Models 
+
+Qwen-3.6 [30] 35B-A3B 33.0 72.9 14.5 16.6 27.1 27.0 35.3 35.2 35.0 Qwen-3.6 [30] 27B 35.2 76.5 17.8 18.3 29.0 29.7 38.0 36.5 35.9 Qwen-3.5 [29] 9B 32.4 64.3 17.9 21.2 25.3 26.6 33.6 34.8 35.1 Qwen-3-VL [1] 8B 31.8 73.4 14.5 18.0 21.4 26.8 35.1 32.8 32.7 InternVL-3.5 [34] 8B 32.1 71.3 14.9 16.5 24.5 27.9 34.8 33.3 34.0 
+
+Specialized 3D Models 
+
+VLM-3R [13] 7B 33.6 68.2 21.5 21.8 27.7 28.1 33.6 33.8 34.1 Spatial-MLLM [37] 6B 31.9 60.1 22.3 20.0 23.8 25.5 35.6 33.5 33.9 Cambrian-P [40] 7B 32.9 69.5 18.7 18.2 31.0 25.4 33.4 33.9 33.3 SenseNova-SI [5] 8B 32.7 74.2 17.1 20.4 19.8 25.8 37.7 31.4 35.3 
+
+Video + Text 
+
+General-Purpose Models 
+
+Qwen-3.6 [30] 35B-A3B 39.6 66.3 23.3 29.4 51.3 33.7 35.9 41.1 35.6 Qwen-3.6 [30] 27B 42.2 68.4 30.4 39.4 50.0 34.6 34.9 43.6 36.2 Qwen-3.5 [29] 9B 38.6 59.3 28.2 30.5 47.9 33.4 39.2 34.7 35.8 Qwen-3-VL [1] 8B 36.0 59.8 21.3 25.7 48.2 32.7 33.6 31.5 35.2 InternVL-3.5 [34] 8B 35.8 60.4 21.8 20.7 38.9 31.4 42.6 35.8 34.9 
+
+Specialized 3D Models 
+
+VLM-3R [13] 7B 37.2 58.8 23.9 23.2 49.8 35.6 34.4 35.6 36.5 Spatial-MLLM [37] 6B 31.6 53.3 22.8 19.2 29.5 24.6 34.8 34.0 34.8 Cambrian-P [40] 7B 33.5 52.2 20.0 17.5 50.5 27.3 33.4 33.9 33.2 SenseNova-SI [5] 8B 35.4 57.9 20.6 22.9 44.4 29.8 32.9 34.9 39.8 
+
+## 5. Experiments 
+
+5.1. Experimental Setup 
+
+Evaluated models. We evaluate nine recent VLMs span-ning general-purpose and spatially specialized models. The general-purpose models are Qwen-3.6 [30] in its 35B-A3B and 27B variants, Qwen-3.5 [29], Qwen-3-VL [1], and InternVL-3.5 [34]. The spatially specialized models are VLM-3R [13], Spatial-MLLM [37], Cambrian-P [40], and SenseNova-SI [5]. We use the authors’ publicly released checkpoints and official inference implementations with-out task-specific fine-tuning. All model inference was con-ducted on an HPC cluster, using a single NVIDIA A100 or NVIDIA RTX PRO 6000 GPU per run, with 80 GB and 96 GB of GPU memory, respectively. 
+
+Evaluation protocol. We report per-question multiple-choice accuracy and macro-average accuracy, giving each question type equal weight despite Visibility Check having twice as many questions compared to others. Each model receives the 1 fps video prefix up to the query time Tq . For models with shorter context limits, frames are uniformly subsampled to fit the available context. Visual preprocess-ing and the full prompts are provided in Supp. 9.1 and 9.2. 
+
+5.2. Main Results 
+
+We present the performance of different models in Table 2 evaluated in three settings: (i) Text only , where the model receives only the question and options; (ii) Last Frame Only + Text , where the frame at the query time is additionally provided; and (iii) Video + Text , where the video prefix is provided instead of the last frame. 
+
+Text-only performance is near chance. Without video, 6models perform close to random guessing on nearly all question types. The main exception is Nearest Fixture ,where several models achieve higher accuracy. This reflects object–fixture priors acquired during pretraining, such as associating a milk carton with a fridge. 
+
+Video evidence improves on text-only performance. 
+
+Video improves macro accuracy for every model by 1.6– 10.5%, with the largest average gains on Visibility Check 
+
+(+9.4%) and Nearest Fixture (+14.4%). Gains are less con-sistent for temporal grounding and smaller for spatial tasks. Despite these gains, overall performance remains low. 
+
+Difficulty varies across tasks. Relative to chance, VLMs perform best on Nearest Fixture (45.6% vs. 22.7%), fol-lowed by visual grounding (59.6% vs. 50.0%). In contrast, temporal grounding and spatial reasoning are substantially harder, exceeding chance by only 4.5% and 3.6% on av-erage, respectively. Thus, models are better at recovering coarse semantic location than at precisely grounding past events or reasoning about remembered positions in 3D. 
+
+General-purpose models vs. spatially specialized mod-els. General-purpose models perform better overall, led by Qwen-3.6-27B at 42.2% macro accuracy. This is not a scale effect: Qwen-3.5-9B (38.6%) outperforms all com-parably sized spatially specialized models (31.6–37.2%). On the 3D spatial tasks, these models show no consistent advantage and remain modestly above random. We hy-pothesize that this reflects a mismatch between their spa-tial specialization and our setting: existing 3D training mainly targets scene geometry and viewpoint-induced spa-tial changes, while B EYOND 3D additionally requires up-stream temporal grounding of object relocations and retain-ing the spatial state while the object is not viewable. Their weaker temporal grounding and evidence retrieval ability creates a bottleneck that limits the benefit of 3D reasoning. More restrictive context budgets for several spatially spe-cialized models may contribute to this gap. 
+
+Current-frame evidence is insufficient for out-of-sight reasoning. Providing only the query frame substantially improves Visibility Check , reaching 70.0% on average, but leaves temporal grounding, scene localization, and 3D spa-tial reasoning near chance. In contrast, full-video input substantially improves tasks that require recovering the tar-get’s earlier state: Last Visible Time increases from 17.7% to 23.6%, Last Placement Time from 19.0% to 25.4%, and 
+
+Nearest Fixture from 25.5% to 45.6%. This shows that the benchmark separates instantaneous visibility perception from reasoning over latent object states that must be recov-ered from video history. 
+
+5.3. Diagnosing Failure Modes 
+
+Unless otherwise stated, all subsequent analyses use the 
+
+Video + Text setting, corresponding to the full-video bench-mark setting.   
+
+> short 2–10 s medium 11–30 s long
+> >30 s
+> 20 30 40 50
+
+Out-of-sight horizon h(o, T q )
+
+> Accuracy (%)
+> early 0–149 s middle 150–299 s late 300–600 s
+
+Query time Tq      
+
+> Random Qwen-3.6-35B-A3B Qwen-3.6-27B Qwen-3.5 Qwen-3-VL InternVL-3.5 SenseNova-SI Cambrian-P Spatial-MLLM VLM-3R
+
+Figure 5. Performance across temporal conditions. Left: Accu-racy across short, medium, and long out-of-sight horizons. Right: 
+
+Accuracy across early, middle, and late query times.                   
+
+> GT Near Med. Far
+> 20 40 60 80 100
+> Last visible
+> GT Near Med. Far
+> Last placement
+> GT Near Med. Far
+> 20 40 60 80 100
+> GT Near Med. Far Random Qwen-3.6-35B-A3B Qwen-3.6-27B Qwen-3.5 Qwen-3-VL SenseNova-SI InternVL-3.5 Cambrian-P Spatial-MLLM VLM-3R Cumulative accuracy (%)
+> Full-video Context-limited
+
+Figure 6. Cumulative accuracy over temporal distance. Ac-curacy when progressively accepting the rounded ground truth (GT) and timestamp choices up to Near (±1–2 s), Medium (±3– 4 s), and Far (±5–6 s). Top: full-video models; Bottom: 
+
+context-limited models (InternVL-3.5 / Cambrian-P / VLM-3R: 150 frames, Spatial-MLLM: 64 frames). Left: last-visible time; 
+
+Right: last-placement time. 
+
+Temporal evidence retrieval is an upstream bottleneck. 
+
+Performance reveals a strong dependence on how long the target remains out of sight (Fig. 5). Macro average ac-curacy decreases from 40.4% for short horizons to 34.8% for medium and 31.9% for long horizons. As the hori-zon grows, the target’s last observed state must be re-tained across more intervening activity, making it increas-ingly difficult to recover at query time. In contrast, ac-curacy varies non-monotonically with query time (34.9%, 38.4%, and 36.6% for early, middle, and late queries). Later 70 20 40 60 80 100  
+
+> SenseNova-SI Cambrian-P Spatial-MLLM VLM-3R InternVL-3.5 Qwen-3-VL Qwen-3.5 Qwen-3.6-27B Qwen-3.6-35B-A3B
+> 53 .312 18 .241 .387 .876 .357 .171 .848 .762 .592 .383 .376 .332 .943 .261 .465 83 .8
+> Accuracy (%) Not visible Visible
+
+Figure 7. Visibility-state estimation. Accuracy in determining whether the queried object is visible at query time, reported sepa-rately for objects that are not visible and visible .                   
+
+> Ground truth Qwen-3.6-35B-A3B Qwen-3.6-27B Qwen-3.5 Qwen-3-VL InternVL-3.5 VLM-3R Spatial-MLLM Cambrian-P SenseNova-SI Ground truth Qwen3.6-35B Qwen3.6-27B Qwen3.5 Qwen3-VL InternVL3.5 VLM-3R Spatial-MLLM Cambrian-P SenseNova-SI
+> (a) Camera direction (b) Camera distance (c) Object direction (d) Object distance
+> FL FR BL BR <11–1.5≥1.5m12–4:30 4:30–7:30 7:30–12 <11–1.5≥1.5m
+
+Figure 8. Prediction distributions for 3D spatial perception. 
+
+Stacked bars show prediction frequencies (%). (a) object–camera direction (FL/FR/BL/BR: front/back left/right); (b) object–camera distance; (c) camera-aligned object–object direction; (d) object– object distance. 
+
+queries provide more scene evidence but also longer histo-ries, which may explain the middle-query peak. Thus, out-of-sight horizon drives difficulty more than video length. We next examine one potential upstream source of these errors, locating the interaction that determines the target’s latest state (Fig. 6). Since the four distractors lie in bins increasingly distant from the ground truth, the plot progres-sively counts predictions from farther bins as correct, caus-ing random-choice accuracy to rise from 20% to 80%. If models found the relevant event but missed its exact times-tamp, their curves would rise faster than this baseline. Most remain close to random, indicating weak preference for the correct temporal region and suggesting that models often       
+
+> 2–10 11–30 31+
+> 35 %
+> 40 %
+> 45 %
+> 50 %
+> 55 %
+> 60 %OOS horizon (s) Accuracy (%) 04812 Visibility Nearest O–C dir. O–C dist. O–O dir. O–O dist. Temporal cue gain wrt baseline (%) Baseline Temporal cue
+
+Figure 9. Effect of temporal cues on Qwen-3.6-27B. Left: 
+
+Macro accuracy across out-of-sight (OOS) horizons, with shad-ing indicating the improvement over the baseline. Right: Paired improvement for visibility, nearest-fixture, object–camera (O–C), and object–object (O–O) direction and distance questions. Error bars show 95% bootstrapped confidence intervals. 
+
+retrieve another plausible visibility or movement event. 
+
+Out-of-sight state recognition is unreliable. Fig. 7 eval-uates the Visibility Check separately for visible and out-of-sight targets. A robust model should perform well in both conditions, yet several models show strong asymmetries. InternVL-3.5 correctly predicts not visible for 87 .8% of out-of-sight targets but visible for only 32 .9% of visible tar-gets, while Cambrian-P shows the opposite bias. These op-posing errors suggest model-specific visibility biases rather than uniformly weak visual recognition: some models tend to assume that previously observed objects remain absent, whereas others over-rely on current visual evidence. Since downstream questions require reasoning about an object specifically when it is no longer visible, such failures can corrupt the spatial state used for subsequent predictions. 
+
+Spatial predictions exhibit strong biases. As shown in Fig. 8, despite balanced ground-truth answer distributions for each 3D task, camera-direction predictions are skewed toward locations in front of the camera for every model, reaching 98.7% for Spatial-MLLM [37], while most mod-els concentrate both distance tasks on the nearest bin, with Cambrian-P [40] assigning 100% and 99.4% of its Object– Camera Distance and Object–Object Distance predictions there, respectively. One explanation is that, when the re-membered target state is uncertain, models fall back on spa-tial configurations supported by the direct visual evidence, favoring objects that are in front of and close to the camera. 
+
+5.4. Ablation Study 
+
+The preceding analyses suggest two upstream sources of er-ror, namely locating the state-changing interactions and re-taining the resulting state, and accounting for the target’s visibility status at query time. We test these hypotheses on Qwen-3.6-27B, the strongest model in our main evaluation. 
+
+Temporal evidence retrieval is an upstream bottleneck. 
+
+We first prepend a textual cue that lists all intervals in which the target object was moved, e.g., “The camera 8Figure 10. Qualitative analysis. For each example, we show the provided temporal cues (blue), keyframes and Q&A, and reasoning traces. Correct and incorrect steps are marked in green and red. Top: the model misses the final relocation of the blueberry box and misidentifies it. Bottom: the model correctly tracks and grounds the food processing lid but fails in camera-relative 3D reasoning. 
+
+wearer moved the blueberry box during these time in-tervals: <TIME 00:00:07.3 video 1> to <TIME 00:00:13.6 video 1> , . . . ”. The cue directs the model toward the state-changing interactions that determine the object’s latest location. As shown in Fig. 9, this inter-vention improves all downstream question types across out-of-sight horizons, supporting temporal evidence retrieval as an important upstream bottleneck. 
+
+Visibility information further improves scene ground-ing. We next add an explicit textual statement that the tar-get is not visible at query time, on top of the temporal cue. 
+
+Nearest Fixture accuracy improves by 8%, but 3D spatial tasks gain only 0–2.4%. This suggests that visibility aware-ness helps recover the target’s scene location, but leaves most geometric errors unresolved. 
+
+5.5. Qualitative Analysis 
+
+To understand the errors remaining after simplifying tempo-ral retrieval, we examine Qwen-3.6-27B’s reasoning traces under temporal cues with thinking enabled. Fig. 10 illus-trates where failures arise along the reasoning chain. Three recurring patterns emerge: (i) Fine-grained evidence can still be missed. For a blueberry box , the model summa-rizes both provided movement intervals but misses the fi-nal relocation from the counter to a storage area next to the fridge. It therefore carries an outdated location for-ward to the query; (ii) Tracking errors can corrupt the remembered state. In the same example, the model con-flates the queried box with the blueberries being washed and concludes that the container is in the person’s hands. The relevant interaction is present, but the target identity is not maintained over time; (iii) Spatial reasoning remains a downstream bottleneck. For a food processing lid , the model correctly follows the movements and recovers that the lid was left on the kitchen counter. It nevertheless maps this location incorrectly into the current camera viewpoint, predicting front-right instead of the correct back-right .
+
+## 6. Conclusions 
+
+We introduced a new VQA benchmark to evaluate out-of-sight spatiotemporal reasoning in dynamic egocentric videos, addressing a key gap in literature. By querying re-located objects only after they are unobservable, and de-composing the task into eight questions and four capabil-ities, B EYOND 3D tests whether VLMs can update an ob-9ject’s spatial state, retain it beyond visibility, and reason from it in space and time. Experiments show that recent VLMs remain far from reliable, with errors compounding across retrieving relevant past events, maintaining object state over time, and reasoning from that state once the object is no longer visible. Future work should therefore move be-yond current-view perception toward models that explicitly update and preserve persistent latent representations of dy-namic scenes over time. We believe B EYOND 3D provides a useful benchmark for measuring progress toward this ca-pability in egocentric video understanding. 
+
+Acknowledgements We thank Xiaoxuan Cheng for assistance with executing experiments on the cluster. 
+
+## References 
+
+[1] Shuai Bai, Yuxuan Cai, Ruizhe Chen, Keqin Chen, Xionghui Chen, Zesen Cheng, Lianghao Deng, Wei Ding, Chang Gao, Chunjiang Ge, et al. Qwen3-VL technical report. arXiv preprint arXiv:2511.21631 , 2025. 2, 6 [2] Shuai Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Sibo Song, Kai Dang, Peng Wang, Shijie Wang, Jun Tang, et al. Qwen2.5-VL technical report. arXiv preprint arXiv:2502.13923 , 2025. 2 [3] Ren´ ee Baillargeon. Representing the existence and the lo-cation of hidden objects: Object permanence in 6- and 8-month-old infants. Cognition , 23(1):21–41, 1986. 2 [4] Neil Burgess. Spatial memory: How egocentric and allocen-tric combine. Trends in Cognitive Sciences , 10(12):551–557, 2006. 2 [5] Zhongang Cai, Ruisi Wang, Chenyang Gu, Fanyi Pu, Junx-iang Xu, Yubo Wang, Wanqi Yin, Zhitao Yang, Chen Wei, Tongxi Zhou, Qingping Sun, Hui En Pang, Jiaqi Li, Oscar Qian, Zhiqian Lin, Xuanke Shi, Kewang Deng, Xiaoyang Han, Zukai Chen, Xiangyu Fan, Hanming Deng, Lewei Lu, Liang Pan, Bo Li, Ziwei Liu, Quan Wang, Dahua Lin, and Lei Yang. Scaling spatial intelligence with multimodal foun-dation models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 7879–7890, 2026. 2, 6 [6] Jacob Chalk, Saptarshi Sinha, Dima Damen, Yannis Kalan-tidis, and Diane Larlus. Whareformer: Learning to track what is where in long egocentric videos. In European Con-ference on Computer Vision (ECCV) . Springer, 2026. 2 [7] Boyuan Chen, Zhuo Xu, Sean Kirmani, Brian Ichter, Dorsa Sadigh, Leonidas Guibas, and Fei Xia. Spatialvlm: Endow-ing vision-language models with spatial reasoning capabili-ties. In CVPR , pages 14455–14465, 2024. 2 [8] Pingyi Chen, Yujing Lou, Shen Cao, Jinhui Guo, Lubin Fan, Yue Wu, Lin Yang, Lizhuang Ma, and Jieping Ye. SD-VLM: Spatial measuring and understanding with depth-encoded vision-language models. In Advances in Neural Information Processing Systems (NeurIPS) , 2025. 2 [9] An-Chieh Cheng, Hongxu Yin, Yang Fu, Qiushan Guo, Rui-han Yang, Jan Kautz, Xiaolong Wang, and Sifei Liu. Spatial-RGPT: Grounded spatial reasoning in vision-language mod-els. In Advances in Neural Information Processing Systems (NeurIPS) , 2024. 2 [10] Christopher Clark, Jieyu Zhang, Zixian Ma, Jae Sung Park, Rohun Tripathi, Sangho Lee, Mohammadreza Salehi, Ja-son Ren, Chris Dongjoo Kim, Yinuo Yang, Vincent Shao, Yue Yang, Weikai Huang, Ziqi Gao, Taira Anderson, Jian-rui Zhang, Jitesh Jain, George Stoica, Ali Farhadi, and Ran-jay Krishna. Molmo2: Open weights and data for vision-language models with video understanding and ground-ing. In Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition (CVPR) , pages 28652– 28668, 2026. 2 [11] Jacob Cohen. A coefficient of agreement for nominal scales. 
+
+Educational and Psychological Measurement , 20(1):37–46, 1960. 19 [12] Jakob Engel, Kiran Somasundaram, Michael Goesele, Albert Sun, Alexander Gamino, Andrew Turner, Arjang Talattof, Arnie Yuan, Bilal Souti, Brighid Meredith, et al. Project Aria: A new tool for egocentric multi-modal AI research. 
+
+arXiv preprint arXiv:2308.13561 , 2023. 4, 18 [13] Zhiwen Fan, Jian Zhang, Renjie Li, Junge Zhang, Run-jin Chen, Hezhen Hu, Kevin Wang, Peihao Wang, Huaizhi Qu, Shijie Zhou, Dilin Wang, Zhicheng Yan, Hongyu Xu, Justin Theiss, Tianlong Chen, Jiachen Li, Zhengzhong Tu, Zhangyang Wang, and Rakesh Ranjan. VLM-3R: Vision-language models augmented with instruction-aligned 3d re-construction. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 31054–31065, 2026. 2, 6 [14] Gabriele Goletto, Tushar Nagarajan, Giuseppe Averta, and Dima Damen. AMEGO: Active memory from long egocen-tric videos. In European Conference on Computer Vision (ECCV) , pages 92–110. Springer, 2024. 2 [15] Kristen Grauman, Andrew Westbury, Eugene Byrne, et al. Ego4d: Around the world in 3,000 hours of egocentric video. In CVPR , pages 18995–19012, 2022. 3 [16] Bo Gu, Zhikang Zhang, Zizhuang Wei, Zhenyuan Chen, Lingyun Li, and Zhuoyi Song. SpaceMind++: Toward allo-centric cognitive maps for spatially grounded video MLLMs, 2026. 2 [17] Chanyoung Gwak, Yoonwoo Jeong, Byungwoo Jeon, Hyun-seok Lee, Jinwoo Shin, and Minsu Cho. Cog3DMap: Multi-view vision-language reasoning with 3d cognitive maps, 2026. 2 [18] Junsheng Huang, Shengyu Hao, Bo-Cheng Hu, Hongwei Wang, and Gaoang Wang. Understanding dynamic scenes in ego centric 4d point clouds. In Proceedings of the AAAI Con-ference on Artificial Intelligence , pages 5031–5039, 2026. 3 [19] Robert Kowalski and Marek Sergot. A logic-based calculus of events. New Generation Computing , 4(1):67–95, 1986. 2 [20] Klaus Krippendorff. Content Analysis: An Introduction to Its Methodology . SAGE Publications, Thousand Oaks, CA, fourth edition, 2018. 19 [21] Bo Li, Yuanhan Zhang, Dong Guo, Renrui Zhang, Feng Li, Hao Zhang, Kaichen Zhang, Peiyuan Zhang, Yanwei Li, Zi-wei Liu, and Chunyuan Li. LLaVA-OneVision: Easy visual 
+
+10 task transfer. Transactions on Machine Learning Research ,2025. 2 [22] Chih-Ting Liao, Xi Xiao, Chunlei Meng, Zhangquan Chen, Yitong Qiao, Weilin Zhou, Tianyang Wang, Xu Zheng, and Xin Cao. SpaMEM: Benchmarking dynamic spatial reason-ing via perception-memory integration in embodied environ-ments. arXiv preprint arXiv:2604.22409 , 2026. 3 [23] Lucy Lin, Ayush Jain, Yifan Liu, and Katerina Fragkiadaki. Qwen-3d: A generalist 3d vision-language model for spatial understanding. In European Conference on Computer Vision (ECCV) , 2026. 2 [24] Matthias Minderer, Alexey Gritsenko, and Neil Houlsby. Scaling open-vocabulary object detection. In Advances in Neural Information Processing Systems (NeurIPS) , 2023. 4, 18 [25] Toby Perrett, Ahmad Darkhalil, Saptarshi Sinha, Omar Emara, Sam Pollard, Kranti Kumar Parida, Kaiting Liu, Pra-jwal Gatti, Siddhant Bansal, Kevin Flanagan, Jacob Chalk, Zhifan Zhu, Rhodri Guerrier, Fahd Abdelazim, Bin Zhu, Da-vide Moltisanti, Michael Wray, Hazel Doughty, and Dima Damen. Hd-epic: A highly-detailed egocentric video dataset. In CVPR , pages 23901–23913, 2025. 2, 3, 4, 13, 17 [26] Chiara Plizzari, Shubham Goel, Toby Perrett, Jacob Chalk, Angjoo Kanazawa, and Dima Damen. Spatial cognition from egocentric video: Out of sight, not out of mind. In Int. Conf. 3D Vis. , pages 1211–1221, 2025. 2 [27] Chiara Plizzari, Alessio Tonioni, Yongqin Xian, Achin Kul-shrestha, and Federico Tombari. Omnia de EgoTempo: Benchmarking temporal understanding of multi-modal LLMs in egocentric videos. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 24129–24138, 2025. 3 [28] Kevin Qu, Haozhe Qi, Mihai Dusmanu, Mahdi Rad, Rui Wang, and Marc Pollefeys. Loc3R-VLM: Language-based localization and 3d reasoning with vision-language models, 2026. 2 [29] Qwen Team. Qwen3.5: Towards native multimodal agents. 
+
+https://qwen.ai/blog?id=qwen3.5 , 2026. Ac-cessed: 2026-08-13. 2, 6 [30] Qwen Team. Qwen3.6-27B: Flagship-level coding in a 27B dense model. https://qwen.ai/blog?id=qwen3. 6-27b , 2026. Accessed: 2026-08-13. 2, 6 [31] Sahithya Ravi, Gabriel Herbert Sarch, Vibhav Vineet, An-drew D. Wilson, and Balasaravanan Thoravi Kumaravel. Out of sight, not out of context? egocentric spatial reasoning in VLMs across disjoint frames. In Proceedings of the 2025 Conference on Empirical Methods in Natural Language Pro-cessing , pages 16135–16150. Association for Computational Linguistics, 2025. 15 [32] Aleksandar Shtedritski, Christian Rupprecht, and Andrea Vedaldi. What does CLIP know about a red circle? vi-sual prompt engineering for VLMs. In ICCV , pages 11987– 11997, 2023. 15 [33] Pavel Tokmakov, Allan Jabri, Jie Li, and Adrien Gaidon. Ob-ject permanence emerges in a random walk along memory. In International Conference on Machine Learning (ICML) ,pages 21506–21519. PMLR, 2022. 2 [34] Weiyun Wang, Zhangwei Gao, Lixin Gu, Hengjun Pu, Long Cui, Xingguang Wei, Zhaoyang Liu, Linglin Jing, Shenglong Ye, Jie Shao, et al. InternVL3.5: Advancing open-source multimodal models in versatility, reasoning, and efficiency. 
+
+arXiv preprint arXiv:2508.18265 , 2025. 2, 6 [35] Yun Wang, Junbin Xiao, Han Lyu, Yifan Wang, Jing Zuo, Zhanjie Zhang, Hong Huang, Dapeng Wu, and Angela Yao. Keep it in mind: User-centric continual spatial intelligence reasoning in egocentric video streams. In Proceedings of the International Conference on Machine Learning (ICML) .PMLR, 2026. 3 [36] Ziyang Wang, Yue Zhang, Shoubin Yu, Ce Zhang, Zengqi Zhao, Jaehong Yoon, Hyunji Lee, Gedas Bertasius, and Mo-hit Bansal. EgoMemReason: A memory-driven reasoning benchmark for long-horizon egocentric video understanding. 
+
+arXiv preprint arXiv:2605.09874 , 2026. 3 [37] Diankun Wu, Fangfu Liu, Yi-Hsin Hung, and Yueqi Duan. Spatial-MLLM: Boosting MLLM capabilities in visual-based spatial intelligence. In Advances in Neural Informa-tion Processing Systems (NeurIPS) , 2025. 2, 6, 8 [38] Jianwei Yang, Hao Zhang, Feng Li, Xueyan Zou, Chunyuan Li, and Jianfeng Gao. Set-of-mark prompting unleashes extraordinary visual grounding in GPT-4V. arXiv preprint arXiv:2310.11441 , 2023. 15 [39] Jihan Yang, Shusheng Yang, Anjali W. Gupta, Rilyn Han, Li Fei-Fei, and Saining Xie. Thinking in space: How mul-timodal large language models see, remember, and recall spaces. In CVPR , pages 10632–10643, 2025. 3 [40] Jihan Yang, Zifan Zhao, Xichen Pan, Shusheng Yang, Junyi Zhang, Bingyi Kang, Hu Xu, Shang-Wen Li, and Saining Xie. Cambrian-P: Pose-grounded video understanding. In 
+
+European Conference on Computer Vision (ECCV) , 2026. 2, 6, 8 [41] Shusheng Yang, Jihan Yang, Pinzhi Huang, Ellis Brown, Zi-hao Yang, Yue Yu, Shengbang Tong, Zihan Zheng, Yifan Xu, Muhan Wang, Daohan Lu, Rob Fergus, Yann LeCun, Li Fei-Fei, and Saining Xie. Cambrian-S: Towards spatial super-sensing in video. In International Conference on Learning Representations (ICLR) , 2026. 2 [42] Hanxun Yu, Xuan Qu, Lei Ke, Boqiang Zhang, Yuxin Wang, Jianke Zhu, and Dong Yu. Stream3D-VLM: Online 3D spa-tial understanding with incremental geometry priors. In Eu-ropean Conference on Computer Vision (ECCV) , 2026. 2 [43] Yuqian Yuan, Ronghao Dang, Long Li, Wentong Li, Dian Jiao, Xin Li, Deli Zhao, Fan Wang, Wenqiao Zhang, Jun Xiao, and Yueting Zhuang. EOC-Bench: Can MLLMs iden-tify, recall, and forecast objects in an egocentric world? In Advances in Neural Information Processing Systems (NeurIPS) , 2025. 3 [44] Ruosen Zhao, Zhikang Zhang, Jialei Xu, Jiahao Chang, Dong Chen, Lingyun Li, Weijian Sun, and Zizhuang Wei. SpaceMind: Camera-guided modality fusion for spatial rea-soning in vision-language models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 16811–16822, 2026. 2 [45] Yanguang Zhao, Jie Yang, Shengqiong Wu, Shutong Hu, Hongbo Qiu, Yu Wang, Guijia Zhang, Tan Kai Ze, Hao Fei, 
+
+11 Chia-Wen Lin, Mong-Li Lee, and Wynne Hsu. SCP: Spatial causal prediction in video. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) Findings , pages 7165–7175, 2026. 3 [46] Duo Zheng, Shijia Huang, Yanyang Li, and Liwei Wang. Learning from videos for 3D world: Enhancing MLLMs with 3D vision geometry priors. In Advances in Neural In-formation Processing Systems (NeurIPS) , 2025. 2 
+
+12 Long Time No See: Benchmarking VLMs for Out-of-Sight Spatiotemporal Reasoning in Egocentric Videos 
+
+# Supplementary Material 
+
+## 7. Supplementary 
+
+Overview. In this supplementary material, we provide ad-ditional information, visualizations, and analyses that com-plement the main paper. Sec. 8 expands on the bench-mark construction, including the question templates, an-swer and distractor generation, and dataset distributions. Sec. 9 provides implementation details for model inference, including visual preprocessing and the prompts used for the baseline and oracle interventions. Sec. 10 describes the visibility-track construction pipeline in detail, with addi-tional visual illustrations of object-location inference and cross-view projection. Finally, Sec. 11 reports the results of the human validation of these visibility tracks. 
+
+## 8. Benchmark and Statistics 
+
+8.1. Question Templates and Answer Choices 
+
+Each question is constructed at a query time Tq for a sta-tionary and out-of-sight object that was moved earlier in the video using natural language template with placehold-ers. In the templates of Tab. 3, [OBJECT] denotes the tar-get object, [REF] denotes a visible reference object, and 
+
+[TIME] denotes the query timestamp in the format <TIME HH:MM:SS.s video 1> .
+
+8.2. Technical Details for Answer and Distractor Construction 
+
+Each question is constructed as a multiple-choice ques-tion in two stages: (i) derive the ground-truth answer, and (ii) construct the remaining options. All multiple-choice answers are randomly shuffled before being added to the benchmark. 
+
+Ground-truth answer derivation 
+
+Temporal grounding. The correct answer is the timestamp of the relevant visibility transition or placement event, ob-tained from the visibility tracks and movement annotations. 
+
+Scene localization. For each placement event, the HD-EPIC [25] movement annotation provides the fixture closest to the object at the end of the movement. The fixture dis-tribution is highly imbalanced: among 16 ,213 placements with a known fixture, 63 .2% occur on counters, followed by the sink ( 9.7% ), hob ( 6.7% ), cupboard ( 5.1% ), dishwasher (3.4% ), and drawer ( 3.3% ). Collapsing all counters into a single counter label would therefore introduce a strong an-swer bias and discard spatial detail. The annotations contain 63 counter-surface instances across nine kitchens, represented only by non-semantic IDs such as counter 001 . We manually map each instance to a unique, human-readable description using nearby fix-tures, e.g., “counter area between the fridge and the hob” .We favor neutral landmarks to reduce object–location short-cuts; for example, “next to the microwave” is preferred over 
+
+“next to the sink” when the latter may reveal the likely lo-cation of objects such as a sponge. Non-counter placements use the annotated fixture category directly. 
+
+3D spatial perception. We derive all 3D answers from the annotated world-frame object positions and the camera pose at query time Tq . Camera-relative questions express the tar-get in the camera coordinate system at Tq , whereas object-relative questions translate the origin to a confidently vis-ible reference object while preserving the axis orientation defined by the camera pose at Tq .Let cq ∈ R3 denote the camera center at query time 
+
+Tq in world coordinates, and let Rq ∈ SO (3) denote the corresponding world-to-camera rotation. The target’s last known world-frame position ℓo(Tq ) is expressed in the cam-era frame as 
+
+pcam  
+
+> o
+
+= Rq
+
+ ℓo(Tq ) − cq
+
+.
+
+Thus, the camera-relative direction is determined by the ori-entation of pcam  
+
+> o
+
+, while the camera-relative distance is 
+
+do, cam = ∥pcam  
+
+> o
+
+∥2 .
+
+For object-relative questions, we select a distinct refer-ence object r that is confidently visible at Tq , with world-frame position ℓr (Tq ). We translate the coordinate origin from the camera center to the reference object while retain-ing the camera orientation: 
+
+pcam  
+
+> o|r
+
+= Rq
+
+ ℓo(Tq ) − ℓr (Tq ).
+
+Equivalently, in homogeneous coordinates this transforma-tion is 
+
+Tq,r =
+
+Rq −Rq ℓr (Tq )
+
+0⊤ 1
+
+
+
+.
+
+Hence, pcam  
+
+> o|r
+
+is the vector from the reference object to the remembered target location, expressed along the camera-oriented axes at Tq . Its orientation determines the object-relative direction answer, and 
+
+do,r = pcam  
+
+> o|r2
+
+= ∥ℓo(Tq ) − ℓr (Tq )∥2
+
+13 Table 3. Question templates and answer choices. [TIME] , [OBJECT] , and [REF] denote the query timestamp, target object, and visible reference object, respectively.                                                                  
+
+> Question Exact template Answer choices
+> Visual Grounding
+> Visibility Check At [TIME] , is the previously moved [OBJECT] visible in the current frame? No ;Yes
+> Temporal Grounding
+> Last Visible Time Which timestamp is closest to when the [OBJECT] was last visible? 5 timestamps: HH:MM:SS ---Nseconds before the end
+> Last Placement Time The [OBJECT] was moved earlier in the video. Which timestamp is closest to when it last stopped being moved? 5 timestamps: HH:MM:SS ---Nseconds before the end
+> Scene Localization
+> Nearest Fixture
+> (non-counter vari-ant)
+> At [TIME] , based on the last known position of the [OBJECT] that was moved earlier, which fixture type is closest to it? 5 fixture types Nearest Fixture
+> (counter variant)
+> At [TIME] , based on the last known position of the [OBJECT] that was moved earlier, which counter area is closest to it? 3–6 kitchen-dependent counter ar-eas
+> 3D Spatial Perception
+> Object–Camera Di-rection At [TIME] , assuming the previously moved [OBJECT] remains at its last known position, in which direction is the [OBJECT] from your viewpoint?
+> Front-right ;Back-right ;Front-left ;
+> Back-left
+> Object–Camera Distance At [TIME] , assuming the previously moved [OBJECT] remains at its last known position, what is the distance between the camera and where the [OBJECT] was left?
+> Under 1 m ;1 to under 1.5 m ;1.5 m or more
+> Object–Object Di-rection At [TIME] , assuming the previously moved [OBJECT] remains at its last known position, where is it relative to the [REF] (marked in red in the current frame) from your viewpoint?
+> 12 to 4:30 o’clock ;4:30 to 7:30 o’clock ;7:30 to 12 o’clock
+> Object–Object Dis-tance At [TIME] , assuming the previously moved [OBJECT] remains at its last known position, how far is it relative to the [REF] (marked in red in the current frame)?
+> Under 1 m ;1 to under 1.5 m ;1.5 m or more
+
+determines the object-relative distance. The resulting direc-tions and distances are mapped to the predefined categorical answer bins used by each question type. 
+
+Option construction 
+
+Temporal distractors. Each temporal question contains the correct timestamp and four hard negatives. Candidate timestamps are grouped into four bins by absolute temporal distance from the correct answer, near (±1–2 s), medium 
+
+(±3–4 s), far (±5–6 s), and very far (±7–30 s), and one neg-ative is sampled from each bin. We prioritize timestamps corresponding to other visibility or movement events. If none are available, we sample a regular timestamp from the same bin. 
+
+Scene-localization distractors. For counter placements, dis-tractors are other counter-area descriptions from the same kitchen. For non-counter placements, they are sampled from alternative fixture categories, such as counter , cup-board , dishwasher , or drawer .
+
+Nearest Fixture is therefore the only question type whose number of options varies. Non-counter placements always yield five options, whereas counter placements yield be-tween three and six, since a kitchen with few annotated counter areas admits fewer plausible alternatives. The chance level reported for this question type in the main re-sults table is consequently not 1/k for a fixed k, but the mean of 1/k i over the 1,000 questions, which evaluates to 
+
+22 .7% . All other question types have a fixed option count, giving the 50 .0% , 20 .0% , 25 .0% , and 33 .3% chance levels of the remaining columns. 
+
+3D spatial options. Direction and distance are discretized into predefined, exhaustive categories, which directly define the answer choices. 
+
+8.3. Answer Distribution 
+
+To reduce the possibility of exploiting answer-frequency shortcuts, we control the correct-answer distributions for the temporal and spatial questions. For Last Visible Time 
+
+and Last Placement Time , each question contains five times-tamp choices. We sort these choices chronologically and balance which temporal position contains the correct an-swer: the correct timestamp is the earliest choice for 200 questions, the second earliest for 200, and so on up to the latest choice. Thus, each of the five chronological ranks occurs equally often as the correct answer. The 3D spatial perception questions are balanced as evenly as the sample size allows across their semantic answer classes. 
+
+Object–Camera Direction has four classes and is exactly balanced at 250 questions each, while Object–Camera Dis-tance , Object–Object Direction , and Object–Object Dis-tance have three classes and are balanced at 334 /333 /333 .
+
+Nearest Fixture is treated differently since its answers retain the naturally occurring fixture-label frequencies rather than being artificially balanced. The resulting distributions are shown in Supplementary Figs. 11 and 12. 14 1earliest 2 3 4 5latest                                   
+
+> 050 100 150 200 200 200 200 200 200
+> Number of questions
+> (a) Last Visible Time
+> 1earliest 2345latest
+> 200 200 200 200 200
+> (b) Last Placement Time
+> FL FR BL BR
+> 250 250 250 250
+> (c) Object–Camera Direction
+> <11–1.5≥1.50100 200 300 334 333 333
+> Number of questions
+> (d) Object–Camera Distance
+> 12–4:30 4:30–7:30 7:30–12
+> 333 334 333
+> (e) Object–Object Direction
+> <11–1.5≥1.5333 334 333
+> (f) Object–Object Distance
+
+Figure 11. Controlled correct-answer distributions. (a–b) Chronological answer-rank distributions for Last Visible Time and Last Placement Time . Chronological rank is obtained by sorting the five displayed timestamp choices from earliest to latest; rank 1 is the earliest and rank 5 the latest. Each rank is correct for exactly 200 of 1,000 questions in each step. (c–f) Semantic correct-answer distributions for the four 3D spatial perception questions, grouped by answer meaning rather than the shuffled multiple-choice option letter. Panel (c) has four classes and is exactly balanced; panels (d–f) have three classes and are balanced to 334 /333 /333 . FL/FR/BL/BR denote front/back left/right, and distance values are in metres. Dashed lines mark equal-share reference counts. 
+
+## 9. Technical Details for Model Inference 
+
+9.1. Visual Input Preprocessing 
+
+All videos are temporally sampled at 1 fps, resized to 448 ×
+
+448 pixels. Pixels outside the circular fisheye field of view are masked in black. Each sampled frame is annotated near the bottom-right corner, outside the visible camera field, with a timestamp token of the form <TIME HH:MM:SS.s video 1> . For the Object–Object Direction and Object– Object Distance questions, the model must reason about the spatial relationship between the out-of-sight target object o
+
+and a reference object r that remains visible at the query timestamp. To unambiguously identify r, we follow prior work on visual prompting and egocentric spatial reasoning that uses overlaid markers to indicate the queried object [31, 32, 38]. We overlay an 8 × 8 red marker at its projected image loca-tion in the query-time frame only. The marker is chosen to be clearly visible after resizing while minimally occluding the surrounding visual content; restricting it to the query-time frame avoids providing additional information about the reference object’s trajectory. An example of the pro-cessed frame is shown in Fig. 13. For each evaluation sample, the model receives the video prefix from t = 0 to the query time Tq , inclusive. Mod-els that can accommodate the full prefix receive all sam-pled frames, while for models with shorter context limits, frames are further uniformly subsampled to fit the available context. The frame at Tq is always retained to preserve the visual state at the query time. 
+
+9.2. Inference Prompt 
+
+Baseline setup. Each sample consists of a fixed system prompt, the input video, and a multiple-choice question with its answer options. We use the same system prompt for all models: “You are a helpful assistant trained to answer spatial and visual questions based on egocentric videos. Use the video to answer the question. The video is sampled at 1 frame per second.” 
+
+The question and answer choices are provided using the following prompt: 
+
+“Question: [QUESTION] Options: A. [OPTION A] 
+
+15 0 20 40 60 80 100 
+
+> sink counter area between the sink and the hob hob counter area close to the microwave cupboard counter area next to the window fridge counter area beside the hob and close to the door counter area between the hob and the sink counter area next to the wooden rolling cart counter area beside the hob and near the sink counter area next to the microwave counter area under the long straight cupboard row counter area above the washing machine counter area between the microwave and the hob counter area opposite the table counter area under the L-shaped cupboard cluster shelf dishwasher counter area above the refrigerator table counter area above a stack of 4 drawers bin drawer oven counter area between the fridge and the hob fridge–freezer counter area below the boiler counter area next to the oven counter area in the corner under the cupboard counter area between the door and the toaster counter area close to the washing machine microwave freezer counter area next to the tall floor-standing cupboard storage counter area opposite the refrigerator floor washing machine counter area in the corner next to the sink top cupboard top microwave windowsill hook top fridge counter area above the dishwasher counter area next to the refrigerator
+> 96 90 63 57 49 48 42 37 36 35 34 34 32 30 30 29 25 22 21 17 15 15 13 13 11 11 11 10 9877654443332222111
+> Number of questions
+
+Figure 12. Correct-answer distribution for Nearest Fixture . Nearest Fixture asks for the fixture type or counter area closest to the target object’s last known position. Bars show the number of questions for each correct label. Unlike the other question types, this distribution is not balanced but retains the naturally occurring fixture frequencies. All 47 labels occurring across the nine kitchens are shown, and the counts sum to the 1,000 out-of-sight anchors. 
+
+B. [OPTION B] . . . Select the best option and output only its letter.” 
+
+Temporal-cue intervention. For the temporal-cue exper-iments, we prepend the annotated intervals during which the target object was moved: “Temporal cue: The camera wearer moved the [OBJECT] during these time intervals: [START 1] to [END 1]; . . . ; [START n] to [END n]. Focus on these intervals when tracking the object.” 
+
+For example: “Temporal cue: The camera wearer moved the fork during these time intervals: <TIME 00:00:03.0 video 1> to <TIME 00:00:14.3 video 1> ; <TIME 00:00:15.5 video 1> to <TIME 00:00:26.4 video 1> . Focus on these intervals when tracking the object.” 
+
+Visibility-cue intervention. For the visibility-cue experi-ments, we additionally state that the target is not visible at query time. Specifically, downstream questions are rewrit-ten into the following form, where [QUESTION BODY] 
+
+is the template of Tab. 3 with its leading “At [TIME] , as-suming the previously moved [OBJECT] remains at its last known position,” clause removed, so that the clause is not stated twice: “At [QUERY TIME], the previously moved [OB-JECT] is no longer visible. Assuming it remains at its last known position, [QUESTION BODY]” 
+
+16 Figure 13. Example preprocessed query frame. The timestamp is placed in the masked region outside the fisheye field of view. For object-relative spatial questions, the visible reference object is indicated by a red marker. 
+
+For example: “At <TIME 00:01:00.0 video 1> , the previously moved cloth is no longer visible. Assuming it remains at its last known position, in which direction is the cloth from your viewpoint?” 
+
+## 10. Technical Details for Visibility Track Con-struction 
+
+This section provides the implementation details for the vis-ibility track construction procedure. Tracks are sampled at 1 fps and contain both the inferred object location and its visibility state. 
+
+10.1. Inferring Object Locations from Movement Annotations 
+
+HD-EPIC [25] annotates each object movement with its temporal interval and observations at the beginning and end of the movement. These observations include a 2D bound-ing box, segmentation mask, 3D object center, and associ-ated scene fixture. Because intermediate object trajectories are not annotated, we infer the stationary object location us-ing the following rules, illustrated in Fig. 14: • Before the first annotated movement: The object is as-sumed to remain at the location recorded at the beginning of its first movement. • During an annotated movement: The object is as-signed in motion . No stationary location is assigned because its trajectory between the annotated endpoints is     
+
+> Figure 14. Object location inference from HD-EPIC annota-tions. The object is held at its first annotated start location before the first movement, marked in motion during a movement, and held at the endpoint of its most recent completed movement there-after.
+
+unknown, so the three-stage procedure below is not ap-plied to these samples. We nevertheless treat the object as visible while it is being relocated ( vo(t) = 1 ), since it is in the camera wearer’s hands. Because they carry no sta-ble location, they can never themselves be query anchors, and they are excluded from the audit in Sec. 11. • Between movements and after the final movement: 
+
+The object is assumed to remain at the endpoint location of its most recently completed movement. 
+
+10.2. Determining Visibility 
+
+For each one-second sample at which the object has an in-ferred stationary location, we determine its visibility using a three-stage procedure: 1. Field-of-view projection: We determine whether the object’s inferred location falls within the current camera view. 2. Fixture-aware geometric occlusion: We check whether a scene fixture blocks the camera’s view of the object. 3. Detection-based visual confirmation: We inspect the corresponding video frame to confirm whether the ob-ject is visible at the expected location using an open-vocabulary detection method. Stages 1 and 2 act on individual samples. Consecutive samples sharing the same stage-1/stage-2 outcome are then merged into a continuous interval , and Stage 3 operates at interval granularity, where it scores each candidate interval by the fraction of its frames in which the detector confirms the object, and assigns the resulting state to the interval as a whole. Every sample therefore ends up with exactly one state, and every interval is state-homogeneous by construc-tion. 
+
+Stage 1: Field-of-view projection. For stationary ob-jects, projecting only the annotated 3D centroid is unre-liable near image boundaries, as objects may remain par-tially visible even if their centroid is off-screen. To account 17 for this, we determine if an object is within the field of the camera view using the following procedure: • Approximating spatial extent: We represent the object using nine points from its annotated endpoint bounding box: the center, four corners, and four edge midpoints. These points are back-projected onto a plane that passes through the object’s 3D centroid and is parallel to the camera’s image plane, forming a stable 3D footprint in world coordinates that is reused while the object remains stationary. • Camera projection and masking: At each sampled time point, we reproject the nine points into the current cam-era view using the corresponding camera pose provided by the HD-EPIC annotations and the FISHEYE624 fish-eye camera model of Project Aria [12]. We use devi-gnetted RGB frames, in which lens-vignetting effects are corrected and valid image content is limited to the circu-lar region within the frame. The same frames and valid-image mask are used in later detection stages and during benchmark evaluation to ensure consistency. A projected point is considered invalid if it lies behind the camera or outside this region. • State assignment: The object is assigned in view if more than 50% of the points (i.e. at least five of the nine support points) are valid; otherwise, it is assigned the state 
+
+out of view .
+
+Stage 2: Fixture-aware geometric occlusion. For each in-view object, we cast rays from the camera center toward all nine support points and intersect them with the kitchen mesh. A ray is considered blocked if its first intersection lies at least δ = 10 cm closer to the camera than the correspond-ing target support point. We then calculate the fraction of rays that are blocked. If at least 50% of the rays are blocked, the object is considered geometrically occluded. The static digital twin does not track the real-time state of movable parts, such as open refrigerator doors or extended drawers. Consequently, an object placed inside an open cabinet might falsely appear occluded by the digital twin’s default closed-door geometry. If the majority blockage is attributed to the openable fixture containing the object, we instead assign fixture ambiguous and defer the final visibility decision to the detection-based visual confirma-tion stage. 
+
+Stage 3: Detection-based visual confirmation. Samples that lie within the camera’s field of view and are not classi-fied as occluded are verified using an open-vocabulary object detector. We process the corresponding frames at 1 fps, apply the same valid-image mask used in the previ-ous stages, and query OWLv2 [24] with the object’s name. A detection is matched to the target only if its bounding box, enlarged by 20 pixels, contains the object’s projected                 
+
+> 020 40 60 80 100 010 20 30 40 50 60 70 65.2% 20.1%
+> n= 445 ,301 intervals Detected fraction of tested frames (%) Share of intervals (%)
+> Figure 15. Detected-fraction distribution of scored intervals.
+> Share of intervals (%) whose detected fraction of tested frames falls in each 10% bin ( n= 445 ,301 ). The distribution is strongly U-shaped: 65 .2% of intervals fall in the lowest bin and 20 .1% in the highest, leaving under a sixth of intervals spread across the middle.
+
+anchor point. If multiple detections satisfy this condition, we select the one whose center is closest to the target ob-ject. This geometric constraint helps distinguish between multiple objects of the same category. An interval is assigned detected visible if the object is detected in at least half of its testable frames. This threshold is not a sensitive parameter as the detected fraction is strongly U-shaped (Fig. 15), with 65 .2% of intervals in the lowest 10% bin and 20 .1% in the high-est, so only a small minority of intervals lie near the cut-off. If the object is not detected and its previous state was fixture ambiguous , the interval is assigned 
+
+occluded . Otherwise, it is assigned the internal state 
+
+visually unconfirmed .HD-EPIC object-association names are free-form and may contain instance indices, spelling errors, annotation notes, or descriptions that do not refer to a single visually identifiable object. We therefore manually curate the 3,826 
+
+distinct raw names. Of these, 1,713 are retained unchanged, 
+
+1,563 are rewritten as visually groundable object names, and 550 cannot be mapped to a single object. For each groundable name, the detector uses an ordered sequence of up to three queries, from specific to coarse; for exam-ple, air fryer drawer → drawer → air fryer . A coarser query is used only if all more specific queries fail at the pro-jected location. Ungroundable associations are assigned the 
+
+not groundable state. These are not passed to the de-tector and are excluded from the constructed visibility track and the visibility-recall calculations. These objects will not be used for building the benchmark as well. 18 Table 4. Human audit of the visibility tracks. We compare the total number of annotated marks per visibility track state with the number of marks judged to be visible. These correspond to dis-agreements for the first three states, which the pipeline labels not visible, and agreements for detected visible . Acc. is com-puted as the percentage of agreeing marks. The pipeline makes no claim for not groundable . The four scored states sum to the 4,102 marks used for scoring while the 4 in motion marks among the 4,176 gold marks are omitted, as the pipeline derives no visibility evidence for them.                   
+
+> Pipeline state #Marks #Visible Acc. (%)
+> out of view 1,293 105 91 .9
+> occluded 291 11 96 .2
+> visually unconfirmed 1,510 372 75 .4
+> detected visible 1,008 819 81 .2
+> not groundable 70 −−
+
+## 11. Human Validation of the Visibility Tracks 
+
+This section details the visibility track audit. 
+
+Audit protocol. We draw videos round-robin over partici-pants and stratify frame times into uniform bins within each video, preferring frames that contain at least three in-view objects. The audit covers 30 videos and all nine partici-pants. Objects whose track is defined at the sampled times-tamp are drawn as markers at their projected position. An-notators click the markers they can see, so unmarked objects are recorded as not visible, and a marker can also be flagged 
+
+unsure , which abstains from both the majority vote and the agreement statistics. The pipeline state and the detector out-put are hidden, so the annotator judges only the frame and the marker. Judgments are matched to the track state within a 1 s tolerance. Two properties of this design matter when reading the rates below. Frames are biased toward object-populated moments rather than drawn uniformly at random, and frames dense with objects are capped at 15 markers, drawn at random among that frame’s objects, so very dense frames are represented by a subset of their objects. The sampler has no knowledge of the pipeline states, so the per-state coverage in Table 4 is an outcome of this procedure rather than part of its design. Three annotators completed 449 frames in 4.8 hours, of which 436 pass the quality filter below, giving 5,391 mark judgments over 344 distinct frames. We aggregate multiply-rated marks by majority vote and discard 12 marks that all raters called unsure and 12 that end in a tie, leaving 4,176 
+
+gold marks. Of these, 70 are not groundable and 4
+
+are in motion . For neither state does the pipeline de-rive a visibility decision from the geometric and detection evidence that this audit tests. Therefore both cases are ex-cluded from scoring and 4,102 marks remain. 
+
+Quality control. We discard frames on which an anno-tator spent less than 2 s, since the markers cannot be in-spected in that time. Because unmarked objects count as not visible, a rushed frame yields confident wrong labels rather than missing data, so filtering on dwell is necessary. This removes 13 of 449 frames. Median dwell per frame is 38 .5, 17 .4, and 16 .9 s. Splitting each session into thirds, median dwell is lower in the final third than in the first for all three annotators (e.g. 42 .9 → 34 .7 s), but the rate at which they call objects visible stays within 2.7 points of its session mean for all three. Faster judgments later in a session are therefore not systematically more permissive. 
+
+Inter-annotator agreement. 50 frames (634 marks) carry ratings from more than one annotator. Krippendorff’s 
+
+α [20] is 0.76 , the raters are unanimous on 520 of these marks ( 82 .0% ), and 12 reach no majority, leaving 622 
+
+multiply-rated marks in the gold set. Pairwise Cohen’s 
+
+κ [11] is 0.86 , 0.75 , and 0.68 , computed on the 550 , 583 ,and 552 marks that each pair rated without either annota-tor flagging unsure . Part of the disagreement is a threshold effect. On the shared marks the three annotators call the ob-ject visible at rates of 34 .4% , 31 .5% , and 26 .1% , and the annotator with the lowest rate is the one involved in both of the lowest pairwise κ values. 
+
+Overall metrics. Table 5 scores the pipeline against the majority human vote over the 4,102 scored marks, count-ing every mark once. Confidence intervals come from a cluster bootstrap over whole videos ( 30 clusters, 2,000 re-samples) and therefore account for the correlation between marks drawn from the same video. Restricting scoring to the unanimous multiply-rated marks improves every met-ric, so label ambiguity makes the headline numbers conser-vative rather than flattering. Of the 520 unanimous marks, 
+
+518 fall in a state for which the pipeline makes a visibility claim and are therefore scored. 
+
+Where the errors are. The 4,102 scored marks contain 
+
+488 false negatives and 189 false positives. Of the false negatives, 372 are visually unconfirmed , meaning the object is in view, unoccluded by static geometry, and legible to a human, but OWLv2 fails to confirm it, re-turning a matching box in fewer than half of the tested frames. The remaining 105 and 11 fall in out of view 
+
+and occluded , whose labels rest on the projected foot-print and the scene mesh. Occlusions caused by the object’s own containing fixture are additionally required to fail a de-tector check before the occluded label is kept. This asymmetry follows from the design. Detec-tion can only demote an in-view, unoccluded sample to 19 Table 5. Pipeline versus majority human vote. Metrics over raw mark counts with 95% cluster-bootstrap confidence intervals over videos. The last column restricts scoring to the 518 scored marks among the 520 multiply-rated marks on which the annotators are unanimous.                                                                                    
+
+> Metric All marks 95% CI Unanimous
+> Accuracy 83 .5[80 .7,85 .8] 87 .6
+> Precision 81 .2[76 .9,85 .2] 82 .2
+> Recall 62 .7[54 .9,68 .5] 69 .3
+> F1 70 .8–75 .2
+> Balanced acc. 78 .0[74 .1,81 .0] 81 .9
+> Audited marks 4,102 518
+> Table 6. Audit results per participant. Percentages over raw mark counts, with Marks the number of scored marks.
+> Part. Marks Acc. Prec. Rec. Bal. acc.
+> P01 474 84 .077 .763 .077 .8
+> P02 426 81 .775 .357 .574 .7
+> P03 323 80 .865 .961 .474 .7
+> P04 654 87 .989 .469 .883 .0
+> P05 204 81 .993 .669 .582 .2
+> P06 557 82 .979 .966 .879 .1
+> P07 522 84 .977 .262 .477 .8
+> P08 479 74 .778 .839 .466 .8
+> P09 463 89 .288 .474 .885 .2
+> All 4,102 83 .581 .262 .778 .0
+
+visually unconfirmed or leave a fixture-ambiguous sample occluded , so detector failures cost recall rather than precision. We keep visually unconfirmed sep-arate from out of view and occluded throughout be-cause it is the unreliable one, and query anchors are drawn only from the latter two. 
+
+Variation across participants. Balanced accuracy ranges from 66 .8% (P08) to 85 .2% (P09) in Table 6. Precision and recall vary by a comparable amount across kitchens, from 
+
+65 .9 to 93 .6% and from 39 .4 to 74 .8% , which is expected given that both are set by how well the open-vocabulary de-tector handles that kitchen’s objects. The weakest case is P08, where one of the three audited videos (P08-20240618-171546) contributes zero true positives, meaning the detec-tor confirmed none of the objects that annotators could see there. 20

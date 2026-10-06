@@ -1,0 +1,998 @@
+Title: MaRO-GS: Mask-Robust Object-Centric Gaussian Splatting from Inconsistent Multi-view Masks
+
+URL Source: https://arxiv.org/pdf/2610.06472v1
+
+Published Time: Tue, 06 Oct 2026 03:12:08 GMT
+
+Number of Pages: 43
+
+Markdown Content:
+# MaRO-GS: Mask-Robust Object-Centric Gaussian Splatting from Inconsistent Multi-view Masks 
+
+Eunji Kim ∗, Gahyeon Kim ∗, Gianella Cravioto, Dong-hun Lee, Chaewon Moon, Chae-yeong Song, and Sang-hyo Park †
+
+School of Computer Science and Engineering Kyungpook National University, Daegu, Republic of Korea 
+
+{now0104, hwang190190, gianellacrv9, hy05205, moonchaewon2, yeongsong, s.park}@knu.ac.kr https://eunjikim02.github.io/marogs/ 
+
+Abstract. We address the challenge of accurate 3D object reconstruc-tion from multi-view images in Gaussian Splatting. Existing object-level 3DGS methods reconstruct the entire scene rather than directly optimiz-ing the target object, even when only the target object is needed, which incurs substantial computational overhead. They also rely on 2D segmen-tation masks to associate Gaussians with objects, but these masks are often inconsistent across views. Such inconsistencies corrupt Gaussian optimization and produce incorrectly supervised Gaussians that degrade object reconstruction fidelity. To overcome these limitations, we pro-pose MaRO-GS, a 3DGS framework that directly optimizes target-object Gaussians from object-masked multi-view images and remains robust to inconsistent supervision. For reliable supervision, mask-reliability view filtering excludes unreliable views. Object-supported Gaussian density control suppresses Gaussians irrelevant to the target object and prevents background densification, while Silhouette-aligned Object Loss main-tains object-focused optimization. Extensive experiments across diverse datasets demonstrate that MaRO-GS improves PSNR, segmentation ac-curacy, and computational efficiency, with the largest PSNR gain of 2.05 dB on the small-object LERF-Mask dataset. 
+
+Keywords: 3D Gaussian Splatting, Object-centric Reconstruction, Mask Supervision 
+
+1 Introduction 
+
+3D object reconstruction is essential for applications such as object editing [30, 39,43], AR/VR [37], and 3D content creation [30]. Despite the importance of 3D object reconstruction, recent 3D Gaussian Splatting (3DGS) [20] research has primarily focused on improving scene-level reconstruction quality [4, 44, 45] and 
+
+> ∗
+
+Equal contribution 
+
+> †
+
+Corresponding author arXiv:2610.06472v1 [cs.CV] 5 Oct 2026 2 E. Kim et al. •        
+
+> (a) Input images (b) Object-aware GS task (c) Rendered results
+> Voting Initialization Object-aware
+> Anchor
+> Pruning
+> MaRO-GS
+> ••3D Gaussians Point Cloud Element-wise multiplication
+> SAM
+> ObjectGS
+> PSNR: 43.64 dB
+> Training Time (s): 6,824 s
+> Rendering Time (s): 11 s
+> PSNR: 47.64 dB
+> Training Time (s): 323 s
+> Rendering Time (s): 5 s
+> Masked
+> images
+> View Filtering
+> Anchors
+> Anchor
+> Growing
+> SAM
+> Density Refinement
+
+Fig. 1: Comparison between MaRO-GS and ObjectGS on a single object from LERF-Mask. (a) MaRO-GS directly reconstructs the target object from object-masked multi-view images (top), whereas ObjectGS reconstructs the entire scene with its native full-scene pipeline before extracting the target object (bottom). This leads to longer training time (6,824 s vs. 323 s). 
+
+computational efficiency [8, 13, 14, 32]. To support object-centric reconstruction, several methods have extended 3DGS to enable object-level reconstruction [15, 16, 29, 41, 46, 48]. However, as illustrated in Fig. 1, these approaches reconstruct the entire scene before extracting the target object, which incurs unnecessary computational overhead. Furthermore, they rely on SAM [22]-generated masks that are inconsistent across views, thereby destabilizing Gaussian optimization and degrading object reconstruction quality. To improve object extraction quality, recent methods propose boundary re-finement strategies [15,29,46] or enforce cross-view mask consistency via tracking and voting [41, 48]. The former refines object boundaries to mitigate extraction artifacts, yet reconstructing the entire scene still incurs substantial computa-tional overhead. The latter ensures cross-view object identity consistency but does not assess individual mask reliability, so inaccurate masks are still used as supervision during optimization. Meanwhile, Trace3D [35] identifies inconsis-tent masks via instance weight tracing but corrects rather than filters inaccurate masks, which allows erroneous supervision into the optimization process. To address these challenges, we propose MaRO-GS (Ma sk-Robust Object-centric Gaussian Splatting), a framework for direct optimization of target-object Gaussians from object-masked multi-view images under inconsistent mask su-pervision. Mask-reliability view filtering establishes reliable mask supervision by identifying and excluding unreliable views during training. Inconsistent mask supervision can also lead to unnecessary Gaussian densification around object boundaries and background regions. Object-supported Gaussian density control suppresses densification outside the target object and removes Gaussians irrel-evant to the object to maintain a compact object-centric representation while improving reconstruction quality. In addition, the silhouette-aligned object loss MaRO-GS 3
+
+further constrains optimization with object-focused photometric and silhouette supervision, encouraging the reconstructed object to align with the target object silhouette. Extensive experiments demonstrate that MaRO-GS improves PSNR over ex-isting methods, with the largest gain of 2.05 dB on the small-object LERF-Mask dataset [41] while directly reconstructing the target object without scene-level reconstruction. As a complementary analysis, we evaluate target object recon-struction quality from object-centric viewpoints. 
+
+– We propose MaRO-GS, a mask-robust framework for object-centric 3DGS that directly optimizes target-object Gaussians from object-masked multi-view observations under inconsistent mask supervision. 
+
+– We propose mask-reliability view filtering, which stabilizes object-centric optimization by identifying and excluding unreliable views during training. 
+
+– We introduce object-supported Gaussian density control, which removes Gaussians irrelevant to the target object and constrains densification for a compact, high-fidelity object representation. 
+
+– We provide object-centric and mask-error robustness evaluations that com-plement conventional scene-level evaluation for assessing target-object recon-struction quality, particularly under small object regions and inconsistent masks. 
+
+2 Related Work 
+
+2.1 Scene-level Reconstruction in 3DGS 
+
+Recent 3DGS [20] research has substantially improved scene-level reconstruc-tion fidelity through enriched Gaussian representations and adaptive density control [4, 21, 28, 42, 44]. Other studies have instead focused on improving com-putational efficiency through pruning and compression techniques [9, 10, 12–14, 31,32,34]. However, these scene-level 3DGS methods are designed for entire scene reconstruction and do not account for individual objects within the scene. 
+
+2.2 Object-level Reconstruction in 3DGS 
+
+Several methods [29, 35, 41, 46, 48] have extended 3DGS to support object-level reconstruction. For example, ObjectGS [48] introduces object-aware anchors, COB-GS [46] and Trace3D [35] address boundary ambiguity through Gaussian refinement, and BEA-GS [29] improves object extraction via boundary and occu-pancy losses. However, these methods perform scene-level Gaussian optimization prior to object extraction, which results in unnecessary computational overhead. Since scene-level reconstruction optimizes Gaussian primitives for the entire scene, Gaussians near object boundaries receive supervision from both object and background regions. As a result, ambiguous Gaussians emerge, which limits ob-ject extraction quality despite various boundary refinement strategies [29,35,46]. Unlike these approaches, MaRO-GS directly reconstructs the target object from object-masked multi-view images and applies object-supported Gaussian density control to better constrain Gaussian optimization around the target object. 4 E. Kim et al. Operation Flow  
+
+> (b) Object-supported Gaussian Density Control
+> Region-based View Validation
+> Geometric View Consistency
+> Rendering
+> Incorrect mask Correct mask Element-wise multiplication
+> Mask-guided Pruning
+> and Densification
+> Appearance-guided Local Gaussian Merging
+> Consistent view Inconsistent view
+> Pruning
+> 𝜋 𝑣 (𝑥 𝑖 )𝑥 𝑖
+> 𝑀 𝑣 𝒢
+> 𝒢
+> Rasterizer
+> (a) Mask-reliability View Filtering
+> 3D Gaussians
+> Projector
+> Adaptive Density Control
+> Filtering
+> 𝓛 𝒇𝒊𝒏𝒂𝒍
+> Gradient Flow
+> 𝑀
+> 𝐼
+> Splatting
+> (Silhouette-aligned object loss)
+> ሚ𝐼
+> Merging
+
+Fig. 2: Overview of MaRO-GS for object-centric 3D Gaussian Splatting. The pipeline first removes inconsistent views through (a) mask-reliability view filtering. It then suppresses Gaussians irrelevant to the target object via (b) object-supported Gaussian density control to improve object reconstruction fidelity. 
+
+2.3 2D Mask Supervision in 3DGS 
+
+Recent object-aware methods have leveraged 2D masks predicted by SAM [22] and lifted them into 3D representations [15–17, 36, 40, 41]. This enables appli-cations such as object extraction, segmentation, and scene editing in 3DGS. Although SAM provides powerful segmentation capabilities, it produces incon-sistent masks across views for the same object. These inconsistencies manifest in both object boundaries [29, 35, 46] and mask granularity [7]. They introduce conflicting supervision signals into the reconstruction process. As a result, object-centric Gaussian optimization becomes unreliable and reconstruction quality de-grades. To address this, Gaussian Grouping [41] and ObjectGS [48] adopt dif-ferent strategies to establish cross-view mask consistency. Specifically, Gaussian Grouping employs the DEVA [6] tracker for cross-view object ID tracking, while ObjectGS uses majority voting to assign object IDs. In both cases, the focus remains on cross-view object ID consistency rather than assessing the reliabil-ity of individual 2D mask predictions. Consequently, inaccurate masks can still be used as supervision during optimization. Trace3D [35] also addresses multi-view mask inconsistency via GIT-based instance weight tracing. However, as it is designed for multi-object segmentation within a fully reconstructed scene, its consistency enforcement operates across all objects simultaneously rather than explicitly identifying and filtering low-quality masks for a target object. Despite their differences, these methods do not explicitly filter inconsistent masks to ensure clean supervision for object-centric reconstruction. In contrast, MaRO-GS removes unreliable views through mask-reliability view filtering and provides cleaner supervision. MaRO-GS 5
+
+3 Methods 
+
+We propose MaRO-GS (Ma sk-Robust Object-centric Gaussian Splatting), il-lustrated in Fig. 2. Our method first formalizes the object-centric reconstruction task (Sec. 3.1). To ensure reliable optimization under imperfect mask supervi-sion, we introduce mask-reliability view filtering , which enforces geometric consis-tency across training views (Sec. 3.2). We further propose object-supported Gaus-sian density control to suppress background Gaussians and concentrate density around target objects (Sec. 3.3). Finally, we design a Silhouette-aligned object loss function that prioritizes object regions during optimization (Sec. 3.4). This unified design transforms conventional scene-level 3DGS into an object-centric reconstruction pipeline for robust and high-fidelity results under inconsistent mask supervision. 
+
+3.1 Object-centric 3D Gaussian Splatting 
+
+We formalize object-centric 3DGS for accurate and efficient reconstruction of a target object by directly performing Gaussian optimization on object-masked observations, without reconstructing the entire scene. Specifically, given an RGB image I and binary object mask M , we construct an object-masked observation: 
+
+˜I = I ⊙ M,  (1) where ⊙ denotes element-wise multiplication. This masking operation removes irrelevant scene regions and focuses the optimization on the target object. How-ever, simply applying object masks is insufficient, as optimization becomes di-rectly dependent on their quality and consistency. When masks are inaccurate or inconsistent across views, the same 3D region may be supervised as foreground in one view and background in another, which corrupts Gaussian optimization and adaptive density control. Therefore, object-centric 3DGS requires robust optimization under imperfect mask supervision, which motivates the designs in the following sections. 
+
+3.2 Mask-Reliability View Filtering 
+
+Since MaRO-GS directly optimizes an object-centric Gaussian representation from masked observations, the reliability of each object mask directly determines the quality of supervision. However, segmentation models such as SAM [22] often produce view-dependent mask errors, including missing object regions, boundary inaccuracies, and background inclusions. As shown in Fig. 3, even a small number of erroneous masks can disturb Gaussian optimization and lead to rendering artifacts in multiple views. This indicates that mask errors are not isolated 2D supervision noise, but can propagate through the shared 3D Gaussian representation. We therefore propose mask-reliability view filtering ,which identifies unreliable views and excludes them from subsequent training. This filtering is realized through two complementary stages: Geometric view consistency and Region-based view validation .6 E. Kim et al. inconsistent view   
+
+> Mask Error: 10%
+> (5/50 views)
+> Rendering Error: 57%
+> (4/7 views)
+> error 3DGS Rendering error
+
+Fig. 3: Illustration of the instability of conventional 3DGS under inconsistent masks. 
+
+Geometric View Consistency. The first stage identifies geometrically incon-sistent views that provide unreliable object-level supervision. Unlike scene-level view consistency, which treats all visible Gaussians equally, our goal is to evalu-ate whether the visible Gaussians are consistently supported by the target-object masks. For each view vi, we render the current Gaussian set G and obtain its vis-ible Gaussian set Vi. For a Gaussian gk, we define its object-supported visibility weight in view vi as 
+
+Vk
+
+> obj
+
+(i) = 1[gk ∈ V i] · Mi(πi(xk)) · αk, (2) where xk and αk are the 3D center and opacity of Gaussian gk, respectively. 
+
+πi(xk) denotes its projected 2D location in view vi, and Mi(·) is the binary ob-ject mask for view vi. Building on the covisibility formulation of LongSplat [26], we introduce an object-supported covisibility measure. Let Ni denote the neigh-boring view set of vi, selected according to camera-center distance. The object covisibility score Ci is defined as 
+
+Ci = 1
+
+K
+
+X
+
+> j∈TopK( Ni)
+
+P 
+
+> k
+
+min 
+
+
+
+Vk
+
+> obj
+
+(i), Vk
+
+> obj
+
+(j)
+
+P 
+
+> k
+
+max 
+
+
+
+Vk
+
+> obj
+
+(i), Vk
+
+> obj
+
+(j)
+
+
+
++ ϵ, (3) where Ni denotes the pose-nearest candidate view set selected by camera-center distance, and TopK( Ni) selects the three views in Ni that produce the highest object-supported covisibility responses with respect to the reference view vi.After computing Ci for all training views, we sort the scores as C(1) ≤ · · · ≤ C(N ).We then determine τgeo from the largest score gap: 
+
+s∗ = arg max 
+
+> s
+
+ C(s+1) − C(s)
+
+ , τgeo = C(s∗) + C (s∗+1) 
+
+2 . (4) Rather than using a fixed absolute threshold, τgeo is determined from the relative score distribution, and the split is accepted only when the low-score cluster is sufficiently small and clearly separated from the remaining views. The geomet-rically unreliable view set is then defined as 
+
+Vgeo bad = {vi | Ci < τ geo } . (5) These views are excluded from subsequent training, preventing inconsistent object-level supervision from contaminating the densification process. MaRO-GS 7
+
+Region-based View Validation. Geometric consistency alone cannot catch views where the covisibility is acceptable but the 2D mask is spatially misaligned due to occlusion or segmentation failure. For these cases, we evaluate whether the current Gaussian distribution is well supported by the object mask in each view. Specifically, we compute a per-view hit ratio: 
+
+Hi = 1
+
+|G i|
+
+X 
+
+> xk∈G i
+
+Mi
+
+ πi(xk), (6) where Gi denotes the set of Gaussian centers whose projections lie inside the image domain of view vi. Intuitively, Hi measures the fraction of valid Gaussian projections that fall inside the object mask. Views with Hi < τ hit are added to Vreg bad and excluded from subsequent training. The final unreliable view set is defined as Vbad = Vgeo bad ∪ V reg bad .
+
+3.3 Object-supported Gaussian Density Control 
+
+While mask-reliability view filtering improves the reliability of view-level su-pervision, object-centric reconstruction also requires density-level control over the Gaussian representation. The Gaussian distribution should be allocated and maintained in regions that receive consistent target-object support across views. Without this constraint, Gaussians near object boundaries or residual back-ground regions can persist during optimization and may be further amplified by adaptive densification. These unsupported Gaussians degrade object com-pactness and introduce residual background artifacts. To address this issue, we propose object-supported Gaussian density control , which refines the Gaussian distribution through two complementary operations: Mask-guided Pruning and Densification and Appearance-guided Local Gaussian Merging .
+
+Mask-Guided Pruning and Densification. To remove such unsupported primitives, we measure how consistently each Gaussian is supported by object masks across views. For a Gaussian  gi with center  xi, let  Ωi denote the set of views in which  gi is projected inside the image domain. We define its mask-overlap ratio as 
+
+Pi = 1
+
+|Ωi|
+
+X
+
+> v∈Ωi
+
+Mv (πv (xi)) . (7) A low Pi indicates weak object-mask support and suggests that the Gaussian corresponds to background or boundary artifacts. We adaptively determine the pruning threshold from the distribution of {P i}. Let μ and σ denote the mean and standard deviation of mask-overlap ratios. The threshold τmask is derived from these statistics, with μ + kσ as a base criterion and a conservative upper bound to prevent over-pruning. We then remove unsupported Gaussians as 
+
+Gprune = {gi ∈ G | P i < τ mask }. (8) 8 E. Kim et al. 
+
+We further suppress unsupported densification by applying a mask-support gat-ing function to the accumulated positional gradient used for clone and split operations: ˜gi = gi · S v (xi). Here, Sv (xi) = 1[Mv (πv (xi)) > 0] is a binary sup-port indicator that becomes one when Gaussian gi is projected inside the object mask in view v, and zero otherwise. Thus, Gaussians projected outside the object mask do not trigger densification. 
+
+Appearance-guided Local Gaussian Merging. While mask-guided prun-ing removes background artifacts, redundant and overlapping Gaussians can still accumulate on the foreground object. To improve object-centric reconstruction fidelity, we introduce an appearance-guided local Gaussian merging strategy that consolidates nearby primitives with similar appearance. For each Gaus-sian, neighboring primitives are identified within a spatial radius proportional to its scale. Among these neighboring primitives, Gaussians with similar color are selected, and merging is performed when the number of candidates exceeds a predefined threshold. The merged Gaussian replaces the group by averaging the geometric and appearance attributes—position, scale, rotation, and color—while accumulating opacity values to preserve the overall density of the region. 
+
+3.4 Silhouette-aligned Object Loss 
+
+Existing object-level methods often use boundary or occupancy constraints to refine object extraction after scene-level reconstruction. In contrast, our ob-jective is designed for direct object reconstruction from masked observations. Even with object-masked supervision, photometric losses do not explicitly align the rendered Gaussian support with the object silhouette, which allows back-ground leakage or incomplete object support to persist. We therefore introduce a silhouette-aligned object loss that combines object-focused photometric recon-struction with silhouette-level support alignment. Given an input image I, a binary object mask M , and the masked target image ˜I = I ⊙ M , we define the object-weighted photometric loss as 
+
+Lobj = 1
+
+N
+
+> N
+
+X
+
+> p=1
+
+h
+
+Mp | ˆIp − ˜Ip| + γ(1 − Mp) | ˆIp − ˜Ip|
+
+i
+
+. (9) where ˆI is the rendered image and γ is a small attenuation factor for background pixels. This loss emphasizes reconstruction inside the object mask while weakly penalizing residual colors outside the mask. To further align the spatial support of Gaussians with the target object, we render a soft silhouette ˆM from the current Gaussian representation and define the silhouette loss as 
+
+Lsil = 1 −
+
+PNp=1 
+
+ ˆMpMp
+
+
+
++ ϵ
+
+PNp=1 
+
+ ˆMp + Mp − ˆMpMp
+
+
+
++ ϵ. (10) MaRO-GS 9
+
+Table 1: Quantitative comparison on the LERF-Mask [41], Mip-NeRF 360 [2], and Tanks and Temples [23]. Results are averaged over all objects, with all methods eval-uated under the same controlled masked-input protocol. The percentages next to each dataset indicate the average object area ratio within the frame. The best, second-best, and third-best results are highlighted in red, orange, and yellow, respectively.                                                                                                
+
+> Category Method PSNR ↑SSIM ↑LPIPS ↓FPS ↑
+> LERF-Mask (2.01%) Baseline 3DGS [20] 40.67 0.990 0.010 639 Efficient GS PUP 3D-GS [14] 39.50 0.989 0.012 1,934 Object-centric ObjectGS [48] 37.65 0.988 0.013 350 Trace3D [35] 34.74 0.986 0.019 772 High-Fidelity FDS-GS [44] 40.84 0.990 0.010 449
+> Ours 42.89 0.992 0.008 2,081
+> Mip-NeRF 360 (12.54%) Baseline 3DGS [20] 32.99 0.977 0.023 250 Efficient GS PUP 3D-GS [14] 32.67 0.975 0.028 1,121 Object-centric ObjectGS [48] 29.22 0.958 0.050 177 Trace3D [35] 31.20 0.971 0.032 405 High-Fidelity FDS-GS [44] 33.46 0.979 0.022 385
+> Ours 34.49 0.977 0.024 1,010
+> Tanks & Temples (31.35%) Baseline 3DGS [20] 30.63 0.964 0.048 159 Efficient GS PUP 3D-GS [14] 29.98 0.955 0.068 735 Object-centric ObjectGS [48] 30.21 0.960 0.056 123 Trace3D [35] 26.33 0.923 0.103 508 High-Fidelity FDS-GS [44] 30.25 0.965 0.041 231
+> Ours 30.94 0.961 0.056 397
+
+The final objective is 
+
+Lfinal = (1 − λdssim )Lobj + λdssim 
+
+
+
+1 − SSIM( ˆI, ˜I)
+
+
+
++ λsil Lsil . (11) This objective aligns appearance reconstruction and silhouette support with the target object. It encourages the Gaussian distribution to remain compact and object-centric during direct reconstruction. 
+
+4 Experiments 
+
+4.1 Implementation Details 
+
+Our method follows the default 3DGS [20] configuration, except that the den-sification gradient threshold is increased from 0.0002 to 0.0003. For datasets requiring generated masks, we use EfficientViT-SAM [47] as the segmentation model, but our method is not tied to a specific mask generator; additional results with other mask generators are provided in the supplementary material. All ex-periments are conducted on a single NVIDIA A6000 GPU and ablation studies are performed on a single NVIDIA RTX 4070 Ti Super GPU. Further details on the experiments, including hit-ratio threshold settings, filtering-schedule sensi-tivity, and mean and standard deviation over three seeds for the key comparisons in Tables 1 and 3, are provided in the supplementary material. 10 E. Kim et al. 3DGS  FDS-GS  Ours ObjectGS Input Views 
+
+Fig. 4: MaRO-GS reconstructs target objects from input views with inconsistent back-ground removal. Existing approaches produce residual artifacts, whereas MaRO-GS achieves robust, high-fidelity object reconstruction. Ours Trace3D ILGS Gaussian Grouping  ObjectGS Image 
+
+Fig. 5: Qualitative comparison of our method with object extraction methods on the LERF-Mask dataset. 
+
+4.2 Rendered Results of Object-centric 3D Gaussian Splatting 
+
+Table 1 reports quantitative comparisons on LERF-Mask [41], Mip-NeRF 360 [2], and Tanks and Temples [23]. All methods are evaluated under the same object-centric masked-input protocol without method-specific modifications, and the metrics measure agreement with the mask-defined target ˜I = I ⊙ M rather than absolute object appearance. Additional comparisons under the baselines’ na-tive full-scene settings are provided in the supplementary material. Our method achieves the highest PSNR on all three datasets. The performance gap widens as the object region occupies a smaller portion of the image, with the most pro-nounced improvement on LERF-Mask (2.01%), where our method outperforms the second-best method by 2.05 dB. Qualitative comparisons are provided in Fig. 4. Our method produces cleaner object reconstructions with fewer back-ground artifacts while more reliably recovering object regions occluded by other objects. 
+
+4.3 Evaluation of Object Boundary Quality 
+
+We evaluate the boundary quality of target objects on the LERF-Mask dataset. This evaluation is conducted on images that include background regions to as-sess object extraction quality in the original scene context. For existing object-level methods, we evaluate the boundaries of extracted objects. For MaRO-GS, MaRO-GS 11 
+
+Table 2: Quantitative com-parison of object boundary quality. Best results are high-lighted in bold .                     
+
+> Method mIoU ↑bIoU ↑FPS ↑
+> GaussGroup. [41] 30.63 27.39 857 ILGS [17] 45.40 36.54 762 ObjectGS [48] 76.78 74.42 70 Trace3D [35] 83.58 79.68 627
+> Ours 86.24 83.04 1,106
+
+Table 3: Evaluation on the DTU [18] Dataset. Best results are highlighted in bold , and second-best re-sults are underlined. PUP 3D-GS [14] fails to train because all Gaussians are pruned during training.                                                  
+
+> Method Easy Medium Hard
+> PSNR ↑SSIM ↑LPIPS ↓PSNR ↑SSIM ↑LPIPS ↓PSNR ↑SSIM ↑LPIPS ↓
+> 3DGS [20] 31.15 0.955 0.055 22.52 0.895 0.116 19.60 0.906 0.106 ObjectGS [48] 31.51 0.968 0.056 23.90 0.919 0.111 21.41 0.911 0.106 PUP 3D-GS [14] ERROR ERROR ERROR FDS-GS [44] 31.04 0.964 0.053 22.16 0.892 0.117 19.15 0.909 0.106
+> Ours 33.26 0.963 0.055 26.50 0.939 0.085 22.88 0.924 0.085 ObjectGS FDS-GS Ours 3DGS
+> Hard  Medium  Easy
+> GT
+
+Fig. 6: Qualitative comparisons on the DTU [18] Dataset. Our method remains more robust and preserves the object geometry more reliably despite mask inaccuracies. 
+
+which directly reconstructs target objects, we evaluate the boundaries of the reconstructed objects. Both evaluations follow the protocol of FlashSplat [36] and BEA-GS [29]. Table 2 reports quantitative comparisons in terms of mIoU and bIoU, and Fig. 5 provides qualitative comparisons of target object bound-aries. Our method achieves the best performance, with 86.24 mIoU and 83.04 bIoU, outperforming Trace3D by 2.66 and 3.36 points, respectively. These results demonstrate that our method produces a more accurate object representation with fewer boundary errors and less background leakage. 
+
+4.4 Additional Evaluation for Object-centric Reconstruction 
+
+Existing 3DGS benchmarks are primarily designed for reconstruction under con-sistent supervision and therefore cannot adequately measure robustness under multi-view inconsistencies. Moreover, conventional metrics may not capture per-ceptually meaningful visual quality differences when the target object occupies only a small image region, as shown in Fig. 7. To address these limitations, we conduct two additional evaluations for object-centric scenarios: (1) Robustness Evaluation under Mask Errors , which measures reconstruction robustness under varying levels of mask inconsistency, and (2) Object-centric Viewpoint Evalua-tion , which assesses perceptual fidelity from object-centric viewpoints. 
+
+Robustness Evaluation under Mask Errors. To evaluate robustness under imperfect object-mask supervision, we construct a controlled evaluation using 12 E. Kim et al. PSNR: 39.91 dB  PSNR: 39.95 dB  
+
+> 3DGS Ours GT
+
+Fig. 7: Limitation of standard 3DGS evaluation. Although the reconstructed object quality differs noticeably, the PSNR values remain nearly identical. 
+
+Table 4: Results of Object-centric eval-uation on the LERF-Mask dataset. Best results are highlighted in bold .          
+
+> Method CLIP-IQA+ ↑
+> [38]
+> MUSIQ ↑
+> [19]
+> Met3R ↓
+> [1] ObjectGS [48] 0.464 38.85 0.144 Trace3D [35] 0.469 48.06 0.088
+> Ours 0.489 55.64 0.073
+
+DTU [18]. We divide samples into Easy, Medium, and Hard groups according to the mask error ratio: at most 10%, above 10% up to 50%, and above 50%, re-spectively. DTU uses EfficientViT-SAM-predicted masks without synthetic error injection, and the mask-error ratio denotes the fraction of manually identified erroneous views per scene. Further details are provided in the supplementary ma-terial. Table 3 reports quantitative results on the DTU subset. Baseline methods degrade as mask errors become more severe, and PUP 3D-GS fails to train be-cause all Gaussians are pruned under inconsistent inputs. In contrast, MaRO-GS achieves the best PSNR across all difficulty levels, with 33.26 dB, 26.50 dB, and 22.88 dB on Easy, Medium, and Hard cases, respectively. Additional DTU fil-tering ablations in the supplementary material show that view filtering is most effective on Medium, where corrupted and reliable views coexist, while it pro-vides no additional gain on Hard, where most views are corrupted. As shown in Fig. 6, MaRO-GS preserves the target object structure more reliably than competing methods even under significant segmentation noise. 
+
+Object-centric Viewpoint Evaluation. When the target object occupies only a small portion of the image, full-image metrics become insensitive to per-ceptually meaningful differences in the object region, as shown in Fig. 7. To com-plement the standard evaluation, we additionally evaluate objects from object-centric viewpoints, where novel views are rendered around the object. Since the transformed viewpoints do not correspond to available ground-truth im-ages, perceptual quality is assessed using no-reference metrics: CLIP-IQA+ [38], MUSIQ [19] and Met3R [1]. As shown in Table 4, our method achieves the best results across all metrics. Details of the evaluation pipeline are provided in the supplementary material. 
+
+5 Ablation Study 
+
+5.1 Ablations on Each Module 
+
+Table 5 presents an ablation study of the proposed components on the LERF-Mask dataset [41]. All variants in this table are trained with the proposed silhouette-aligned object loss. Applying Mask-guided Pruning and Densification MaRO-GS 13 
+
+Table 5: Ablation study on the LERF-Mask [41] dataset. (a) mask-guided prun-ing and densification, (b) appearance-guided local Gaussian merging, (c) geo-metric view consistency, (d) region-based view validation.                                
+
+> Component Performance (a) (b) (c) (d) PSNR ↑Train. Time (s) ↓FPS ↑#Gauss. ↓
+> 41.98 464.69 1,458 42,846
+> ✓42.54 340.92 1,630 25,805
+> ✓✓42.51 332.00 1,784 21,157
+> ✓✓✓42.55 340.07 1,757 25,540
+> ✓✓✓✓42.90 322.84 1,653 24,422
+
+Table 6: Ablation study on the LERF-Mask [41] dataset on the effect of object loss and silhouette loss. Best results are highlighted in bold , and second-best re-sults are underlined. 
+
+Lobj Lsil PSNR ↑ mIoU ↑ bIoU ↑
+
+39.25 27.77 23.72 
+
+✓ 41.92 47.37 41.16 
+
+✓ 39.20 85.69 82.85 
+
+✓ ✓ 41.51 85.76 82.45 
+
+(a) improves PSNR and reduces the number of Gaussians, which indicates that removing background-supported Gaussians leads to a more compact object rep-resentation. Adding appearance-guided local Gaussian merging (b) further re-duces the Gaussian count and improves FPS with negligible quality degradation. With geometric view consistency (c), the model maintains comparable quality while improving supervision stability. Finally, adding region-based view valida-tion (d) achieves the best PSNR. Table 6 analyzes the effect of the proposed silhouette-aligned object loss. Without both, the model produces poor object extraction quality. Using only Lobj achieves the highest PSNR, but its mIoU and bIoU remain limited. Using only Lsil greatly improves mIoU and bIoU, con-firming that silhouette supervision effectively reduces background leakage and boundary errors. Combining Lobj and Lsil achieves the best mIoU while main-taining boundary quality. 
+
+5.2 Effect of Object-supported Gaussian Density Control 
+
+We analyze the effect of different pruning ratios in the proposed object-supported Gaussian density control. As shown in Fig. 8, increasing the pruning ratio signifi-cantly reduces the number of Gaussians. Moreover, PSNR consistently improves, suggesting that removing redundant background Gaussians helps the model fo-cus on object regions. Fig. 9 visualizes the spatial distribution of Gaussian cen-ters with and without the proposed pruning. Without pruning, a large number of Gaussians are scattered outside the target object region. With pruning, Gaus-sians are concentrated within the object boundary, which yields a more compact and accurate representation. 
+
+5.3 Efficiency of Object-centric Reconstruction 
+
+Table 7 compares the computational efficiency of different methods on LERF-Mask [41]. All methods use the same object-masked multi-view observations. MaRO-GS achieves substantially lower overall runtime and memory consumption 14 E. Kim et al. 39        
+
+> 40 41 42 43
+> 44 45 00.2 0.4 0.6 0.8 1Prune Ratio
+> PSNR (dB)
+> 17000
+> 22000 27000
+> 32000 00.2 0.4 0.6 0.8 1
+> Prune Ratio
+> Number of Gaussians
+
+Fig. 8: Effect of pruning ratio. w/o pruning  w/ pruning  
+
+> 0.08
+> 0.00
+> 0.04
+> 0.02
+> 0.06
+> mask overlap ratio
+> # of Gauss. : 4,703 # of Gauss. : 38,354
+
+Fig. 9: Visualization of Gaussian centers without and with applying mask-guided pruning. 
+
+Table 7: Runtime comparison of different methods on LERF-Mask dataset. Method Preprocessing Training Rendering Total Max VRAM Time (s) Time (s) Time (s) Time (s) (MB) 3DGS [20] N/A 363 4.84 367.84 4,305 PUP 3D-GS [14] 363 103 4.69 470.69 3,551 ObjectGS [48] 338 2,196 8.07 2,542.07 24,300 Ours N/A 345 3.53 348.53 4,187 
+
+than ObjectGS while maintaining computational cost comparable to standard 3DGS. 
+
+6 Limitations 
+
+Although MaRO-GS improves robustness under inconsistent mask supervision, severe segmentation failures can still degrade reconstruction quality. The Medium and Hard DTU subsets are limited to 3 and 4 scenes, respectively, and conser-vative filtering achieves only 4.6% recall on Hard, so the overall Hard-case im-provement cannot be attributed to view filtering alone. Filtering also depends on sufficiently localized Gaussian support during optimization. Further analyses and failure cases are provided in the supplementary material. 
+
+7 Conclusion 
+
+We present MaRO-GS for object-centric 3D Gaussian Splatting under inconsis-tent mask supervision. MaRO-GS combines mask-reliability view filtering with object-supported Gaussian density control to exclude unreliable supervision and suppress Gaussians irrelevant to the target object. Experiments demonstrate im-proved PSNR and robustness, complemented by object-centric and mask-error robustness evaluations. 
+
+Acknowledgments. This work was partly supported by the National Research Foundation of Korea(NRF) grant funded by the Korea government(MSIT)(RS-2025-00520308, 50%) and the Glocal 30 program of Kyungpook National Uni-versity, funded by the Ministry of Education(25%) and by Culture, Sports and Tourism R&D Program through the Korea Creative Content Agency grant funded by the Ministry of Culture, Sports and Tourism in 2026(RS-2026-2552393, 25%). MaRO-GS 15 
+
+References 
+
+1. Asim, M., Wewer, C., Wimmer, T., Schiele, B., Lenssen, J.E.: MEt3R: Measuring Multi-View Consistency in Generated Images. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 6034–6044 (2025) 2. Barron, J.T., Mildenhall, B., Verbin, D., Srinivasan, P.P., Hedman, P.: Mip-NeRF 360: Unbounded Anti-Aliased Neural Radiance Fields. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 5470– 5479 (2022) 3. Caron, M., Touvron, H., Misra, I., Jégou, H., Mairal, J., Bojanowski, P., Joulin, A.: Emerging properties in self-supervised vision transformers. In: Proceedings of the IEEE/CVF international conference on computer vision. pp. 9650–9660 (2021) 4. Chao, B., Tseng, H.Y., Porzi, L., Gao, C., Li, T., Li, Q., Saraf, A., Huang, J.B., Kopf, J., Wetzstein, G., et al.: Textured Gaussians for Enhanced 3D Scene Ap-pearance Modeling. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 8964–8974 (2025) 5. Cheng, B., Misra, I., Schwing, A.G., Kirillov, A., Girdhar, R.: Masked-attention mask transformer for universal image segmentation. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 1290– 1299 (2022) 6. Cheng, H.K., Oh, S.W., Price, B., Schwing, A., Lee, J.Y.: Tracking anything with decoupled video segmentation. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 1316–1326 (2023) 7. Choi, S., Song, H., Kim, J., Kim, T., Do, H.: Click-gaussian: Interactive segmen-tation to any 3d gaussians. In: European Conference on Computer Vision. pp. 289–305. Springer (2024) 8. Dai, Z., Liu, T., Zhang, Y.: Efficient Decoupled Feature 3D Gaussian Splatting via Hierarchical Compression. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 11156–11166 (2025) 9. Fan, Z., Wang, K., Wen, K., Zhu, Z., Xu, D., Wang, Z.: LightGaussian: Unbounded 3D Gaussian Compression with 15x Reduction and 200+ FPS. Advances in neural information processing systems 37 , 140138–140158 (2024) 10. Fang, G., Wang, B.: Mini-Splatting: Representing Scenes with a Constrained Number of Gaussians. In: European conference on computer vision. pp. 165–181. Springer (2024) 11. Fu, S., Hamilton, M., Brandt, L.E., Feldmann, A., Zhang, Z., Freeman, W.: Fea-tup: A model-agnostic framework for features at any resolution. In: International Conference on Learning Representations. vol. 2024, pp. 45324–45350 (2024) 12. Girish, S., Gupta, K., Shrivastava, A.: EAGLES: Efficient Accelerated 3D Gaus-sians with Lightweight EncodingS. In: European Conference on Computer Vision. pp. 54–71. Springer (2024) 13. Hanson, A., Tu, A., Lin, G., Singla, V., Zwicker, M., Goldstein, T.: Speedy-Splat: Fast 3D Gaussian Splatting with Sparse Pixels and Sparse Primitives. In: Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 21537–21546 (2025) 14. Hanson, A., Tu, A., Singla, V., Jayawardhana, M., Zwicker, M., Goldstein, T.: PUP 3D-GS: Principled Uncertainty Pruning for 3D Gaussian Splatting. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 5949–5958 (2025) 16 E. Kim et al. 15. Hu, X., Wang, Y., Fan, L., Luo, C., Fan, J., Lei, Z., Li, Q., Peng, J., Zhang, Z.: SAGD: Boundary-enhanced segment anything in 3D Gaussian via Gaussian decomposition. IEEE Transactions on Image Processing (2026) 16. Jain, U., Mirzaei, A., Gilitschenski, I.: Gaussiancut: Interactive segmentation via graph cut for 3d gaussian splatting. Advances in Neural Information Processing Systems 37 , 89184–89212 (2024) 17. Jang, S., Kim, W.: Identity-aware language gaussian splatting for open-vocabulary 3d semantic segmentation. In: Proceedings of the IEEE/CVF International Con-ference on Computer Vision. pp. 20467–20476 (2025) 18. Jensen, R., Dahl, A., Vogiatzis, G., Tola, E., Aanæs, H.: Large scale multi-view stereopsis evaluation. In: Proceedings of the IEEE conference on computer vision and pattern recognition. pp. 406–413 (2014) 19. Ke, J., Wang, Q., Wang, Y., Milanfar, P., Yang, F.: MUSIQ: Multi-scale Image Quality Transformer. In: Proceedings of the IEEE/CVF international conference on computer vision. pp. 5148–5157 (2021) 20. Kerbl, B., Kopanas, G., Leimkühler, T., Drettakis, G.: 3D Gaussian Splatting for Real-Time Radiance Field Rendering. ACM TOG 42 (4), 1–14 (2023) 21. Kheradmand, S., Rebain, D., Sharma, G., Sun, W., Tseng, Y.C., Isack, H., Kar, A., Tagliasacchi, A., Yi, K.M.: 3D Gaussian Splatting as Markov Chain Monte Carlo. Advances in Neural Information Processing Systems 37 , 80965–80986 (2024) 22. Kirillov, A., Mintun, E., Ravi, N., Mao, H., Rolland, C., Gustafson, L., Xiao, T., Whitehead, S., Berg, A.C., Lo, W.Y., et al.: Segment anything. In: Proceedings of the IEEE/CVF international conference on computer vision. pp. 4015–4026 (2023) 23. Knapitsch, A., Park, J., Zhou, Q.Y., Koltun, V.: Tanks and temples: Benchmarking large-scale scene reconstruction. ACM Transactions on Graphics (ToG) 36 (4), 1–13 (2017) 24. Leroy, V., Cabon, Y., Revaud, J.: Grounding image matching in 3d with mast3r. In: European conference on computer vision. pp. 71–91. Springer (2024) 25. Li, F., Zhang, H., Xu, H., Liu, S., Zhang, L., Ni, L.M., Shum, H.Y.: Mask dino: Towards a unified transformer-based framework for object detection and segmen-tation. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 3041–3050 (2023) 26. Lin, C.Y., Sun, C., Yang, F.E., Chen, M.H., Lin, Y.Y., Liu, Y.L.: LongSplat: Robust Unposed 3D Gaussian Splatting for Casual Long Videos. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 27412–27422 (2025) 27. Liu, S., Zeng, Z., Ren, T., Li, F., Zhang, H., Yang, J., Jiang, Q., Li, C., Yang, J., Su, H., et al.: Grounding dino: Marrying dino with grounded pre-training for open-set object detection. In: European conference on computer vision. pp. 38–55. Springer (2024) 28. Lu, T., Yu, M., Xu, L., Xiangli, Y., Wang, L., Lin, D., Dai, B.: Scaffold-GS: Structured 3D Gaussians for View-Adaptive Rendering. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 20654– 20664 (2024) 29. Mazzucchelli, A., Naranjo-Almeida, M., Bustos-Sanchez, J., Dimiccoli, M., Moreno-Noguer, F., Sanchez-Riera, J., Penate-Sanchez, A.: BEA-GS: BEyond RA-diance Supervision in 3DGS for Precise Object Extraction. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 41054– 41064 (2026) MaRO-GS 17 30. Ni, J., Liu, Y., Lu, R., Zhou, Z., Zhu, S.C., Chen, Y., Huang, S.: Decompositional neural scene reconstruction with generative diffusion prior. In: Proceedings of the Computer Vision and Pattern Recognition Conference. pp. 6022–6033 (2025) 31. Niedermayr, S., Stumpfegger, J., Westermann, R.: Compressed 3D Gaussian Splat-ting for Accelerated Novel View Synthesis. In: Proceedings of the IEEE/CVF Con-ference on Computer Vision and Pattern Recognition. pp. 10349–10358 (2024) 32. Niemeyer, M., Manhardt, F., Rakotosaona, M.J., Oechsle, M., Duckworth, D., Gosula, R., Tateno, K., Bates, J., Kaeser, D., Tombari, F.: RadSplat: Radiance Field-Informed Gaussian Splatting for Robust Real-Time Rendering with 900+ FPS. In: 2025 International Conference on 3D Vision (3DV). pp. 134–144. IEEE (2025) 33. OpenAI: Gpt-5 technical report. https://openai.com (2025) 34. Qian, J., Yan, Y., Gao, F., Ge, B., Wei, M., Shangguan, B., He, G.: C3DGS: Compressing 3D Gaussian Model for Surface Reconstruction of Large-Scale Scenes Based on Multi-View UAV Images. IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing 18 , 4396–4409 (2025) 35. Shen, H., Ni, J., Chen, Y., Li, W., Pei, M., Huang, S.: Trace3D: Consistent Segmen-tation Lifting via Gaussian Instance Tracing. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 6656–6666 (2025) 36. Shen, Q., Yang, X., Wang, X.: Flashsplat: 2d to 3d gaussian splatting segmenta-tion solved optimally. In: European Conference on Computer Vision. pp. 456–472. Springer (2024) 37. Shen, Y., Li, B., Huang, J., Yip, D., Wang, Z.: GaussianShopVR: Facilitating Immersive 3D Authoring Using Gaussian Splatting in VR. In: Proceedings of the 38th Annual ACM Symposium on User Interface Software and Technology. UIST ’25, Association for Computing Machinery, New York, NY, USA (2025). https: //doi.org/10.1145/3746059.3747803 
+
+38. Wang, J., Chan, K.C., Loy, C.C.: Exploring CLIP for Assessing the Look and Feel of Images. In: Proceedings of the AAAI Conference on Artificial Intelligence. vol. 37, pp. 2555–2563 (2023) 39. Xie, Y., Pan, A., Huang, Y.H., Chang, C., Dai, P., Yu, X., Qi, X.: ObjectMorpher: 3D-Aware Image Editing via Deformable 3DGS. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 5828–5838 (2026) 40. Yang, C., Li, S., Fang, J., Liang, R., Xie, L., Zhang, X., Shen, W., Tian, Q.: GaussianObject: High-Quality 3D Object Reconstruction from Four Views with Gaussian Splatting. ACM Transactions on Graphics (TOG) 43 (6), 1–13 (2024) 41. Ye, M., Danelljan, M., Yu, F., Ke, L.: Gaussian Grouping: Segment and Edit Anything in 3D Scenes. In: European conference on computer vision. pp. 162–179. Springer (2024) 42. Ye, Z., Li, W., Liu, S., Qiao, P., Dou, Y.: AbsGS: Recovering Fine Details in 3D Gaussian Splatting. In: Proceedings of the 32nd ACM international conference on multimedia. pp. 1053–1061 (2024) 43. Yenphraphai, J., Pan, X., Liu, S., Panozzo, D., Xie, S.: Image sculpting: Precise object editing with 3d geometry control. In: Proceedings of the IEEE/CVF Con-ference on Computer Vision and Pattern Recognition. pp. 4241–4251 (2024) 44. Zeng, Z., Wang, Y., Ju, L., Guan, T.: Frequency-aware density control via repa-rameterization for high-quality rendering of 3d gaussian splatting. In: Proceedings of the AAAI Conference on Artificial Intelligence. vol. 39, pp. 9833–9841 (2025) 45. Zhang, J., Zhan, F., Xu, M., Lu, S., Xing, E.: FreGS: 3D Gaussian Splatting with Progressive Frequency Regularization. In: Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition. pp. 21424–21433 (2024) 18 E. Kim et al. 46. Zhang, J., Jiang, J., Chen, Y., Jiang, K., Liu, X.: COB-GS: Clear Object Bound-aries in 3DGS Segmentation Based on Boundary-Adaptive Gaussian Splitting. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recog-nition. pp. 19335–19344 (2025) 47. Zhang, Z., Cai, H., Han, S.: EfficientViT-SAM: Accelerated Segment Anything Model Without Performance Loss. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 7859–7863 (2024) 48. Zhu, R., Yu, M., Xu, L., Jiang, L., Li, Y., Zhang, T., Pang, J., Dai, B.: ObjectGS: Object-aware Scene Reconstruction and Scene Understanding via Gaussian Splat-ting. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 8350–8360 (2025) MaRO-GS 19 
+
+# Supplementary Material 
+
+Overview 
+
+This supplementary material provides additional details and analyses that sup-port the main paper. Sec. A summarizes the implementation details of MaRO-GS, including the optimization settings and module-specific hyperparameters. Sec. B describes the experimental protocols used throughout the paper, cover-ing dataset configurations, mask generation and annotation procedures, object-region evaluation, boundary quality evaluation, robustness analysis under mask errors, and object-centric viewpoint evaluation. Sec. C presents additional exper-iments and analyses, including comparisons across evaluation settings, additional ablation studies, analyses of mask-reliability view filtering and object-supported Gaussian density control, and sensitivity studies of key hyperparameters. Sec. D analyzes practical challenges in object-centric reconstruction, including mask er-rors from automatic segmentation and artifacts caused by background removal. Sec. E clarifies the relationship between MaRO-GS and closely related methods by comparing their task settings, supervision strategies, pruning mechanisms, and use of Gaussian visibility. Sec. F discusses remaining limitations and rep-resentative failure cases, both for MaRO-GS and for existing baseline methods. Sec. G evaluates whether MaRO-GS remains robust when masks are generated by different segmentation models. Sec. H reports seed variance for the key com-parisons in the main paper. Finally, Sec. I provides additional qualitative recon-struction results on LERF-Mask, Mip-NeRF 360, and Tanks and Temples. 
+
+A Implementation Details 
+
+We follow the default 3DGS optimization settings unless otherwise specified. All models are trained for 30K iterations with spherical harmonics degree 3. We use the default learning rates for Gaussian position, feature, opacity, scaling, and rotation parameters, and set the DSSIM weight to λdssim = 0 .2. For the 
+
+silhouette-aligned object loss , we set the background weight to γ = 0 .01 in all experiments. For the proposed modules, we use the following configuration in all experiments. Mask-reliability view filtering is enabled by default. Geometric view consistency is performed from iteration 1K to 5K at 2K-iteration intervals, using up to 20 pose-neighboring views selected by camera-center distance and the top-3 weighted similarities for each view score. The adaptive largest-gap threshold is accepted only when the low-score cluster occupies at most 25% of the views and the cluster separation is larger than 0.5. Region-based view validation is applied once at iteration 1.8K with a hit-ratio threshold of 0.05. For object-supported Gaussian density control , mask-guided pruning is performed at iterations 1K, 3K, and 5K with pruning coefficient k = 0 .5, maximum pruning threshold 0.05, and prune ratio 1.0. Appearance-guided local Gaussian merging is applied at scheduled filtering iterations during the early optimization stage. Specifically, 20 E. Kim et al. I   
+
+> M
+> Grounding DINO EfficientViT-SAM GPT-5 bounding
+> box
+> prompt example
+> prompt
+> Fig. 10: Overview of the mask generation pipelines. GPT-5 [33] generates a text prompt, GroundingDINO [27] predicts a bounding box, and EfficientViT-SAM pro-duces the object mask.
+
+merging is triggered when the iteration is divisible by the filtering interval and remains below the filtering end iteration. With the default setting of a filtering interval of 2K and a filtering end iteration of 5K, we use a color threshold of 0.2, a radius factor of 0.4, and a minimum group size of 3. 
+
+B Experimental Details 
+
+B.1 Rendered Results of Object-centric 3D Gaussian Splatting (Sec 4.2) Datasets and Mask Annotation For Mip-NeRF 360 [2] and Tanks and Tem-ples [23], we generate object masks using a GPT-5 [33]–GroundingDINO [27]– EfficientViT-SAM [47] pipeline, as illustrated in Fig. 10. For reproducibility, we provide the example prompts used in the mask generation process. Given an input image and example prompts, GPT-5 generates an image-specific prompt that describes the target object. Example prompts are shown in Table 8. Al-though we use GPT-5 in our implementation, this step can be replaced by other language models, since the language model is used only to generate an object description prompt. This prompt is then used to guide GroundingDINO, which localizes the target object and produces its bounding box. The resulting bound-ing box is provided as the input prompt to EfficientViT-SAM to obtain the final object mask. To further support reproducibility, we will release the generated object prompts and mask-generation scripts. Our method uses this pipeline only for mask generation. The proposed reconstruction framework is not tied to a specific segmentation model and can be combined with alternative segmentation methods, as shown in Sec. G. For the LERF-Mask [41] dataset, we use the pro-vided multi-object masks and convert them into single-object masks based on the corresponding object IDs. Specifically, we extract each target object from the multi-object annotation and use the resulting binary mask as the single-object mask for training and evaluation. The scene configurations are summarized in Table 9–Table 11, and representative examples from the dataset are shown in Fig. 11. In this evaluation, all methods are trained with the same masked input images and evaluated within the corresponding object regions. 
+
+Evaluation Metrics Reconstruction quality is measured using PSNR, SSIM, and LPIPS computed exclusively within the masked object regions. As illustrated MaRO-GS 21 
+
+Table 8: Example prompts provided to GPT-5 for object description generation. GPT-5 receives these example prompts together with an input image and generates a new object description in a similar style. 
+
+Example Prompt (Mip-NeRF 360) 
+
+A bicycle parked outdoors on the ground. A road bike standing alone in an outdoor scene. A two-wheeled bicycle with handlebars and a seat. A bicycle with thin wheels leaning or standing in a park. A classic bicycle frame with wheels visible in the scene. A bike parked on a dirt or gravel path surrounded by trees. A standalone bicycle in the center of an outdoor environment. A bicycle with a metallic frame photographed from various angles. 
+
+Table 9: Mip-NeRF 360 configuration.              
+
+> Scene Object Object Ratio (%) Resolution
+> bicycle bicycle 15.59 4,946 ×3,286 bonsai bonsai 11.39 3,113 ×2,074 counter flower pot 6.29 1,558 ×1,038 garden table 16.89 5,185 ×3,359
+
+Table 10: Tanks&Temples configuration.          
+
+> Scene Object Object Ratio (%) Resolution
+> Barn barn 41.75 1920 ×1080 Caterpillar caterpillar 35.84 Ignatius ignatius statue 12.97 Truck truck 34.83
+
+Table 11: LERF-Mask Configuration 
+
+Scene Object Object Ratio (%) Resolution 
+
+figurines (15) camera 1.67 986 ×728 figurines (33) hand figurine 0.33 figurines (36) green apple 1.05 figurines (40) cat figurine 0.30 figurines (43) rabbit figurine 0.10 figurines (49) elephant figurine 0.81 figurines (55) ice cream figurine 0.39 figurines (65) jelly bean bag 1.16 figurines (67) yellow figurine 0.86 teatime (48) teddy bear 11.76 988 ×730 teatime (54) coffee bean bag 0.55 teatime (97) sheep doll 6.56 teatime (110) tissue 0.55 
+
+in Fig. 13 (a), masked images ˜I = I ⊙M are used to train the Gaussian Splatting model. At test time, object masking is applied to both the rendered output and the ground-truth images to isolate the target object region before computing the metrics. We additionally measure rendering efficiency using the FPS and the number of Gaussians. 
+
+B.2 Evaluation of Object Boundary Quality (Sec 4.3) Datasets and Mask Annotation We evaluate object extraction quality on LERF-Mask [41] following the protocols of FlashSplat [36] and BEA-GS [29]. LERF-Mask provides rendered-view masks for object-level supervision. For exist-ing object-level methods, we provide the original images containing background 22 E. Kim et al. Original Mask Masked Image 
+
+figurines (15)  figurines (33)  figurines (36)  figurines (40)  figurines (43) 
+
+figurines (55) figurines (49)  figurines (67) figurines (65) 
+
+teatime (54) teatime (48)  teatime (110) teatime (97) 
+
+> Original Mask Masked Image Original Mask Masked Image
+
+Fig. 11: Examples from the LERF-Mask dataset. MaRO-GS 23 Object Scene Ratio (%)    
+
+> 1% 10% 20% 30%
+
+Fig. 12: Visualization of object scene ratios across representative scenes. Each image illustrates the proportion of the object region relative to the full scene, ranging from sparse (1%) to moderately dense (30%). (a) Standard Evaluation    
+
+> (b) Object-centric Viewpoint Evaluation
+> I
+> M
+> Camera Transform
+> CLIP-IQA, MUSIQ,
+> Met3R
+> Gaussian Splatting Rendering
+> Rendering
+> train set
+> test set
+> Object
+> Masking
+> Object Masking
+> ሚI
+> PSNR, SSIM, LPIPS
+> Gaussian
+> Splatting
+> I
+> M
+> train set
+> ሚItest set
+> M
+> I
+> M
+> I
+> Training View Test View
+> element-wise multiplication
+
+Fig. 13: Illustration of the object-centric viewpoint evaluation pipeline. 
+
+(a) Standard Evaluation computes PSNR, SSIM, and LPIPS within the masked object regions. (b) Object-centric viewpoint evaluation transforms camera viewpoints to zoom into the target object and assesses perceptual quality using no-reference metrics. 
+
+regions as input, following the standard evaluation setting of prior object extrac-tion methods. This evaluation therefore assesses post-hoc object extraction qual-ity under the conventional full-scene input setting, rather than the masked-input reconstruction setting used for object-centric rendering evaluation. To evaluate extraction quality, occlusion-free object silhouettes are required to capture the complete geometry of each target object. Therefore, following the mask anno-tation protocol of BEA-GS, we construct additional extracted-object masks for the evaluation views. Specifically, we use Trace3D [35] outputs as visual guid-ance to infer the full object extent, and then manually trace and refine the final mask boundaries. The resulting refined masks are used as the ground truth for evaluating object extraction quality. 
+
+Evaluation Metrics This evaluation measures whether the optimized Gaus-sians represent the target object while excluding surrounding background re-24 E. Kim et al. 
+
+Table 12: DTU dataset Configuration                                                                                                                     
+
+> Scene Object Object Ratio (%) Error Ratio (%) Resolution
+> scan2 rabbit statue 36.19 0.0 1,588 ×1,190 scan4 bird doll 17.86 0.0 1,587 ×1,190 scan11 power supply 57.27 6.0 1,583 ×1,186 scan31 pumpkin 22.08 10.0 1,586 ×1,189 scan32 cacao bag 29.61 6.0 1,587 ×1,190 scan36 brick 20.51 8.0 1,588 ×1,190 scan42 cabbage 12.56 6.0 1,587 ×1,190 scan45 tea bag 15.40 0.0 1,587 ×1,189 scan49 duck doll 37.83 5.0 1,587 ×1,189 scan54 picture 24.26 10.0 1,577 ×1,176 scan59 can 19.46 8.0 1,600 ×1,200 scan61 chocolate milk 17.73 4.0 1,597 ×1,193 scan75 green pepper 9.34 10.0 1,586 ×1,188 scan76 canary melon 19.71 0.0 1,585 ×1,188 scan77 tea pot 15.45 10.0 1,600 ×1,200 scan95 detergent box 24.14 0.0 1,586 ×1,189 scan97 can 9.48 7.0 1,592 ×1,189 scan103 pig doll 41.57 0.0 1,587 ×1,188 scan110 bronze statue 48.29 0.0 1,586 ×1,189 scan118 stone statue 31.48 7.6 1,588 ×1,190 scan123 stone statue 24.75 0.0 1,600 ×1,200 scan10 cardboard box 46.55 34.0 1,586 ×1,188 scan12 beverage cans 42.75 46.0 1,588 ×1,189 scan52 anatomical model 41.32 50.0 1,586 ×1,189 scan34 bricks 55.29 60.0 1,587 ×1,189 scan37 scissors 10.88 90.0 1,586 ×1,189 scan48 mugs 36.59 82.0 1,586 ×1,188 scan62 volleyball 19.44 80.0 1,585 ×1,188
+
+gions. We report mean IoU (mIoU) and boundary IoU (bIoU) between the extracted object mask and the ground-truth mask. For this extraction-quality evaluation, all methods use the same object masks and train/test split, while ex-isting object-level methods are trained with the original RGB images following the standard full-scene input setting. 
+
+B.3 Robustness Evaluation under Mask Errors. (Sec 4.4.1) Datasets and Mask Annotation We use DTU [18] for an additional robust-ness analysis under mask inconsistency. We randomly select 28 DTU scenes for this analysis, as summarized in Table 12, rather than choosing scenes based on specific segmentation outcomes. For each scene, object masks are generated us-ing EfficientViT-SAM [47] from the image captured with the highest brightness level, without synthetically injecting mask errors. Unlike the standard rendering evaluation datasets, this analysis focuses on the effect of imperfect object masks. Fig. 14 shows representative examples of normal and erroneous mask annota-tions in the DTU scenes. Normal cases include masks that accurately capture the target object while removing background regions, as shown in Fig. 14(1-a), and masks that reasonably segment only the visible part of a partially occluded object, as shown in Fig. 14(1-b). We regard such occlusion-induced truncation MaRO-GS 25 Scan4   
+
+> (1-a) Case 1 (1-b) Case 2
+> (2-c) Case 3
+> (2-b) Case 2 (2-a) Case 1
+> Scan31
+> Scan42
+> Scan59
+> Scan61
+> Scan12
+> (2-d) Case 4
+> Error  Normal
+> Fig. 14: Representative examples of normal and erroneous mask annotations on DTU scenes. The target objects are highlighted in green.
+
+as a normal case because the invisible part of the object cannot be reliably supervised from the corresponding view. Erroneous cases exhibit several com-mon types of mask inconsistency. In Fig. 14(2-a), the mask includes non-target regions together with the target object. In Fig. 14(2-b), interior or boundary regions of the target object are missed, resulting in partial object truncation. In Fig. 14(2-c), the target object is present in the image but is completely missed by the segmentation model. In Fig. 14(2-d), the mask includes large background regions that are unrelated to the target object. Based on these criteria, the mask error ratio is defined as the fraction of erroneous views per scene. These error patterns make DTU a suitable testbed for evaluating the robustness of object-centric reconstruction methods under realistic mask noise. 
+
+Evaluation Metrics We group the scenes according to the mask error ratio and evaluate reconstruction quality under different levels of mask inconsistency. The evaluation follows the same protocol as described in Sec. B.1. The same masks are used for all methods, and no method-specific mask editing or additional supervision is applied. 
+
+B.4 Object-centric Viewpoint Evaluation (Sec 4.4.2) Camera Trajectory Generation As a complementary analysis, we further evaluate object-level rendering quality from object-centric viewpoints. To gener-ate the object-centric camera poses, we construct a spherical camera trajectory 26 E. Kim et al. Standard Test Set  
+
+> Object-centric Evaluation Test Set
+> Fig. 15: Visualization of the test dataset composition for the standard evaluation and the proposed object-centric evaluation.
+
+centered on the target object. Given the target object instance O, we first com-pute its center C and radius R to determine the camera trajectory parameters. The elevation angle ranges from θE,start = 0 ◦ to θE,end = 80 ◦, uniformly sam-pled with NE = 10 elevation steps, and NA = 20 azimuthal views are distributed evenly over 360 ◦. This yields a total of NE × NA = 200 camera poses arranged in a spherical orbit around the target object. For each elevation step j and az-imuthal step k, the elevation angle θE,j and azimuthal angle θA,k are computed, and the corresponding camera-to-world transformation matrix C2W is obtained via ComputePose( C, R, θ E,j , θ A,k ). The resulting set of camera poses Cviews de-fines a dense spherical trajectory that covers the target object from multiple elevations and azimuths. This trajectory enables comprehensive evaluation of the rendering quality of the reconstructed object and its cross-view consistency. Fig. 15 compares the conventional evaluation with our object-centric evaluation protocol. Our protocol places cameras on a spherical trajectory centered on the target object and enables object-focused observations. 
+
+Evaluation Metrics The object-centric viewpoints are rendered using the trained Gaussian representation without further optimization. Since the object-centric viewpoints do not correspond to the original camera poses in the dataset, no ground-truth images are available for the rendered views. Therefore, we eval-uate the rendered results using the no-reference metrics described in the main paper. Specifically, we use CLIP-IQA+ and MUSIQ to assess image quality, and MEt3R to evaluate cross-view consistency, as illustrated in Fig. 13(b). For MEt3R, we use the default configuration with MASt3R [24] as the feature ex-tractor, DINO [3] as the backbone, FeatUp [11] as the upsampler, and cosine distance for feature comparison. The reported score is obtained by averaging the metric values over all rendered viewpoints. Object-centric evaluation is con-ducted on the LERF-Mask [41] dataset using the same object instances and train/test split as the standard evaluation. MaRO-GS 27                            
+
+> Table 13: Comparison of reconstruction quality across evaluation settings on LERF-Mask. Setting Method PSNR ↑SSIM ↑LPIPS ↓
+> Full scene ObjectGS [48] 23.45 0.860 0.235 Trace3D [35] 22.64 0.821 0.263 Extracted from full scene ObjectGS [48] 39.90 0.995 0.003 Trace3D [35] 36.36 0.994 0.005 Masked input (Main Table 1) ObjectGS [48] 37.65 0.988 0.013 Trace3D [35] 34.74 0.986 0.019 MaRO-GS 42.89 0.992 0.008
+
+C Additional Experiments and Analysis 
+
+C.1 Comparison Across Evaluation Settings 
+
+Table 13 compares three evaluation settings on LERF-Mask covering native full-scene and object-centric reconstruction protocols. In the Full scene setting, Ob-jectGS and Trace3D are evaluated using their native full-scene pipelines. The 
+
+Extracted from full scene setting reports object-level results obtained from these full-scene reconstructions, while the Masked input setting follows the object-masked evaluation protocol used in Main Table 1. 
+
+C.2 Additional Ablation Studies 
+
+While the main paper reports cumulative ablations, Table 14 provides represen-tative non-cumulative combinations to further analyze the individual and inter-active effects of the proposed components. Mask-guided pruning and densifica-tion gives the most consistent single-module improvement, increasing PSNR from 41.98 to 42.55 while reducing the number of Gaussians from 42,846 to 25,805. This shows that suppressing background-supported Gaussians is essential for forming a compact object-centric representation. Appearance-guided local Gaus-sian merging mainly contributes to compactness and efficiency. Combined with pruning, it further reduces the Gaussian count to 21,157 and achieves the highest FPS with negligible PSNR degradation. The filtering-based modules require a reliable object-centric Gaussian support to operate effectively. Without pruning, the object region is not yet clearly localized, so geometric view consistency and region-based view validation could incorrectly filter out useful views or regions. This over-filtering behavior explains the weak performance of the filtering-only variants, especially the large degradation caused by region-based view validation alone. After pruning refines the object support, these filtering modules become effective: pruning with geometric view consistency improves PSNR to 42.68, and pruning with region-based view validation achieves the highest PSNR of 43.01. The full model achieves a PSNR of 42.90 with 24,422 Gaussians. Although it does 28 E. Kim et al. 
+
+Table 14: Representative ablation study of the proposed components. The first row denotes the baseline trained with the proposed silhouette-aligned object loss only. P,
+
+M, G, and R denote mask-guided Pruning and densification, appearance-guided local Gaussian Merging, Geometric view consistency, and Region-based view validation, respectively. Best results are highlighted in bold , and the full model is underlined.                                                             
+
+> PMGRPSNR ↑FPS ↑#Gaussians ↓
+> ––––41.98 1,458 42,846
+> ✓–––42.55 1,630 25,805 –✓––42.38 1,586 29,966 ––✓–41.86 1,401 43,576 –––✓37.11 1,281 60,735
+> ✓✓––42.52 1,784 21,157
+> ✓–✓–42.68 1,633 26,951
+> ✓––✓43.01 1,515 30,390
+> ✓✓✓✓42.90 1,653 24,422
+
+Table 15: View filtering ablation on the DTU splits (PSNR ↑). Geo. and Reg. denote geometric view consistency and region-based view validation, respectively. Geo. Reg. Easy Medium Hard 31.84 23.23 23.13 
+
+✓ 31.66 25.68 23.07 
+
+✓ 33.34 25.98 23.03 
+
+✓ ✓ 33.26 26.50 22.88 
+
+not maximize a single metric, it combines reconstruction quality, compactness, efficiency, and robustness, and is therefore used as the default configuration. 
+
+C.3 Analysis of Mask-Reliability View Filtering Ablation under Mask Errors To isolate the effect of the two filtering modules under mask errors, we ablate geometric view consistency and region-based view validation on the DTU Easy, Medium, and Hard splits, with all other compo-nents fixed. Table 15 reports PSNR for each split. Filtering is most effective on the Medium split, where corrupted and reliable views coexist, improving PSNR from 23.23 to 26.50 dB. On the Easy split, the full filtering configuration im-proves PSNR from 31.84 to 33.26 dB. On the Hard split, where most views are corrupted, filtering does not improve PSNR because the conservative crite-rion cannot remove enough erroneous views without sacrificing supervision. A corresponding failure case is shown in Fig. 23. 
+
+Filtering Statistics We evaluate the behavior of mask-reliability view filtering on the DTU Easy, Medium, and Hard splits. Erroneous views are manually labeled according to the failure criteria in Fig. 14, and these labels are used as MaRO-GS 29                                        
+
+> Table 16: View-filtering statistics on the DTU splits. Difficulty # Scenes Avg. # of input views Avg. # of error views Avg. # of filtered views Recall (%) Precision (%) Easy 21 53.3 2.33 0.8 24.5 75.0 Medium 349.0 21.7 5.0 23.1 100.0 Hard 449.0 38.0 1.8 4.6 100.0
+> Table 17: Sparse-view reconstruction on DTU Scan 12 (Medium) using six input views. Geo. and Reg. denote geometric view consistency and region-based view validation, respectively. Geo. Reg. PSNR ↑SSIM ↑LPIPS ↓
+> 18.82 0.809 0.192
+> ✓20.84 0.846 0.173
+> ✓18.89 0.810 0.193
+> ✓✓20.71 0.846 0.174
+
+ground truth for computing precision and recall. Table 16 reports the average numbers of input, erroneous, and filtered views for each split, together with the corresponding precision and recall. The results show high precision with relatively low recall. This behavior reflects a conservative filtering strategy that removes only a limited subset of unreliable views. In particular, recall decreases to 4.6% on the Hard split, where filtering becomes less effective as erroneous views dominate the input. At the same time, the conservative strategy limits the irreversible removal of valid supervision. 
+
+Sparse-view Analysis To examine whether mask-reliability view filtering de-grades reconstruction when only a small number of input views is available, we evaluate DTU Scan 12 (Medium) using only six views. Table 17 compares geometric view consistency and region-based view validation under this sparse-view setting. Even with only six views, applying both filtering modules does not degrade reconstruction and improves PSNR from 18.82 to 20.71 dB. 
+
+Sensitivity to Filtering Schedules We examine whether mask-reliability view filtering depends on a fixed ordering of its two filtering modules. We vary their schedules while keeping density refinement fixed. Table 18 includes a con-figuration where region-based view validation is applied before geometric view consistency. Across the tested schedules, PSNR varies by only 0.12 dB on LERF-Mask and 0.63 dB on DTU Medium. These results show that reconstruction quality is relatively insensitive to the tested filtering schedules. 
+
+Sensitivity to Hit-Ratio Threshold τhit We analyze the effect of the hit-ratio threshold τhit on reconstruction quality and scene compactness, as shown 30 E. Kim et al. 
+
+Table 18: Sensitivity to filtering schedules. Geo. and Reg. denote geometric view consistency and region-based view validation, respectively. Filtering Schedule LERF-Mask DTU (Medium) Geo. Iter. Reg. Iter. PSNR ↑ SSIM ↑ LPIPS ↓ PSNR ↑ SSIM ↑ LPIPS ↓
+
+1K/3K/5K (default) 1.8K 42.98 0.992 0.008 26.50 0.939 0.085 1K/3K/5K 5.8K 42.86 0.992 0.008 26.57 0.939 0.084 5K/7K/9K 1.8K 42.89 0.992 0.008 25.95 0.934 0.089 5K/7K/9K 5.8K 42.87 0.992 0.009 26.58 0.939 0.085 44.1 44.15 44.2 44.25                       
+
+> 44.3
+> 44.35 44.4 44.45
+> 44.5
+> 44.55 44.6 34.22 34.24 34.26 34.28 34.3 34.32 34.34 00.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+> 0.0084 0.0085 0.0086
+> 0.0087
+> 0.0088 0.0089 0.009 0.0091 0.0092 0.023
+> 0.0232
+> 0.0234 0.0236 0.0238 0.024 0.0242
+> 00.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+> 21000 21200 21400 21600 21800
+> 22000
+> 22200 22400
+> 22600
+> 22800 180000 190000 200000
+> 210000
+> 220000 230000 240000 250000 00.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+> PSNR ↑LPIPS ↓Number of Gaussians ↓
+> LERF-Mask MipNeRF-360
+> ℎ𝑖𝑡 𝑟𝑎𝑡𝑖𝑜 ℎ𝑖𝑡 𝑟𝑎𝑡𝑖𝑜 ℎ𝑖𝑡 𝑟𝑎𝑡𝑖𝑜
+> Ours
+
+Fig. 16: Sensitivity analysis of the hit-ratio threshold τhit . We report PSNR ↑, LPIPS ↓,and the number of Gaussians ↓ across varying τhit values on LERF-Mask and Mip-NeRF 360 scenes. The dashed red line indicates our selected value ( τhit = 0 .05 ). 
+
+in Fig. 16. This ablation is conducted on the Mip-NeRF 360 scenes and the LERF-Mask dataset. When τhit exceeds 0.5, LPIPS increases noticeably on both datasets, indicating that overly strict view filtering removes views that still pro-vide useful supervision. In the range τhit ∈ [0 , 0.5] , PSNR remains relatively stable across both datasets. We also observe opposite trends between the two datasets within the interval τhit ∈ [0 .1, 0.5] . As τhit increases, the performance on Mip-NeRF 360 slightly improves, whereas the performance on LERF-Mask de-creases. This observation suggests that increasing the threshold can benefit one dataset while degrading the other. Based on this analysis, we select τhit = 0 .05 
+
+as the default threshold. This conservative setting avoids excessive view filtering while maintaining stable performance and compact scene representations across both datasets. All evaluations in this section were conducted on an NVIDIA RTX 4070 Ti Super GPU. 
+
+C.4 Object-supported Gaussian Density Control Analysis 
+
+We analyze the behavior of the proposed object-supported Gaussian density control with respect to the adaptive pruning threshold and additional refinement hyperparameters. 
+
+Effect of the threshold parameter k. The parameter k controls the base pruning threshold τbase = μ + kσ , which determines how aggressively Gaussians MaRO-GS 31 64 64.5 65 65.5 66 66.5 67               
+
+> 67.5 00.5 11.5 2
+> Rendering Time↓
+> 34.2 34.22 34.24 34.26 34.28 34.3 34.32
+> 34.34 00.5 11.5 2
+> PSNR↑
+> 0
+> 100
+> 200 300 400 500 600 700 800
+> 900 00.5 11.5 2
+> FPS↑
+> threshold K threshold K threshold K
+
+Fig. 17: Ablation study on the threshold parameter k used in the adaptive pruning threshold τbase = μ + kσ on the LERF-Mask dataset. The setting k = 0 .5 achieves the lowest rendering time and the highest FPS while maintaining comparable PSNR, and is therefore selected as the default value. 
+
+Table 19: Sensitivity analysis of the coverage weight coefficient β and the decay coeffi-cient λd on LERF-Mask and Mip-NeRF 360. Both coefficients show stable performance across a wide range of values (PSNR varies within 0.12 dB on LERF-Mask and 0.27 dB on Mip-NeRF 360), and are fixed as β = 0 .5 and λd = 0 .6 in all experiments. Parameter Value LERF-Mask Mip-NeRF 360 PSNR ↑ LPIPS ↓ PSNR ↑ LPIPS ↓                                            
+
+> β
+> 0.00 44.12 0.0085 34.58 0.0243 0.25 44.18 0.0085 34.61 0.0244
+> 0.50 44.17 0.0082 34.45 0.0244 0.75 44.24 0.0085 34.54 0.0244 1.00 44.13 0.0086 34.50 0.0244
+> λd
+> 0.00 44.17 0.0086 34.57 0.0244 0.20 44.18 0.0085 34.40 0.0250 0.40 44.16 0.0086 34.34 0.0247
+> 0.60 44.25 0.0086 34.32 0.0253 0.80 44.18 0.0085 34.59 0.0243 1.00 44.18 0.0085 34.59 0.0244
+
+with low mask overlap are removed. We conduct an ablation study to analyze the impact of k on reconstruction quality and rendering efficiency. As shown in Fig. 17, the PSNR remains largely stable across different values of k, while rendering efficiency varies noticeably. In particular, k = 0 .5 achieves the lowest rendering time and the highest FPS while maintaining comparable reconstruc-tion quality. Based on this observation, we choose k = 0 .5 as the default value since it provides the best balance between reconstruction fidelity and rendering efficiency. Beyond the adaptive threshold parameter, we further analyze the sen-sitivity of additional refinement hyperparameters to evaluate the robustness of MaRO-GS under different object-centric supervision settings. 
+
+Sensitivity to mask weight and soft decay. We analyze the sensitivity of the proposed refinement strategy with respect to the coverage weight coefficient β
+
+and the decay coefficient λd. The analysis is conducted on both LERF-Mask and Mip-NeRF 360 to evaluate robustness across datasets with different object area ratios. Table 19 summarizes the results. For β in w = 1 − β(1 − α), PSNR varies 32 E. Kim et al. Color Sensitivity ( 𝜏𝑐 )
+
+> 18,443 20,576 22,856 22,616
+
+17781 18781 19781 20781 21781 22781 44 44.05 44.1 44.15 44.2 44.25 44.3 44.35 44.4    
+
+> 0.1 0.2 0.3 0.4
+
+PSNR Gaussians 
+
+Spatial Sensitivity ( 𝜂 )
+
+> 24,377 23,279 20,576 23,951 18,311
+
+17401 18401 19401 20401 21401 22401 23401 24401 44 44.05 44.1 44.15 44.2 44.25 
+
+44.3 
+
+44.35 44.4     
+
+> 0.1 0.3 0.4 0.5 0.6
+
+PSNR Gaussians 
+
+KNN Sensitivity (k) 
+
+> 18,580 20,576 25,634 21,676
+
+17521 18521 
+
+19521 
+
+20521 21521 22521 23521 24521 25521 26521 44 44.05 44.1 44.15 44.2 44.25 
+
+44.3 
+
+44.35 44.4    
+
+> 2345
+
+PSNR Gaussians  
+
+> 19.28 20.50 19.92 19.92 20.64
+
+19 
+
+19.2 19.4 19.6 19.8 20 20.2 20.4 20.6 20.8 21 
+
+44 
+
+44.05 44.1 44.15 44.2 44.25 44.3 44.35 44.4 44.45 44.5     
+
+> 0.1 0.3 0.4 0.5 0.6
+
+PSNR RT  
+
+> 19.81 19.92 20.92 19.57
+
+19 19.2 19.4 19.6 19.8 20 20.2 20.4 20.6 20.8 21 44 44.05 44.1 44.15 44.2 44.25 44.3 44.35 44.4 44.45 44.5    
+
+> 2345
+
+PSNR RT 
+
+> 18,443 20,576 22,856 22,616
+
+17781 18781 19781 20781 21781 22781 18 18.5 19 19.5 20 20.5 21 21.5 22    
+
+> 0.1 0.2 0.3 0.4
+
+RT Gaussians 
+
+> 24,377 23,279 20,576 23,951 18,311
+
+17401 18401 19401 20401 21401 22401 23401 24401 19 19.2 19.4 19.6 19.8 20 20.2 20.4 
+
+20.6 20.8 
+
+21     
+
+> 0.1 0.3 0.4 0.5 0.6
+
+RT Gaussians 
+
+> 18,580
+> 20,576 25,634
+> 21,676
+
+17521 18521 19521 
+
+20521 
+
+21521 22521 23521 24521 25521 26521 19 19.5 20 20.5 21    
+
+> 2345
+
+RT Gaussians 
+
+> 18.92 19.92 21.07 19.14
+
+18 
+
+18.5 19 19.5 20 
+
+20.5 
+
+21 21.5 22 
+
+44 
+
+44.05 44.1 44.15 44.2 44.25 44.3 44.35 44.4 44.45 44.5    
+
+> 0.1 0.2 0.3 0.4
+
+PSNR RT 
+
+Fig. 18: Ablation study on merging hyperparameters. Effect of color sensitivity (τc), spatial sensitivity ( η), and group size threshold ( κmerge ) on PSNR, the number of Gaussians, and rendering time (RT). All non-varied parameters are fixed to the baseline configuration (τc, η, κ merge ) = (0 .2, 0.4, 3) .
+
+by at most 0.16 dB across all tested values on both datasets, indicating that β has limited influence on reconstruction quality. We set β = 0 .5 as a representative mid-range value. For λd in τbase · (1 − λd δ w ), PSNR varies by at most 0.09 dB on LERF-Mask and 0.27 dB on Mip-NeRF 360 across the tested values. Since 
+
+λd and β interact multiplicatively within τsoft , their individual effects partially compensate each other, which explains the low sensitivity to either coefficient in isolation. We set λd = 0 .6, which achieves the best PSNR on LERF-Mask. These results confirm that the threshold formulation does not require per-scene tuning of these coefficients. All evaluations in this section were conducted on an NVIDIA RTX 3090. MaRO-GS 33 010000  
+
+> 20000
+> 30000 40000 50000
+> Number of Gaussians
+> Iterations merging OFF pruning OFF
+> merging ON pruning OFF
+> 010000 20000 30000 40000 50000
+> Number of Gaussians
+> Iterations merging OFF pruning ON merging ON pruning ON
+> (a) (b)
+
+Fig. 19: Evolution of the number of Gaussians over training iterations under different configurations of appearance-guided local gaussian Merging and mask-guided pruning and densification. (a) Comparison with and without appearance-guided local gaussian Merging without mask-guided pruning and densification. (b) Comparison with and without appearance-guided local gaussian Merging when mask-guided pruning and densification is applied. 
+
+C.5 Gaussian Merging Hyperparameter Analysis 
+
+We evaluate the effect of each merging hyperparameter in Fig. 18, with a focus on rendering efficiency and compactness. For the color sensitivity τc, τc = 0 .1 pro-duces the most compact representation but noticeably degrades PSNR, whereas 
+
+τc = 0 .3 achieves the highest PSNR at the cost of more Gaussians and higher rendering time. We therefore choose τc = 0 .2, which offers a balanced trade-off between reconstruction quality, compactness, and rendering efficiency. For spa-tial sensitivity η, 0.4 achieves the lowest Gaussian count among configurations that maintain stable PSNR. For group size threshold κmerge , which controls the minimum group size required for merging, κmerge = 2 yields the fewest Gaus-sians, but PSNR improves by 0.2 dB at κmerge = 3 with a comparable Gaussian count. We therefore select κmerge = 3 . Based on these observations, the final configuration is (τc, η, κ merge ) = (0 .2, 0.4, 3) . All evaluations in this section were conducted on an NVIDIA RTX 4070 Ti Super GPU. 
+
+C.6 Effect of Gaussian Merging and Mask-guided Pruning 
+
+We analyze the effect of Gaussian merging and mask-guided pruning during training. Fig. 19 illustrates the evolution of the number of Gaussians over training iterations under different configurations. Fig. 19(a) presents the results without mask-guided pruning while Gaussian merging is enabled or disabled. With the default configuration, Gaussian merging is performed at iterations 2K and 4K. When merging is enabled, the number of Gaussians gradually decreases because nearby Gaussians are merged during optimization. Fig. 19(b) shows the results when mask-guided pruning is applied. Pruning is performed at iterations 1,000, 3,000, and 5,000 to remove redundant Gaussians. Pruning significantly reduces the number of Gaussians in the early training stage. When Gaussian merging and mask-guided pruning are applied together, the model achieves the most compact representation with the smallest number of Gaussians. These results 34 E. Kim et al. 43.4 43.5 43.6 43.7                       
+
+> 43.8
+> 43.9 44 44.1 44.2
+> 0.0001 0.001 0.01 0.1 1
+> 0.00915 0.0092 0.00925 0.0093 0.00935 0.0094
+> 0.00945 0.0095
+> 0.00955 0.0001 0.001 0.01 0.1 1
+> 5.53
+> 5.54
+> 5.55 5.56 5.57 5.58 5.59 5.6
+> 5.61
+> 5.62
+> 0.0001 0.001 0.01 0.1 1
+> PSNR ↑LPIPS ↓Rendering Time ↓
+> loss weight : 𝛾 loss weight : 𝛾 loss weight : 𝛾
+
+Fig. 20: Ablation study on the silhouette-aligned object loss weight γ. γ = 0 .01 pro-vides the best trade-off between reconstruction quality and rendering efficiency. 
+
+demonstrate that the two modules complement each other and enable effective Gaussian compression during training. 
+
+C.7 Silhouette-aligned Object Loss 
+
+We analyze the effect of the background loss weight γ, which controls the con-tribution of background regions during training. When γ = 0 , the model is opti-mized using only the masked object region, completely ignoring the background. Although this enforces strong object-centric supervision, it can reduce train-ing stability because surrounding scene context is not considered. Introducing a small background weight improves reconstruction stability while still emphasiz-ing the target object. As shown in Fig. 20, γ = 0 .01 maintains high PSNR and low LPIPS while preserving efficient rendering time. In contrast, when γ becomes too large ( γ = 0 .1), the training objective becomes dominated by background regions, which weakens the object-centric constraint and degrades reconstruction quality. Based on these observations, we select γ = 0 .01 as the default setting since it provides the best trade-off between object-focused supervision and stable scene optimization. All evaluations in this section were conducted on an NVIDIA RTX 3090 GPU. 
+
+D Problem Analysis: Challenges in Object-Centric 3D Gaussian Splatting 
+
+D.1 Challenges Under Inconsistent Supervision 
+
+As discussed in Sec. 3.1 of the main paper, object-centric Gaussian reconstruction requires accurate object region information. However, obtaining perfect segmen-tation masks in practice is nearly impossible. Table 20 reports the mask error rates on the Tanks and Temples and Mip-NeRF 360 datasets when masks are generated automatically with the pipeline described in Fig. 10. The error rates MaRO-GS 35 
+
+Table 20: Error rate comparison across datasets                  
+
+> Tanks and Temples Scene Barn Caterpillar Ignatius Truck
+> Error Rate 30.97 62.14 25.70 52.58
+> Mip-NeRF 360 Scene bicycle bonsai counter garden
+> Error Rate 80.51 72.26 52.50 61.08 3DGS Ours
+
+Fig. 21: Visualization of Gaussian central points after background removal. The red bounding box indicates the target object region. 
+
+range from 25% to over 80%. These results indicate that object regions are fre-quently masked incorrectly even under a standard automatic pipeline. When these noisy masks are directly used in 3DGS, the errors propagate throughout the optimization process and degrade rendering quality, as illustrated in Fig. 3 of the main paper. 
+
+D.2 Background Removal Artifacts 
+
+When background regions are removed, conventional 3DGS still generates a large number of Gaussians in empty regions. Fig. 21 visualizes the Gaussian distri-butions after background masking. Although the background is removed, the baseline 3DGS reconstructs a large spatial region around the target object and produces many redundant Gaussians in the surrounding space. In contrast, our method maintains a compact Gaussian distribution that is concentrated around the target object. The presence of redundant Gaussians can also be observed in the rendered results. As shown in the truck in Fig. 30, objects exhibit white regions where parts of the object are partially removed or occluded. These arti-facts arise from redundant Gaussians generated in surrounding empty regions. In contrast, our method suppresses these redundant Gaussians and produces more complete object reconstruction. 36 E. Kim et al. 
+
+Table 21: Object Reconstruction Strategies: ObjectGS vs. MaRO-GS.         
+
+> ObjectGS [48] MaRO-GS (Ours) Main Task Object-aware scene reconstruction and un-derstanding Robust object-centric reconstruction un-der inconsistent mask supervision
+> Input Data 2D multi-view images + 2D instance masks Object-masked multi-view images + 2D object masks
+> Problem Formulation Semantic ambiguity in scene-level render-ing Rendering instability under inconsistent mask supervision
+> Role of Masks Semantic supervision for object-level clas-sification Object supervision for Gaussian optimiza-tion
+
+Table 22: Pruning-based GS Comparisons: PUP 3D-GS vs. MaRO-GS.                 
+
+> PUP 3D-GS [14] MaRO-GS (Ours) Main Task Post-hoc compression of pretrained 3DGS models for efficient storage and rendering Object-centric reconstruction from object-masked multi-view images
+> Object Preservation Implicit foreground retention via multi-view sensitivity. Explicit object preservation via mask-guided pruning and densification.
+> Pruning Strategy Low-sensitivity Gaussians are pruned based on reconstruction sensitivity. Unsupported Gaussians are pruned based on mask overlap.
+
+Table 23: Covisibility Usage: LongSplat vs. MaRO-GS. 
+
+LongSplat [26] MaRO-GS (Ours) Input Gaussians in consecutive frames t and t′. Gaussians in training view vi and its refer-ence views. 
+
+How IoU of binary visible-Gaussian sets be-tween two frames. Soft IoU of Gaussian visibility weighted by mask value and opacity, averaged over TopK reference views. 
+
+Why To decide which nearby frames should be jointly optimized to ensure reliable multi-view supervision. To determine which training views should be excluded to ensure reliable object-level supervision. 
+
+E Detailed Comparison with Related Work 
+
+E.1 Comparison with ObjectGS 
+
+Table 21 summarizes the differences between ObjectGS [48] and MaRO-GS. ObjectGS performs scene-level reconstruction and leverages 2D instance masks as semantic supervision for object-level classification via one-hot ID encoding. In contrast, MaRO-GS reconstructs objects directly from object-masked multi-view images, where masks suppress background Gaussians and filter inconsistent views. 
+
+E.2 Comparison with PUP 3D-GS 
+
+Table 22 compares PUP 3D-GS [14] and MaRO-GS. PUP 3D-GS focuses on compressing pretrained 3D-GS models via sensitivity-based pruning. The au-thors suggest that foreground Gaussians tend to be implicitly retained because they are observed across more training views. In contrast, MaRO-GS explic-itly preserves the target object through mask-guided pruning for object-centric reconstruction. MaRO-GS 37 Original  Input View  ObjectGS  FDS-GS  Ours  
+
+> (A)
+> (B)
+> (D)
+> (C)
+> Fig. 22: Challenging cases of MaRO-GS. (A) Overlapping objects preventing clean isolation of the target object. (B–C) Inaccurate object masks limiting quantitative evaluation despite improved visual quality. (D) Extremely small target object, where perceptual improvements are underestimated by quantitative metrics.
+
+E.3 Comparison with LongSplat 
+
+Table 23 summarizes the differences in covisibility usage between LongSplat [26] and MaRO-GS. While both methods utilize Gaussian visibility to measure view-to-view relationships, they serve fundamentally different purposes in their re-spective pipelines. LongSplat computes a binary IoU of visible-Gaussian sets between frame pairs, and uses it to decide which nearby frames should be jointly optimized within a visibility-adapted local window, ensuring reliable multi-view supervision during incremental pose and scene optimization. In contrast, MaRO-GS leverages Gaussian visibility IoU across reference views as a reliability met-ric for view consistency. By evaluating the overlap between a target training view and its geometrically related reference views, MaRO-GS effectively dis-cards geometrically inconsistent views that might otherwise introduce artifacts. This mechanism ensures robust object-centric reconstruction, particularly when dealing with noisy or inconsistent mask supervision that commonly arises from automated segmentation models such as SAM. 
+
+F Limitations and Failure Case Analysis 
+
+F.1 Challenging Cases and Limitations of MaRO-GS 
+
+Although our method achieves robust object-centric reconstruction across di-verse scenes, several challenging cases remain, as illustrated in Fig. 22–Fig. 23. In Fig. 22(A), the target object overlaps with a nearby object, where thin struc-tures (e.g., bicycle spokes) and overlapping regions are consistently merged by 38 E. Kim et al. GT  w/o filtering  w/ filtering   
+
+> Correctly filtered Missed by Filtering
+> Rendering Results
+> (DTU Hard : Scan 48) Training Views with Mask Errors
+> Fig. 23: Failure case on the DTU Hard split (Scan 48). Top: training views with mask errors. Some views are correctly removed by filtering, while others are missed. Bottom: rendering results without and with filtering. Residual artifacts remain due to erroneous views that are not filtered.
+
+the segmentation masks across almost all viewpoints. Since our framework is designed to mitigate view-level inconsistent supervision, it cannot recover when incorrect supervision is consistently propagated across nearly the entire view set. Consequently, the optimization receives incorrect object supervision throughout training, resulting in the joint reconstruction of both objects. In Fig. 22(B)–(C), the provided object masks contain inaccurate object boundaries. Because the standard evaluation computes quantitative metrics only over the object-mask regions, visual improvements beyond the inaccurate mask boundaries are not reflected in the reported scores. As a result, MaRO-GS produces perceptually more accurate reconstructions, while the quantitative metrics remain compara-ble to those of the baseline methods. In Fig. 22(D), the target object occupies only a very small image region and is visible in only a limited number of views. Baseline methods fail to reconstruct a meaningful object structure under this setting, whereas MaRO-GS still recovers a coherent object shape. Nevertheless, this substantial qualitative gap is reflected in only a marginal difference in the quantitative scores. Fig. 23 further illustrates a failure case on the DTU Hard split (Scan 48). The filtering module removes some erroneous views, but several unreliable views remain unfiltered. These missed error views continue to provide incorrect su-pervision during optimization and cause residual artifacts in the reconstructed object. This case reflects the limitation of conservative filtering under severe mask corruption, where not all erroneous views can be removed reliably. These cases indicate that MaRO-GS still depends on the quality of the input segmentation masks under challenging conditions, while also highlighting lim-itations of the current evaluation protocol. Improving robustness to imperfect segmentation, together with more reliable object-centric datasets and evaluation protocols, remains an important direction for future work. MaRO-GS 39 bonsai       
+
+> Iterations : 100 Iterations : 1000 Iterations : 10000 Iterations : 30000
+> kitchen
+> Iterations : 100 Iterations : 1000 Iterations : 10000 Iterations : 30000
+
+Fig. 24: Failure case of ObjectGS on the kitchen scene from Mip-NeRF 360. While the bonsai scene is reconstructed successfully, the kitchen scene produces no visible object throughout training. Pseudo GT (scan12) 
+
+> Rendered Image
+
+Fig. 25: Failure case of PUP 3D-GS on DTU scenes. 
+
+F.2 Failure Cases of Existing Methods 
+
+In the kitchen scene on Mip-NeRF 360 dataset, ObjectGS [48] failed to recon-struct any visible object when this scene was used as input, as shown in Fig. 24. ObjectGS is designed to optimize object-centric Gaussians based on object segmentation priors. When the object region is small or ambiguous, the method may fail to initialize reliable object Gaussians, which can lead to an empty re-construction. PUP 3D-GS [14] showed stable behavior on Mip-NeRF 360 and LERF-Mask but exhibited a failure case on the DTU dataset. In several DTU scenes, the method pruned most Gaussians in the scene during training. Since DTU contains many views with inconsistent geometry and background clutter, the pruning strategy can incorrectly suppress Gaussians that correspond to valid object structures. This result indicates that pruning-based acceleration methods may become unstable when the importance of scene elements cannot be reliably estimated. Fig. 25 shows that even in the few scenes where training successfully completes, the reconstructed results remain inaccurate. 
+
+G Robustness Across Segmentation Models 
+
+For datasets requiring generated masks in the main paper, our framework uses EfficientViT-SAM [47] as the segmentation model due to its strong segmentation quality and computational efficiency. To evaluate the robustness of MaRO-GS under different segmentation models, we additionally conduct experiments us-ing masks generated by Mask2Former [5] and MaskDINO [25]. As shown in Fig. 26, masks generated by Mask2Former and MaskDINO exhibit less precise object boundaries, with noticeable background leakage around thin structures such as table legs. Fig. 27 compares the reconstruction results of MaRO-GS and baseline 3DGS under each segmentation model. Under the same input masks, baseline 3DGS produces more noticeable background artifacts, whereas MaRO-GS suppresses these artifacts more effectively across all segmentation models. 40 E. Kim et al. Mask2Former MaskDINO  EfficientViT -SAM Original 
+
+Fig. 26: EfficientViT-SAM yields more precise object boundaries, while Mask2Former and MaskDINO show noticeable background leakage around thin structures. Mask2Former  
+
+> Ours
+> 3DGS
+> EfficientViT-SAM MaskDINO
+
+Fig. 27: Comparison of object masks and reconstruction results using different seg-mentation models. 
+
+These results suggest that MaRO-GS is more robust than baseline 3DGS under different segmentation models. 
+
+H Seed Variance 
+
+We repeat the key comparisons over three random seeds to assess run-to-run variation, and report the mean and standard deviation in Tables 24 and 25. For LERF-Mask and Mip-NeRF 360, we compare MaRO-GS with FDS-GS, which has the strongest competing PSNR in Table 1 of the main paper. For Tanks and Temples, we report all methods because the PSNR margins among the compared methods are relatively small. For DTU, we compare MaRO-GS with ObjectGS, MaRO-GS 41 
+
+which has the strongest competing PSNR across the Easy, Medium, and Hard splits in Table 3 of the main paper. For MaRO-GS, the PSNR standard deviation ranges from 0.05 to 0.39 dB across the evaluated settings. For each reported setting, the mean PSNR margin between MaRO-GS and the strongest competing method is larger than the PSNR standard deviation of either method. 
+
+Table 24: Seed variance for selected methods from Table 1 in the main paper. Mean 
+
+± standard deviation over three random seeds (180, 193, 5873). Dataset Method PSNR ↑ SSIM ↑ LPIPS ↓                                                                                   
+
+> LERF-Mask FDS-GS 40.76 ±0.38 0.991 ±0.0001 0.009 ±0.0001 Ours 42.90 ±0.14 0.992 ±0.0000 0.008 ±0.0000 Mip-NeRF 360 FDS-GS 33.19 ±0.29 0.977 ±0.0012 0.024 ±0.0008 Ours 34.64 ±0.11 0.979 ±0.0001 0.022 ±0.0000 Tanks & Temples 3DGS 30.68 ±0.13 0.964 ±0.0002 0.049 ±0.0001 PUP 3D-GS 30.07 ±0.08 0.955 ±0.0002 0.070 ±0.0001 ObjectGS 29.80 ±0.44 0.957 ±0.0002 0.054 ±0.0007 FDS-GS 30.47 ±0.15 0.966 ±0.0004 0.042 ±0.0004 Ours 31.17 ±0.15 0.962 ±0.0001 0.052 ±0.0000
+
+Table 25: Seed variance for selected methods from Table 3 in the main paper. Mean 
+
+± standard deviation over three random seeds (180, 193, 5873). Split Method PSNR ↑ SSIM ↑ LPIPS ↓
+
+Easy ObjectGS 31.55 ± 0.11 0.967 ± 0.0008 0.056 ± 0.0004 Ours 33.26 ± 0.39 0.963 ± 0.0001 0.055 ± 0.0003 Medium ObjectGS 23.27 ± 0.59 0.903 ± 0.0038 0.116 ± 0.0043 Ours 26.50 ± 0.05 0.939 ± 0.0012 0.085 ± 0.0006 Hard ObjectGS 21.15 ± 0.43 0.913 ± 0.0034 0.106 ± 0.0018 Ours 22.95 ± 0.10 0.923 ± 0.0003 0.085 ± 0.0005 
+
+I More Qualitative Results 
+
+We provide additional qualitative reconstruction results across diverse scenes. Figs. 28 to 30 present object-centric reconstruction results on the LERF-Mask [41], Mip-NeRF 360 [2], and Tanks and Temples [23] datasets, respectively. 42 E. Kim et al. Input View  3DGS  PUP 3D-GS  FDS-GS  Ours ObjectGS 
+
+Fig. 28: Visualization of object reconstruction on the LERF-Mask figurines scene. Red boxes denote the target object selected for reconstruction. MaRO-GS 43 3DGS  PUP 3D-GS  FDS-GS  Ours ObjectGS GT 
+
+Fig. 29: Visualization of object reconstruction on the Mip-NeRF scene. 3DGS  PUP 3D-GS  FDS-GS  Ours ObjectGS GT 
+
+Fig. 30: Visualization of object reconstruction on the Tanks and Temples scene.

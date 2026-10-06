@@ -1,0 +1,432 @@
+Title: FOCUS: Fine-Grained Open-Vocabulary Change Detection for Uncertainty-Aware Semi-Static Scenes
+
+URL Source: https://arxiv.org/pdf/2610.05639v1
+
+Published Time: Tue, 06 Oct 2026 02:36:10 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# FOCUS: Fine-Grained Open-Vocabulary Change Detection for Uncertainty-Aware Semi-Static Scenes 
+
+Can Xu 1, Mingfeng Yuan 1, Mahan Mohammadi 1, and Steven L. Waslander 1
+
+Abstract — Autonomous robots operating over long periods must keep their environmental memory up to date as the world changes between visits. In semi-static environments, an object may be replaced in place by a different but geometrically and semantically similar instance, making the identity change difficult to detect from geometry or coarse semantics alone. We present FOCUS , an uncertainty-aware framework for object-level change detection and map maintenance. We formulate semi-static memory maintenance as probabilistic inference that fuses geometric likelihood with appearance likelihood rendered from a 3D Gaussian map. A recursive three-state estimator maintains whether each mapped object is PERSISTED ,
+
+> REPLACED
+
+, or REMOVED . To account for imperfect 3DGS rendering, we model the rendered appearance evidence proba-bilistically rather than using it as a direct change score, with the model parameters automatically calibrated from a change-free replay of the initial mapping session. We evaluate our method on a new Isaac Sim warehouse benchmark with ambiguous in-place replacements and on the real-world TorWIC dataset. It improves object-level replacement F1 from 0.20 to 0.84 over a probabilistic baseline and transfers to real-world data without manual parameter retuning. 
+
+I. I NTRODUCTION 
+
+The rapid advance of foundation models in recent years has greatly expanded robots’ ability to recognize unseen ob-jects and understand open-ended environments. This progress is pushing robotics beyond short-horizon perception and reactive behavior toward long-term autonomy, where robots must operate reliably over extended periods as the world evolves. A key step toward this goal is persistent embodied intelligence: the ability to maintain an up-to-date memory of the environment, understand how it changes, and use that knowledge to adapt future decisions. Such capability is essential for warehouse inventory auditing, long-term crop monitoring, construction-site inspection, and household ser-vice robots, where objects may be added, removed, moved, replaced, or undergo meaningful changes in appearance or state over time. These settings are naturally semi-static :most of the environment remains stable, while a small but important subset undergoes persistent change. Reliable operation in such environments therefore requires robots to distinguish genuine changes from viewpoint variation, sensing noise, transient observations, and subtle differences between visually similar objects. Recent open-vocabulary scene representations and scene graphs have enabled robots to build increasingly rich object-centric memories of their environments [1], [2].  
+
+> 1All authors are with the University of Toronto Institute for Aerospace Studies and the University of Toronto Robotics Institute, Toronto, ON, Canada.
+
+{first.last }@robotics.utias.utoronto.ca 
+
+Existing semi-static mapping methods have begun to address this problem through geometric and probabilistic consistency estimation [3], [4]. However, these methods are primarily designed to detect coarse scene changes rather than fine-grained changes in object identity or state. POV-SLAM [5], for example, probabilistically esti-mates whether mapped objects remain consistent with cur-rent observations, but assumes prior semantic knowledge of mapped objects and models object state largely through geometric consistency. Khronos [4] similarly reasons about long-term scene evolution using geometric visibility and free-space evidence to verify whether previously observed structures remain present. These approaches are effective when changes produce a clear geometric signature, such as object addition, removal, or displacement. They become much more ambiguous under in-place replacement , where an object is replaced by another instance with nearly identical geometry and coarse semantics. For example, two cardboard boxes may occupy the same volume and share the same category while differing in a fragile label, plastic wrapping, or an open/closed state. Such differences may generate little geometric residual, yet can be operationally important for applications such as warehouse inventory reconciliation or long-term crop-condition monitoring. Appearance can be used to augment geometric change detection, but appearance evidence is itself uncertain. Dense visual features can distinguish objects that share similar geometry and semantics, and recent methods exploit im-age descriptors such as DINO-based features for associa-tion across observations [6]. However, pairwise matching usually requires sufficiently overlapping views, which may not exist across long-term revisits. 3D Gaussian Splatting (3DGS) provides an attractive alternative by storing a view-conditioned appearance model that can render the expected appearance of a mapped object from the current camera pose [7], [8]. This enables direct comparison between the current observation and the expected appearance without requiring a co-visible reference image. However, rendered appearance can be unreliable due to limited object visi-bility, incomplete reconstruction, floaters, pose errors, and illumination changes. A single-frame appearance residual is therefore insufficient for reliable change detection. Simply accumulating more observations is also problematic: along patrol-style trajectories, robots often observe an object from highly similar viewpoints over consecutive frames, causing correlated evidence to be repeatedly counted and resulting in overconfident decisions. 
+
+We therefore formulate semi-static memory mainte-arXiv:2610.05639v1 [cs.RO] 5 Oct 2026 nance as uncertainty-aware probabilistic inference over object state. For each mapped object, our system maintains a recursive three-state belief over PERSISTED , REPLACED ,and REMOVED . Geometry and appearance provide comple-mentary evidence: geometric cues are effective for detecting disappearance and newly occupied space, while rendered appearance provides the fine-grained signal needed to dis-tinguish a persisted object from an in-place replacement. To make this appearance evidence reliable, we maintain an object-specific appearance baseline together with its uncer-tainty, compensate for frame-level appearance shifts, sup-press unstable rendered evidence, and reduce the influence of temporally correlated observations. The resulting geometry and appearance likelihoods are fused in a recursive Bayesian estimator whose parameters are calibrated from a change-free replay of the reference session. In this way, our framework shifts semi-static memory maintenance from asking only 
+
+“has the mapped geometry changed?” toward the finer question “is this still the same object?” 
+
+We summarize our contributions as follows: 1) We introduce an uncertainty-aware 3DGS appearance model for fine-grained object change detection, ac-counting for appearance variation and unreliable ren-dered evidence. 2) We formulate object-level memory maintenance as a three-state recursive Bayesian estimator over PER -
+
+> SISTED
+
+, REPLACED , and REMOVED , fusing comple-mentary geometric and appearance evidence while accounting for unstable and correlated observations. 3) We introduce a multi-session warehouse benchmark for fine-grained semi-static changes, with challenging in-place replacements between geometrically and seman-tically similar objects and a complete set of object-level change annotations. II. R ELATED WORK 
+
+A. Long-Term Object-Level Map Maintenance 
+
+Long-term map maintenance has traditionally relied on geometric inconsistency across revisits. TSDF- and SDF-based methods detect persistent changes from reconstruction differences [9], [10], while Khronos [4] uses geometric and free-space evidence to infer long-term object persistence. Such methods are effective for additions, removals, and displacement, but can be ambiguous for in-place replacement between geometrically similar objects. To provide additional cues beyond geometry, recent object-centric maps incorpo-rate semantic features and language descriptions [1], [2], [8], [11]. However, coarse semantics may still be insufficient to distinguish visually similar instances. We instead target fine-grained object identity changes by combining geometry with uncertainty-aware, view-conditioned appearance evidence. 
+
+B. Appearance-Based Scene Change Detection 
+
+Appearance provides complementary evidence for cross-session change detection. Recent 3DGS-based methods ex-ploit novel-view rendering to compare a reference scene with current observations. 3DGS-CD [12] detects 2D object-level changes from rendered references and fuses them across views to recover 3D change masks and object transforma-tions, while Galappaththige et al. [13] extend this setting to online scene change detection with multi-view fusion and change-guided 3DGS updates. DynamicGSG [7] is par-ticularly related to our setting: it renders visible mapped objects, compares them with current observations using SSIM, and removes objects whose similarity falls below a fixed threshold, treating them as moved or substituted. In contrast, we treat rendered appearance as an uncertain identity observation rather than a hard change decision, and recursively fuse it with geometric evidence to distinguish 
+
+> PERSISTED
+
+, REPLACED , and REMOVED objects. 
+
+C. Probabilistic Object-State Estimation 
+
+Change evidence from individual observations can be un-reliable due to sensor noise, localization error, and imperfect segmentation. Persistence filtering therefore accumulates ev-idence over time rather than making single-frame decisions. Hashemifar and Dantu [14] incorporate feature-persistence reasoning into visual SLAM, while POCD [3] recursively estimates object stationarity from geometric and semantic evidence. Bogenberger et al. [15], referred to as Perceive-Semantix, incorporate geometric and semantic similarity for persistent object-instance tracking. Building on this prob-abilistic formulation, we explicitly distinguish PERSISTED ,
+
+> REPLACED
+
+, and REMOVED states and recursively fuse ge-ometry with uncertainty-aware appearance evidence. 
+
+D. Datasets for Semi-Static Change Detection 
+
+Several datasets support evaluation in changing indoor environments. TorWIC [3] provides multi-session warehouse sequences with object additions, removals, translations, and rotations for map-maintenance evaluation. 3RScan [16] con-tains repeated scans of indoor scenes with dense instance annotations, cross-session correspondences, and object trans-formations, primarily targeting object re-localization. However, these datasets do not directly target fine-grained object-state estimation under ambiguous in-place replace-ment. Our benchmark therefore introduces geometrically and semantically similar replacements with per-object change states and globally consistent instance identities across ses-sions. III. S YSTEM DESCRIPTION 
+
+A. Problem Formulation and Assumptions 
+
+In this work, we consider object-level change detection and semantic map maintenance across multiple traversals of a semi-static environment. Specifically, the environment remains static during each visit, and object changes only occur when the robot is away. We construct an object-level reference map during the first traversal, capturing scene geometry, semantics, object identity, and appearance information. During each revisit, we detect newly appeared objects and recursively update the state belief for each mapped object to determine whether its state has changed, updating the reference map accordingly. We define three Fig. 1. System Pipeline. The system first constructs an object-level reference map including a TSDF-based geometric map, and a 3DGS. During later revisits, the system infers each mapped object state by fusing geometry and appearance probabilistic evidence, and updates the map online. 
+
+states for each object, Si ∈ {pr = PERSISTED , rp =
+
+> REPLACED
+
+, rm = REMOVED }. P ERSISTED denotes that the mapped object remains unchanged. R EPLACED denotes the mapped object has been removed and a new object occupies the same space with similar geometry. REMOVED denotes the object no longer exists and its space is no longer occupied. Newly appeared objects do not belong to this state space; the system detects them using the reference-map construction pipeline. We do not model object motion: when an object is displaced, we treat it as a disappearance at the original pose and, following the rule above, as a newly appeared object at the new location. We leave for future work the simple extension to associate new objects with previously removed ones to handle displacement explicitly. For each mapped object we maintain a belief over its state given the observations up to time t,
+
+bi(S) = p(S | z1: t),S ∈ { PERSISTED , REPLACED , REMOVED }, (1) which is updated recursively during revisits. 
+
+B. System Pipeline Overview 
+
+As shown in Fig. 1, our system has two stages: building a reference map MR in the initial traversal, and running change detection and maintenance in later revisits. The input is a sequence of aligned RGB-D frames F = {Ft}t=1 ...T 
+
+with their camera-to-world poses T = {T W C t }t=1 ...T . In the first stage, we incrementally build MR from scratch, consisting of a TSDF voxel map V for geometry and a Gaussian Splatting model G for appearance. At the same time, we maintain an object library O = {O0, . . . , O n}.After construction, the reference recording is replayed on the reference map to calibrate the filter without labels. In the second stage, we monitor the state of every mapped object against MR online. Specifically, each object Oi
+
+carries a three-state belief bi(S), Eq. (1), recursively updated as observations accumulate. Then, decisions are applied to the map during the revisit. 
+
+C. Reference Map Construction 
+
+Building on OmniMap [8], we construct and maintain a geometry TSDF voxel map V and an appearance Gaussian Splatting model G in parallel. Objects are detected and seg-mented by an open-vocabulary front-end: we use DART [17], built on SAM3 [18], to obtain instance masks in real time, and then apply TAP [19] to generate a refined segmentation mask with a description caption for each candidate. The caption is encoded into a semantic embedding by the SBERT encoder. We then project these 2D masks into 3D voxels using the depth. Following OmniMap, we adopt probabilistic voxel association. To be more specific, each voxel maintains several candidate instance IDs with their vote counts. Given a new mask, we compute a weighted sum of geometric similarity and semantic similarity for each candidate, and determine whether the mask is associated to an existing object or initializes a new one. After several confirmed observations, objects are added to the object library O and kept in the map. During Gaussian Splatting training, we select keyframes by accumulated translation and rotation rather than at a fixed frame interval. On patrol-style trajectories, the robot speed varies substantially, so selecting keyframes by frame count makes the spatial density of the appearance reference vary with speed, resulting in uneven rendering quality. The resulting reference map MR = {V , G, O} renders the reference scene from an arbitrary camera view, providing the geometric and appearance reference for each later revisit. 
+
+D. Object State Representation 
+
+Each mapped object Oi keeps {Vi, fi, ˆai, ˆℓi, b i}: 
+
+> •
+
+Voxel set Vi: the voxels the object occupies, labeled by majority vote during mapping.  
+
+> •
+
+Semantic feature fi: the fused SBERT embedding.  
+
+> •
+
+Appearance and geometric zero-points ˆai, ˆℓi: the resid-uals an unchanged object is expected to produce under the reference map, each with its posterior variance and per-object noise scale.  
+
+> •
+
+Three-state belief bi(S), initialized to the prior b0.IV. P ROBABILISTIC CHANGE DETECTION AND ONLINE 
+
+MAP UPDATE 
+
+A. Observation Model 
+
+We use two channels of evidence to determine change: a geometry channel and an appearance channel. For each frame 
+
+Ft in a revisit session, we construct an observation for every mapped object visible in the current camera frustum, 
+
+zt = {∆t, x t}, (2) where ∆t denotes the geometric residual and xt denotes the appearance residual. We render each object’s expectation and compare it with the current frame. 
+
+Projection and rendering alignment. Using current pose 
+
+Tt, we project the voxels of all mapped objects into the current frame and keep, at each pixel, the object nearest to the camera. This generates a model depth image dmodel 
+
+> t
+
+and a per-pixel instance-label image. In parallel, we render the Gaussian field G from the same pose and get ˆIt, the expected appearance of the reference scene from the current view. Both channels are aligned in the current view; then, each object’s residuals are computed on its own pixel set. 
+
+Residuals. Residuals are computed over the core mask Ct
+
+of each object, the object’s projected pixels after occlusion culling and a small erosion. The erosion drops the one- to two-pixel ring at silhouettes where the Gaussian field alpha-blends across depth discontinuities. The geometric residual is the median model–sensor depth discrepancy over Ct,
+
+∆t = median 
+
+> m∈C t
+
+ dmodel  
+
+> t
+
+(m) − dsensor  
+
+> t
+
+(m). (3) When an object is removed, rays pass through its original location and terminate on the background, producing a large negative see-through residual. On the other hand, for both in-place rp and pr , ∆t ≈ 0. This is the ambiguity the appearance channel is introduced to resolve. The appearance residual is the complement of a per-pixel multi-scale struc-tural similarity map averaged over the core, 
+
+xt = 1 − mean 
+
+> m∈C t
+
+Mt(m), Mt(m) = 
+
+> 3
+
+Y
+
+> l=1
+
+Sl(m)wl , (4) where Sl is the SSIM map between the rendering and the observation at pixel m at scale l with its weight wl. Mt(m)
+
+is a per-pixel similarity. Then the residual is the mean dissimilarity over the object’s core area. 
+
+B. Measurement Likelihoods and Label-Free Calibration 
+
+Given the state S, we assume the appearance channel and the geometry channel are conditionally independent. The measurement likelihood is 
+
+p(zt | S) = p(xt | S) p(∆ t | S). (5) 
+
+Appearance likelihood. Exposure and rendering drift shift a whole frame at once, so we remove a per-frame offset mt,
+
+˜xt = xt − mt. (6) 
+
+mt = median i∈V t
+
+
+
+x(i) 
+
+> t
+
+− ˆai
+
+
+
+, (7) 
+
+Vt is the visible objects set in the current frame. Under pr ,the residual should fluctuate around the object’s appearance zero-point: 
+
+p(˜ xt | pr ) = N  ˜xt | ˆai, v a,i + σ2
+
+> a,i
+
+, (8) where va,i is object’s observation variance, and σ2 
+
+> a,i
+
+is the posterior variance of its zero-point. Under a change, either rp or rm , the residual is expected to be lifted by a change magnitude c, which is constrained to be non-negative, since a change can only reduce similarity. Specifically, we place a truncated Gaussian prior on c, with mean μc and scale σc, and marginalize it out. The change likelihood has a closed form: 
+
+p(˜ xt | chg ) = N  y | μc, σ 2 
+
+> c
+
++ s2 Φ  ˜m/ √˜v
+
+Φ μc/σ c
+
+ , (9) where y = ˜xt − ˆai, s2 = va,i + σ2
+
+> a,i
+
+, and ˜m, ˜v are the posterior moments of c given y, with ˜v = (1 /σ 2 
+
+> c
+
++ 1 /s 2)−1
+
+and ˜m = ˜ v (μc/σ 2 
+
+> c
+
++ y/s 2). Since the Gaussian prior decays quickly above μc, we hold the likelihood at its peak beyond 
+
+μc to keep a larger difference from weakening the evidence. 
+
+Geometry likelihood. We consider pr and rp share the geometry likelihood, since the in-place replacement is unob-servable to geometry. 
+
+p(∆ t | pr ) = p(∆ t | rp ) = N  ∆t | ˆℓi, τ 2 
+
+> i
+
++ σ2
+
+> ℓ,i
+
+, (10) where ˆℓi is the geometric zero-point, τ 2 
+
+> i
+
+the object’s depth observation variance, and σ2 
+
+> ℓ,i
+
+the posterior variance of the zero-point. For the state rm , following the Gaussian-uniform outlier treatment of POCD [3], we consider a bounded uniform over the see-through range: 
+
+p(∆ t | rm ) = U ∆t | [δmin , δ max ]. (11) 
+
+Robustness floor. Single frames occasionally fail through unstable rendering, depth holes, or occlusion. Rather than rejecting them by a manually chosen residual threshold, we apply ε-contamination to each likelihood, p 7 → (1 − ε)p +
+
+φ. We set the floor by capping how much one frame may contribute toward change at Λ nats, 
+
+φ = (1 − ε) fmax 
+
+eΛ − 1 , (12) where fmax is the peak density of the change likelihood of the corresponding channel, applied per channel. 
+
+Label-free calibration. The per-object noise parameters and the decision threshold come from a change-free replay. The observations used to build the reference map are un-changed by construction. Therefore, after construction, we replay the reference session as if it were a revisit, with the map frozen, and compute the residuals for each object. These residuals contain no real change, and their spread is entirely rendering error and sensor noise. We split the frames into two interleaved halves, one for the per-object parameters and one for the decision threshold, so no frame serves both. For each object, the median of its corrected residuals is the raw estimate of its zero-point, and their spread gives the object’s own observation variance va,i . Since the median is unreliable for objects seen only a few times, we combine it with a population prior through a conjugate update to get the zero-point ˆai, together with its posterior variance σ2
+
+> a,i
+
+. The geometric quantities ˆℓi and τ 2 
+
+> i
+
+follow the same procedure. The change magnitude μc and σc cannot be estimated from change-free data, so we fit them once as a prior and refine them causally during the revisit with a two-component mixture over the residuals seen so far, allowing the mean only to increase. 
+
+C. Bayesian Recursion Update 
+
+For each object, we run a Bayesian filter. The state has two parts, a discrete belief over the three states, bt(S) = 
+
+p(S | z1: t), and the Gaussian posteriors of two zero-points, N (ˆ ai, σ 2
+
+> a,i
+
+) and N (ˆℓi, σ 2
+
+> ℓ,i
+
+) which capture the residual a persisted object is expected to produce. The belief starts at 
+
+b0 = (1 − π0, π 0(1 − πrm ), π 0πrm ), (13) where π0 is the prior probability of change, and πrm is the conditional prior probability that a change is a removal. The zero-points are initialized during calibration. 
+
+Prediction. Between observations, the belief reverts slightly toward the prior, so that evidence accumulated long ago does not dominate the current estimate, 
+
+b− 
+
+> t
+
+= (1 − ρ) bt−1 + ρ b 0. (14) The zero-points revert at the same rate toward their calibrated values, so that a zero-point driven off by earlier observations does not veto its own channel indefinitely. 
+
+Update. Each observation updates the belief with the two likelihoods, 
+
+bt(S) ∝ b− 
+
+> t
+
+(S) p(˜ xt | S)wt p(∆ t | S)wt
+
+, (15) tempered by a weight wt that accounts for correlated frames. Consecutive frames are far from independent. A robot that dwells on one viewing direction could turn a bad rendering into overwhelming evidence if all frames are used for up-dates. We bin the viewing directions around each object in azimuth and elevation, give the n-th observation in a bin the weight 
+
+wt = √n − √n − 1, (16) so that the weights of the first n observations in a bin telescope to exactly √n. In this way the discount is available online. The zero-points are jointly updated with the belief, follow-ing POCD [3]. Whether the current frame should be fused into the zero-points depends on whether the object is still unchanged. Under pr , the residual is a valid sample of the zero-point. Taking the appearance zero-point as an example, it is fused by a conjugate update, 
+
+γ2 =
+
+ 1
+
+> σ2
+> a,i
+
++ wt
+
+> va,i
+
+−1
+
+, m = γ2 ˆai
+
+> σ2
+> a,i
+
++ wt ˜xt
+
+> va,i
+
+
+
+. (17) When the state is a change, the residual comes from the change rather than the zero-point and carries no information about it, so the branch remains at the prior, mchg = ˆ ai,
+
+γ2chg = σ2
+
+> a,i
+
+. The exact posterior is a two-component Gaus-sian mixture of these two branches, 
+
+p(ai | z1: t) = C1 N (ai | m, γ 2) + C2 N (ai | ˆai, σ 2
+
+> a,i
+
+), (18) where C1 and C2 are the normalized branch weights. As the mixture is no longer a single Gaussian, we match its first two moments so the recursion can continue, 
+
+ˆai ← C1m + C2ˆai,σ2 
+
+> a,i
+
+← C1γ2 + C2σ2 
+
+> a,i
+
++ C1C2(m − ˆai)2. (19) The geometric zero-point follows the same procedure. 
+
+D. Decision and Online Map Update 
+
+We define the posterior change log-odds as 
+
+Lt = log bt(rp ) + bt(rm )
+
+bt(pr ) . (20) A change is declared for an object as soon as Lt crosses a threshold θ from the change-free calibration: we collect the per-object max t Lt and take a high quantile at the acceptable false-positive rate. Then, the decision is latched, so pr is ruled out and does not return, and the belief keeps updating between rp and rm over a short confirmation window. The change type follows the larger of bt(rm ) and bt(rp ). Once the type is fixed, the map is edited. The object’s Gaussians are hidden, its TSDF region is reset, and a new instance is re-integrated from recently buffered frames. Any newly detected instance in the revisit session takes no further part in the belief update. V. D ATASET 
+
+We build two simulated warehouse environments of differ-ent scales in NVIDIA Isaac Sim 5.1, as shown in Fig. 2. A simulated Clearpath Husky drives through each environment repeatedly to mimic the revisits of an inspection robot. The scenes consist of common warehouse assets such as cardboard boxes, pallets, plastic drums, shelves, forklifts, and signs. Each traversal includes 1280 ×720 aligned RGB-D images, instance-level segmentation labels, and camera poses. Each object keeps a consistent global ID across multiple traversals, providing exact object association and change ground truth. For each warehouse, we record one reference sequence and multiple revisit sequences. More specifically, we create different changed revisit sessions by randomly removing objects, replacing objects, and changing object appearances or materials.  
+
+> Fig. 2. Three examples of in-place replacements (A–C) that preserve category and geometry but differ in wrapping, labels, or color.
+
+VI. E XPERIMENTS 
+
+A. Experimental Setup 1) Baselines: Perceive-Semantix [15] extends POCD with an additional semantic-similarity likelihood. We take it as the representative of this family. 
+
+DynamicGSG [7] detects changes based on 3DGS. It renders each mapped object from Gaussian map and deletes it once the single-frame SSIM against the observation falls below a fixed threshold. Since it runs out of GPU memory at full resolution, we run it at 640 ×360 on the small warehouse and on TorWIC; the large-warehouse sequences are too long to run at any resolution. TABLE I QUANTITATIVE CHANGE DETECTION RESULTS .                                                                                                                                                           
+
+> Persisted Replaced Removed Scene Method Level FP/N (%) ↓TP/P ∗FP/N (%) ↓P↑R↑F1 ↑TP/P ∗FP/N (%) ↓P↑R↑F1 ↑
+> Small Warehouse Perceive-Semantix Voxel 8.2% 6242/37192 8.9% 0.11 0.17 0.13 6692/28926 6.3% 0.15 0.23 0.18 Object 33.8% 6/27 23.9% 0.19 0.22 0.20 5/22 26.3% 0.14 0.23 0.18 DynamicGSG Voxel 14.5% 15363/37192 12.2% 0.17 0.41 0.25 9170/28926 10.6% 0.13 0.32 0.18 Object 55.9% 15/27 54.1% 0.20 0.56 0.30 14/22 37.7% 0.25 0.64 0.35
+> Ours Voxel 4.7% 27385/37192 1.2% 0.79 0.74 0.76 21073/28926 2.2% 0.62 0.73 0.67
+> Object 10.3% 27/27 9.2% 0.73 1.00 0.84 22/22 15.8% 0.55 1.00 0.71
+> Large Warehouse Perceive-Semantix Voxel 19.6% 3649/22830 20.3% 0.07 0.16 0.10 3782/18063 15.6% 0.09 0.21 0.13 Object 14.6% 18/82 12.4% 0.08 0.22 0.12 16/94 13.1% 0.07 0.17 0.10
+> Ours Voxel 3.2% 18093/22830 4.9% 0.62 0.79 0.70 14704/18063 10.4% 0.38 0.81 0.51
+> Object 3.2% 56/82 5.4% 0.39 0.68 0.50 78/94 7.9% 0.38 0.83 0.53
+> ∗Pdenotes the number of evaluable GT positive objects under the common evaluation protocol. Best results are shown in bold, and second-best results are underlined. DynamicGSG could not be evaluated on the Large Warehouse due to GPU out-of-memory errors.
+> Fig. 3. Evidence and object-state belief. An object is observed unchanged in revisit 1 (gray) and replaced by a same-sized box in revisit 2 (red); top frames correspond to the circled observations. Left. In-place replacement. The geometric measurement ∆tis indistinguishable between the two revisits, whereas the appearance measurement xtclearly separates them. The recursive belief ignores isolated outliers and converges to REPLACED
+> once appearance evidence accumulates. Right. Real-world removal case.
+
+2) Evaluation Metrics: We evaluate change-detection per-formance at two levels: voxel-level and object-level. At the voxel level, a ground-truth surface voxel counts as changed if the map segment covering it is declared changed by the method, and as a false positive if it belongs to an unchanged object. The voxel level does not require object-level instance matching and mainly focuses on spatial correctness. At the object level, the unit is the annotated physical object. Each detection is assigned to the ground-truth object containing the majority of its voxels, or treated as unmatched if it does not overlap any evaluable object. Both unmatched detections and detections assigned to unchanged objects are counted as false positives. 
+
+B. Isaac Sim Warehouse Dataset 
+
+Each warehouse provides four sequences. A reference traversal is denoted t0, two revisits with replacement and removal are denoted trp and trm , and a static revisit tstatic , in which nothing changes, is used to measure false detections. Table I reports the results under the two-level protocol. We first compare all methods on tstatic . Since nothing changes, every detection is a false positive. The object-level false-positive rate of Perceive-Semantix is 14.6% on the large warehouse and 33.8% on the small one, and DynamicGSG flags 55.9% of the unchanged objects on the small ware-house, since a single-frame SSIM drop is enough for it to delete an object. Ours is 3.2% and 10.3%. For our method this also shows that the threshold θ, calibrated by replaying 
+
+t0, transfers to the different trajectory of tstatic . Fig. 3 illustrates how evidence accumulates for a box replaced by one of identical size but with a different label. On changed revisits our method also shows high recall in all cases. It detects all changed objects in the small ware-house and more than 68% of them in the large warehouse, while Perceive-Semantix’s recall does not exceed 0.23 in any case, and DynamicGSG reaches at most 0.64 while flagging more than half of the unchanged objects. In particular, the gap is widest on replacement, the case our appearance model is designed for. For Perceive-Semantix, replacement is harder than removal, with a voxel-level F1 of 0.13 on replacement against 0.18 on removal in the small warehouse. For our method the two cases are comparable, with 0.76 against 0.67.   
+
+> Fig. 4. Fine-grained change detection and map maintenance in large warehouse. Our method maintains a clean instance-level map, whereas Perceive-Semantix misses most changes and merges adjacent boxes into large semantic segments.
+
+Perceive-Semantix suffers mainly from association. Ware-house assets are packed tightly, and its association merges new detections into old objects 591 times on the large warehouse, which also explains its high false-positive rate on tstatic , as shown in Fig. 4. Our method has a failure mode of its own. On the large-warehouse removal revisit the object-level F1 drops to 0.53, and in both scenes the false-positive rate on removal is higher than on replacement. We attribute this to online map maintenance. Once an object is removed, it exposes surfaces of neighbouring objects that were never observed during reference mapping, whose rendered appearance then mismatches the observation and leads them to be flagged as changed. Table II shows that the estimator also assigns the right kind of change to nearly all detected objects, with the most common confusion being some removed objects in the large warehouse labelled as replaced.                  
+
+> TABLE II STATE CLASSIFICATION OF DETECTED CHANGED OBJECTS
+> GT Replaced GT Removed Scene Pred. Rep. Pred. Rem. Pred. Rep. Pred. Rem.
+> Small Warehouse 25 2121 Large Warehouse 52 411 67
+
+C. TorWIC Real-World Warehouse Dataset 
+
+We evaluate our method on the real-world TorWIC dataset [3], which was collected with a RealSense D435i RGB-D camera on a mobile robot, with poses from LiDAR-based SLAM. We evaluate four box- and fence-removal scenarios, 2-1 to 2-4 . We evaluate all methods at the voxel level, as TorWIC provides only placement layouts to describe the changes, without object-level annotation. Since these sequences contain removals only, the evaluation reduces to a binary decision, changed or unchanged.                                                                       
+
+> TABLE III VOXEL -LEVEL REMOVAL DETECTION RESULTS ON TOR WIC
+> Scene Method TP/P FP/N (%) ↓P↑R↑F1 ↑
+> 2-1 Perceive-Semantix 9,493/11,378 20.1 0.37 0.83 0.51 DynamicGSG 9,973/11,378 37.5 0.25 0.88 0.39 Ours 9,704/11,378 6.0 0.67 0.85 0.75
+> 2-2 Perceive-Semantix 11,691/18,991 16.5 0.52 0.62 0.56 DynamicGSG 12,415/18,991 23.4 0.45 0.65 0.53 Ours 13,716/18,991 3.1 0.87 0.72 0.79
+> 2-3 Perceive-Semantix 22,102/38,162 1.1 0.98 0.58 0.73 DynamicGSG 25,268/38,162 1.0 0.98 0.66 0.79 Ours 28,406/38,162 0.7 0.99 0.74 0.85
+> 2-4 Perceive-Semantix 170/42,042 58.6 0.01 0.00 0.01 DynamicGSG 3,794/42,042 64.4 0.12 0.09 0.10 Ours 31,012/42,042 7.5 0.91 0.74 0.81
+> Best results are shown in bold, and second-best results are underlined.
+
+As shown in Table III, Perceive-Semantix performs better here than in simulation, reaching a recall of 0.83 on 2-1 .This recall comes with a false-positive rate of 20.1%, and it tends to declare an object missing and rebuild a new one in its place. DynamicGSG reaches the highest recall on 2-1 , but at a false-positive rate of 37.5%, since a single-frame SSIM     
+
+> Fig. 5. Results on TorWIC 2-4 .Top : instance-level maps colored by object ID, so a color preserved from the reference means the object kept its identity. Ours keeps most identities across the revisit, while Perceive-Semantix reconstructs the scene well but under new IDs. Bottom : detections against the layout ground truth, which show the same pattern.
+
+drop is enough for it to delete an object. As Fig. 5 shows, in 2-4 , where only the fence moved, both baselines fail. Perceive-Semantix treats the fence as background and never updates it, and DynamicGSG is at 64.4% false positives. For our method, migrating from the simulated dataset to TorWIC requires no manual parameter tuning, as we discussed in Sec. IV-B. The only change is the estimation of mt. Only a few mapped objects are visible per frame, so the object-level median is unreliable and we estimate mt
+
+from background pixels such as the floor instead. Our overall recall is lower than on the simulated warehouses because SLAM drift and depth noise broaden the residual distribution of unchanged objects and raise the calibrated threshold. 
+
+D. Ablation Studies 
+
+We ablate the system on both warehouses at the voxel level. All variants run detection only with the map fixed, which isolates each component from the side effects of map edits. Table IV shows this to be a fair proxy, as the fixed map matches the closed loop on replacement in both scenes and exceeds it on removal by 0.07 F1 in the large warehouse and 0.05 in the small one. As shown in Fig. 6, the two channels divide the work as designed. Geometry alone detects removal well with the fewest false positives but fails on replacement. For in-place replacement, the occupied volume does not change and geometry is unobservable. Appearance alone matches the full model on replacement at a higher false-positive rate that geometry then reduces. Removing the frame-wise offset 
+
+mt lowers F1 in all four settings, by 0.10 and 0.12 in the large warehouse and 0.39 and 0.46 in the small one. The contamination floor mainly affects replacement. Without the TABLE IV EFFECT OF ONLINE MAP EDITING ON VOXEL -LEVEL PERFORMANCE                                     
+
+> Replaced Removed Scene Variant FP/N (%) ↓F1 ↑R@5% ↑FP/N (%) ↓F1 ↑R@5% ↑
+> Large Full (closed loop) 4.9 0.70 0.79 10.4 0.51 0.44 Full (map fixed) 4.3 0.72 0.80 7.6 0.58 0.61 Small Full (closed loop) 1.2 0.76 0.75 2.2 0.67 0.73 Full (map fixed) 1.0 0.77 0.76 1.4 0.72 0.73
+
+R@5% denotes recall at a 5% false-positive rate. 
+
+per-frame cap, a few static objects accumulate extreme log-odds during replay, raising the calibrated threshold. The per-object zero-point and viewpoint binning address imperfect 3DGS rendering on real data, which is largely absent in simulation; removing either changes F1 by at most 0.05. 
+
+Fig. 6. Ablation on the warehouse dataset. Bars show the F1 drop of each variant relative to the full model with the map fixed. Positive values mean the component helps while negative mean removing it improves that revisit. 
+
+E. Computation Time 
+
+Our system runs on an RTX 5090. Reference mapping is performed once per map, taking 1.8 s per frame on the 1280 ×720 warehouse sequences and 0.6 s on the 640 ×360 TorWIC sequences plus a calibration replay. Each revisit costs 0.73 s per frame on the warehouses and 0.27 s on TorWIC, dominated by segmentation, rendering, and TSDF integration, while the change filter itself takes 0.2 ms per object observation. Perceive-Semantix costs 1.2 s and 0.2 s, and DynamicGSG 3.3 s and 2.3 s at 640 ×360. VII. C ONCLUSIONS 
+
+We presented FOCUS, an uncertainty-aware framework for object-level change detection and map maintenance in semi-static environments. FOCUS combines geometric consistency with view-conditioned appearance from a 3D Gaussian map and recursively estimates whether each ob-ject is PERSISTED , REPLACED , or REMOVED . By mod-eling appearance uncertainty and correlated observations, the method detects ambiguous in-place replacements that are difficult to identify from geometry or coarse semantics alone. Experiments on simulated warehouses and the real-world TorWIC dataset demonstrate improved change detec-tion and map maintenance, highlighting the importance of uncertainty-aware appearance reasoning for persistent object-centric memory. REFERENCES [1] M. Yuan, H. Zhang, M. Mohammadi, R. Li, J. Shan, and S. L. Waslander, “STaR: Scalable task-conditioned retrieval for long-horizon multi-modal robot memory,” IEEE Robotics and Automation Letters ,vol. 11, no. 5, pp. 5994–6001, 2026. [2] N. Gorlo, L. Schmid, and L. Carlone, “Describe anything anywhere at any moment,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2026, pp. 35 002– 35 013. [3] J. Qian, V. Chatrath, J. Yang, J. Servos, A. P. Schoellig, and S. L. Waslander, “POCD: Probabilistic object-level change detection and volumetric mapping in semi-static scenes,” in Proceedings of Robotics: Science and Systems , New York City, NY, USA, June 2022. [4] L. Schmid, M. Abate, Y. Chang, and L. Carlone, “Khronos: A unified approach for spatio-temporal metric-semantic SLAM in dynamic en-vironments,” in Proceedings of Robotics: Science and Systems , Delft, Netherlands, July 2024. [5] J. Qian, V. Chatrath, J. Servos, A. Mavrinac, W. Burgard, S. L. Waslander, and A. P. Schoellig, “Pov-slam: probabilistic object-aware variational slam in semi-static environments,” arXiv preprint arXiv:2307.00488 , 2023. [6] H. Oh, Y. Tao, N. Chebrolu, and M. Fallon, “OASIS-Map: Object-level change detection in multi-session mapping using semantic correspon-dence matching,” arXiv preprint arXiv:2607.14899 , 2026. [7] L. Ge, X. Zhu, Z. Yang, and X. Li, “Dynamicgsg: Dynamic 3d gaussian scene graphs for environment adaptation,” in 2025 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) .IEEE, 2025, pp. 2232–2239. [8] Y. Deng, Y. Yue, J. Dou, J. Zhao, J. Wang, Y. Tang, Y. Yang, and M. Fu, “OmniMap: A general mapping framework integrating optics, geometry, and semantics,” IEEE Transactions on Robotics , vol. 41, pp. 6549–6569, 2025. [9] M. Fehr, F. Furrer, I. Dryanovski, J. Sturm, I. Gilitschenski, R. Sieg-wart, and C. Cadena, “Tsdf-based change detection for consistent long-term dense reconstruction and dynamic object discovery,” in 2017 IEEE International Conference on Robotics and Automation (ICRA) ,2017, pp. 5237–5244. [10] J. Fu, C. Lin, Y. Taguchi, A. Cohen, Y. Zhang, S. Mylabathula, and J. J. Leonard, “Planesdf-based change detection for long-term dense mapping,” IEEE Robotics and Automation Letters , 2022. [11] Q. Gu, A. Kuwajerwala, S. Morin, K. M. Jatavallabhula, B. Sen, A. Agarwal, C. Rivera, W. Paul, K. Ellis, R. Chellappa, C. Gan, C. M. de Melo, J. B. Tenenbaum, A. Torralba, F. Shkurti, and L. Paull, “ConceptGraphs: Open-Vocabulary 3D Scene Graphs for perception and planning,” in 2024 IEEE International Conference on Robotics and Automation (ICRA) , 2024, pp. 5021–5028. [12] Z. Lu, J. Ye, and J. Leonard, “3DGS-CD: 3d gaussian splatting-based change detection for physical object rearrangement,” IEEE Robotics and Automation Letters , vol. 10, no. 3, pp. 2662–2669, 2025. [13] C. J. Galappaththige, J. Lai, L. Windrim, D. Dansereau, N. Suen-derhauf, and D. Miller, “Changes in real time: Online scene change detection with multi-view fusion,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2026, pp. 32 246–32 256. [14] Z. S. Hashemifar and K. Dantu, “Practical persistence reasoning in visual slam,” in 2020 IEEE International Conference on Robotics and Automation (ICRA) , 2020, pp. 7307–7313. [15] B. Bogenberger, O. Harrison, O. Dahanaggamaarachchi, L. Brunke, J. Qian, S. Zhou, and A. P. Schoellig, “Where did i leave my glasses? open-vocabulary semantic exploration in real-world semi-static environments,” IEEE Robotics and Automation Letters , 2026. [16] J. Wald, A. Avetisyan, N. Navab, F. Tombari, and M. Nießner, “RIO: 3d object instance re-localization in changing indoor environments,” in 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 2019. [17] M. K. Turkcan, “Detect anything in real time: From single-prompt seg-mentation to multi-class detection,” arXiv preprint arXiv:2603.11441 ,2026. [18] N. Carion, L. Gustafson, Y.-T. Hu, S. Debnath, R. Hu, D. Suris Coll-Vinent, C. Ryali, K. V. Alwala, H. Khedr, A. Huang et al. , “Sam 3: Segment anything with concepts,” in International conference on learning representations , vol. 2026, 2026, pp. 138 846–138 923. [19] T. Pan, L. Tang, X. Wang, and S. Shan, “Tokenize Anything via Prompting,” in European Conference on Computer Vision . Springer, 2024, pp. 330–348.
