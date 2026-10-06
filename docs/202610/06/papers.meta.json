@@ -1,0 +1,69 @@
+{
+  "label": "2026-10-06",
+  "date": "2026-10-06",
+  "generated_at": "2026-10-06T01:09:34",
+  "count": 4,
+  "papers": [
+    {
+      "paper_id": "202610/06/2610.02388v1-octrees-as-an-explicit-3d-language",
+      "section": "quick",
+      "title_en": "Octrees as an Explicit 3D Language",
+      "authors": "Ran Dan, Si-Tong Wei, Pengfei Xiong, Wei Zhang, Yadong Mu, Peng-Shuai Wang",
+      "date": "2026-10-01",
+      "pdf": "https://arxiv.org/pdf/2610.02388v1",
+      "score": "6.0",
+      "evidence": "用于3D理解的分层八叉树表示",
+      "tldr": "现有3D大模型将形状压缩为隐式码本或坐标文本，丢失空间结构；微调主干引入3D又会损害语言能力。OctLLM 用显式八叉树占用 token 表示几何，并随机清空倒数第二层节点、省略后代，得到更短的稀疏 S-Octree，用于位置感知掩码建模。方法以独立可训练分支处理网格 token，文本图像走冻结视觉语言通路，二者经共享自注意力交互。它在统一多模态 LLM 中达 SOTA：image-to-3D FID 降17.4%，渲染描述提升28.7分，通用语言基准与主干持平。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "Existing 3D large language models (LLMs) compromise on two fronts: they compress shapes into latent codebook indices or coordinate text, which removes spatial structure from what the model observes, and they acquire the 3D modality by fine-tuning the backbone, which overwrites its general language ability. We present OctLLM, which addresses both limitations. Geometry enters as an explicit 3D sequence of octree occupancy tokens. However, full octree sequences grow rapidly with depth; OctLLM therefore randomly empties penultimate-level nodes and omits descendants while preserving shape, yielding a shorter coordinate- and depth-anchored Sparse Octree (S-Octree) for position-aware mask-modeling generation and 3D understanding. On the other front, existing methods introduce a new modality with full fine-tuning or LoRA, but full fine-tuning is costly, LoRA limits 3D capacity, and both modify the language pathway. OctLLM instead adds 3D capacity in parameters separate from the pretrained ones: mesh tokens are routed through independent trainable branches in a subset of blocks while text and image tokens retain the frozen vision-language pathway, and the two streams interact through shared self-attention. It trains far fewer parameters than full fine-tuning, yet sets a new state of the art among unified multimodal LLMs, lowering image-to-3D FID by $17.4\\%$ and raising render-grounded captioning by $28.7$ points over ShapeLLM-Omni, while matching the backbone on general language benchmarks.",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    },
+    {
+      "paper_id": "202610/06/2610.02946v1-when-predicting-nothing-beats-sam-3-revisiting-evaluation-in-video-object-segmentation",
+      "section": "quick",
+      "title_en": "When Predicting Nothing Beats SAM 3: Revisiting Evaluation in Video Object Segmentation",
+      "authors": "Jihwan Hong, Woohyeon Park, Jaeik Kim, Jaeyoung Do",
+      "date": "2026-10-02",
+      "pdf": "https://arxiv.org/pdf/2610.02946v1",
+      "score": "6.0",
+      "evidence": "视频分割中的时序可见性与遮挡",
+      "tldr": "现有视频目标分割基准多关注长时间可见目标，难以评估目标间歇出现的复杂长视频。作者提出FaVOS基准，聚焦低时间可见性场景，并发现标准J&F指标会退化为缺失分类，甚至让空掩码预测器胜过SAM 3。为修正评估，他们提出Volumetric J&F，将掩码序列视为时空体积，降低目标缺失奖励的主导性，同时保留对分割质量和时序结构的敏感度。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "Video Object Segmentation (VOS) in complex and long videos is increasingly important for real-world applications, where target objects often appear only intermittently within long temporal horizons. However, existing benchmarks largely focus on temporally salient objects that remain visible for most of the video. To address this gap, we introduce FaVOS (A Benchmark for Video Object Segmentation with Fractional Temporal Visibility), a benchmark designed to evaluate VOS methods under low temporal visibility. We show that, in this regime, the standard J&F metric can collapse VOS evaluation into absence classification, because empty predictions receive high rewards on target-absent frames. Consequently, even a trivial empty-mask predictor can outperform strong models such as SAM 3, revealing a fundamental mismatch between current metrics and practical VOS performance. To mitigate this issue, we propose Volumetric J&F, which evaluates mask sequences as spatio-temporal volumes and reduces the dominance of target-absence rewards while preserving sensitivity to segmentation quality and temporal structure. Project page: https://aidaslab.github.io/FaVOS.",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    },
+    {
+      "paper_id": "202610/06/2610.03031v1-crowdocc-monocular-semantic-scene-completion-for-quadruped-robots-in-crowded-indoor-environments",
+      "section": "quick",
+      "title_en": "CrowdOcc: Monocular Semantic Scene Completion for Quadruped Robots in Crowded Indoor Environments",
+      "authors": "Feiyang Chen, Jincheng Hu, Yiduo Chen, Jihao Li, Yue Liang, Bingzhao Gao, Yanjun Huang, Yuanjian Zhang",
+      "date": "2026-10-02",
+      "pdf": "https://arxiv.org/pdf/2610.03031v1",
+      "score": "6.0",
+      "evidence": "遮挡鲁棒的几何融合与深度感知提升",
+      "tldr": "针对四足机器人在拥挤室内场景中单目语义场景补全研究不足、人-场景遮挡破坏静态几何且人体占据预测不完整或错位的问题，本文提出CrowdOcc数据集与单目SSC框架。数据集含11个室内场景、25.1K帧，通过静态动态解耦构建语义占据标注；方法融合法线引导场景几何融合NGSGF与以人为中心稀疏交互HCSI，提升遮挡下几何鲁棒性并建模3D人-人及局部人-场景关系。在场景不相交测试集上取得15.80 IoU、11.40 mIoU和46.23 Human IoU，达到最优并泛化到未见室内场景。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "Monocular semantic scene completion (SSC) for quadruped robots remains underexplored in real crowded indoor environments, where human-scene occlusion disrupts static geometry and human occupancy predictions are often incomplete or spatially misplaced. We present CrowdOcc, an RGB-D dataset and monocular SSC framework for this setting. CrowdOcc contains 25.1K frames from 11 indoor scenes, with semantic occupancy annotations constructed through static dynamic decoupling. Our framework combines: (i) Normal Guided Scene Geometry Fusion (NGSGF) to complement depth-aware lifting with surface-normal cues for occlusion robust geometry; and (ii) Human-Centric Sparse Interaction (HCSI) to selectively model human-human and local human scene relations in 3D. Our method achieves state-of-the-art SSC performance on CrowdOcc's scene-disjoint test set, reaching 15.80 IoU, 11.40 mIoU, and 46.23 Human IoU, demonstrating generalization to unseen indoor scenes.",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    },
+    {
+      "paper_id": "202610/06/2610.03248v1-embpass-towards-cross-embodiment-open-panoramic-segmentation",
+      "section": "quick",
+      "title_en": "EmbPASS: Towards Cross-Embodiment Open Panoramic Segmentation",
+      "authors": "Pujun Guo, Yuanfan Zheng, Fei Teng, Mengfei Duan, Guoqiang Zhao, Yuheng Zhang, Kai Luo, Kailun Yang",
+      "date": "2026-10-02",
+      "pdf": "https://arxiv.org/pdf/2610.03248v1",
+      "score": "6.0",
+      "evidence": "跨具身开放全景语义分割基准",
+      "tldr": "全景图像能提供360度完整视野，但不同具身平台在观测视角与空间布局上差异显著，产生跨具身观测偏移，使一致可靠的全景感知面临挑战，而相关系统研究仍很有限。为此，作者提出跨具身开放全景分割新任务，并构建覆盖车辆、无人机、可穿戴与四足平台的EmbPASS统一语义分类基准。进一步提出EPONet，通过关系感知度量适配器RAMA与内容自适应语义迁移CAST增强异构观测下的空间建模与语义迁移。EPONet在EmbPASS上取得35.82% mIoU的最佳平台均衡性能，超越最强基线1.10%，并在现有全景分割基准上保持竞争力。",
+      "tags": "query:open-vocab-d",
+      "abstract_en": "Panoramic images provide a complete 360-degree field of view, enabling comprehensive scene understanding for embodied perception. However, heterogeneous embodied platforms exhibit substantial differences in observation viewpoints and spatial layouts, giving rise to cross-embodiment observation shifts that pose additional challenges to consistent and reliable panoramic perception, while systematic studies of this problem remain limited. To bridge this gap, we introduce a new task, termed Cross-Embodiment Open Panoramic Segmentation. Meanwhile, we establish EmbPASS, a multi-platform panoramic semantic segmentation benchmark spanning Vehicle, Drone, Wearable, and Quadruped platforms under a unified semantic taxonomy, providing a testbed for systematically studying cross-embodiment panoramic perception. We further propose EPONet, an open-vocabulary panoramic semantic segmentation network that integrates Relation-Aware Metric Adapter (RAMA) and Content-Adaptive Semantic Transfer (CAST) to enhance spatial modeling and semantic transfer under heterogeneous embodied observations. Extensive experiments show that EPONet achieves the best platform-balanced performance on EmbPASS with 35.82% mIoU, outperforming the strongest baseline by 1.10%, while remaining competitive on existing panoramic segmentation benchmarks. The source code and EmbPASS benchmark will be made publicly available at https://github.com/guopj1/EmbPASS.",
+      "source": "arxiv",
+      "selection_source": "fresh_fetch"
+    }
+  ],
+  "errors": []
+}
