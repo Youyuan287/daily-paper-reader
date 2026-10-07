@@ -1,0 +1,441 @@
+Title: DTFormer: Text-Guided Semantic Alignment for RGB-D Segmentation
+
+URL Source: https://arxiv.org/pdf/2610.07014v1
+
+Published Time: Wed, 07 Oct 2026 00:05:57 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+> 1
+
+# DTFormer: Text-Guided Semantic Alignment for RGB-D Segmentation 
+
+Ziang Wei 2, Yinlong Liu 3, Yan Xia 4, Alois Knoll 2, and Hu Cao 1∗
+
+Abstract —RGB-D semantic segmentation has made notable progress by fusing RGB and Depth, yet mainstream models still learn features almost exclusively from pixel-level supervision, lacking direct high-level semantic constraints. This raises acentral question: can external knowledge—such as language pri-ors—inject stronger semantic discriminability into mainstream RGB-D segmentation models? We present DTFormer, a novel tri-modal (RGB-D-Text) semantic segmentation framework. At its core is Text-guided Semantic Alignment Module (TSAM) that first encodes textual cues into a set of semantic prototypes and then explicitly aligns multi-modal RGB-D features with these prototypes at multiple encoder and decoder layers. This design imposes strong semantic regularization on representa-tion learning, guiding the network toward more discriminative features. Extensive experiments on multiple benchmarks show that DTFormer delivers consistent gains while remaining simple and efficient. Our results demonstrate that explicit semantic alignment offers an effective and practical route to improving RGB-D semantic segmentation. The code will be released upon acceptance. 
+
+I. I NTRODUCTION 
+
+# SEMANTIC segmentation, a core task in computer vision, assigns a semantic label to every pixel, and it underpins applications including autonomous driving [1]–[3], robotics [4], [5], augmented reality [6], and medical imaging [7]. With the advance of 3D sensing technologies, RGB-D data has emerged as a robust paradigm for scene understanding, particularly under occlusion and low-light conditions [8]– [10]. In parallel, large-scale vision-language models [11]–[13] have demonstrated that textual knowledge can provide class-level anchors and transferable high-level semantics for dense prediction, as evidenced in text-driven 2D segmentation [14]– [16]. However, a tri-modal paradigm that injects such language priors into geometrically-aware RGB-D segmentation remains surprisingly underexplored. As illustrated in Fig. 1, the evolution of semantic segmen-tation can be characterized by the modalities each pipeline leverages. Conventional RGB-only methods (Fig. 1(a)) feed a single image to an encoder-decoder [18], [20], but they remain constrained by appearance and texture cues alone, often failing under illumination changes, occlusion, or texture ambiguity. To address this, RGB-D segmentation (Fig. 1(b)) introduces depth as a geometric cue to alleviate such ambiguities; for instance, DFormerv2 [19] treats depth as a geometry prior that modulates self-attention, achieving a better accuracy-efficiency  
+
+> ∗
+
+Hu Cao is the corresponding author of this work (hu.cao@seu.edu.cn). Authors Affiliation: 1School of Automation, Southeast University, Nanjing, China, 2Chair of Robotics, Artificial Intelligence and Real-time Systems, Technical University of Munich, Germany, 3City University of Macau, China,  
+
+> 4
+
+University of Science and Technology of China, China. (b) RGB-D semantic segmentation Encoder Depth Decoder Text (a) Traditional RGB semantic segmentation (c) Text-guided RGB-D semantic segmentation (Ours)    
+
+> Geometry Prior
+> Text Prior
+> RGB Encoder Decoder RGB Depth Geometry Prior
+> Encoder Decoder RGB
+
+Fig. 1: Comparison of semantic segmentation pipelines. (a) Single-stream encoder-decoder [17], [18]. (b) Depth as ageometric prior [19]. (c) Our DTFormer injects language priors into both encoding and decoding to explicitly align RGB-D representations. trade-off. However, existing RGB-D pipelines still rely mainly on pixel-level supervision and geometric constraints, largely overlooking the high-level semantic regularities available in textual form. Recently, the success of vision-language models (VLMs) [11], [13] has inspired textual priors for dense prediction. Early methods such as DenseCLIP [16] and LSeg [14] align visual features with fixed CLIP class-name embeddings, but applying a single dataset-level vocabulary to every image introduces semantic ambiguity from text tokens irrelevant to the actual scene. Subsequent learnable-query approaches like X-Decoder [21] and SEEM [22] achieve more flexible open-vocabulary segmentation, yet, as general-purpose models, they incur addi-tional computation and rarely model modality-specific charac-teristics. Moreover, most VLM-based segmentation pipelines inject language only at the decoder [14], [16], [21], [22], missing the opportunity to guide feature learning throughout the encoder. To address these limitations, we introduce the Text-guided Semantic Alignment Module (TSAM), which bridges RGB-D fused visual features and textual modalities through temperature-scaled cross-attention (TSCA) with stage-adaptive designs. As illustrated in Fig. 2, TSAM learns to selectively attend to semantically relevant regions based on different arXiv:2610.07014v1 [cs.CV] 4 Oct 2026 2
+
+class names, enabling fine-grained semantic-visual alignment. Building on TSAM, we construct DTFormer, a hierarchical text-guided framework for RGB-D segmentation that leverages vision-language models to generate image-specific text priors (Fig. 3) and injects them at multiple stages throughout the network. Unlike methods that rely on fixed class names or inject language only at the decoder, DTFormer employs a dual-variant strategy: a lightweight Text-guided Semantic Alignment for Encoder (TSA-E) enables semantic feature extraction with minimal overhead, while an enriched Text-guided Semantic Alignment for Decoder (TSA-D) provides fine-grained semantic-geometric alignment with additional normalization and an MLP. Built upon the DFormerv2 [19] backbone, DTFormer effectively fuses RGB, depth geometry, and language semantics, creating a tri-modal representation for robust scene understanding. We evaluate DTFormer on two widely-used RGB-D seman-tic segmentation benchmarks, NYU Depth V2 [23] and SUN-RGBD [24]. Our method achieves consistent improvements across all model scales (Tab. I): DTFormer-S attains 57.8% mIoU on NYU Depth V2 and 53.5% on SUN-RGBD, while DTFormer-L establishes new state-of-the-art (SOTA) results with 58.6% and 53.9% mIoU respectively, surpassing previous best methods with competitive computational efficiency. These results validate that hierarchical injection of image-specific language priors can effectively complement geometric reason-ing in RGB-D segmentation. Our main contributions are summarized as follows:  
+
+> •
+
+We propose the Text-guided Semantic Alignment Module (TSAM) with stage-adaptive encoder/decoder variants, injecting language priors across the network to enable hierarchical text–visual-geometry alignment.  
+
+> •
+
+We present DTFormer, a tri-modal RGB–Depth–Text framework that fuses VLM-generated, image-specific text priors with RGB-D representations via multi-stage align-ment, addressing the lack of high-level semantic con-straints in existing RGB-D segmentation methods.  
+
+> •
+
+Extensive experiments on NYU Depth V2 and SUN-RGBD show that DTFormer achieves new SOTA results with moderate parameter increase, validating the effec-tiveness of hierarchical language guidance for RGB-D semantic segmentation. II. R ELATED WORK 
+
+RGB-D Semantic Segmentation. RGB-only semantic seg-mentation often suffers from significant performance degra-dation in complex real-world scenarios, such as low-light conditions or cluttered environments. The integration of depth data, which provides crucial 3D geometry information, has led to the development of RGB-D semantic segmentation [25], [26]. Early approaches [27], [28] utilized dual-stream encoders to process RGB and depth in separate backbones, followed by various feature fusion schemes. Subsequent works introduced more sophisticated fusion mechanisms, such as designing attention-based gates [8], [29] or shape-aware operations [30], [31]. With the advent of Transformers, this paradigm was extended by [9], [32], [33], which employ cross-modal interac-tion modules—e.g., cross-attention or token replacement—to exchange information between modalities. To address the high computational cost of dual-stream models, an alternative line explores efficient or more tightly coupled encoder designs [34]–[36]. Most recently, DFormerv2 [19] takes this further, treating depth not as another encoded feature but as an explicit geometry prior that directly guides the self-attention weights of the RGB extractor. While these methods mark significant advancements in fusing photometric and geometric informa-tion, they rely exclusively on visual-spatial cues, overlooking the rich contextual guidance offered by language. 
+
+Vision-Language for Dense Prediction. Large-scale vision-language models, particularly CLIP [11], have inspired text-guided dense prediction. Early works in text-guided seg-mentation, such as DenseCLIP [16], LSeg [14], and CLIPSeg [37], align pixel-level features with text embeddings and are often instantiated with dataset-level vocabularies. While effective, this approach introduces semantic ambiguity, as the model must disambiguate against irrelevant text tokens. This limitation motivated efforts to replace fixed, dataset-level vocabularies with more flexible text inputs. One popular approach [21], [22], [38], [39] utilizes learnable text queries to segment arbitrary concepts. A parallel line of work [40]– [42] focuses on text-to-box grounding to achieve region-level segmentation. Despite their power, these methods share two fundamental limitations in the context of our research: (1) they are designed as general-purpose 2D models, overlooking modality-specific characteristics such as depth geometry, and (2) a common choice is to inject language priors primarily at the decoder stage, which may miss the opportunity to guide early-stage feature extraction. Unlike these approaches, DTFormer generates image-specific class names via VLMs and injects text priors hierarchically in both encoder and decoder stages, introducing text guidance atop geometry-aware RGB-D backbones. III. M ETHOD 
+
+A. Image-Specific Text Generation 
+
+Unlike methods that rely on fixed class names or learn-able generic queries, our approach leverages vision—language models (VLMs) to generate image-specific text priors tailored to each input. Fig. 4(c) illustrates this offline text generation pipeline, where VLM predictions are encoded into CLIP [11] text embeddings for downstream semantic alignment. Given an RGB image IRGB (depth is utilized only in the downstream segmentation network), we query K different VLMs using the same prompt p, with output vocabulary constrained to the dataset’s canonical class set A:
+
+Li = VLM i, A(IRGB ; p) ⊆ A , i = 1 , . . . , K, (1) where VLM i, A(·; ·) denotes the i-th VLM’s output restricted to vocabulary A. To ensure consistency and reduce hallucina-tion, we apply an intersection-based filter across all VLMs: 
+
+L =
+
+> K
+
+\
+
+> i=1
+
+Li. (2) This simple yet effective mechanism retains only the class names predicted by all K VLMs, thereby improving precision and reducing model-specific biases. 3curtain chair desk floor image (a) Attention visualizations for different class names in the same scene (dining room)  
+
+> bed bathtub counter table
+> toilet (b) Attention visualization examples across diverse scenes and class names
+
+Fig. 2: TSAM attention visualization. (a) For the same dining room scene, TSAM attends to different regions (curtain, chair, table, floor) as the target class name changes, demonstrating fine-grained semantic-visual alignment within a single image. (b) Across diverse indoor scenes (kitchen, bedroom, office, bathroom), TSAM consistently localizes the queried class (counter, bed, desk, bathtub, toilet), showing cross-scene generalization. ["wall", "counter", "mirror", "towel", "sink", "bathtub", "window"] 
+
+> ["wall", "floor", "bed", "door","window", "pillow", "night stand"]
+> ["wall", "floor", "chair", "table", "window", "blinds"] ["wall", "floor", "bed", "chair", "desk", "mirror", "window"]
+> ["wall", "floor", "sofa", "table", "window", "curtain", "picture"]
+
+Fig. 3: Examples of VLM-generated class names for diverse indoor scenes from the NYU Depth V2 dataset. Each image is paired with its corresponding set of class names obtained through dual-VLM intersection filtering ( K = 2 ). 
+
+Exploiting scene sparsity: Indoor scenes typically contain only a small subset of the full class set. To exploit this natural sparsity, we impose a weak cardinality constraint by instructing each VLM to output at most 8 class names (mmax = 8 ). With two VLMs ( K = 2 ), the intersection L
+
+typically yields a stable set of 4–8 class names per image, balancing precision and recall. 
+
+VLM implementation: We employ two high-performance vision-language models from the InternVL [49] and Qwen-VL [50] families as our dual VLMs ( K = 2 ). Both models query each image with a fixed prompt template that instructs them to output up to 8 class names from the dataset vocabulary, prioritizing large and obvious regions. The prompt explicitly constrains outputs to match exact spellings from the provided vocabulary to minimize hallucination. Intersection filtering across both VLM outputs ensures only consistently predicted class names are retained, reducing model-specific biases while maintaining sufficient semantic coverage. 
+
+VLM query prompt: To ensure reliable and vocabulary-constrained outputs, we design a structured prompt that in-structs VLMs to generate class names based on image content while prioritizing large and obvious regions. The core prompt structure (simplified for clarity) is: 
+
+Input: One RGB image + fixed vocabulary Goal: Return ONLY a JSON array of strings (no code block, no prose) with UP TO 8labels that correspond to the LARGEST and MOST OBVIOUS regions in the image. Selection rules: - Include only labels that are obvious and match with high confidence; - Use EXACT spelling from the vocabulary; - DO NOT invent new labels; - ... Vocabulary: [wall, floor, cabinet, ...] Output format example: ["wall", "floor", "table", ...] 
+
+This simplified representation captures the essential prompt logic. The full implementation includes additional constraints to prevent hallucination and ensure deterministic JSON pars-ing. 
+
+VLM-generated class names: Fig. 3 presents representa-tive examples of VLM-generated class names across diverse indoor scenes from the NYU Depth V2 dataset. Our pipeline 4Intersection "a photo of a bed/cabinet/..." "an image of a .../ ... /..." "..."                                        
+
+> TSA-E
+> ℎ×𝐀 ×3Patch Embedding RGB-D Block Patch Merging RGB-D-T Block Patch Merging RGB-D-T Block Patch Merging RGB-D-T Block ℎ/4×𝐀 /4×Cℎ/8×𝐀 /8×2Cℎ/16 ×𝐀 /16 ×4Cℎ/32 ×𝐀 /32 ×8C
+
+(a) Architecture of our DTFormer 
+
+> RGB image TSA-D Upsample Upsample Upsample TSA-D TSA-D Concat MLP Layer Norm TSA-E Layer Norm Geometry Self-Attention
+
+(b) RGB-D-T Block 
+
+> Encoder Decoder
+
+(c) Details of Image-Specific Text Generation and our TSAM (TSA-D and TSA-E)     
+
+> Layer Norm
+> Visual Features
+> "wall", "bed", "cabinet", ...
+> High Confidence Class names
+> V
+> ×N1×N2×N3×N4
+> VLM 1
+> Text Features
+> TTSA-D KT
+> VT
+> QV
+> Temp-Scaled Cosine Attn
+> ×NLayer Norm MLP Segmentation Refine Prediction
+> Class set 1
+> VLM 2
+> Class set 2 CLIP Text Encoder
+> Template application
+> Text Embedding
+
+Fig. 4: Overall architecture of our DTFormer. (a) Four-stage encoder and three-stage decoder. The encoder extracts multi-scale features, while the decoder progressively upsamples and refines segmentation predictions. (b) RGB-D-T block in the encoder, where TSA-E is applied after Geometry Self-Attention (GSA). (c) Details of image-specific text generation and TSAM variants. Left: Two different VLMs query the input image with the same prompt, and intersection filtering retains only class names predicted by both models to reduce hallucination, yielding approximately 4–8 high-confidence class names per image. These class names are wrapped into templates and encoded by frozen CLIP text encoder. Right: TSA-D (decoder) employs enriched Transformer blocks with Pre-LayerNorm, temperature-scaled cosine attention, and MLP for fine-grained refinement, while TSA-E (encoder) uses lightweight temperature-scaled cosine attention only for efficient semantic injection. Both variants use learnable gating for gradual semantic alignment. queries two VLMs independently with the same prompt, and intersection filtering ( K = 2 ) retains only class names predicted by both models. This consensus-based approach typically yields 4–8 high-confidence class names per image, substantially reducing semantic ambiguity compared to fixed 40-class vocabulary while maintaining sufficient coverage for effective text guidance. 
+
+Encoding into CLIP text space: As shown in the left panel of Fig. 4(c), the filtered class names are encoded via the CLIP text encoder. Following DenseCLIP [16], we apply a template ensemble strategy: each class name lj is wrapped into multiple contextualized prompts (e.g., “ a photo of a ... ” and “ an image of a ... ”), encoded via the CLIP text encoder Etext , and the resulting embeddings are averaged to produce tj . The full text embedding matrix is: 
+
+T = [ t1, . . . , tN ] ∈ RN ×Ct , (3) where Ct = 512 is the CLIP text embedding dimension and 
+
+N = |L| is the number of retrieved class names. The resulting matrix T serves as semantic guidance throughout the network, helping suppress irrelevant visual tokens and stabilizing cross-modal alignment. Although CLIP text embeddings are trained to align with CLIP image features, DTFormer does not require RGB-D segmentation features to lie in CLIP image space. In TSAM, visual features are projected into queries, while text embeddings are projected into keys and values; cross-modal attention is then computed in this attention space and optimized by the segmentation objective. 
+
+B. Text-guided Semantic Alignment Module 
+
+The core of our framework is the Text-guided Semantic Alignment Module (TSAM), which bridges visual and textual modalities through cross-modal attention. Fig. 4(c) illustrates the dual-variant design of TSAM. A key design challenge is balancing expressiveness and efficiency: encoder layers require early semantic injection to guide hierarchical feature learning, while decoder layers demand richer transformations. To address this, we propose a stage-adaptive dual-variant design. Both TSA-E and TSA-D employ temperature-scaled cosine attention for stable cross-modal alignment, but differ in 5
+
+TABLE I: Comparison with SOTA methods on NYU Depth V2 and SUN-RGBD. Methods are grouped by scale (small, base, large) for fair comparison. 
+
+Model Backbone Params NYU Depth V2 SUN-RGBD Input FLOPs mIoU Input FLOPs mIoU 
+
+TokenFusion 22 [32] MiT-B2 26.0M 480 ×640 55.2G 53.3 530 ×730 71.1G 50.3 Omnivore 22 [43] Swin-Tiny 29.1M 480 ×640 32.7G 49.7 530 ×730 — —DFormer 24 [35] DFormer-Tiny 6.0M 480 ×640 11.7G 51.8 530 ×730 15.0G 48.8 DFormer 24 [35] DFormer-Small 18.7M 480 ×640 25.6G 53.6 530 ×730 33.0G 50.0 DFormer 24 [35] DFormer-Base 29.5M 480 ×640 41.9G 55.6 530 ×730 54.0G 51.2 AsymFormer 24 [34] MiT-B0+CNX-T 33.0M 480 ×640 39.4G 55.3 530 ×730 52.6G 49.1 DFormerv2-S 25 [19] DFormerv2-Small 26.7M 480 ×640 33.9G 56.0 530 ×730 43.7G 51.5 
+
+DTFormer-S (Ours) DTFormer-Small 35.5M 480 ×640 40.2G 57.8 530 ×730 51.9G 53.5 
+
+SGNet 21 [31] ResNet-101 64.7M 480 ×640 108.5G 51.1 530 ×730 151.5G 48.6 ShapeConv 21 [30] ResNeXt-101 86.8M 480 ×640 124.6G 51.3 530 ×730 161.8G 48.6 FRNet 22 [44] ResNet-34 85.5M 480 ×640 115.6G 53.6 530 ×730 150.0G 51.8 EMSANet 22 [36] ResNet-34 46.9M 480 ×640 45.4G 51.0 530 ×730 58.6G 48.4 TokenFusion 22 [32] MiT-B3 45.9M 480 ×640 94.4G 54.2 530 ×730 122.1G 51.4 Omnivore 22 [43] Swin-Small 51.3M 480 ×640 59.8G 52.7 530 ×730 — —CMX 23 [9] MiT-B2 66.6M 480 ×640 67.6G 54.4 530 ×730 86.3G 49.7 DFormer 24 [35] DFormer-Large 39.0M 480 ×640 65.7G 57.2 530 ×730 84.5G 52.5 GeminiFusion 24 [33] MiT-B3 75.8M 480 ×640 138.2G 56.8 530 ×730 179.0G 52.7 DFormerv2-B 25 [19] DFormerv2-Base 53.9M 480 ×640 67.2G 57.7 530 ×730 86.9G 52.8 
+
+DTFormer-B (Ours) DTFormer-Base 67.7M 480 ×640 79.6G 58.3 530 ×730 103.0G 53.8 
+
+SA-Gate 20 [29] ResNet-101 110.9M 480 ×640 193.7G 52.4 530 ×730 250.1G 49.4 CEN 20 [45] ResNet-101 118.2M 480 ×640 618.7G 51.7 530 ×730 790.3G 50.2 CEN 20 [45] ResNet-152 133.9M 480 ×640 664.4G 52.5 530 ×730 849.7G 51.1 PGDENet 22 [46] ResNet-34 100.7M 480 ×640 178.8G 53.7 530 ×730 229.1G 51.0 MultiMAE 22 [47] ViT-Base 95.2M 480 ×640 267.9G 56.0 640 ×640 267.9G 51.1 Omnivore 22 [43] Swin-Base 95.7M 480 ×640 109.3G 54.0 530 ×730 — —CMX 23 [9] MiT-B4 139.9M 480 ×640 134.3G 56.3 530 ×730 173.8G 52.1 CMX 23 [9] MiT-B5 181.1M 480 ×640 167.8G 56.9 530 ×730 217.6G 52.4 CMNeXt 23 [48] MiT-B4 119.6M 480 ×640 131.9G 56.9 530 ×730 170.3G 51.9 GeminiFusion 24 [33] MiT-B5 137.2M 480 ×640 256.1G 57.7 530 ×730 332.4G 53.3 DFormerv2-L 25 [19] DFormerv2-Large 95.5M 480 ×640 124.1G 58.4 530 ×730 160.5G 53.3 
+
+DTFormer-L (Ours) DTFormer-Large 114.0M 480 ×640 161.1G 58.6 530 ×730 208.2G 53.9 
+
+architectural complexity. TSA-E adopts a lightweight design with only cross-attention and residual integration, injecting semantic priors efficiently during feature extraction. TSA-D extends this with Pre-LayerNorm and MLP layers, enabling richer feature transformations for robust semantic-geometric alignment. This asymmetric design allows our model to leverage language guidance throughout the hierarchy while maintaining computational efficiency critical for RGB-D seg-mentation. 
+
+Core attention mechanism: Given RGB-D fused visual features V ∈ RB×H×W ×Cv (where B is the batch size) and text embeddings T ∈ RB×N ×Ct where N denotes image-specific class names (Sec. III-A), we reshape V into 
+
+B × HW × Cv to treat each spatial location as a query. Linear projections produce queries QV ∈ RB×HW ×d, keys 
+
+KT ∈ RB×N ×d, and values VT ∈ RB×N ×d, where d is the head dimension. We adopt temperature-scaled cosine attention for stable cross-modal alignment. Queries and keys are L2-normalized before computing similarity: 
+
+A = softmax 
+
+ Q′ 
+
+> V
+
+K′TT
+
+τ
+
+
+
+, (4) where Q′ 
+
+> V
+
+= QV /∥QV ∥2, K′ 
+
+> T
+
+= KT /∥KT ∥2, and τ
+
+is a learnable temperature parameter. Cosine similarity sta-bilizes gradients by removing magnitude sensitivity, while learnable temperature enables adaptive attention sharpness. As visualized in Fig. 2, this attention mechanism enables TSAM to selectively focus on semantically relevant regions for each class name across diverse indoor scenarios. The aligned features are computed via weighted aggregation: 
+
+F = AV T , (5) where each head produces semantically aligned features. Multi-head outputs are concatenated and projected back to Cv ,yielding F ∈ RB×HW ×Cv for residual integration. 
+
+TSA-E for encoder stages: As shown in Fig. 4(b), TSA-E is integrated into the RGB-D-T block after geometry self-attention. After temperature-scaled cross-attention (TSCA), the aligned features are directly integrated through residual gating: 
+
+Vout = V + βe · F, (6) where βe is a learnable scalar for controlled semantic in-jection. This lightweight design—using only cross-attention without layer normalization or MLP—preserves computational 6
+
+efficiency while guiding feature learning alongside geometry self-attention (GSA). TSA-E is applied at encoder stages 2, 3, and 4, skipping stage 1 which consumes more computational resources but brings limited performance improvement due to too much low-level information and higher resolution. 
+
+TSA-D for decoder stages: TSA-D employs an enriched Transformer block architecture for robust semantic-geometric alignment, as illustrated in Fig. 4(c). Following standard practice, we adopt Pre-LayerNorm configuration with residual connections: 
+
+V′ = V + βd · TSCA (LN (V), T), (7) 
+
+Vout = V′ + MLP (LN (V′)) , (8) where LN (·) denotes layer normalization, TSCA (·) is the temperature-scaled cosine attention, and MLP (·) is a two-layer feed-forward network with expansion ratio 4 and GELU activation. βd is a learnable scalar for adaptive feature integra-tion. Layer normalization stabilizes feature distributions before attention and MLP operations, enabling more expressive trans-formations for robust semantic-geometric alignment. TSA-D is applied at all three decoder levels to refine features through text-visual interactions. 
+
+C. Network Architecture 
+
+Fig. 4(a) presents the overall architecture of DTFormer, which adopts a hierarchical encoder-decoder structure built upon the DFormerv2 backbone [19]. The encoder ex-tracts multi-scale features at four stages with resolutions 
+
+{h/ 4, h/ 8, h/ 16 , h/ 32 }. Stage 1 contains RGB-D blocks with geometry self-attention, while stages 2–4 extend to RGB-D-T blocks (Fig. 4(b)) by integrating TSA-E for text-guided feature extraction. The decoder applies TSA-D at each pyramid level before feature fusion. After TSA-D, features are upsampled to a common resolution and fused through a Ham-style decoder head [51]. A final segmentation head produces per-pixel pre-dictions. IV. E XPERIMENTS 
+
+A. Experimental Setup 
+
+TABLE II: RGB-D benchmark statistics.               
+
+> Attribute NYU Depth V2 SUN-RGBD Total images 1,449 10,335 Training images 795 5,285 Testing images 654 5,050 Categories 40 37 Resolution 480 ×640 530 ×730 Metric mIoU mIoU
+
+Datasets: We evaluate DTFormer on two widely-used RGB-D semantic segmentation benchmarks: NYU Depth V2 [23] and SUN-RGBD [24], as summarized in Tab. II. 
+
+Implementation details: We build DTFormer upon DFormerv2 [19] with ImageNet-1K pre-trained weights. The CLIP ViT-B/16 [11] text encoder is frozen to extract 512-dimensional embeddings from VLM-generated class names. We use InternVL3-38B [49] and Qwen3-VL-30B [50] as our two VLMs ( K = 2 ) with intersection filtering, yield-ing approximately 4–8 class names per image. Text embed-dings are pre-encoded and cached offline. Training employs AdamW [52] optimizer with standard augmentations (random horizontal flipping and random scaling in [0.5, 2.0]). All experiments are conducted on 2 NVIDIA H100 GPUs. Fol-lowing standard practice [19], we report single-scale inference with horizontal flipping on NYU Depth V2, and multi-scale inference (scales=[0.5, 0.75, 1.0, 1.25, 1.5]) with horizontal flipping on SUN-RGBD. TABLE III: Text guidance configuration in DTFormer.         
+
+> Configuration Value Text encoder CLIP ViT-B/16 Embedding dimension 512 Encoder stages (TSA-E) 2, 3, 4 Decoder levels (TSA-D) All 3 levels VLM number K2Typical class names per image 4–8
+
+Text guidance configuration: Tab. III summarizes the key hyperparameters for text guidance in DTFormer. The encoder employs TSA-E at stages 2–4, while the decoder applies TSA-D at all three upsampling levels. 
+
+Training configurations: Tab. IV details the training hy-perparameters for all DTFormer variants on both benchmarks. Multiple batch sizes and input sizes are for NYU Depth V2 and SUN-RGBD datasets respectively. 
+
+Model architecture: Tab. V provides detailed architec-tural configurations of DTFormer variants. Ci represents the channel number in i-th stage. Ni is the number of building blocks in i-th stage. 
+
+TSA-E parameter sharing mechanism: Tab. VI illustrates the parameter sharing mechanism of the Text-guided Seman-tic Alignment for Encoder (TSA-E). We apply a sharing strategy where a group of blocks shares one set of TSA-E parameters. The number of TSA-E instances is calculated as ⌈Ni/ShareFactor ⌉. The decoder (TSA-D) modules remain independent (no sharing) at all levels. 
+
+B. Comparison with State-of-the-Art 
+
+Tab. I compares DTFormer with state-of-the-art methods on NYU Depth V2 and SUN-RGBD. DTFormer consistently outperforms prior methods across all model scales. On NYU Depth V2, DTFormer-S achieves 57.8% mIoU, improving over DFormerv2-S by 1.8 points with 40.2G FLOPs, while DTFormer-L reaches a new state-of-the-art result of 58.6%. On SUN-RGBD, DTFormer-S obtains 53.5% mIoU, a 2.0-point gain over DFormerv2-S, and DTFormer-L further achieves 53.9%. These consistent improvements across both bench-marks validate the effectiveness of hierarchical text-guided semantic alignment. Training details and qualitative results are provided in Secs. IV-A and IV-E, respectively. 7
+
+TABLE IV: Training configurations for DTFormer variants on NYU Depth V2 and SUN-RGBD datasets. Multiple batch sizes and input sizes are for NYU Depth V2 and SUN-RGBD datasets respectively. 
+
+Configuration DTFormer-S DTFormer-B DTFormer-L Input size 480 ×640 / 480 2
+
+Optimizer AdamW Base learning rate 6 × 10 −5
+
+Weight decay 0.01 Batch size 16 / 16 8 / 16 16 / 16 Epochs 500 / 300 Optimizer momentum β1, β 2 = 0 .9, 0.999 
+
+Learning rate schedule Polynomial decay Warmup epochs 10 Warmup schedule Linear Layer-wise lr decay None Auxiliary head None 
+
+TABLE V: Detailed configurations of DTFormer variants. Ci
+
+represents the channel number in i-th stage. Ni is the number of building blocks in i-th stage. 
+
+Stage Output size DTFormer-S DTFormer-B DTFormer-L 1 H/ 4 × W/ 4 C1 = 64 
+
+N1 = 3 
+
+C1 = 80 
+
+N1 = 4 
+
+C1 = 112 
+
+N1 = 4 
+
+2 H/ 8 × W/ 8 C2 = 128 
+
+N2 = 4 
+
+C2 = 160 
+
+N2 = 8 
+
+C2 = 224 
+
+N2 = 8 
+
+3 H/ 16 × W/ 16 C3 = 256 
+
+N3 = 18 
+
+C3 = 320 
+
+N3 = 25 
+
+C3 = 448 
+
+N3 = 25 
+
+4 H/ 32 × W/ 32 C4 = 512 
+
+N4 = 4 
+
+C4 = 512 
+
+N4 = 8 
+
+C4 = 640 
+
+N4 = 8 
+
+Decoder dimension: 512 512 1024 
+
+TABLE VI: TSA-E parameter sharing configuration. Ni is the total number of blocks in that stage. 
+
+DTFormer-S DTFormer-B DTFormer-L Stage Share Factor TSA-E Instances Share Factor TSA-E Instances Share Factor TSA-E Instances Stage 2 2 2 (use 
+
+N2 = 4 ) 2 4 (use 
+
+N2 = 8 ) 2 4 (use 
+
+N2 = 8 )Stage 3 4 5 (use 
+
+N3 = 18 ) 4 7 (use 
+
+N3 = 25 ) 8 4 (use 
+
+N3 = 25 )Stage 4 2 2 (use 
+
+N4 = 4 ) 2 4 (use 
+
+N4 = 8 ) 4 2 (use 
+
+N4 = 8 )
+
+Efficiency analysis: As illustrated in Fig. 5, DTFormer variants achieve a favorable accuracy–efficiency trade-off com-pared with dual-encoder methods [9], [33], [48]. Since the class vocabulary is fixed, the text embeddings of all canonical classes can be precomputed once and stored as a prototype bank, from which scene-relevant prototypes are selected. In temporally continuous and semantically stable scenes, these prototypes may be reused across adjacent frames and refreshed only when the scene context changes, avoiding repeated frame-level prior generation. Ours   
+
+> DFormerv2 25
+> DFormer 24
+> CMNext 23
+> Geminifusion 24
+> MultiMAE 22
+> CMX 23
+> TokenFusion 22
+> Omnivore 22
+> DTFormer-S
+> DFormerv2-S DFormerv2-B
+> DTFormer-B
+> Model mIoU Param 57.7 58.3 56.0 57.8 FLOPs 67.2G 33.9G 40.2G 79.6G 26.7M 35.5M 53.9M 67.7M
+
+Fig. 5: Performance vs. FLOPs on NYU Depth V2. DTFormer variants (red) achieve superior mIoU with competitive compu-tational cost. 
+
+C. Ablation Studies Effectiveness of TSAM Variants: Tab. VII evaluates encoder- and decoder-side text guidance. Starting from the DFormerv2-S baseline of 56.0% mIoU, TSA-D and TSA-E individually improve performance to 56.9% (+0.9) and 57.1% (+1.1), respectively. Combining both variants yields the best result of 57.8% (+1.8), showing that encoder- and decoder-side text guidance provide complementary benefits. TSA-E supports semantic-aware feature extraction in the encoder, while TSA-D further refines the fused representations during decoding. 
+
+Learned injection strength: Tab. VIII reports the con-verged values of the per-block gating scalars βe and βd.Encoder gates settle at 0.54–0.59, while decoder gates increase from 0.10 to 0.25–0.27, with no block collapsing to a near-zero value. This indicates that both TSA-E and TSA-D actively use text guidance after training, consistent with the ablation in Tab. VII. 
+
+Optimal Injection Stages: Tab. IX examines where TSA-E should be injected. Injecting text guidance at stages 2–4 achieves the best result of 57.1% mIoU, compared with 56.5% for stages 3–4 and 56.6% for stages 1–4. This suggests that high-resolution, low-level features at stage 1 are less suitable for category-level language alignment. We therefore apply TSA-E to stages 2–4. 
+
+Text Guidance Strategy: Tab. X compares different text priors. Using all 40 fixed class names gives only a marginal gain, 56.1% mIoU (+0.1), because irrelevant tokens dilute attention. Image-specific VLM predictions are more effective: a single VLM ( K = 1 ) reaches 57.1% (+1.1), while our dual-VLM intersection strategy ( K = 2 ) further improves to 57.8% (+1.8) with about six class names per image. The intersection reduces hallucinated or model-specific biases while preserving enough semantic coverage; using more than two VLMs ( K > 
+
+2) gave diminishing returns because overly strict filtering made the class set too sparse. Our K = 2 configuration balances 8
+
+TABLE VII: Variant composition. Ticks indicate whether encoder TSA-E / decoder TSA-D is enabled.                   
+
+> Configuration TSA-E TSA-D mIoU (%)
+> Baseline ––56.0 + Decoder only –✓56.9 (+0.9)
+> + Encoder only ✓–57.1 (+1.1)
+> DTFormer-S (Full) ✓✓57.8 (+1.8)
+
+TABLE VIII: Converged gating scalars βe (TSA-E) and βd
+
+(TSA-D); ranges/means aggregate across all blocks.            
+
+> Parameter Init Converged range Mean
+> βe(encoder) 0.50 0.54 – 0.59 0.57
+> βd(decoder) 0.10 0.25 – 0.27 0.26
+
+TABLE IX: Encoder injection stages for TSA-E. Ticks indicate which stages receive text guidance.                             
+
+> Configuration S1 S2 S3 S4 mIoU (%)
+> Baseline ––––56.0 S3–4 only ––✓✓56.5 (+0.5)
+> S1–4 (all) ✓✓✓✓56.6 (+0.6)
+> S2–4 (ours) –✓✓✓57.1 (+1.1)
+
+TABLE X: Text guidance strategies. “Avg. Classes” is the mean number of class names per image.              
+
+> Text Strategy Avg. Classes mIoU (%)
+> Fixed class names (all 40) 40 56.1 (+0.1)
+> VLM class names ( K= 1 )∼757.1 (+1.1)
+> VLM ( K= 2 , ours) ∼657.8 (+1.8)
+
+precision and recall, validating that image-specific priors are essential for effective text guidance. 
+
+Attention Mechanism Design: Tab. XI examines key choices in cross-modal attention. Standard scaled dot-product attention reaches 57.3% mIoU. Adding cosine similarity or learnable temperature improves performance to 57.5% (+0.2) and 57.4% (+0.1), respectively. Combining both achieves the best result, 57.8% (+0.5), showing that the two designs are complementary: cosine similarity makes attention depend on directional alignment rather than vector magnitudes, while the learnable temperature adapts attention sharpness for more stable and selective text–visual alignment. 
+
+D. Analysis of Text Prior Quality Upper bound with oracle text priors: To establish the headroom available to the TSAM framework, we replace VLM-generated class names with ground-truth (GT) labels during both training and inference. For a fair cardinality match, the GT prior uses the top six ground-truth categories per image ranked by pixel area, which is close to the average size of the dual-VLM intersection. As shown by the Oracle (GT) row in Tab. XII, this oracle setting reaches 61.8% 
+
+mIoU on NYU Depth V2, a +5 .8 gain over the DFormerv2-S baseline (56.0%). The gap between the oracle (61.8) and TABLE XI: Cross-modal attention design. “Cosine”: L2-normalized Q, K; “Temp.”: learnable temperature τ .                   
+
+> Configuration Cosine Temp. mIoU (%)
+> Standard (baseline) ––57.3 + Cosine sim. ✓–57.5 (+0.2)
+> + Learnable τ–✓57.4 (+0.1)
+> Full (ours) ✓✓57.8 (+0.5)
+
+TABLE XII: Robustness of the oracle-trained DTFormer-S on NYU Depth V2 under progressive text-prior corruption. ±
+
+values denote std over 3 noise realizations.                   
+
+> Setting mIoU (%) ∆vs. baseline
+> Reference
+> DFormerv2-S 56.0 —DTFormer-S (ours) 57.8 +1.8
+> From oracle, with progressive noise
+> Oracle (GT) 61.8 +5.8 Replace 1/6 59.9 ±0.2+3.9 Replace 2/6 57.9 ±0.3+1.9 Replace 3/6 56.0 ±0.30.0
+
+standard DTFormer-S (57.8) indicates the potential gains from cleaner text priors, and suggests that TSAM can translate more accurate semantic priors into segmentation gains. A per-class breakdown in Tab. XIII further shows that this +5 .8 oracle gain concentrates on semantically confusable category pairs (e.g., desk /table ). 
+
+Per-class analysis on confusable categories: To under-stand where accurate text priors provide the largest headroom, we inspect per-class IoU under the oracle setting (DTFormer-S trained with GT class names, 61.8%). As shown in Tab. XIII, the oracle gains over DFormerv2-S are concentrated on semantically confusable pairs— window /blinds , desk /table ,
+
+shelves /bookshelf , dresser /night stand , and sofa /chair . These categories share visual appearance but differ in label, suggest-ing that accurate class-level priors can complement geometry in resolving semantic ambiguity. 
+
+Robustness to text prior corruption: Tab. XII stress-tests the oracle-trained DTFormer-S by corrupting its text priors only at evaluation time, without retraining. Starting from the oracle GT class names, we progressively replace a fraction of the 6 names per image with random in-vocabulary distractors. Performance degrades smoothly: replacing 1/6 of the names drops mIoU from 61.8 to 59.9 ( ±0.2), 2/6 further to 57.9 (±0.3), and only at 3/6 corruption does performance fall back to the text-free DFormerv2-S baseline (56.0 ±0.3). The graceful degradation suggests that DTFormer retains a degree of robustness to text-prior noise. 
+
+Generalization across text sources: We next evaluate train/test mismatch between GT and VLM class names in all four combinations (Tab. XIV). A GT-trained model evaluated with VLM text retains 57.5% mIoU, close to the default VLM-trained setting (57.8%), while a VLM-trained model improves to 58.2% when given GT text at inference. These results suggest that TSAM is not tightly tied to a particular text source 9
+
+TABLE XIII: Oracle headroom analysis on semantically confusable NYU Depth V2 class pairs. Baseline denotes DFormerv2-S; Oracle denotes DTFormer-S trained with GT class names. 
+
+Pair Class Base. Oracle ∆
+
+window / blinds window 49.8 72.2 +22.4 blinds 61.5 83.2 +21.7 desk / table desk 31.4 51.9 +20.5 table 56.2 66.4 +10.2 shelves / bookshelf shelves 23.4 41.6 +18.2 bookshelf 49.1 61.9 +12.8 dresser / night stand dresser 63.9 78.6 +14.7 night stand 71.2 76.1 +4.9 sofa / chair sofa 65.5 74.7 +9.2 chair 69.4 76.2 +6.8 
+
+TABLE XIV: Cross-evaluation under train/test text-source mismatch (GT vs. VLM class names). 
+
+Train / Eval GT text VLM text 
+
+GT-trained 61.8 57.5 VLM-trained (ours) 58.2 57.8 
+
+and can benefit from cleaner priors at inference. 
+
+E. Qualitative Results 
+
+Fig. 6 presents qualitative comparisons between DTFormer and DFormerv2 baseline on NYU Depth V2. As shown, DT-Former produces improved segmentation across diverse indoor scenes, including bedrooms, offices, and dining rooms. The results demonstrate better handling of challenging structures such as furniture details. These improvements are consistent with the quantitative gains reported in Sec. IV-B. V. C ONCLUSION 
+
+We presented DTFormer, a tri-modal framework that brings explicit semantic guidance to RGB-D segmentation through hierarchical text-visual-geometry alignment. Our key insight is that text guidance should be stage-adaptive: lightweight in early encoder stages to preserve geometric reasoning, and en-riched in decoder stages for robust semantic-geometric align-ment. To address the semantic ambiguity of fixed vocabularies, we leverage vision-language models to generate image-specific class names with intersection-based filtering, ensuring reliable and focused semantic priors. Extensive experiments validate that DTFormer achieves SOTA performance on NYU Depth V2 and SUN-RGBD while maintaining competitive efficiency. REFERENCES [1] H. Caesar, V. Bankiti, A. H. Lang, S. Vora, V. E. Liong, Q. Xu, A. Krishnan, Y. Pan, G. Baldan, and O. Beijbom, “nuscenes: A multi-modal dataset for autonomous driving,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2020. 1 DTFormer(ours) GT DFormerv2 Image 
+
+Fig. 6: Qualitative comparison on NYU Depth V2. From left to right: RGB input, ground truth, DFormerv2, DTFormer (ours). 
+
+[2] J. Behley, M. Garbade, A. Milioto, J. Quenzel, S. Behnke, C. Stachniss, and J. Gall, “Semantickitti: A dataset for semantic scene understanding of lidar sequences,” in Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , October 2019. 1 [3] P. Sun, H. Kretzschmar, X. Dotiwalla, A. Chouard, V. Patnaik, P. Tsui, J. Guo, Y. Zhou, Y. Chai, B. Caine, V. Vasudevan, W. Han, J. Ngiam, H. Zhao, A. Timofeev, S. Ettinger, M. Krivokon, A. Gao, A. Joshi, Y. Zhang, J. Shlens, Z. Chen, and D. Anguelov, “Scalability in perception for autonomous driving: Waymo open dataset,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2020. 1 [4] A. Rosinol, M. Abate, Y. Chang, and L. Carlone, “Kimera: an open-source library for real-time metric-semantic localization and mapping,” in 2020 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 2020, pp. 1689–1696. 1 [5] M. Savva, A. Kadian, O. Maksymets, Y. Zhao, E. Wijmans, B. Jain, J. Straub, J. Liu, V. Koltun, J. Malik, D. Parikh, and D. Batra, “Habitat: A platform for embodied ai research,” in Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , October 2019. 1 [6] J. McCormac, A. Handa, A. Davison, and S. Leutenegger, “Semanticfu-sion: Dense 3d semantic mapping with convolutional neural networks,” in 2017 IEEE International Conference on Robotics and automation (ICRA) . IEEE, 2017, pp. 4628–4635. 1 [7] O. Ronneberger, P. Fischer, and T. Brox, “U-net: Convolutional networks for biomedical image segmentation,” in International Conference on Medical image computing and computer-assisted intervention (MIC-CAI) . Springer, 2015, pp. 234–241. 1 [8] X. Hu, K. Yang, L. Fei, and K. Wang, “Acnet: Attention based network to exploit complementary features for rgbd semantic segmentation,” in 
+
+2019 IEEE International Conference on Image Processing (ICIP) , 2019, pp. 1440–1444. 1, 2 [9] J. Zhang, H. Liu, K. Yang, X. Hu, R. Liu, and R. Stiefelhagen, “Cmx: Cross-modal fusion for rgb-x semantic segmentation with transformers,” 
+
+IEEE Transactions on intelligent transportation systems , vol. 24, no. 12, pp. 14 679–14 694, 2023. 1, 2, 5, 7 [10] C. Yeshwanth, Y.-C. Liu, M. Nießner, and A. Dai, “Scannet++: A high-fidelity dataset of 3d indoor scenes,” in Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , October 2023, pp. 12–22. 1 [11] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark, G. Krueger, and I. Sutskever, “Learning transferable visual models from natural language supervi-sion,” in International conference on machine learning (ICML) . PmLR, 2021, pp. 8748–8763. 1, 2, 6 [12] J. Li, R. Selvaraju, A. Gotmare, S. Joty, C. Xiong, and S. C. H. Hoi, “Align before fuse: Vision and language representation learning with momentum distillation,” Advances in neural information processing systems (NeurIPS) , vol. 34, pp. 9694–9705, 2021. 1 [13] J. Li, D. Li, C. Xiong, and S. Hoi, “BLIP: Bootstrapping language-image pre-training for unified vision-language understanding and generation,” in International conference on machine learning (ICML) . PMLR, 2022, pp. 12 888–12 900. 1 [14] B. Li, K. Q. Weinberger, S. Belongie, V. Koltun, and R. Ranftl, “Language-driven semantic segmentation,” in International Conference on Learning Representations (ICLR) , 2022. 1, 2 10 
+
+[15] J. Xu, S. De Mello, S. Liu, W. Byeon, T. Breuel, J. Kautz, and X. Wang, “Groupvit: Semantic segmentation emerges from text supervision,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2022, pp. 18 134–18 144. 1 [16] Y. Rao, W. Zhao, G. Chen, Y. Tang, Z. Zhu, G. Huang, J. Zhou, and J. Lu, “Denseclip: Language-guided dense prediction with context-aware prompting,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2022, pp. 18 082–18 091. 1, 2, 4 [17] E. Xie, W. Wang, Z. Yu, A. Anandkumar, J. M. Alvarez, and P. Luo, “Segformer: Simple and efficient design for semantic segmentation with transformers,” Advances in neural information processing systems (NeurIPS) , vol. 34, pp. 12 077–12 090, 2021. 1 [18] L.-C. Chen, Y. Zhu, G. Papandreou, F. Schroff, and H. Adam, “Encoder-decoder with atrous separable convolution for semantic image segmen-tation,” in European conference on computer vision (ECCV) , September 2018. 1 [19] B.-W. Yin, J.-L. Cao, M.-M. Cheng, and Q. Hou, “Dformerv2: Geometry self-attention for rgbd semantic segmentation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2025, pp. 19 345–19 355. 1, 2, 5, 6 [20] J. Long, E. Shelhamer, and T. Darrell, “Fully convolutional networks for semantic segmentation,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , June 2015. 1 [21] X. Zou, Z.-Y. Dou, J. Yang, Z. Gan, L. Li, C. Li, X. Dai, H. Behl, J. Wang, L. Yuan, N. Peng, L. Wang, Y. J. Lee, and J. Gao, “Gen-eralized decoding for pixel, image, and language,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2023, pp. 15 116–15 127. 1, 2 [22] X. Zou, J. Yang, H. Zhang, F. Li, L. Li, J. Wang, L. Wang, J. Gao, and Y. J. Lee, “Segment everything everywhere all at once,” Advances in neural information processing systems (NeurIPS) , vol. 36, pp. 19 769– 19 782, 2023. 1, 2 [23] N. Silberman, D. Hoiem, P. Kohli, and R. Fergus, “Indoor segmentation and support inference from rgbd images,” in European conference on computer vision (ECCV) . Springer, 2012, pp. 746–760. 2, 6 [24] S. Song, S. P. Lichtenberg, and J. Xiao, “Sun rgb-d: A rgb-d scene understanding benchmark suite,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , June 2015. 2, 6 [25] S. Gupta, R. Girshick, P. Arbel´ aez, and J. Malik, “Learning rich features from rgb-d images for object detection and segmentation,” in European conference on computer vision (ECCV) . Springer, 2014, pp. 345–360. 2[26] S.-J. Park, K.-S. Hong, and S. Lee, “Rdfnet: Rgb-d multi-level residual feature fusion for indoor semantic segmentation,” in Proceedings of the IEEE International Conference on Computer Vision (ICCV) , Oct 2017. 2[27] C. Hazirbas, L. Ma, C. Domokos, and D. Cremers, “Fusenet: Incorporat-ing depth into semantic segmentation via fusion-based cnn architecture,” in Asian conference on computer vision (ACCV) . Springer, 2016, pp. 213–228. 2 [28] J. Jiang, L. Zheng, F. Luo, and Z. Zhang, “Rednet: Residual encoder-decoder network for indoor rgb-d semantic segmentation,” arXiv preprint arXiv:1806.01054 , 2018. 2 [29] X. Chen, K.-Y. Lin, J. Wang, W. Wu, C. Qian, H. Li, and G. Zeng, “Bi-directional cross-modality feature propagation with separation-and-aggregation gate for rgb-d semantic segmentation,” in European confer-ence on computer vision (ECCV) . Springer, 2020, pp. 561–577. 2, 5[30] J. Cao, H. Leng, D. Lischinski, D. Cohen-Or, C. Tu, and Y. Li, “Shapeconv: Shape-aware convolutional layer for indoor rgb-d semantic segmentation,” in Proceedings of the IEEE/CVF International Confer-ence on Computer Vision (ICCV) , October 2021, pp. 7088–7097. 2, 5[31] L.-Z. Chen, Z. Lin, Z. Wang, Y.-L. Yang, and M.-M. Cheng, “Spatial information guided convolution for real-time rgbd semantic segmenta-tion,” IEEE Transactions on Image Processing , vol. 30, pp. 2313–2324, 2021. 2, 5 [32] Y. Wang, X. Chen, L. Cao, W. Huang, F. Sun, and Y. Wang, “Multimodal token fusion for vision transformers,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2022, pp. 12 186–12 195. 2, 5 [33] D. Jia, J. Guo, K. Han, H. Wu, C. Zhang, C. Xu, and X. Chen, “Gemini-Fusion: Efficient pixel-wise multimodal fusion for vision transformer,” in International Conference on Machine Learning (ICML) . PMLR, 2024, pp. 21 753–21 767. 2, 5, 7 [34] S. Du, W. Wang, R. Guo, R. Wang, and S. Tang, “Asymformer: Asymmetrical cross-modal representation learning for mobile platform real-time rgb-d semantic segmentation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) Work-shops , June 2024, pp. 7608–7615. 2, 5 [35] B. Yin, X. Zhang, Z. Li, L. Liu, M.-M. Cheng, and Q. Hou, “Dformer: Rethinking rgbd representation learning for semantic segmentation,” in 
+
+International Conference on Learning Representations (ICLR) , 2024. 2, 5[36] D. Seichter, S. B. Fischedick, M. K¨ ohler, and H.-M. Groß, “Efficient multi-task rgb-d scene analysis for indoor environments,” in 2022 International joint conference on neural networks (IJCNN) . IEEE, 2022, pp. 1–10. 2, 5 [37] T. L¨ uddecke and A. Ecker, “Image segmentation using text and image prompts,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2022, pp. 7086–7096. 2 [38] J. Xu, S. Liu, A. Vahdat, W. Byeon, X. Wang, and S. De Mello, “Open-vocabulary panoptic segmentation with text-to-image diffusion models,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2023, pp. 2955–2966. 2 [39] X. Li, H. Yuan, W. Li, H. Ding, S. Wu, W. Zhang, Y. Li, K. Chen, and C. C. Loy, “Omg-seg: Is one model good enough for all segmentation?” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2024, pp. 27 948–27 959. 2 [40] Y. Zhong, J. Yang, P. Zhang, C. Li, N. Codella, L. H. Li, L. Zhou, X. Dai, L. Yuan, Y. Li, and J. Gao, “Regionclip: Region-based language-image pretraining,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2022, pp. 16 793–16 803. 2[41] L. H. Li, P. Zhang, H. Zhang, J. Yang, C. Li, Y. Zhong, L. Wang, L. Yuan, L. Zhang, J.-N. Hwang, K.-W. Chang, and J. Gao, “Grounded language-image pre-training,” in Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition (CVPR) , June 2022, pp. 10 965–10 975. 2 [42] A. Kamath, M. Singh, Y. LeCun, G. Synnaeve, I. Misra, and N. Carion, “Mdetr - modulated detection for end-to-end multi-modal understand-ing,” in Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , October 2021, pp. 1780–1790. 2 [43] R. Girdhar, M. Singh, N. Ravi, L. van der Maaten, A. Joulin, and I. Misra, “Omnivore: A single model for many visual modalities,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2022, pp. 16 102–16 112. 5 [44] W. Zhou, E. Yang, J. Lei, and L. Yu, “Frnet: Feature reconstruction network for rgb-d indoor scene parsing,” IEEE Journal of Selected Topics in Signal Processing , vol. 16, no. 4, pp. 677–687, 2022. 5 [45] Y. Wang, W. Huang, F. Sun, T. Xu, Y. Rong, and J. Huang, “Deep mul-timodal fusion by channel exchanging,” Advances in neural information processing systems (NeurIPS) , vol. 33, pp. 4835–4845, 2020. 5 [46] W. Zhou, E. Yang, J. Lei, J. Wan, and L. Yu, “Pgdenet: Progressive guided fusion and depth enhancement network for rgb-d indoor scene parsing,” IEEE Transactions on Multimedia , vol. 25, pp. 3483–3494, 2022. 5 [47] R. Bachmann, D. Mizrahi, A. Atanov, and A. Zamir, “MultiMAE: Multi-modal multi-task masked autoencoders,” in European Conference on Computer Vision (ECCV) . Springer, 2022, pp. 348–367. 5 [48] J. Zhang, R. Liu, H. Shi, K. Yang, S. Reiß, K. Peng, H. Fu, K. Wang, and R. Stiefelhagen, “Delivering arbitrary-modal semantic segmentation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2023, pp. 1136–1147. 5, 7 [49] Z. Chen, J. Wu, W. Wang, W. Su, G. Chen, S. Xing, M. Zhong, Q. Zhang, X. Zhu, L. Lu, B. Li, P. Luo, T. Lu, Y. Qiao, and J. Dai, “Internvl: Scaling up vision foundation models and aligning for generic visual-linguistic tasks,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2024, pp. 24 185–24 198. 3, 6 [50] J. Bai, S. Bai, S. Yang, S. Wang, S. Tan, P. Wang, J. Lin, C. Zhou, and J. Zhou, “Qwen-vl: A versatile vision-language model for un-derstanding, localization, text reading, and beyond,” arXiv preprint arXiv:2308.12966 , 2023. 3, 6 [51] Z. Geng, M.-H. Guo, H. Chen, X. Li, K. Wei, and Z. Lin, “Is attention better than matrix decomposition?” in International Conference on Learning Representations (ICLR) , 2021. 6 [52] I. Loshchilov and F. Hutter, “Decoupled weight decay regularization,” in International Conference on Learning Representations (ICLR) , 2019. 6

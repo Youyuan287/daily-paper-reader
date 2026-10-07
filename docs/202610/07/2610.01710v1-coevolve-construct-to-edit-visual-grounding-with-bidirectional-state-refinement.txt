@@ -1,0 +1,1356 @@
+Title: CoEvolve: Construct-to-Edit Visual Grounding with Bidirectional State Refinement
+
+URL Source: https://arxiv.org/pdf/2610.01710v1
+
+Published Time: Fri, 02 Oct 2026 01:46:10 GMT
+
+Number of Pages: 30
+
+Markdown Content:
+# COEVOLVE : C ONSTRUCT -TO -E DIT VISUAL 
+
+# GROUNDING WITH BIDIRECTIONAL 
+
+# STATE REFINEMENT 
+
+Dongwei Sun 1 ∗
+
+, Yujie Zhang 2 ∗
+
+, Bowen Yao 2, Pei Liu 1, Jing Yao 3, Xiangyong Cao 1 † 
+
+> 1
+
+School of Computer Science and Technology and the Ministry of Education Key Lab for Intelligent Networks and Network Security, Xi’an Jiaotong University, Xi’an 710049, China  
+
+> 2
+
+School of Computer Science and Technology, Faculty of Electronic and Information Engineering, Xi’an Jiaotong University, Xi’an 710049, China  
+
+> 3
+
+State Key Laboratory of Remote Sensing and Digital Earth, Aerospace Information Research Institute, Chinese Academy of Sciences, Beijing 100094, China 
+
+{sundongwei, zhang yujie2005, BowenYao2007 }@outlook.com lpei53682@gmail.com, jasonyao92@gmail.com, caoxiangyong@xjtu.edu.cn 
+
+ABSTRACT 
+
+Visual grounding localizes an object described by language with a bounding box. Most multimodal grounding models compress target identification, spatial reason-ing, and boundary estimation into one terminal prediction. Free-form rationales make reasoning linguistically explicit but do not necessarily expose measurable, editable spatial states. Intermediate localization errors are therefore difficult to diagnose and correct, allowing incorrect region choices and imprecise boundaries to persist in the final box. We introduce CoEvolve , a construct-to-edit frame-work that separates grounding into explicit state construction and state editing. Region-Evolution Reinforcement (RER) organizes grounding analysis into a pro-gressive semantic–spatial trajectory, with each reasoning step committing to an explicit candidate region. Bidirectional Denoising Refiner (BDR) treats the rea-soning text as fixed semantic context and refines the trajectory’s coordinate fields through bidirectional same-position reconstruction. Geometry- and behavior-level objectives provide target geometry and edit-preference signals for consolidating reliable candidates, preserving accurate inputs, or correcting toward annotations. Evaluations cover natural-image and remote-sensing grounding. With a 9B back-bone, CoEvolve rivals models up to 241B parameters in grounding accuracy. Under controlled corruption, a single BDR pass improves mean box overlap by over 27 percentage points, demonstrating strong recovery from substantial lo-calization errors. State-source comparisons further support the complementar-ity of explicit state construction and source-matched editing. The project is at 
+
+https://sundongwei.github.io/CoEvolve_Project/ .
+
+1 INTRODUCTION 
+
+Visual grounding, or referring expression comprehension, localizes a language-described object with a bounding box. The field has progressed from proposal-based and modular grounding (Kazemzadeh et al., 2014; Mao et al., 2016; Yu et al., 2016; 2018; Zhang et al., 2018; Liu et al., 2019b; Yang et al., 2019; Liu et al., 2019a) to end-to-end Transformers and grounded pre-training (Deng et al., 2021; Kamath et al., 2021; Li et al., 2022; Yan et al., 2023; Liu et al., 2024; Wang et al., 2023), and more recently to multimodal large language models (MLLMs) that unify language understanding and coordinate generation (You et al., 2024; Wang et al., 2024a;b; Bai et al., 2025a;b; Wang et al., 2025; Wu et al., 2024). Despite stronger semantic representations, most approaches still compress  
+
+> ∗
+
+Equal contribution.  
+
+> †
+
+Corresponding author. 
+
+1arXiv:2610.01710v1 [cs.AI] 1 Oct 2026 target disambiguation, spatial search, and boundary estimation into one terminal box. Without an explicit spatial state for inspection and repair, errors in region selection and boundary estimation can persist into the final prediction. Reasoning-oriented systems expose rationales before spatial ?                    
+
+> Expression
+> “the blue cup to the right of the red cup. ”
+> Free -form rationale
+> Spatial decisions implicit Missed handle
+> Plausible text ≠ Precise localization
+> Only the final box is evaluated
+> Scene
+> (,)rb11
+> Right cup
+> (,)rb22
+> Candidate
+> (,)rb33
+> Trajectory-level spatial rewards
+> RER · construct an explicit state BDR · synchronous state editing
+> Fixed Context
+> Correct misplaced coordinates
+> Construct an inspectable state
+> Dynamically refine box coordinates
+> Dynamic coordinate refinement
+
+Typical MLLM grounding  CoEvolve (Ours)               
+
+> (,)rb11
+> '(,)rb22
+> '(,)rb33
+> '
+
+Figure 1: Comparison between conventional MLLM grounding and CoEvolve. Conventional meth-ods compress spatial reasoning and localization into a terminal prediction, leaving intermediate spatial decisions implicit and difficult to correct. CoEvolve uses RER to construct a measurable progressive region trajectory and BDR to synchronously refine its coordinate fields while retaining the surrounding response structure. prediction (DeepSeek-AI, 2025; Huang et al., 2026b; Liu et al., 2025), and grounded reasoning methods further pair language with explicit visual regions or coordinates (Fan et al., 2025; Wu et al., 2026). Iterative localization has also used reinforcement-guided region search (Sun et al., 2021), including anchor-guided reasoning in remote sensing (Wang et al., 2026a). These advances motivate a further question: how can candidate target regions form a measurable state that is passed to an editor, so that coordinate changes can be evaluated against the observed state and accurate regions can be preserved? We introduce CoEvolve , a construct-to-edit framework that separates grounding into explicit state construction and state editing, as illustrated in Fig. 1. Region-Evolution Reinforcement (RER) 
+
+externalizes otherwise free-form grounding analysis into a progressive semantic–spatial trajectory in which every reasoning step commits to an explicit region. Trajectory-level spatial rewards de-rived from terminal annotations adapt the model to this structured interface without human-authored reasoning chains or intermediate region labels. Bidirectional Denoising Refiner (BDR) retains the reasoning text as semantic context and edits the trajectory’s coordinate fields through bidirectional same-position reconstruction. Geometry-level supervision provides target geometry, while behavior-level supervision provides preferences for consolidating a reliable candidate, preserving an accurate input, or correcting toward the annotation. Experiments evaluate localization accuracy and state refinement. CoEvolve reaches 92.41% Overall 
+
+Acc@0 .5 on eight RefCOCO-family splits and 85.72% mIoU on five test splits. Under controlled corruption, BDR raises mIoU from 58.80% to 86.19%, with 87.99% Repair@0 .7. Domain-specific retraining achieves 76.23% mIoU on DIOR-RSVG. Our contributions are: • We introduce CoEvolve and its RER component to expose intermediate localization deci-sions as a parseable semantic–spatial trajectory, providing an explicit state for inspection and correction. • We develop BDR to edit the coordinate fields of this state through position-aligned same-position reconstruction. Geometry- and behavior-level objectives jointly provide target geometry and edit-preference signals for state refinement. • We demonstrate strong target localization across natural-image and remote-sensing bench-marks, together with substantial correction gains under controlled box corruption. 
+
+2 PRELIMINARIES 
+
+2.1 GROUP RELATIVE POLICY OPTIMIZATION 
+
+Let c = ( I, q ) denote a multimodal context consisting of an image I and a referring expression q,and let y = ( y1, . . . , y T ) be a response containing the reasoning trajectory and final coordinates. An 2autoregressive policy factorizes the response likelihood as 
+
+πθ (y | c) = 
+
+> T
+
+Y
+
+> t=1
+
+πθ (yt | c, y <t ). (1) Group Relative Policy Optimization (GRPO) (Shao et al., 2024) removes the learned critic by sam-pling a group {yi}Gi=1 ∼ πθold (· | c) and normalizing sequence-level rewards Ri within the group: 
+
+Ai = Ri − μR
+
+σR + δ , μR = 1
+
+G
+
+> G
+
+X
+
+> i=1
+
+Ri, (2) where σR is the corresponding standard deviation and δ ensures numerical stability. With the token-wise importance ratio 
+
+ρi,t (θ) = πθ (yi,t | c, y i,<t )
+
+πθold (yi,t | c, y i,<t ) ,
+
+the policy is optimized by 
+
+JGRPO (θ) = E
+
+"
+
+1
+
+G
+
+> G
+
+X
+
+> i=1
+
+1
+
+TiTiX
+
+> t=1
+
+min 
+
+n
+
+ρi,t (θ)Ai,
+
+clip( ρi,t (θ), 1 − ϵl, 1 + ϵh) Ai
+
+o
+
+− βD KL (πθ ∥πref )
+
+#
+
+. (3) Here πref is the reference policy, β controls KL regularization, and ϵl and ϵh are the lower and upper clipping radii. Setting ϵl = ϵh recovers symmetric clipping; using ϵh > ϵ l permits broader exploration for positively advantaged responses. 2.2 BIDIRECTIONAL DENOISING REFINEMENT 
+
+Bidirectional reconstruction over corrupted discrete tokens provides a natural bridge between bidi-rectional context modeling and iterative correction (Ou et al., 2025; Sahoo et al., 2024; Sun et al., 2026). Lavida-O applies masked diffusion with bidirectional context to discretized grounding coor-dinates (Li et al., 2026). BDR instead keeps an existing response and its coordinate tokens visible as references for same-position editing. Let z = ( z1, . . . , z L) denote a clean response and ez its discretely corrupted version, with M denoting the perturbed positions. A bidirectional denoiser reconstructs the original token at each selected position with the same-position objective: 
+
+Ldenoise = −Ez, ez
+
+ 1
+
+|M| 
+
+X
+
+> j∈M
+
+log pϕ(zj | ez, c )j
+
+ . (4) Here pϕ(· | ez, c )j is the token distribution predicted at response position j. Starting from an imper-fect response z(0) , the same position-aligned predictor can update selected positions for P passes: 
+
+z(p) 
+
+> j
+
+=
+
+
+
+arg max 
+
+> v
+
+pϕ
+
+
+
+v | z(p−1) , c 
+
+
+
+> j
+
+, j ∈ M (p),z(p−1)  
+
+> j
+
+, otherwise ,p = 1 , . . . , P. (5) Here M(p) denotes the set of response positions updated during refinement pass p.This formulation combines bidirectional position-aligned reconstruction with denoising-style itera-tive correction. It operates directly on discrete response tokens rather than introducing a continuous noise-time process or a full reverse-time Markov chain. In CoEvolve, z(0) is the RER localization trajectory, and BDR extends this view to visible and geometrically corrupted coordinate tokens; to-ken masking is used only during warm-up. Bidirectional context and coordinate-aware objectives define the refinement process described in Section 3. 33 METHODOLOGY 
+
+3.1 OVERVIEW 
+
+Given an image I and a referring expression q, visual grounding predicts the referred object’s box in the non-empty target setting. We denote the training annotation by b∗ = [ x∗
+
+1, y ∗
+
+1 , x ∗
+
+2, y ∗
+
+2 ] and normalize coordinates to integers in [0 , 1000] . A valid box satisfies x1 < x 2 and y1 < y 2 within this range. Fig. 2 illustrates the workflow. Region-Evolution Reinforcement (RER) constructs a tagged response y comprising reasoning text, a progressive region sequence, and a terminal answer. 
+
+Bidirectional Denoising Refiner (BDR) retains the reasoning text as semantic context and refines the state’s coordinate fields. This state provides semantic context, spatial history, an edit reference, and natural upstream errors. The two components are trained sequentially and communicate only through the generated state. Image  & Expression 
+
+> “The rider on the left”
+
+Scene 
+
+Step 1 
+
+Candidate 
+
+Step 2 
+
+Relation 
+
+Step 3 
+
+Tighten 
+
+Step K 
+
+…
+
+(a) Region-Evolution Reinforcement (RER)          
+
+> FULL RER RESPONSE CONTENT
+> <refine >reasoning + step box es </ refine >
+> <answer> final answer </answer>
+> 𝑅 𝑠𝑡𝑒𝑝 Step-Format Reward 𝑅 𝑝𝑟𝑜𝑔 Progressive Reward
+> 𝑅 𝑏𝑜𝑥 Terminal Box Reward 𝑅 𝑓𝑚𝑡 Format Reward
+
+(b) Bidirectional Denoising Refiner (BDR) 
+
+Training Progress     
+
+> []02 000180 05 800840
+
+Prompt                             
+
+> •At each refinement step
+> •Reason and bracketed box
+> <refine >Step 1: locate the scene. →[0, 0, 1000, 1000]
+> Step 2: focus on the riders. →[0, 22, 475, 975]
+> …
+> Step K: identify rider on left. →[200, 180, 580, 840 ]
+> </ refine >
+> <answer >[200, 180, 580, 840 ]</ answer>
+> Reasoning & Step Boxes & Final Answer Input box Selected target Helpful → edit Harmful → keep Final output
+> []0210 0180 0580 0840
+> []02 400180 05 400840
+> Geometry
+> Where to move?
+> 𝐿 𝑏𝑜𝑥 𝐿 𝑟𝑒𝑔
+> Behavior
+> Whether to edit?
+> 𝐿 𝑝𝑟𝑒𝑓
+> Preservation
+> What to preserve?
+> 𝐿 𝑓𝑚𝑡 𝐿 𝑔𝑒𝑛
+> Confidence
+> Which digits to trust?
+> 𝐻 ℎ𝑖𝑠𝑡 𝐻 𝑓𝑖𝑛
+
+Figure 2: Overview of CoEvolve. RER converts otherwise free-form grounding analysis into a pro-gressive semantic–spatial state in which each reasoning step commits to an explicit region. The resulting response becomes an editable localization state for BDR. BDR performs bidirectional same-position refinement of its coordinate fields while retaining the surrounding response as con-text. Geometry-level objectives provide target geometry, and behavior-level objectives provide edit-preference signals. 3.2 REGION -E VOLUTION REINFORCEMENT 
+
+An outcome-only box reward does not directly assess whether intermediate region states make target-directed progress before the terminal prediction. RER therefore adapts an autoregressive policy πθ (y | I, q ) to construct a measurable localization state. A valid response contains one 
+
+<refine > block with 3–5 steps and one <answer > block. We denote its parsed sequence by 
+
+τ (y), where each pair (rk, bk) associates a reasoning step with an explicit region and bans is the ter-minal answer. Unlike regions that identify visual evidence in grounded reasoning (Fan et al., 2025; Wu et al., 2026), each RER box is a candidate location for the referred target, and the ordered se-quence becomes BDR’s editable state. We use semantic–spatial state to denote this division of roles: free-form text supplies semantic context, while each step exposes a spatial commitment evaluated by trajectory-level rewards. These rewards assess the spatial commitments rather than the semantic correctness of the free-form text itself. For each sampled response, RER assigns the sequence-level reward 
+
+RRER (y, b∗) = 0 .5Rfmt (y) + 0 .5Rstep (y) + Rprog (y, b∗) + Rbox (y, b∗). (6) 
+
+Rfmt checks the outer tagged structure and provides graded feedback for partially valid responses. 
+
+Rstep checks whether each refinement step ends in a parseable box; it does not score localization accuracy. When 3–5 valid non-empty regions are available, Rprog evaluates target-directed spatial 4progress using overlap, center, coverage, and final-consistency signals. Rbox parses and evaluates the terminal answer by its overlap and shape agreement with b∗, and assigns the prescribed negative reward when the answer is missing, repeated, malformed, or invalid. The appendix specifies the piecewise definitions and coefficients of these terms. We sample eight responses per input and use Eq. (6) in the GRPO objective introduced in Section 2. The annotated terminal box evaluates the generated regions, but RER requires no manually labeled reasoning text or intermediate box trajectory. It therefore derives trajectory-level spatial rewards from the terminal box annotation and organizes the search process into a structured state whose coordinate fields BDR can refine. 3.3 BIDIRECTIONAL DENOISING REFINER 
+
+Editable localization states. BDR refines complete RER responses, using their fixed reasoning text as semantic context and editing the coordinate fields of historical Steps, the last Step, and the Answer. Geometry-level and behavior-level objectives supervise target coordinates and edit decisions, while auxiliary reconstruction and entropy terms preserve the response and regularize confidence. For states whose RER Answer has IoU above 0.5, we sample ξ ∼ Bernoulli(0 .3) ; for all other states, we set ξ = 0 . Given x(0) = Tok( y), we use xin = x(0) when ξ = 0 and xin =Tok( Q(y, b∗)) otherwise, where Q replaces selected boxes with valid geometric perturbations. 
+
+Bidirectional same-position reconstruction. We realize bidirectional state access by removing causal masking from the backbone’s full-attention layers, while retaining each editable coordinate at its original response position. The set Ts contains the 16 ordered digit positions of box role s, and 
+
+Tbbox = S 
+
+> s
+
+Ts. BDR produces position-aligned logits for all editable coordinates from the same observed response. Denoting the ten digit tokens by Vdigit , the coordinate candidates used during training are obtained as 
+
+z = Fϕ(I, q, xin ), ˜xout  
+
+> t
+
+= arg max 
+
+> v∈V digit
+
+zt,v , t ∈ T bbox ,
+
+˜bout  
+
+> s
+
+= DecBox  (˜ xout  
+
+> t
+
+)t∈T s
+
+ .
+
+(7) Here Fϕ denotes BDR with adapter parameters ϕ, and z contains position-aligned logits. Digit projection yields synchronous box candidates for target selection, regression, and preference super-vision. At inference, BDR updates coordinate positions while retaining the reasoning text; denoising denotes reconstruction from masking and geometric corruption, not a diffusion timestep process. 
+
+Behavior-Level Supervision: Quality-Gated Target Selection. We compute uin =IoU( bin ans , b∗) and uout = IoU( ˜bout ans , b∗), assigning zero to an invalid box. With η = 0 .9 and 
+
+γ = 0 .005 , Cout denotes uout > η and uout − uin ≥ γ, while Cin denotes ξ = 0 and uin ≥ η.Absolute box supervision uses 
+
+btar =
+
+
+
+˜bout ans , Cout ,
+
+bin ans , Cin ,
+
+b∗, otherwise .
+
+(8) The stop-gradient branches define three target-selection cases. When Cout holds, the candidate itself becomes the target, reinforcing a reliable improvement. When Cin holds, the input anchor becomes the target, reinforcing preservation. Otherwise, the annotation provides the corrective target. The rule therefore supplies both the geometric label and the corresponding training preference for the current state. 
+
+Geometry-Level Supervision. Geometry-level supervision provides the target geometry for the edited localization. The last refinement box and the answer, denoted by Sf = {last , ans }, receive the same selected target from Eq. (8). Their four zero-padded coordinates contribute 32 strongly supervised digit positions. The coordinate cross-entropy Lbox enforces the target digit at each posi-tion, with equal digit weights during warm-up. After warm-up, the four digits of coordinate k share 
+
+wk = 1 + 10 ek, where ek = (2000) −1 P 
+
+> s∈S f
+
+|˜bout  
+
+> sk
+
+− btar  
+
+> k
+
+|. The weighted token losses are divided by the sum of their weights, so wk redistributes gradient toward inaccurate coordinates without changing the nominal scale of Lbox .5Token cross-entropy distinguishes exact digit identities but does not directly encode numerical dis-tance. We therefore project the logits of digit j ∈ { 0, 1, 2, 3} in coordinate k ∈ { 1, 2, 3, 4} of role 
+
+s ∈ S f onto the ten digit tokens. For its position tskj , the resulting distribution and soft coordinate are 
+
+pskj (d) = exp ztskj ,d 
+
+P9 
+
+> a=0
+
+exp ztskj ,a 
+
+, ¯bsk =
+
+> 3
+
+X
+
+> j=0
+
+10 3−j
+
+> 9
+
+X
+
+> d=0
+
+d p skj (d). (9) The regression loss Lreg averages |¯bsk − btar  
+
+> k
+
+|/1000 over the eight supervised coordinates. Together, 
+
+Lbox and Lreg provide complementary geometric signals: the former preserves the exact discrete coordinate representation, while the latter encodes continuous numerical distance to the selected target. 
+
+Coordinate-wise Edit Preference. Quality-gated target selection defines the desired state-level behavior, but does not explicitly compare an individual coordinate edit with retaining its input value. We therefore introduce coordinate-wise preference supervision. We index historical roles by Sh =
+
+{1, . . . , K − 1} and define S = Sh ∪ S f . For every role with 16 valid input digits, ˘bin  
+
+> s
+
+is decoded from the observed input and ˜bout  
+
+> s
+
+is the digit-projected candidate. Their coordinate-level edit gain is 
+
+∆sk = |˘bin  
+
+> sk
+
+− b∗
+
+> k
+
+| − | ˜bout  
+
+> sk
+
+− b∗
+
+> k
+
+|
+
+1000 . (10) For coordinate k of role s, Csk contains the changed digit positions, Dsk is their mean output-versus-input logit margin, and ysk indicates whether ∆sk is positive. Thus, ∆sk > 0 identifies an edit closer to the annotation than its input counterpart, whereas ∆sk < 0 identifies a detrimental edit. Binary cross-entropy with logits is applied when Csk ̸ = ∅ and |∆sk | > 0.005 . Active coordinates within a role are averaged with weights ask = min(1 , |∆sk |/0.05) . Historical roles receive weight 0.2, and the last Step and Answer each receive weight 0.5. The active role losses are summed per sample and then averaged over the minibatch to obtain Lpref . Unlike absolute coordinate supervision, Lpref 
+
+learns the relative utility of an edit. 
+
+State Preservation and Confidence Regularization. The primary objectives operate inside a structured response whose reasoning and syntax must remain stable. General reconstruction Lgen 
+
+applies token cross-entropy outside the strongly supervised final digits; after warm-up, it preserves non-coordinate assistant content. Format loss Lfmt adds cross-entropy on structural tags and co-ordinate punctuation. For a digit distribution p, natural entropy is H(p) = − P9 
+
+> d=0
+
+p(d) log p(d).The historical term Hhist sharpens digit distributions in earlier refinement steps without imposing an absolute coordinate target. The final term Hfin acts on the last Step and Answer only when the digit-vocabulary argmax equals the selected target digit, sharpening correct predictions without increasing confidence in an incorrect digit. These terms preserve response structure and non-coordinate content while regularizing confidence; they do not determine whether an edit is beneficial. 
+
+Combined objective and warm-up. With the coefficients used in training, the post-warm-up objective is 
+
+LBDR = Lbox + 30 Lreg 
+
+| {z }
+
+> Lgeom
+
++Lpref 
+
++ 0 .5Lfmt + 0 .2Lgen 
+
+| {z }
+
+> Lstate
+
++ 0 .2Hhist + 0 .2Hfin 
+
+| {z }
+
+> Lconf
+
+. (11) Behavior-level supervision enters through both the target policy in Eq. (8), which determines the target used by Lgeom , and the additive preference term Lpref . During the first 3% of optimization, we mask 10% of eligible assistant tokens and use Lbox + 0 .2Lgen . The target rule remains active; 
+
+Lgen also covers historical box digits, assigning the selected target to perturbed historical boxes. Regression, entropy, and preference are activated after warm-up. 
+
+4 EXPERIMENTS 
+
+We evaluate CoEvolve on standard referring-expression grounding, localization under stricter IoU criteria, controlled box correction, component ablation, and remote-sensing grounding. Unless oth-erwise noted, aggregate evaluation metrics are reported as percentages. 64.1 EXPERIMENTAL SETUP 
+
+Datasets and Evaluation. For natural-image grounding, we train CoEvolve only on the Ref-COCOg training set and evaluate all eight RefCOCO-family splits (57,457 examples) without further fine-tuning (Mao et al., 2016; Yu et al., 2016). RefCOCOg measures in-dataset performance, while RefCOCO and RefCOCO+ provide cross-dataset evaluation under RefCOCOg-only training. We report split-wise Acc@0 .5 and their arithmetic mean (Overall). Stricter-IoU, controlled-correction, and ablation experiments use five test splits comprising 30,969 examples. Unless stated otherwise, their aggregate metrics are computed jointly over all examples rather than by averaging the five split-level scores. Remote-sensing grounding is evaluated on DIOR-RSVG (Zhan et al., 2023). 4.2 STANDARD REF COCO-F AMILY GROUNDING 
+
+Among the general-purpose MLLMs, specialized grounding systems, and grounding-adapted MLLMs compared in Table 1, CoEvolve obtains the highest tabulated Overall Acc@0 .5 of 92.41, outperforming Qwen3.5-9B on all eight splits and improving its aggregate score by 2.93 points. CoEvolve ranks first on four splits and ties for first on RefCOCOg val, demonstrating strong and consistent grounding performance across the RefCOCO family. Table 1: Grounding performance on the eight standard RefCOCO-family splits, measured by 
+
+Acc@0 .5. Overall is the arithmetic mean across the eight split-level results. It is computed from full-precision values when available and otherwise from the reported split-level values. Public methods follow their reported protocols; ‡ denotes our locally reproduced Qwen3.5-9B baseline. CoEvolve trains only on RefCOCOg train, without target-dataset fine-tuning. Best and second-best results are bolded and underlined.                                                                                                                                                                                                  
+
+> RefCOCO RefCOCO+ RefCOCOg Method val testA testB val testA testB val test Overall ↑
+> Qwen2-VL-7B (Wang et al., 2024a) 91.7 93.6 87.3 85.8 90.5 79.5 87.3 87.8 87.94 Qwen2-VL-72B (Wang et al., 2024a) 93.2 95.3 90.7 90.1 93.8 85.6 89.9 90.4 91.13 Qwen2.5-VL-7B (Bai et al., 2025b) 90.0 92.5 85.4 84.2 89.1 76.9 87.2 87.2 86.56 Qwen2.5-VL-72B (Bai et al., 2025b) 92.7 94.6 89.7 88.9 92.2 83.7 89.9 90.3 90.25 Qwen3-VL-8B-Instruct (Bai et al., 2025a) 91.6 93.3 87.8 85.8 90.3 79.9 88.7 88.7 88.26 Qwen3-VL-235B-A22B (Bai et al., 2025a) 92.9 94.6 90.2 88.6 92.4 84.2 90.3 90.8 90.50 InternVL3-8B (Zhu et al., 2025) 92.5 94.6 88.0 88.2 92.5 81.8 89.6 90.0 89.65 InternVL3-78B (Zhu et al., 2025) 93.4 95.4 90.3 90.1 93.8 85.3 91.5 91.5 91.41 InternVL3.5-8B (Wang et al., 2025) 92.4 94.7 88.7 87.9 92.4 82.4 89.6 89.4 89.69 InternVL3.5-241B-A28B (Wang et al., 2025) 94.1 96.3 91.5 91.6 94.6 86.9 92.0 92.1 92.39 DeepSeek-VL2-Small (Wu et al., 2024) 93.9 95.3 91.3 89.4 92.9 84.8 92.6 92.6 91.60 Grounding-DINO-L (Liu et al., 2024) 90.6 93.2 88.2 82.8 89.0 75.9 86.1 87.0 86.60 UNINEXT-H (Yan et al., 2023) 92.6 94.3 91.5 85.2 89.6 79.8 88.7 89.4 88.89 ONE-PEACE (Wang et al., 2023) 92.6 94.2 89.3 88.8 92.2 83.2 89.2 89.3 89.85 Ferret-v2-13B (Zhang et al., 2024) 92.6 95.0 88.9 87.4 92.1 81.4 89.4 90.0 89.60 CogVLM-Grounding-17B (Wang et al., 2024b) 92.8 94.8 89.0 88.7 92.9 83.4 89.8 90.8 90.28 EGM-InternVL3-8B (Zhan et al., 2026) 93.6 95.2 90.1 89.3 93.6 83.1 89.7 90.7 90.66 EGM-Qwen3-VL-8B (Zhan et al., 2026) 93.9 95.0 91.2 90.1 93.3 85.9 90.4 91.2 91.38 Qwen3.5-9B ‡(Qwen Team, 2026) 91.5 93.8 89.5 87.7 91.3 82.9 89.7 89.6 89.48
+> CoEvolve (ours) 94.4 95.3 92.4 90.7 93.5 87.8 92.6 92.8 92.41
+
+4.3 LOCALIZATION UNDER STRICTER IOU C RITERIA 
+
+Table 2 evaluates localization under stringent IoU criteria across five test splits. CoEvolve achieves 85.72% mIoU, 87.94% Acc@0 .7, and 68.64% Acc@0 .9, exceeding CogVLM-Grounding-17B by 2.12, 2.63, and 4.19 points, respectively. CoEvolve ranks first in every reported setting, with 
+
+Acc@0 .9 gains ranging from 0.41 points on RefCOCOg test to 7.02 points on RefCOCO+ testB. The larger gains at the strictest threshold are consistent with improved high-IoU localization and boundary alignment across the evaluated test splits. 4.4 CONTROLLED BOX CORRECTION 
+
+Grounding self-correction has been studied through iterative prompting and visual verification (Liao et al., 2025). We evaluate a trained coordinate editor on 30,969 examples using the same deter-7Table 2: Localization under stricter IoU thresholds on five test splits. Split entries report 
+
+Acc@0 .7/Acc@0 .9; aggregate metrics are computed jointly across the splits. † denotes Hi-R1 aggregates reconstructed from its reported size groups; ‡ marks locally reproduced baselines (Ap-pendix B.6). Bold and underline denote the best and second-best results. 
+
+RefCOCO RefCOCO+ RefCOCOg Aggregate Results Method testA testB testA testB test mIoU ↑ Acc@0.7 ↑ Acc@0.9 ↑
+
+Hi-R1 † (Zhu et al., 2026b) - - - - - 79.97 80.07 54.84 InternVL3.5-8B ‡ (Wang et al., 2025) 85.9/63.0 77.5/55.0 83.9/61.6 70.6/50.0 79.3/58.6 79.33 79.68 58.02 Qwen3-VL-4B (Bai et al., 2025a; Zhu et al., 2026c) 88.6/– 81.3/– 86.0/– 73.3/– 82.2/– 81.74 82.51 61.24 Qwen3-VL-8B ‡ (Bai et al., 2025a) 88.8/66.3 81.1/58.4 86.4/64.9 74.8/54.0 83.0/61.7 82.39 83.09 61.35 Qwen3.5-9B ‡ (Qwen Team, 2026) 88.7/65.9 81.7/58.6 86.4/64.5 75.6/54.3 83.1/59.6 82.16 83.31 60.64 CogVLM-Grounding-17B ‡ (Wang et al., 2024b) 90.6/69.2 83.0/61.3 88.6/67.9 77.3/57.7 85.5/64.7 83.60 85.31 64.45 
+
+CoEvolve (ours) 92.7/74.2 87.1/67.8 90.7/73.1 82.3/64.7 86.9/65.2 85.72 87.94 68.64 
+
+ministic corrupted anchors for all methods. The anchors span multiple IoU levels and geometric perturbations and have 58.80% mIoU; Appendix D.4 gives the full construction protocol. This set-ting bypasses RER and directly evaluates end-to-end box correction under a shared corrupted-anchor protocol. BDR performs one same-position refinement pass, while the compared baselines generate corrected boxes from the same image, referring expression, and input anchor. Exact state templates, prompts, and parsing rules appear in Appendix B.6. We report output localization metrics and Repair@ t, the fraction of initially sub-threshold anchors corrected to at least t:
+
+Repair@ t = |{ i : ui < t, ˆui ≥ t}| |{ i : ui < t }| , (12) where ui and ˆui denote input and output IoUs. We additionally report the mean IoU change, 
+
+N −1 P
+
+i(ˆ ui − ui), and the improvement and degradation rates, defined as the fractions of anchors whose output IoU is strictly higher and lower than the corresponding input IoU, respectively. Fig. 3 shows that BDR raises mIoU to 86.19% and achieves 87.99% Repair@0 .7. Among the com-pared correction baselines, Qwen3.5-9B is strongest in output mIoU. CoEvolve BDR improves out-put mIoU, Acc@0 .9, and Repair@0 .7 over this baseline by 2.34, 5.46, and 8.11 points, respectively. The degradation rate is 11.42% for Qwen3.5-9B and 15.50% for CoEvolve BDR. RefCOCO ARefCOCO BRefCOCO+ ARefCOCO+ BRefCOCOg 50 60 70 80 90       
+
+> Metric Value
+> (a) Split-level output mIoU
+> 68.36 62.59 65.54 56.20 68.13 86.34 82.94 84.70 80.02 84.32 81.49 73.96 80.27 68.34 75.94 89.18 85.92 87.48 82.56 85.64
+> RefCOCO ARefCOCO BRefCOCO+ ARefCOCO+ BRefCOCOg 30 40 50 60 70 80
+> (b) Split-level Acc@0.9
+> 44.18 38.45 40.62 32.73 44.43 66.61 60.71 65.51 57.64 62.87 61.89 50.62 60.85 47.29 55.48 74.51 67.20 72.06 64.72 64.87
+> Acc@0.5 Acc@0.7 Acc@0.9 40 50 60 70 80 90 100
+> (c) Aggregate accuracy
+> 70.94 60.22 40.85 90.94 84.16 62.86 81.97 75.82 55.55 93.02 87.89 68.32
+> Output mIoU ↑ Mean ΔIoU ↑ Imp. Rate ↑ Deg. Rate ↓ Repair@0.7 ↑
+> 10 30 50 70 90
+> (d) Aggregate correction behavior
+> 64.90 6.10 38.94 21.53 47.67 83.85 25.05 68.31 11.42 79.88 76.23 17.43 71.66 27.95 78.25 86.19 27.38 81.42 15.50 87.99
+
+Controlled Box-Correction Performance on Deterministic Anchors    
+
+> InternVL3.5-8B Qwen3.5-9B CogVLM-Grounding-17B CoEvolve BDR (ours)
+
+Figure 3: Controlled box correction on five test splits with 30,969 deterministic anchors. Aggre-gate metrics are computed jointly over all anchors. CoEvolve BDR achieves the highest output mIoU, aggregate localization accuracies, mean IoU gain, improvement rate, and Repair@0 .7, while Qwen3.5-9B yields the lowest degradation rate. Higher values are better except for degradation rate. 4.5 STATE CONSTRUCTION AND SOURCE -M ATCHED REFINEMENT 
+
+Meaningful-state ablation. Zero-Anchor BDR removes both the upstream localization hypothe-sis and the anchor-aware preservation and preference objectives enabled by that hypothesis, reducing training to direct same-position coordinate prediction. CoEvolve instead uses the RER state as both a localization starting point and an edit reference. Fig. 4 shows a 2.22-point mIoU gain, while the improvement grows from 2.19 points at Acc@0 .5 to 3.68 at Acc@0 .7 and 6.48 at Acc@0 .9. This widening gap supports the joint value of a meaningful prior localization state and the anchor-aware objectives it enables. Appendix Table 10 reports split-level results. 884.0 85.5 
+
+> Score (%)
+> mIoU
+> 83.49 85.72 +2.22
+> 90.0 91.5 93.0
+> Acc@0.5
+> 90.31 92.50 +2.19
+> 85.0 87.5
+> Acc@0.7
+> 84.26 87.94 +3.68
+> 64 68
+> Acc@0.9
+> 62.16 68.64 +6.48
+
+Editable-State and Anchor-Aware Objective Ablation   
+
+> Zero-Anchor BDR CoEvolve Gain
+
+Figure 4: Effect of a meaningful editable state and its associated anchor-aware objectives on five test splits. Aggregate metrics are computed jointly across the splits. Zero-Anchor BDR (ours) uses zero anchors; CoEvolve (ours) uses RER states and anchor-aware objectives. Gains are computed from unrounded aggregate values before display rounding. 
+
+Structured state construction and source-matched refinement. Under the same structured in-terface, RER raises mIoU from 63.48% to 80.70% and Acc@0 .9 from 24.28 to 59.81 relative to unadapted Qwen3.5-9B. Because both policies use the same response format, these gains show the benefit of RER training for structured region evolution. For each state source, we train a separate BDR from scratch on its outputs. Table 3 shows that native outputs start at 82.16% mIoU, above RER states at 80.70%. After source-matched refinement, the RER pipeline gains 5.02 points and reaches 85.72%, while the native-output pipeline gains 2.41 points and reaches 84.57%. At Acc@0 .9, their respective gains are 8.83 and 5.68 points, yielding 68.64% and 66.32%. This reversal shows that initial localization accuracy alone does not determine how effectively a state can be refined. Table 3: Source-matched state construction and refinement on five test splits. Each source is paired with a separately trained BDR; metrics are computed jointly across the splits.                                   
+
+> State / editor RER Trained? Init. mIoU Final mIoU ∆mIoU Init. Acc@0.9 Final Acc@0.9 ∆Acc@0.9 Structured Qwen3.5 No 63.48 ––24.28 ––Native output →BDR (ours) No 82.16 84.57 +2.41 60.64 66.32 +5.68 RER →BDR (ours) Yes 80.70 85.72 +5.02 59.81 68.64 +8.83
+
+4.6 CROSS -D OMAIN ADAPTATION AND DOWNSTREAM SEGMENTATION 
+
+Remote-sensing grounding. After domain-specific retraining on DIOR-RSVG, CoEvolve achieves 86.20% Pr@0 .5 and 76.23% mIoU. Relative to the reproduced native Qwen3.5-9B base-line, which is evaluated without DIOR-RSVG adaptation, the complete domain-adapted system im-proves these metrics by 30.35 and 24.40 points, respectively. Table 4 compares CoEvolve with task-specific methods and general-purpose MLLM baselines. Table 4: Remote-sensing grounding on DIOR-RSVG. Public methods follow their reported pro-tocols; RER and BDR are retrained on the DIOR-RSVG training split. † denotes our reproduced native baseline evaluated without DIOR-RSVG adaptation. Best and second-best results are bolded and underlined, respectively; dashes denote unreported results.                                          
+
+> Method Pr@0 .5↑Pr@0 .7↑Pr@0 .9↑mIoU ↑
+> LQVG (Lan et al., 2024) 83.41 75.91 43.53 74.02 LPVA (Li et al., 2024) 82.27 72.25 39.55 72.35 Qwen3.5-4B (Qwen Team, 2026; Wang et al., 2026a) 53.10 39.40 –49.00 InternVL3.5-8B (Wang et al., 2025; 2026a) 64.90 50.50 –56.90 RSGround-R1 (Huang et al., 2026a) 71.80 58.70 –63.40 GeoSearcher (Wang et al., 2026a) 83.20 72.40 –73.50 Qwen3.5-9B †(Qwen Team, 2026) 55.85 43.15 18.81 51.83 CoEvolve (ours) 86.20 76.16 43.45 76.23
+
+Downstream segmentation. CoEvolve predictions also serve as box prompts to frozen SAM3 (Carion et al., 2026), yielding 78.19 Macro-8 cIoU across the eight RefCOCO-family splits without mask fine-tuning. Appendix D.6 provides the full split-wise comparison. 95 CONCLUSION 
+
+CoEvolve reformulates visual grounding as a construct-to-edit process: RER externalizes measur-able region commitments, and BDR refines their coordinates through bidirectional same-position reconstruction with geometry-level and behavior-level supervision. Experiments across natural im-ages, controlled perturbations, and remote-sensing scenes support this decomposition. The state-source comparison further shows that refinement depends not only on initial localization quality, but also on how the editable state is constructed and how its editor is trained. 
+
+REFERENCES 
+
+Shuai Bai, Yuxuan Cai, Ruizhe Chen, et al. Qwen3-VL technical report. arXiv preprint arXiv:2511.21631 , 2025a. doi: 10.48550/arXiv.2511.21631. URL https://arxiv.org/ abs/2511.21631 .Shuai Bai, Keqin Chen, Xuejing Liu, et al. Qwen2.5-VL technical report. arXiv preprint arXiv:2502.13923 , 2025b. doi: 10.48550/arXiv.2502.13923. URL https://arxiv.org/ abs/2502.13923 .Nicolas Carion, Laura Gustafson, Yuan-Ting Hu, et al. SAM 3: Segment anything with concepts. In 
+
+Int. Conf. Learn. Represent. (ICLR) , 2026. URL https://openreview.net/forum?id= r35clVtGzw .Yong Xien Chng, Henry Zheng, Yizeng Han, et al. Mask grounding for referring image segmenta-tion. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , pp. 26573–26583, 2024. URL https://openaccess.thecvf.com/content/CVPR2024/html/Chng_ Mask_Grounding_for_Referring_Image_Segmentation_CVPR_2024_paper. html .DeepSeek-AI. DeepSeek-R1: Incentivizing reasoning capability in LLMs via reinforcement learn-ing. Nature , 645:633–638, 2025. doi: 10.1038/s41586-025-09422-z. URL https://doi. org/10.1038/s41586-025-09422-z .Jiajun Deng, Zhengyuan Yang, Tianlang Chen, et al. TransVG: End-to-end visual grounding with transformers. In Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , pp. 1769–1779, 2021. URL https://openaccess.thecvf.com/content/ICCV2021/html/Deng_ TransVG_End-to-End_Visual_Grounding_With_Transformers_ICCV_2021_ paper.html .Yue Fan, Xuehai He, Diji Yang, et al. GRIT: Teaching MLLMs to think with im-ages. In Adv. Neural Inf. Process. Syst. (NeurIPS) , volume 38, 2025. doi: 10.52202/ 085713-3884. URL https://proceedings.nips.cc/paper_files/paper/2025/ hash/a92ee7e49a25412add0883454da6bed9-Abstract-Conference.html .Shiqi Huang, Shuting He, and Bihan Wen. RSGround-R1: Rethinking remote sensing visual ground-ing through spatial reasoning. arXiv preprint arXiv:2601.21634 , 2026a. doi: 10.48550/arXiv. 2601.21634. URL https://arxiv.org/abs/2601.21634 .Wenxuan Huang, Bohan Jia, Shaosheng Cao, et al. Vision-R1: Incentivizing reasoning capability in multimodal large language models. In Int. Conf. Learn. Represent. (ICLR) , 2026b. URL 
+
+https://openreview.net/forum?id=UZIjskfbfU .Aishwarya Kamath, Mannat Singh, Yann LeCun, et al. MDETR: Modulated detection for end-to-end multi-modal understanding. In Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , pp. 1780–1790, 2021. URL https://openaccess.thecvf.com/content/ICCV2021/html/ Kamath_MDETR_-_Modulated_Detection_for_End-to-End_Multi-Modal_ Understanding_ICCV_2021_paper.html .Sahar Kazemzadeh, Vicente Ordonez, Mark Matten, et al. ReferItGame: Referring to objects in photographs of natural scenes. In Proc. Conf. Empir. Methods Nat. Lang. Process. (EMNLP) ,pp. 787–798, 2014. doi: 10.3115/v1/D14-1086. URL https://doi.org/10.3115/v1/ D14-1086 .10 Xin Lai, Zhuotao Tian, Yukang Chen, et al. LISA: Reasoning segmentation via large language model. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , pp. 9579–9589, 2024. URL https://openaccess.thecvf.com/content/CVPR2024/html/Lai_ LISA_Reasoning_Segmentation_via_Large_Language_Model_CVPR_2024_ paper.html .Meng Lan, Fu Rong, Hongzan Jiao, et al. Language query based transformer with multi-scale cross-modal alignment for visual grounding on remote sensing images. IEEE Trans. Geosci. Remote Sens. , 62:1–14, 2024. doi: 10.1109/TGRS.2024.3407598. URL https://doi.org/10. 1109/TGRS.2024.3407598 .Ke Li, Di Wang, Haojie Xu, et al. Language-guided progressive attention for visual grounding in remote sensing images. IEEE Trans. Geosci. Remote Sens. , 62:1–13, 2024. doi: 10.1109/TGRS. 2024.3423663. URL https://doi.org/10.1109/TGRS.2024.3423663 .Liunian Harold Li, Pengchuan Zhang, Haotian Zhang, et al. Grounded language-image pre-training. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , pp. 10965–10975, 2022. URL https://openaccess.thecvf.com/content/CVPR2022/html/Li_ Grounded_Language-Image_Pre-Training_CVPR_2022_paper.html .Shufan Li, Jiuxiang Gu, Kangning Liu, et al. Lavida-O: Elastic large masked diffusion models for unified multimodal understanding and generation. In Int. Conf. Learn. Represent. (ICLR) ,2026. URL https://proceedings.iclr.cc/paper_files/paper/2026/hash/ 52d7e1f59be8a140bd5c3b0b5b8bdee2-Abstract-Conference.html .Yuan-Hong Liao, Rafid Mahmood, Sanja Fidler, et al. Can large vision-language models correct se-mantic grounding errors by themselves? In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , pp. 14667–14678, 2025. URL https://openaccess.thecvf.com/content/ CVPR2025/html/Liao_Can_Large_Vision-Language_Models_Correct_ Semantic_Grounding_Errors_By_Themselves_CVPR_2025_paper.html .Chang Liu, Henghui Ding, and Xudong Jiang. GRES: Generalized referring expression segmen-tation. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , pp. 23592–23601, 2023a. URL https://openaccess.thecvf.com/content/CVPR2023/html/ Liu_GRES_Generalized_Referring_Expression_Segmentation_CVPR_ 2023_paper.html .Daqing Liu, Hanwang Zhang, Feng Wu, et al. Learning to assemble neural module tree networks for visual grounding. In Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , pp. 4673–4682, 2019a. doi: 10.1109/ICCV.2019.00477. URL https://doi.org/10.1109/ICCV.2019.00477 .Jiang Liu, Hui Ding, Zhaowei Cai, et al. PolyFormer: Referring image segmentation as sequen-tial polygon generation. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) ,pp. 18653–18663, 2023b. URL https://openaccess.thecvf.com/content/ CVPR2023/html/Liu_PolyFormer_Referring_Image_Segmentation_As_ Sequential_Polygon_Generation_CVPR_2023_paper.html .Shilong Liu, Zhaoyang Zeng, Tianhe Ren, et al. Grounding DINO: Marrying DINO with grounded pre-training for open-set object detection. In Proc. Eur. Conf. Comput. Vis. (ECCV) , pp. 38–55, 2024. doi: 10.1007/978-3-031-72970-6 3. URL https://doi.org/10.1007/ 978-3-031-72970-6_3 .Xihui Liu, Zihao Wang, Jing Shao, et al. Improving referring expression grounding with cross-modal attention-guided erasing. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , pp. 1950–1959, 2019b. doi: 10.1109/CVPR.2019.00205. URL https://doi.org/10.1109/ CVPR.2019.00205 .Yuqi Liu, Bohao Peng, Zhisheng Zhong, et al. Seg-Zero: Reasoning-chain guided segmentation via cognitive reinforcement. arXiv preprint arXiv:2503.06520 , 2025. doi: 10.48550/arXiv.2503. 06520. URL https://arxiv.org/abs/2503.06520 .11 Junhua Mao, Jonathan Huang, Alexander Toshev, et al. Generation and comprehension of unam-biguous object descriptions. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) ,pp. 11–20, 2016. doi: 10.1109/CVPR.2016.9. URL https://doi.org/10.1109/CVPR. 2016.9 .Jingyang Ou, Shen Nie, Kaiwen Xue, et al. Your absorbing discrete diffusion secretly models the conditional distributions of clean data. In Int. Conf. Learn. Represent. (ICLR) , 2025. URL 
+
+https://openreview.net/forum?id=sMyXP8Tanm .Qwen Team. Qwen3.5. Qwen Blog, 2026. URL https://qwen.ai/blog?id=qwen3.5 .Accessed: 2026-09-17. Subham Sekhar Sahoo, Marianne Arriola, Yair Schiff, et al. Simple and effective masked diffusion language models. In Adv. Neural Inf. Process. Syst. (NeurIPS) , volume 37, 2024. URL https://proceedings.neurips.cc/paper_files/paper/2024/ hash/eb0b13cc515724ab8015bc978fdde0ad-Abstract-Conference.html .Zhihong Shao, Peiyi Wang, Qihao Zhu, et al. DeepSeekMath: Pushing the limits of mathematical reasoning in open language models. arXiv preprint arXiv:2402.03300 , 2024. doi: 10.48550/ arXiv.2402.03300. URL https://arxiv.org/abs/2402.03300 .Dongwei Sun, Bowen Yao, Yujie Zhang, et al. EchoChange: A diffusion language model with dual pass remasking for factual remote sensing disaster change captioning. arXiv preprint arXiv:2608.01856 , 2026. doi: 10.48550/arXiv.2608.01856. URL https://arxiv.org/ abs/2608.01856 .Mingjie Sun, Jimin Xiao, and Eng Gee Lim. Iterative shrinking for referring expression grounding using deep reinforcement learning. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , pp. 14060–14069, 2021. URL https://openaccess.thecvf.com/content/ CVPR2021/html/Sun_Iterative_Shrinking_for_Referring_Expression_ Grounding_Using_Deep_Reinforcement_Learning_CVPR_2021_paper.html .Jiajin Tang, Ge Zheng, Cheng Shi, et al. Contrastive grouping with transformer for referring image segmentation. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , pp. 23570– 23580, 2023. URL https://openaccess.thecvf.com/content/CVPR2023/ html/Tang_Contrastive_Grouping_With_Transformer_for_Referring_ Image_Segmentation_CVPR_2023_paper.html .Dianyu Wang, Peirong Zhang, Xuyang Li, et al. GeoSearcher: Anchor-guided progressive reasoning for remote sensing visual grounding with process supervision. arXiv preprint arXiv:2607.01050 ,2026a. doi: 10.48550/arXiv.2607.01050. URL https://arxiv.org/abs/2607.01050 .Hao Wang, Limeng Qiao, Zequn Jie, et al. X-SAM: From segment anything to any segmentation. In 
+
+Proc. AAAI Conf. Artif. Intell. (AAAI) , volume 40, pp. 26187–26196, 2026b. doi: 10.1609/aaai. v40i31.39822. URL https://doi.org/10.1609/aaai.v40i31.39822 .Peng Wang, Shijie Wang, Junyang Lin, et al. ONE-PEACE: Exploring one general representation model toward unlimited modalities. arXiv preprint arXiv:2305.11172 , 2023. doi: 10.48550/ arXiv.2305.11172. URL https://arxiv.org/abs/2305.11172 .Peng Wang, Shuai Bai, Sinan Tan, et al. Qwen2-VL: Enhancing vision-language model’s perception of the world at any resolution. arXiv preprint arXiv:2409.12191 , 2024a. doi: 10.48550/arXiv. 2409.12191. URL https://arxiv.org/abs/2409.12191 .Weihan Wang, Qingsong Lv, Wenmeng Yu, et al. CogVLM: Visual expert for pretrained lan-guage models. In Adv. Neural Inf. Process. Syst. (NeurIPS) , volume 37, 2024b. doi: 10.52202/ 079017-3860. URL https://doi.org/10.52202/079017-3860 .Weiyun Wang, Zhangwei Gao, Lixin Gu, et al. InternVL3.5: Advancing open-source multimodal models in versatility, reasoning, and efficiency. arXiv preprint arXiv:2508.18265 , 2025. doi: 10.48550/arXiv.2508.18265. URL https://arxiv.org/abs/2508.18265 .12 Zhaoqing Wang, Yu Lu, Qiang Li, et al. CRIS: CLIP-driven referring image segmentation. In 
+
+Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , pp. 11686–11695, 2022. URL 
+
+https://openaccess.thecvf.com/content/CVPR2022/html/Wang_CRIS_ CLIP-Driven_Referring_Image_Segmentation_CVPR_2022_paper.html .Cong Wei, Yujie Zhong, Haoxian Tan, et al. HyperSeg: Hybrid segmentation assistant with fine-grained visual perceiver. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , pp. 8931–8941, 2025a. URL https://openaccess.thecvf.com/content/ CVPR2025/html/Wei_HyperSeg_Hybrid_Segmentation_Assistant_with_ Fine-grained_Visual_Perceiver_CVPR_2025_paper.html .Cong Wei, Yujie Zhong, Haoxian Tan, et al. InstructSeg: Unifying instructed visual seg-mentation with multi-modal large language models. In Proc. IEEE/CVF Int. Conf. Com-put. Vis. (ICCV) , pp. 20193–20203, 2025b. URL https://openaccess.thecvf. com/content/ICCV2025/html/Wei_InstructSeg_Unifying_Instructed_ Visual_Segmentation_with_Multi-modal_Large_Language_Models_ICCV_ 2025_paper.html .Qiong Wu, Xiangcong Yang, Yiyi Zhou, et al. Grounded chain-of-thought for multimodal large language models. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , pp. 33577– 33587, 2026. URL https://openaccess.thecvf.com/content/CVPR2026/ html/Wu_Grounded_Chain-of-Thought_for_Multimodal_Large_Language_ Models_CVPR_2026_paper.html .Zhiyu Wu, Xiaokang Chen, Zizheng Pan, et al. DeepSeek-VL2: Mixture-of-experts vision-language models for advanced multimodal understanding. arXiv preprint arXiv:2412.10302 , 2024. doi: 10.48550/arXiv.2412.10302. URL https://arxiv.org/abs/2412.10302 .Linhui Xiao, Xiaoshan Yang, Fang Peng, et al. OneRef: Unified one-tower expression grounding and segmentation with mask referring modeling. In Adv. Neural Inf. Process. Syst. (NeurIPS) ,volume 37, 2024. doi: 10.52202/079017-4438. URL https://doi.org/10.52202/ 079017-4438 .Bin Yan, Yi Jiang, Jiannan Wu, et al. Universal instance perception as object discovery and retrieval. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , pp. 15325–15336, 2023. doi: 10.1109/CVPR52729.2023.01471. URL https://doi.org/10.1109/CVPR52729. 2023.01471 .Sibei Yang, Guanbin Li, and Yizhou Yu. Dynamic graph attention for referring expression comprehension. In Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , pp. 4644–4653, 2019. URL https://openaccess.thecvf.com/content_ICCV_2019/html/Yang_ Dynamic_Graph_Attention_for_Referring_Expression_Comprehension_ ICCV_2019_paper.html .Zhao Yang, Jiaqi Wang, Yansong Tang, et al. LAVT: Language-aware vision transformer for referring image segmentation. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , pp. 18155–18165, 2022. URL https://openaccess.thecvf.com/content/ CVPR2022/html/Yang_LAVT_Language-Aware_Vision_Transformer_for_ Referring_Image_Segmentation_CVPR_2022_paper.html .Haoxuan You, Haotian Zhang, Zhe Gan, et al. Ferret: Refer and ground anything anywhere at any granularity. In Int. Conf. Learn. Represent. (ICLR) , 2024. URL https://openreview. net/forum?id=2msbbX3ydD .Licheng Yu, Patrick Poirson, Shan Yang, et al. Modeling context in referring expressions. In Proc. Eur. Conf. Comput. Vis. (ECCV) , pp. 69–85, 2016. doi: 10.1007/978-3-319-46475-6 5. URL 
+
+https://doi.org/10.1007/978-3-319-46475-6_5 .Licheng Yu, Zhe Lin, Xiaohui Shen, et al. MAttNet: Modular attention network for referring ex-pression comprehension. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , pp. 1307–1315, 2018. doi: 10.1109/CVPR.2018.00142. URL https://doi.org/10.1109/ CVPR.2018.00142 .13 Guanqi Zhan, Changye Li, Zhijian Liu, et al. Scaling test-time inference for visual grounding. arXiv preprint arXiv:2601.13633 , 2026. doi: 10.48550/arXiv.2601.13633. URL https://arxiv. org/abs/2601.13633 .Yang Zhan, Zhitong Xiong, and Yuan Yuan. RSVG: Exploring data and models for visual grounding on remote sensing data. IEEE Trans. Geosci. Remote Sens. , 61:1–13, 2023. doi: 10.1109/TGRS. 2023.3250471. URL https://doi.org/10.1109/TGRS.2023.3250471 .Hanwang Zhang, Yulei Niu, and Shih-Fu Chang. Grounding referring expressions in images by variational context. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , pp. 4158– 4166, 2018. doi: 10.1109/CVPR.2018.00437. URL https://doi.org/10.1109/CVPR. 2018.00437 .Haotian Zhang, Haoxuan You, Philipp Dufter, et al. Ferret-v2: An improved baseline for referring and grounding with large language models. In Conf. Lang. Model. (COLM) , 2024. URL https: //openreview.net/forum?id=EEPBOB2Xww .Yuxuan Zhang, Tianheng Cheng, Rui Hu, et al. EVF-SAM: Early vision-language fusion for text-prompted segment anything model. Image Vis. Comput. , 173:106028, 2026a. doi: 10.1016/j. imavis.2026.106028. URL https://doi.org/10.1016/j.imavis.2026.106028 .Zekang Zhang, Guangyu Gao, Youyun Tang, et al. FlowSeg: Dynamic semantic guidance for LLM-conditioned segmentation. In Int. Conf. Mach. Learn. (ICML) , 2026b. URL https: //icml.cc/virtual/2026/poster/63754 .Jinguo Zhu, Weiyun Wang, Zhe Chen, et al. InternVL3: Exploring advanced training and test-time recipes for open-source multimodal models. arXiv preprint arXiv:2504.10479 , 2025. doi: 10.48550/arXiv.2504.10479. URL https://arxiv.org/abs/2504.10479 .Lianghui Zhu, Bin Ouyang, Yuxuan Zhang, et al. LENS: Learning to segment anything with uni-fied reinforced reasoning. In Proc. AAAI Conf. Artif. Intell. (AAAI) , volume 40, pp. 13952– 13960, 2026a. doi: 10.1609/aaai.v40i16.38405. URL https://doi.org/10.1609/aaai. v40i16.38405 .Xiuyuan Zhu, Ke Lu, Kun Dong, et al. Hi-Token: Hierarchical coordinate tokenization for genera-tive visual grounding. arXiv preprint arXiv:2608.03471 , 2026b. doi: 10.48550/arXiv.2608.03471. URL https://arxiv.org/abs/2608.03471 .Xiuyuan Zhu, Ke Lu, Hao Wu, et al. IoU-PD: IoU-aware privileged distillation for visual grounding with multimodal large language models. arXiv preprint arXiv:2607.15732 , 2026c. doi: 10.48550/ arXiv.2607.15732. URL https://arxiv.org/abs/2607.15732 .14 A APPENDIX CONTENTS 
+
+B Supplementary Method Details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16 B.1 RER–BDR Interface . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16 B.2 Sequential Training and BDR Data . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16 B.3 Region-Evolution Reinforcement . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16 B.4 BDR Refinement and Targets . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18 B.5 Inference Procedure . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21 B.6 Prompts and Evaluation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21 B.7 Implementation Notes . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23 
+
+C Formal Properties . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23 
+
+D Additional Experimental Results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24 D.1 Dataset Accounting . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24 D.2 RER Localization State Quality . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24 D.3 Qualitative Grounding Results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25 D.4 Controlled Correction Details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28 D.5 Remote-Sensing Grounding. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 29 D.6 Downstream Segmentation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30 
+
+E Limitations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30 15 B SUPPLEMENTARY METHOD DETAILS 
+
+This appendix gives the complete mathematical specification of RER and BDR. We use the same notation as in the main paper and make explicit which quantities are used only to construct training targets and which quantities are visible to the model. B.1 NOTATION AND THE RER–BDR I NTERFACE 
+
+For an image–expression pair (I, q ), a box is represented in the normalized integer coordinate system by b = [ x1, y 1, x 2, y 2] ∈ [0 , 1000] 4, with x1 < x 2 and y1 < y 2. The annotated box is b∗. RER produces a response 
+
+y = <refine > (r1, b1), . . . , (rK , bK ) </refine > < answer > bans </answer > ,
+
+(13) where K ∈ { 3, . . . , 5} is the number of refinement steps. BDR receives this complete response, including its text and all coordinate tokens, as an editable localization state. RER and BDR are optimized sequentially and communicate only through this generated state. B.2 SEQUENTIAL TRAINING AND BDR D ATASET CONSTRUCTION 
+
+CoEvolve is trained sequentially rather than end to end. We first optimize RER on the RefCOCOg training set using the rewards defined below. After RER training is complete, its adapter is frozen and used to generate one complete localization response for each RefCOCOg training expression. Each saved record pairs the original image and referring expression with the complete RER assistant response and its annotated box. The generated RER responses are then used to construct the BDR training set. BDR initializes a separate adapter on the frozen Qwen3.5-9B backbone; it is not initialized from the RER adapter. At loading time, auxiliary <think > content is removed, every coordinate is zero-padded to four digits, and the remaining <refine > and <answer > sequence is used as the editable input state. The unmodified records retain the natural errors produced by RER. Eligi-ble high-overlap states are additionally augmented with synchronized geometric perturbations, as detailed in Section B.4, so BDR observes both the natural RER error distribution and deliberately corrupted anchors. The annotation is retained only for target construction and loss computation and is never inserted into the model input. B.3 REGION -E VOLUTION REINFORCEMENT 
+
+Interface adaptation and state construction. RER adapts the backbone from terminal box gen-eration to a structured interface in which each reasoning Step exposes an explicit region. The ter-minal annotation evaluates both the final answer and properties of the generated trajectory, deriving trajectory-level spatial rewards from terminal annotations without introducing manually labeled ra-tionales or intermediate boxes. The resulting response is therefore optimized as a localization state for subsequent evaluation and editing, rather than as explanation text alone. 
+
+Structural rewards. For a non-empty target, let n be the number of Step headers. The format reward is 
+
+Rfmt =
+
+
+
+0, invalid outer tagged structure ,
+
+0.5, valid outer structure and (n < 3 or n > 5) ,
+
+1, valid outer structure and 3 ≤ n ≤ 5.
+
+(14) All evaluated benchmarks use non-empty targets; the empty-target branch is retained as a generic interface fallback. For an empty target, a valid tagged response with an empty answer receives one, without a minimum Step count. The step-format reward checks every Step independently and is 
+
+Rstep =
+
+Rfmt , empty target ,Rfmt 1[each Step has a parseable final bracketed box ] , otherwise . (15) When a Step contains several bracketed expressions, the last one is used as the Step box. Thus, the reward evaluates the final state written by a Step rather than an earlier box mentioned in its explanation. 16 Terminal box reward. For a valid single predicted box, let u = IoU( bans , b∗) and g =GIoU( bans , b∗). The generalized overlap is computed from the minimum enclosing rectangle C
+
+and its area AC :
+
+GIoU = u − AC − A∪
+
+AC
+
+, (16) where A∪ is the union area. The scale and aspect agreement term is 
+
+SA = 12
+
+ min( Aans , A ∗)max( Aans , A ∗) + min( ρans , ρ ∗)max( ρans , ρ ∗)
+
+
+
+, ρ = width height . (17) The raw terminal score and its format-modulated form are 
+
+Rraw box = u + 0 .5u2 + 0 .2g + 0 .2 σ(10( u − 0.5)) SA, (18) 
+
+Rbox = Rfmt max(0 , R raw box ) + min(0 , R raw box ). (19) Here σ(·) denotes the logistic sigmoid. The implementation assigns −0.5 to a malformed or missing answer, an answer with the wrong number of boxes, or an answer containing multiple boxes. A correct empty-target answer receives one. Negative geometry feedback is never attenuated by an invalid format score. 
+
+Progressive reward. Let ui = IoU( bi, b∗). To provide a distance signal before overlap is nonzero, the center quality of Step i is 
+
+qi = 1 − dnorm 
+
+> i
+
+√2 , (20) where dnorm  
+
+> i
+
+is the Euclidean center distance after mapping coordinates to [0 , 1] 2. Let dcenter  
+
+> i
+
+be the Euclidean distance between the centers of bi and b∗ in the original [0 , 1000] 2 coordinate system. The first Step receives a coverage score 
+
+Ccov = 12
+
+ Carea + exp −dcenter 1 /350  . (21) Let A1 and A∗ denote the first-Step and target areas, and set Areq = max(2 A∗, 10 4). The imple-mented area term is 
+
+Carea =
+
+1, A1 ≥ 5 × 10 5,σ(6( A1/A req − 1)) , otherwise . (22) For later Steps, RER compares each box with the best preceding state. We use ϵ = 10 −8 to stabilize the remaining-improvement denominators: 
+
+∆ui = ui − max j<i uj
+
+1 − u1 + ϵ , ∆qi = qi − max j<i qj
+
+1 − q1 + ϵ ,gi = 0 .6∆ ui + 0 .4∆ qi , Cprog = max 0,
+
+> K
+
+X
+
+> i=2
+
+gi
+
+!
+
+. (23) The overall first-to-last gain and the last-Step/answer consistency are 
+
+Coverall = max 
+
+
+
+0, uK − u1
+
+1 − u1 + ϵ
+
+
+
+, Ccons = IoU( bK , bans ). (24) The progressive reward and the complete RER reward are 
+
+Rprog = Rfmt (0 .20 Ccov + 0 .50 Cprog + 0 .20 Coverall + 0 .10 Ccons ) , (25) 
+
+RRER = 0 .5Rfmt + 0 .5Rstep + Rprog + Rbox . (26) If the trajectory has fewer than three or more than five Steps, or any Step does not contain a valid positive-area box, Rprog is zero. In implementation, Eq. (26) is realized by supplying 
+
+(Rfmt , R step , R prog , R box ) to GRPO with weights 0.5, 0.5, 1.0, 1.0, respectively; these weights are not applied again to an already combined reward. For each prompt, eight sampled responses form one GRPO group. The annotation is used to evaluate geometry, but no human-written reasoning chain is used as a token target. Figure 5 places the corresponding training diagnostics beside the reward specification. The curves show the total reward together with the structural, progressive, and terminal geometry components. 17 0 1K 2K 3K 4K 5K 6K                   
+
+> Training Step
+> 2.4 2.7 3.0 3.3 3.6
+> Reward
+> Total Training Reward
+> Raw reward Moving average (~300 steps) 01K 2K 3K 4K 5K 6K
+> Training Step
+> 0.945 0.960 0.975 0.990 1.005
+> Reward
+> Format Reward and Step-Format Reward
+> Format Reward Step-Format Reward 01K 2K 3K 4K 5K 6K
+> Training Step
+> 0.4 0.5 0.6 0.7 0.8 0.9
+> Reward
+> Progressive Region-Evolution Reward
+> Raw reward Moving average (~300 steps) 01K 2K 3K 4K 5K 6K
+> Training Step
+> 0.8 1.0 1.2 1.4 1.6
+> Reward
+> Terminal Box Reward
+> Raw reward Moving average (~300 steps)
+
+Figure 5: Supplementary training dynamics for RER. For visualization, we show the first 6K opti-mization steps; this window does not indicate the total training duration. From left to right: total reward; format and Step-format rewards; progressive region-evolution reward; and terminal box re-ward. B.4 BIDIRECTIONAL SAME -P OSITION REFINEMENT AND TARGET CONSTRUCTION 
+
+Editable state and masks. Every coordinate is written as four zero-padded digit tokens, so one box contains sixteen digit positions. Let Mall be all box digit positions in the assistant response, Mb
+
+the positions of the last refinement box and the answer, and Mf the structural tags and punctuation. The normal strongly supervised region therefore has |M b| = 32 .BDR removes causal masking from the base model’s Full Attention layers, providing each same-position prediction with bidirectional access to the global response context. If z = Fϕ(I, q, xin ) are logits aligned with the observed response, a digit candidate is 
+
+bxt = arg max 
+
+v∈V digit 
+
+zt,v , t ∈ M all , (27) where Vdigit contains the ten single-character digits. The 16 candidate digits associated with each box role are decoded separately into one candidate box. Same-position reconstruction predicts every editable coordinate from the same observed response and retains alignment with its original response position. Keeping the observed coordinate tokens visible provides an explicit input reference against which candidate edits can be evaluated and accu-rate coordinates can be preserved. The decoded box therefore provides the synchronized candidate used by coordinate regression, quality-gated target selection, entropy regularization, and relative preference between the input and output. 
+
+Behavior-Level Supervision: Perturbation and Quality-Gated Targets. When the RER an-swer has IoU above 0.5, it is selected for perturbation with probability 0.3. The selected answer is replaced by a nonzero box obtained through rejection sampling toward the configured IoU interval 
+
+[0 .2, 0.5] relative to the annotated box. The sampler uses translation, shrink, expansion, or random geometry and rejects zero-area boxes; after 200 unsuccessful attempts it uses bounded coordinate offsets. The answer, the last refinement box, and earlier Steps whose IoU with the original answer exceeds 0.95 are replaced together to preserve spatial consistency among the perturbed coordinate fields. At each rejection-sampling attempt, the four proposal families are selected with equal probability. Their exact ranges are summarized in Table 5. Every proposal is clipped to the normalized coor-dinate range and accepted only when it has positive area and IoU( bproposal , b∗) ∈ [0 .2, 0.5] . The fallback independently offsets the two horizontal coordinates within ±0.8 target widths and the two vertical coordinates within ±0.8 target heights before clipping. In the coordinate-shift proposal, w and h denote the width and height of the ground-truth box, and s
+
+is the sampled offset-scale factor. Let bin ans denote the actual Answer box seen by BDR after this operation, and let ebans be the hard candidate decoded from its output. With η = 0 .9 and γ = 0 .005 , the dynamic-copy condition is 
+
+Cout ≡
+
+
+
+IoU( ebans , b∗) > η 
+
+
+
+∧
+
+
+
+IoU( ebans , b∗) ≥ IoU( bin ans , b∗) + γ
+
+
+
+. (28) 18 Table 5: Geometric proposals used to construct BDR training perturbations. Probabilities refer to proposal selection at each rejection-sampling attempt; the accepted proportions may differ because proposals are filtered by the target IoU interval [0 .2, 0.5] .
+
+Proposal Probability Parameter range Coordinate shift 0.25 s ∼ U (0 .2, 1.5) ; offsets in [−sw, sw ] and [−sh, sh ]
+
+Centered shrink 0.25 width and height ratio r ∼ U (0 .3, 0.9) 
+
+Centered expansion 0.25 width and height ratio r ∼ U (1 .3, 3.0) 
+
+Random box 0.25 valid integer endpoints in [0 , 1000] 
+
+If it is not activated and the unperturbed input has IoU at least η, the static preservation branch is used. The selected absolute target is 
+
+btar =
+
+ebans , if Cout ,
+
+bin ans , unperturbed and IoU( bin ans , b∗) ≥ η, 
+
+b∗, otherwise .
+
+(29) The ground-truth box is used to construct this training target and the geometry labels only; it is never provided as an input during inference. 
+
+Geometry-Level Supervision. For a target digit yt, cross-entropy over positions M is 
+
+LCE (M) = − 1
+
+|M| 
+
+X
+
+> t∈M
+
+log exp zt,y t
+
+P 
+
+> v
+
+exp zt,v 
+
+. (30) Let bbhard  
+
+> sk
+
+denote coordinate k of the hard argmax-decoded candidate box for role s. For the final Step and answer, the four digits belonging to coordinate k share one detached weight obtained by averaging the two hard-coordinate errors: 
+
+wk = 1 + wL1CE 
+
+2
+
+X
+
+> s∈{ last ,ans }
+
+bbhard  
+
+> sk
+
+− btar 
+
+> k
+
+1000 , wL1CE = 10 . (31) Each digit position t of coordinate k inherits wt = wk, and CE t denotes its token cross-entropy. The weighted BBox CE divides by the sum of token weights: 
+
+Lbox =
+
+P 
+
+> t∈M b
+
+wt CE t
+
+P 
+
+> t∈M b
+
+wt
+
+. (32) Consequently, L1-derived weights redistribute the gradient toward inaccurate coordinates without changing the nominal CE scale. The differentiable coordinate used by the regression term is obtained from the ten-digit softmax at each digit position: 
+
+pskj (d) = exp ztskj ,d 
+
+P9 
+
+> a=0
+
+exp ztskj ,a 
+
+,
+
+¯bsk =
+
+> 3
+
+X
+
+> j=0
+
+10 3−j
+
+> 9
+
+X
+
+> d=0
+
+d p skj (d),
+
+Lreg = 18
+
+X
+
+> s∈{ last ,ans }
+> 4
+
+X
+
+> k=1
+
+|¯bsk − btar  
+
+> k
+
+|
+
+1000 . (33) The code computes the same quantity as the mean over the eight supervised coordinates. CE pre-serves the discrete coordinate representation, whereas the regression term supplies a continuous numerical direction. 19 State Preservation and Confidence Regularization. General reconstruction is applied to assis-tant tokens outside the coordinate mask. In the warm-up phase it excludes only Mb, so a perturbed historical Step can still receive the selected target through general CE. After warm-up it excludes 
+
+Mall and therefore preserves only non-coordinate assistant content. Format CE is computed on 
+
+Mf , including structural tags and coordinate punctuation. For the ten-digit distribution pt, natural entropy is 
+
+H(pt) = −
+
+> 9
+
+X
+
+> d=0
+
+pt(d) log pt(d). (34) The historical entropy term averages H(pt) over Mall \ M b. The final entropy term uses Mb but keeps only positions whose digit-vocabulary argmax already equals the selected target digit. Thus the former sharpens unsupervised historical digits, while the latter does not make an incorrect final digit more confident. 
+
+Coordinate-wise Edit Preference. For a fixed sample i and every box role s (all historical Steps, the last Step, and the answer), let Csk be the changed digit positions in coordinate k. The input and output coordinate errors are compared to the original annotation: 
+
+∆sk = |˘bin  
+
+> sk
+
+− b∗
+
+> k
+
+| − | ebout  
+
+> sk
+
+− b∗
+
+> k
+
+|
+
+1000 . (35) Only coordinates with Csk ̸ = ∅ and |∆sk | > m with m = 0 .005 are active; their index set is 
+
+As = {k : Csk ̸ = ∅, |∆sk | > m }. Let xin  
+
+> t
+
+denote the observed input digit token and exout  
+
+> t
+
+the digit-vocabulary argmax at position t. On changed digit positions, 
+
+Dsk = 1
+
+|C sk |
+
+X
+
+> t∈C sk
+
+
+
+zt, exout  
+
+> t
+
+− zt,x in 
+
+> t
+
+
+
+, ysk = 1[∆ sk > m ]. (36) The coordinate loss is the expanded binary cross-entropy with logits: 
+
+ℓsk = −ysk log σ(Dsk ) − (1 − ysk ) log (1 − σ(Dsk )) , σ(D) = 11 + exp( −D) . (37) For As̸ = ∅, active coordinates within one role are weighted by ask = min(1 , |∆sk |/0.05) :
+
+L(i)pref ,s =
+
+P 
+
+> k∈A s
+
+ask ℓsk 
+
+P 
+
+> k∈A s
+
+ask 
+
+. (38) We set L(i)pref ,s = 0 when As = ∅. The answer and the last Step have role weight 0.5, and every earlier Step has role weight 0.2. The per-sample and minibatch losses are 
+
+L(i)pref = X
+
+> s∈S
+
+wsL(i)pref ,s , Lpref = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+L(i)pref . (39) The preference branches are added directly to the base loss. Hence a sample can contribute one active preference term per role, while coordinates inside each role are normalized by their own active magnitude weights. Samples without an active preference coordinate contribute zero but remain in the minibatch denominator N .
+
+Phase-specific objectives. During the first 3% of optimizer updates, the training loss is 
+
+Learly = 1 .0 Lbox + 0 .2 Lgen . (40) Perturbed historical Step labels are covered by the general CE mask in this phase, and 10% of eligible assistant input tokens are replaced by the configured mask token. No token masking is applied after warm-up. BDR then uses 
+
+Lmid = 1 .0 Lbox + 30 Lreg + 0 .5 Lfmt + 0 .2 Lgen 
+
++ 0 .2 Hhist + 0 .2 Hfin + Lpref . (41) Only the last Step and answer enter Lbox , Lreg , and Hfin ; historical boxes enter Hhist . The total sample losses are divided by the effective minibatch size before back-propagation. Figure 6 follows the complete BDR objective and reports the optimization dynamics of its coordi-nate, reconstruction, confidence, and preference terms. 20 0 1K 2K 3K 4K 5K 6K                   
+
+> Training Step
+> 0.6 0.8 1.0 1.2 1.4 1.6
+> Loss
+> Bidirectional Refinement and Box Losses
+> LBDR
+> LBox 01K 2K 3K 4K 5K 6K
+> Training Step
+> 0.0075 0.0100 0.0125 0.0150 0.0175 0.0200
+> LReg  Loss
+> Regression and Format Losses
+> LReg
+> LFmt
+> 0.0 1.5 3.0 4.5 6.0 7.5
+> LFmt  Loss
+> 1e−4 01K 2K 3K 4K 5K 6K
+> Training Step
+> 0.024 0.032 0.040 0.048 0.056
+> HHist  Loss
+> Historical and Final-Box Entropies
+> HHist
+> HFin
+> 0.225 0.250 0.275 0.300 0.325
+> HFin  Loss 01K 2K 3K 4K 5K 6K
+> Training Step
+> 0.005 0.010 0.015 0.020 0.025 0.030
+> LGen  Loss
+> General-Token and Preference Losses
+> LGen
+> LPref
+> 0.150 0.175 0.200 0.225 0.250
+> LPref  Loss
+
+Figure 6: Supplementary training dynamics for BDR. For visualization, we show the first 6K op-timization steps; this window does not indicate the total training duration. From left to right: total and coordinate cross-entropy losses; coordinate regression and format losses; historical and final coordinate entropies; and general reconstruction and coordinate-wise preference loss. B.5 INFERENCE PROCEDURE 
+
+At inference, RER first generates the complete localization state. BDR then performs a deterministic same-position pass on the current state. After each pass, only the editable coordinate positions are updated; the surrounding reasoning text and response structure are retained. The response is then detokenized and tokenized again, coordinate masks are rebuilt, and the updated state becomes the next-pass input. We use two BDR passes for all standard natural-image and remote-sensing eval-uations, providing a consistent refinement budget across settings. Unparseable final <answer >
+
+boxes remain in the evaluation denominator and receive zero IoU. B.6 PROMPT AND EVALUATION PROTOCOLS 
+
+Figure 7 consolidates the standard-grounding and controlled-correction interfaces in one prompt plate. The structured base condition and RER use the same structured prompt and parsing rule; the former uses the frozen backbone directly, whereas the latter activates the RER adapter. In controlled correction, every method receives the same image, referring expression q, and deterministic input anchor bin . The displayed line breaks are typographic, and the placeholders are replaced by the corresponding sample values at inference. 
+
+Reproduced standard-grounding baselines. The reproduced entries in Table 2 use each model’s native grounding interface rather than the structured RER prompt. Their shared evaluation conven-tions are summarized in Table 6. Each model produces one autoregressive response per example. Predictions are evaluated as normalized xyxy coordinates in [0 , 1000] ; a single complete final box is extracted, while invalid or unparseable outputs remain in the denominator with zero IoU. Table 6: Protocols for the locally reproduced standard-grounding baselines in Table 2. “Native” denotes the prompt interface distributed or recommended for the corresponding model family. 
+
+Model Native prompt interface InternVL3.5-8B Referring box with <ref> expression Qwen3-VL-8B JSON grounding with normalized box Qwen3.5-9B JSON grounding with normalized box CogVLM-Grounding-17B Caption-to-box grounding 
+
+Native-output-derived state construction. For the Native-Output BDR condition, unadapted Qwen3.5-9B first produces visible natural-language analysis and a terminal box through the native grounding interface in Figure 7. Auxiliary <think > content is removed. The remaining visible analysis, including its terminal box, is retained verbatim inside a <refine > block; the same zero-padded box is placed in <answer >. For example, the processed state for the query “the man in yellow coat” is 
+
+Example native-output-derived state. <refine > Got it, let’s look at the image. The man in the yellow coat is the one on the right. So we need to find his bounding box. Let’s check the coordinates. The yellow coat, red pants, and the bib. So the re-
+
+21 Prompt interfaces used in CoEvolve evaluations 
+
+(a) Standard grounding Native Qwen3.5 interface <image >
+
+Locate every object that matches the description “ q” in the image. Report bbox coordinates in JSON format using [x1, y1, x2, y2] normalized to 0–1000. 
+
+Structured Qwen3.5 and RER interface User prompt You are a precise visual grounding assistant. Locate the target object described in the text. You must reason step by step, progressively narrowing from a broad scene region to a tight box. This coarse-to-fine process forces you to deeply understand the whole image and the object’s context, preventing misidentifica-tion and leading to a more accurate final localization. Follow the structure and style of the example below. 
+
+<refine >
+
+Step 1: The scene shows a wooden desk with a laptop, a cup, a blue notebook, and a blue magazine. → [100, 50, 900, 850] Step 2: Focus on the right side of the desk, ignoring the laptop and the cup on the left; both the blue notebook and the blue magazine are visible in this area. → [400, 200, 850, 750] Step 3: Among the two blue items, the notebook is lying flat near the desk edge, while the magazine is further back and partially un-derneath it; identify the notebook as the closer one. → [455, 325, 820, 700] Step 4: Zoom in on the blue notebook itself, excluding the magazine completely; its cover is facing up with a pen resting beside it. →
+
+[510, 345, 750, 650] Step 5: Tightly enclose only the blue notebook—its full cover and spine—trimming away the pen and all surrounding background. →
+
+[523, 382, 719, 620] 
+
+</refine ><answer >[523, 382, 719, 620] </answer >
+
+Requirements Use 3–5 steps , each with exactly one bounding box 
+
+[x1, y1, x2, y2] (integers 0–1000). Each box must be tighter than the previous, covering less background and fitting the target more precisely. For each step, first provide a brief scene observation locating the target; then use → as a delimiter followed by the box. The final <answer > box must be identical to the last step’s box .Output only the two XML tags; no text outside them. If no matching object exists, the last step’s box and <answer > must both be [] .
+
+<image >
+
+Text description: q
+
+(b) BDR refinement User prompt You are a precise visual grounding refinement as-sistant. Your job is to verify and refine bounding box coordinates through multi-step reasoning by carefully examining the image. 
+
+Key rules • If the bounding box in <answer > already tightly and accurately encloses the target object → KEEP IT EXACTLY AS-IS . Do not change coordinates that are already correct. • The final <answer > is the authoritative result. The last step’s bbox in <refine > MUST be consistent with the <answer >
+
+bbox. • If you believe the reasoning chain contains errors, you may modify the relevant steps—update their bounding boxes as needed. You do NOT need to make every single step’s bbox perfectly precise; inter-mediate steps serve as progressive reasoning toward the final answer. 
+
+Guidelines • Carefully examine the image to locate the target object described in the text description below. • If the answer box is already precise → output the SAME reasoning chain unchanged. • If the reasoning chain has inaccuracies → refine the relevant steps and the answer progressively, with each corrected step moving closer to the correct location. • Keep the same number of steps and overall structure; adjust coor-dinates only where they are wrong. • All coordinates use xyxy format normalized to 0–1000, zero-padded to 4 digits . For example: 585 → “0585”, 0 → “0000”, 1000 
+
+→ “1000”; a complete bbox is [0585, 0173, 0797, 0710] .• The final <answer > box must tightly enclose only the target object, trimming away all surrounding background. 
+
+<image >
+
+Text description: q
+
+(c) Controlled box correction baselines Qwen3.5-9B A candidate bounding box bin is provided for “ q” but 
+
+may be inaccurate . Locate every object that matches the description “q” in the image. Report bbox coordinates in JSON format using 
+
+[x1, y1, x2, y2] normalized to 0–1000. 
+
+InternVL3.5-8B <image > Please provide the bounding box co-ordinate of <ref >q< /ref > in this image. A candidate box 
+
+[bin ] is provided as reference but may be inaccurate .
+
+CogVLM-Grounding-17B The candidate bounding box for q is 
+
+[bin ], but it may be inaccurate. Can you point out q in the image and provide the corrected bounding box of its location? 
+
+Figure 7: Exact prompt templates used for standard grounding, BDR refinement, and controlled box correction. Red bold text marks the constraints that define the output interface or the preserve-or-correct behavior. Only line wrapping and sample-specific placeholders are changed for typesetting. 
+
+gion is [0585, 0185, 0793, 0696] . </refine > < answer >[0585, 0185, 0793, 0696] </answer >
+
+This state contains a terminal localization hypothesis but no RER-trained ordered region commit-ments. BDR keeps the <refine > content fixed and performs same-position editing only on the 16 Answer digits. A separate native-output editor is trained from scratch on these native-output-derived training states; its parameters are independent of the BDR trained on RER-generated states. Training uses Answer coordinate cross-entropy, soft-coordinate regression, correctness-gated An-swer entropy, coordinate-wise preference, format cross-entropy, and general reconstruction of the unchanged <refine > content. The annotated box is used only for target and loss construction and is never inserted into the model input. 
+
+Controlled-correction BDR state. For BDR, the shared corrupted anchor is represented exactly as 22 <refine > The target object is located at coordinates [bin ]. </refine ><answer >[bin ]</answer >
+
+There are no earlier numbered Steps. The two occurrences of bin form the editable final-refinement and Answer roles, while the sentence, tags, and punctuation remain fixed. Autoregressive baselines receive the same image, expression, and corrupted anchor through the templates in Figure 7. No method receives the annotated box as input. For an image of width W and height H, pixel coordinates are normalized as 
+
+x′ = round(1000 x/W ), y′ = round(1000 y/H ), (42) and clipped to [0 , 1000] . RER and the native baseline use deterministic decoding for reported evalu-ation, while BDR applies digit-vocabulary argmax at the aligned coordinate positions. The evaluator parses one complete legal box from the final <answer > field. Invalid or unparseable predictions remain in the corresponding split denominator and receive zero IoU. B.7 IMPLEMENTATION NOTES 
+
+We implement RER and BDR on Qwen3.5-9B and train their adapters sequentially. RER and BDR initialize separate adapters, and standard evaluation uses one RER generation followed by two deter-ministic BDR passes. Complete optimization configurations, adapter settings, execution commands, and hardware details are provided in the anonymous supplementary code. All method-defining ob-jectives, target rules, perturbation procedures, decoding protocols, and evaluation conventions are specified in the paper and appendices. 
+
+C FORMAL PROPERTIES 
+
+The following propositions characterize boundedness, normalization, gradient direction, and entropy gating in the implemented objectives. 
+
+Proposition C.1 (Bounded progressive signal) The implemented progressive component satisfies 
+
+0 ≤ Cprog ≤ 1. Consequently, 0 ≤ Rprog ≤ Rfmt .Proof. Let mui = max j≤i uj and mqi = max j≤i qj . Every positive best-so-far increment telescopes, and therefore KX
+
+> i=2
+
+mui − mui−1
+
+1 − u1 + ϵ ≤ 1,
+
+> K
+
+X
+
+> i=2
+
+mqi − mqi−1
+
+1 − q1 + ϵ ≤ 1. (43) The non-positive increments retained in Eq. (23) can only decrease the sum. Its 0.6/0.4 convex weighting and outer truncation thus give Cprog ∈ [0 , 1] . The coverage, overall-gain, and consistency terms also lie in [0 , 1] , and their coefficients in Eq. (25) sum to one. Multiplication by Rfmt ∈ [0 , 1] 
+
+proves the second bound. □
+
+Proposition C.2 (Normalized coordinate weighting) For positive coordinate weights, the weighted box cross-entropy in Eq. (32) is invariant to a common positive scaling of all weights and remains between the minimum and maximum selected token losses. Proof. Writing ct for per-token cross-entropy and αt = wt/ P 
+
+> j
+
+wj gives Lbox = P 
+
+> t
+
+αtct, where 
+
+αt > 0 and P 
+
+> t
+
+αt = 1 . The loss is therefore a convex combination of the selected token losses. Replacing every wt by λw t for λ > 0 leaves each αt unchanged, which proves both claims. □
+
+Proposition C.3 (Preference-gradient direction) For every active coordinate, gradient descent increases the output-versus-input margin for a beneficial edit and decreases it for a detrimental edit. Proof. Differentiating Eq. (37) yields 
+
+∂ℓ sk 
+
+∂D sk 
+
+= σ(Dsk ) − ysk . (44) 23 If ysk = 1 , this derivative is negative and gradient descent increases Dsk . If ysk = 0 , it is positive and gradient descent decreases Dsk . Coordinates inside the dead zone |∆sk | ≤ 0.005 are inactive and receive no preference gradient. □
+
+Proposition C.4 (Correctness-gated entropy) The final-coordinate entropy term cannot directly sharpen a digit whose digit-vocabulary argmax differs from the selected target digit. Proof. The gate includes a final digit position only when its current argmax equals the selected target. An incorrect position is therefore excluded from Hfin and has zero gradient from this term. Included positions minimize entropy only after satisfying the discrete correctness condition. The historical entropy term is ungated but contains no absolute coordinate target. □
+
+Training and inference separation. The annotation b∗ is used in training to select targets and compute edit labels. At inference, target selection, entropy gating, and preference labels are dis-abled; the model observes only (I, q ) and the current response. 
+
+D ADDITIONAL EXPERIMENTAL RESULTS 
+
+D.1 DATASET ACCOUNTING 
+
+The archived localization evaluation contains the following eight standard splits. The high-precision, controlled-correction, and ablation studies use the five test splits shown in the final column. Table 7: Dataset composition used by the archived evaluations.                                       
+
+> Dataset Split Samples Eight-split evaluation Five-test evaluation RefCOCO val 10,834 ✓–RefCOCO testA 5,657 ✓✓
+> RefCOCO testB 5,095 ✓✓
+> RefCOCO+ val 10,758 ✓–RefCOCO+ testA 5,726 ✓✓
+> RefCOCO+ testB 4,889 ✓✓
+> RefCOCOg val 4,896 ✓–RefCOCOg test 9,602 ✓✓
+> Total eight / five splits 57,457 / 30,969
+
+For the main experiment, Overall is the arithmetic mean of the eight split-level Acc@0 .5 values. The RER aggregate in Table 8 is computed jointly over all 57,457 localization examples. Stricter-IoU, controlled-correction, meaningful-state ablation, and state-source aggregates are computed jointly over the 30,969 examples from the five test splits. The segmentation experiment uses 57,457 ex-pression instances and retains this denominator separately from the localization tables. D.2 RER L OCALIZATION STATE QUALITY 
+
+Table 8 reports the terminal answer extracted from the RER state before BDR refinement. Un-parseable predictions are assigned zero IoU and remain in the split denominators. Terminal answer quality alone does not determine the final performance of a source-matched state– editor pipeline. Table 9 contrasts the native grounding output of Qwen3.5-9B, the same model under the structured RER interface without RER adaptation, the trained RER state, and refinement from the two state sources. The structured interface alone is substantially weaker than the native grounding interface, whereas RER adapts the policy to the explicit trajectory format and recovers most of the terminal localization quality. Each state source is paired with a separately trained BDR. The native-output pipeline starts at 82.16% terminal mIoU, whereas the RER pipeline starts at 80.70%. After source-matched refinement, RER + BDR gains 5.02 points to reach 85.72% mIoU and attains 68.64% Acc@0 .9. The native-output pipeline gains 2.41 points to reach 84.57% mIoU and attains 66.32% Acc@0 .9. This comparison highlights the effectiveness of the RER →BDR pairing: despite 24 Table 8: RER terminal localization on the eight standard splits. The aggregate row is computed jointly across the splits. 
+
+Dataset Split Samples mIoU Acc@0.5 Acc@0.7 Acc@0.9 RefCOCO val 10,834 83.35 90.10 83.81 63.61 RefCOCO testA 5,657 84.09 90.75 85.56 64.27 RefCOCO testB 5,095 81.37 88.38 80.73 59.02 RefCOCO+ val 10,758 77.14 82.57 76.15 57.82 RefCOCO+ testA 5,726 79.32 85.23 79.03 59.10 RefCOCO+ testB 4,889 74.18 80.18 72.20 53.12 RefCOCOg val 4,896 82.49 89.22 82.15 60.72 RefCOCOg test 9,602 82.48 89.28 82.70 61.45 
+
+Aggregate all splits 57,457 80.68 87.06 80.48 60.23 
+
+starting from a weaker terminal box, it obtains larger refinement gains and higher final localization quality. The zero-anchor ablation in Fig. 4 provides complementary evidence that a meaningful state and its anchor-aware objectives matter to the complete system. Table 9: Terminal grounding and source-matched refinement under the five-test metric aggregation. Metrics are computed jointly across the splits; invalid or unparseable outputs receive zero IoU, and BDR rows use the second refinement pass. Each refined state source uses a separately trained BDR, and the native and structured rows use their corresponding prompts in Section B.6.                               
+
+> State source Interface RER adaptation mIoU Acc@0 .7Acc@0 .9
+> Qwen3.5-9B native output No 82.16 83.31 60.64 Structured Qwen3.5-9B structured No 63.48 57.08 24.28 RER terminal answer (ours) structured Yes 80.70 80.56 59.81 Native-Output + BDR (ours) native-output-derived No 84.57 86.56 66.32
+> RER state + BDR (ours) structured Yes 85.72 87.94 68.64
+
+Table 10 gives the split-level results of the meaningful-state ablation. Table 10: Split-level meaningful-state ablation. The upper block reports mIoU / Acc@0 .5 and the lower block reports Acc@0 .7 / Acc@0 .9.                         
+
+> Method RefCOCO A RefCOCO B RefCOCO+ A RefCOCO+ B RefCOCOg test
+> CoEvolve, mIoU / Acc@0.5 88.85 / 95.28 85.41 / 92.38 87.12 / 93.45 81.23 / 87.79 85.47 / 92.75
+> Zero-Anchor BDR, mIoU / Acc@0.5 87.91 / 94.22 84.24 / 90.62 86.00 / 92.19 78.89 / 84.27 81.34 / 89.79
+> CoEvolve, Acc@0.7 / Acc@0.9 92.65 / 74.24 87.05 / 67.79 90.67 / 73.11 82.33 / 64.68 86.86 / 65.15
+> Zero-Anchor BDR, Acc@0.7 / Acc@0.9 90.26 / 69.91 84.02 / 65.32 87.91 / 67.69 77.79 / 60.20 81.97 / 53.62
+
+D.3 QUALITATIVE GROUNDING RESULTS 
+
+Figure 8 exposes one complete state transition. The RER response follows the required <refine >
+
+and <answer > format, and every reasoning Step terminates in an explicit region. BDR then edits coordinates at the same response positions: the coordinate matrix shows that refinement can update historical Steps, the last Step, and the Answer while retaining the surrounding reasoning text. 25 Selected localization states 
+
+Step 1 RER Answer BDR Pass 2 GT 
+
+RER structured assistant response 
+
+Query: “broccoli on top right” 
+
+<refine> 
+
+Step 1: The image shows a plate of food with a large piece of meat on the left, carrots in the center, and a pile of green vegetables on the right. → [0, 0, 1000, 1000] 
+
+Step 2: Focus on the right side of the plate where the green vegetables are located; these are the broccoli florets. → [600, 25, 1000, 650] 
+
+Step 3: Among the green vegetables, identify the ones positioned at the top right corner of the plate, which are the target broccoli pieces. → [600, 25, 1000, 450] 
+
+Step 4: Zoom in on the top right broccoli, excluding the lower florets and any other vegetables; this includes the two main florets at the top. → [605, 30, 1000, 420] 
+
+Step 5: Tightly enclose only the broccoli on the top right — the two distinct florets and their stems — trimming away all surrounding carrots and other vegetables. → [605, 30, 1000, 420] 
+
+</refine> 
+
+<answer>[605, 30, 1000, 420]</answer> 
+
+Role RER BDR Pass 1 BDR Pass 2 Step 1 [0, 0, 1000, 1000] [0810, 0020, 1000, 0400] [0810, 0020, 1000, 0420] Step 2 [600, 25, 1000, 650] [0810, 0025, 1000, 0400] [0810, 0025, 1000, 0420] Step 3 [600, 25, 1000, 450] [0810, 0025, 1000, 0420] [0810, 0025, 1000, 0420] 
+
+Step 4 [605, 30, 1000, 420] [0815, 0030, 1000, 0420] [0815, 0020, 1000, 0420] Step 5 [605, 30, 1000, 420] [0815, 0020, 1000, 0410] [0815, 0020, 1000, 0420] Answer [605, 30, 1000, 420] [0815, 0020, 1000, 0410] [0815, 0020, 1000, 0420] 
+
+Same-position coordinate edits 
+
+Answer IoU: RER 0.451 → Pass 1 0.913 → Pass 2 0.936. Amber cells changed from the preceding state. Figure 8: A structured RER trajectory and its subsequent BDR coordinate edits for the query “broc-coli on top right.” RER constructs a progressive localization trajectory, while BDR performs same-position coordinate refinement across multiple editable roles and substantially improves the final Answer. The image shows the first RER region, RER Answer, second-pass BDR Answer, and an-notation. The lower matrix traces all coordinate states; amber cells mark edits from the preceding state. 26 Figure 9 visualizes additional RER-to-BDR localization updates on natural images. The cases are chosen to expose distinct correction behaviors rather than to estimate their frequency. Each panel preserves the full image, and its IoU is computed from the archived box shown in that panel. Case and query 
+
+> RER → Pass 1 → Pass 2 IoU
+
+RER answer 
+
+> red prediction · dashed green GT
+
+BDR Pass 1 
+
+> red prediction · dashed green GT
+
+BDR Pass 2 
+
+> red prediction · dashed green GT
+
+Boundary correction 
+
+“black and white dog”   
+
+> RefCOCO+ val 0.267 → 0.982 → 0.982
+> IoU 0.267 IoU 0.982 IoU 0.982
+
+Crowded-instance repair 
+
+“little brown sheep left”   
+
+> RefCOCO testB 0.151 → 0.974 → 0.974
+> IoU 0.151 IoU 0.974 IoU 0.974
+
+Relational correction 
+
+“zebra with hidden tail”   
+
+> RefCOCO+ val 0.176 → 0.992 → 0.992
+> IoU 0.176 IoU 0.992 IoU 0.992
+
+High-quality preservation 
+
+“man in blue jacket”   
+
+> RefCOCO val 0.999 → 0.999 → 0.999
+> IoU 0.999 IoU 0.999 IoU 0.999
+
+Figure 9: Qualitative results on the RefCOCO family. Red solid boxes show model predictions, green dashed boxes show annotations, and badges report per-example IoU. The examples illustrate boundary correction, disambiguation among nearby instances, relational correction, and preserva-tion of an accurate RER anchor. 27 D.4 CONTROLLED CORRECTION DETAILS 
+
+The controlled inputs are one deterministic nonzero perturbation per example, with target-IoU cen-ters 0.20 , 0.40 , 0.60 , 0.80 , 0.94 and four transformation types (translation, scale, aspect-ratio, and mixed). The same anchor is given to every model. CoEvolve uses one BDR pass in this experiment. Its Repair@0 .7 is 87 .99% , defined on the subset whose input IoU is below 0.7. Using the fixed seed 20260803, the construction procedure deterministically assigns each example a target-IoU band, perturbation type, and transformation parameters. Figure 10 summarizes the benchmark construction. The five test splits contain 30,969 examples and have closely matched input mIoU values, yielding an aggregate input mIoU of 58 .80 over all exam-ples. The deterministic assignment is approximately uniform across the five target IoU bands and the four perturbation types, preventing the aggregate result from being dominated by one corruption severity or geometric transformation. RefCOCO Test A RefCOCO Test B RefCOCO+ Test A RefCOCO+ Test B RefCOCOg Test 
+
+> 02,000 4,000 6,000 8,000 10,000
+> Number of Samples
+> 5,657 5,095 5,726 4,889 9,602
+
+Composition of the Controlled-Correction Benchmark 
+
+> Input mIoU Weighted mean (58.80)
+> 58.70 58.75 58.80 58.85 58.90
+> Input mIoU (%) 58.83 58.78 58.83 58.76 58.80 0.20 [0, 0.3) 6,193 20.0% 0.40 [0.3, 0.5) 6,198 20.0% 0.60 [0.5, 0.7) 6,192 20.0% 0.80 [0.7, 0.9) 6,191 20.0% 0.94 [0.9, 1.0) 6,195 20.0%
+
+TARGET-IoU BANDS 
+
+> 5 bands · 100%
+> Translation 7,742 25.0% Scale 7,743 25.0% Aspect Ratio 7,743 25.0% Mixed 7,741 25.0%
+
+PERTURBATION TYPES 
+
+> 4 types · 100%
+
+Distribution of Deterministic Input Anchors 
+
+Figure 10: Construction of the controlled-correction benchmark. The upper panel reports the num-ber of examples and input mIoU for each test split; the dashed line marks the aggregate input mIoU over all examples. The lower panel reports the assignment across target IoU bands and perturbation types. Each example contributes one deterministic nonzero anchor. 28 D.5 REMOTE -S ENSING GROUNDING 
+
+DIOR-RSVG evaluation contains 7,500 expression instances. The main paper compares CoEvolve with prior methods, while Table 11 traces the three saved localization states. Unparseable outputs remain in the denominator and receive zero IoU. RER and BDR retain the natural-image reward, loss, and two-pass editing definitions while being retrained on the DIOR-RSVG training split. Their domain-specific optimization configurations are provided in the anonymous supplementary code. The reproduced native Qwen3.5-9B row in the main comparison is evaluated without DIOR-RSVG adaptation and is included as a base-to-system reference, not as a matched-training architectural comparison. Table 11: CoEvolve localization-state progression on DIOR-RSVG test expressions. RER and BDR are retrained on the DIOR-RSVG training split. 
+
+State mIoU Pr@0 .5 Pr@0 .7 Pr@0 .9
+
+RER output 58.2248 64.2400 51.1200 23.0400 BDR Pass 1 75.4161 85.2533 74.6267 41.5200 
+
+BDR Pass 2 76.2295 86.2000 76.1600 43.4533 
+
+Figure 11 complements the aggregate progression with successful correction modes and a non-monotonic failure case. Case and query 
+
+> RER → Pass 1 → Pass 2 IoU
+
+RER answer 
+
+> red prediction · dashed green GT
+
+BDR Pass 1 
+
+> red prediction · dashed green GT
+
+BDR Pass 2 
+
+> red prediction · dashed green GT
+
+Zoomed Pass 2                
+
+> geometric crop around target/edit
+> Tiny-object repair
+> “The tiny gray vehicle”
+> DIOR-RSVG test 0.000 → 0.917 → 1.000
+> IoU 0.000 IoU 0.917 IoU 1.000 IoU 1.000
+> Relational correction
+> “The storage tank is on the left of the storage tank on the far right”
+> DIOR-RSVG test 0.011 → 0.987 → 0.987
+> IoU 0.011 IoU 0.987 IoU 0.987 IoU 0.987
+> Extent correction
+> “The green golf field in the middle”
+> DIOR-RSVG test 0.293 → 0.978 → 0.985
+> IoU 0.293 IoU 0.978 IoU 0.985 IoU 0.985
+> Second-pass refinement
+> “The tiny baseball field”
+> DIOR-RSVG test 0.266 → 0.842 → 0.943
+> IoU 0.266 IoU 0.842 IoU 0.943 IoU 0.943
+> Failure case
+> “A baseball field is on the lower right of the vehicle on the upper left”
+> DIOR-RSVG test 0.958 → 0.000 → 0.000
+> IoU 0.958 IoU 0.000 IoU 0.000 IoU 0.000
+
+Figure 11: Qualitative results on DIOR-RSVG. Red solid boxes show model predictions and green dashed boxes show annotations. The first four rows show repair of a tiny object, a relationally specified instance, object extent, and a boundary further improved by the second BDR pass. The final row shows a failure in which refinement moves away from an initially accurate anchor. The rightmost column is a geometric crop around the annotation and final edit; no contrast enhancement is applied. 29 D.6 DOWNSTREAM SEGMENTATION 
+
+We feed each final localization box to a frozen SAM3 without mask fine-tuning. The segmentation archive contains 57,457 expression instances. Table 12 reports split-level cIoU and the arithmetic mean across the eight splits. Table 12: Referring-expression segmentation cIoU on the eight standard splits. Public methods use their reported training and pretraining protocols; Macro-8 is the arithmetic mean of the eight split values. Best and second-best results are bold and underlined.                                                                                                                                                   
+
+> RefCOCO RefCOCO+ RefCOCOg Method val ABval ABval test Macro-8 CRIS (Wang et al., 2022) 70.47 73.18 66.10 62.27 68.08 53.68 59.87 60.36 64.25 LAVT (Yang et al., 2022) 72.73 75.82 68.79 62.14 68.38 55.10 61.24 62.09 65.79 CGFormer (Tang et al., 2023) 74.75 77.30 70.64 64.54 71.00 57.14 64.68 65.09 68.14 ReLA (Liu et al., 2023a) 73.82 76.48 70.18 66.04 71.02 57.65 65.00 65.97 68.27 MagNet (Chng et al., 2024) 75.24 78.24 71.05 66.16 71.32 58.14 65.36 66.03 68.94 LISA (Lai et al., 2024) 74.90 79.10 72.30 65.10 70.80 58.10 67.90 70.60 69.85 PolyFormer-B (Liu et al., 2023b) 74.82 76.64 71.06 67.64 72.89 59.33 67.76 69.05 69.90 OneRef-L (Xiao et al., 2024) 80.48 82.78 78.27 74.25 78.41 69.85 74.91 77.36 77.04 EVF-SAM (Zhang et al., 2026a) 82.10 83.70 80.00 75.20 78.30 70.10 76.80 77.40 77.95
+> CoEvolve + SAM3 (ours) 80.28 82.81 77.87 76.22 80.60 72.42 77.06 78.23 78.19 LENS (Zhu et al., 2026a) 84.20 85.30 81.00 79.40 82.80 74.30 81.20 81.00 81.15 HyperSeg (Wei et al., 2025a) 84.80 85.70 83.40 79.00 83.50 75.20 79.40 78.90 81.24 InstructSeg (Wei et al., 2025b) 85.80 86.60 84.00 80.10 83.80 75.60 79.30 80.30 81.94 X-SAM (Wang et al., 2026b) 85.10 87.10 83.40 78.00 81.00 74.40 83.80 83.90 82.09 FlowSeg (Zhang et al., 2026b) 85.80 87.40 84.80 80.20 84.50 76.90 86.50 86.10 84.03
+
+E LIMITATIONS 
+
+Imperfect preserve-or-edit decisions. BDR improves correction behavior on average but does not guarantee an improvement for every example. In controlled correction, refinement degrades 
+
+15 .50% of the anchors, compared with 11 .42% for Qwen3.5-9B. Quality-gated targets encourage preservation of accurate inputs, but the learned preserve-or-edit decision remains imperfect for a residual subset. Calibrated edit acceptance, uncertainty-aware refinement, or adaptive stopping could retain the current state when a further update is unlikely to help. 
+
+State–editor pairing and broader transfer. The source-matched comparison shows that RER →BDR achieves stronger final refinement than the separately trained native-output pipeline. This result motivates further study of how state representations interact with their corresponding editors, particularly across upstream model families and response formats. 
+
+Coordinate-centric editing. BDR treats reasoning text as fixed semantic context and edits the coordinate fields of the localization state. This design keeps the semantic context fixed during position-aligned refinement, but semantic errors that cannot be resolved through coordinate correc-tion remain outside the current editor’s scope. The current objective also does not explicitly enforce semantic-role consistency between an earlier reasoning step and its edited historical box. Extending bidirectional editing toward jointly editable semantic–spatial states is a promising direction. 30

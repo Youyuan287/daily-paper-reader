@@ -1,0 +1,353 @@
+Title: RADC: Risk-Aware Dual Caching for Vision-Language Test-Time Adaptation
+
+URL Source: https://arxiv.org/pdf/2610.06932v1
+
+Published Time: Wed, 07 Oct 2026 00:03:09 GMT
+
+Number of Pages: 6
+
+Markdown Content:
+# RADC: RISK-AWARE DUAL CACHING FOR VISION-LANGUAGE TEST-TIME ADAPTATION 
+
+# Siyu Huang 1,2,∗ Yueyong Chen 3,∗ Xuejiao Li 2 Jun Zhou 1,† 
+
+> 1
+
+# Tsinghua Shenzhen International Graduate School, Tsinghua University, Shenzhen, China  
+
+> 2
+
+# Pengcheng Laboratory, Shenzhen, China  
+
+> 3
+
+# School of Intelligent Systems Engineering, Sun Yat-sen University, Shenzhen, China 
+
+ABSTRACT 
+
+Cache-based test-time adaptation (TTA) for vision-language mod-els is often hindered by background bias in global representations and unreliable entropy-based cache admission under representation variations. To address these limitations, we propose RADC, which enhances prototype learning through reliable dual caching. RADC introduces a Semantic Foreground Cache that aggregates category-consistent spatial evidence from CLIP representations, yielding fore-ground prototypes that complement the global cache while mitigat-ing background interference. To reliably manage both caches, Gaus-sian Risk Admission models multi-view representations as diagonal Gaussian distributions and jointly considers class separation and fea-ture uncertainty to prioritize reliable cache candidates. RADC inte-grates zero-shot logits with complementary global- and foreground-cache predictions for robust inference. Extensive experiments on cross-domain and out-of-distribution benchmarks demonstrate con-sistent state-of-the-art performance. 
+
+Index Terms — Vision-language models, Test-time adaptation 
+
+1. INTRODUCTION 
+
+Vision-language models (VLMs), such as CLIP [1], have demon-strated strong zero-shot recognition capabilities through large-scale image-text pretraining, and can be further adapted to downstream tasks through post-training [2–5]. Nevertheless, their performance often degrades when the test distribution deviates from the pretrain-ing data. Test-time adaptation (TTA) [6] addresses this issue by exploiting unlabeled test samples during inference. Existing ap-proaches adapt prompts or prototypes [7, 8], while recent cache-based methods retrieve historical test representations to refine pre-dictions [9, 10]. Since cached samples are repeatedly involved in subsequent retrieval and prototype construction, the quality and reli-ability of cached representations are critical to effective online adap-tation. Despite their effectiveness, existing cache-based TTA methods face two key limitations. First, they typically construct caches from global image representations, which inevitably entangle category-relevant foreground information with sample-specific backgrounds. Consequently, irrelevant contextual patterns may accumulate in cached prototypes and repeatedly bias subsequent predictions. Sec-ond, cache admission is commonly determined by prediction con-fidence, typically favoring low-entropy samples [8–11]. However, sample-wise entropy may favor overconfident predictions, motivat-ing reliable caching that exploits complementary visual evidence   
+
+> ∗These authors contributed equally to this work.
+> †Corresponding author: Jun Zhou.
+
+while accounting for representation uncertainty under view and localization variations. To this end, we propose RADC, a risk-aware dual-cache adap-tation framework for vision-language models. RADC complements the global cache with a Semantic Foreground Cache (SFC), forming a dual-cache architecture that preserves both holistic and category-relevant visual evidence. Given the candidate classes predicted for each test view, SFC first filters out hypotheses that are semantically inconsistent with the Top-1 prediction. It then independently local-izes each retained class using CLIP spatial contributions and aggre-gates the resulting class-wise masks to extract foreground represen-tations. In this way, the foreground cache provides category-relevant prototypes complementary to the global cache while reducing per-sistent background interference. Reliable dual caching further requires identifying which rep-resentations are sufficiently stable to contribute to prototype con-struction. We therefore introduce Gaussian Risk Admission (GRA), which models multi-view representations as diagonal Gaussian dis-tributions and evaluates each cache candidate by jointly considering class separation and feature uncertainty. For foreground representa-tions, GRA further incorporates localization uncertainty induced by spatial selection. The resulting risk scores govern admission and re-tention in both the global and foreground caches, prioritizing reliable representations for subsequent retrieval and prototype construction. By combining complementary dual-cache evidence with risk-aware admission, RADC enables robust test-time inference under distribu-tion shifts. In summary, our main contributions are as follows: (1) We pro-pose RADC, a risk-aware dual-cache framework that complements global representations with category-relevant foreground evidence for robust vision-language test-time adaptation; (2) We introduce SFC to construct foreground prototypes from semantically consis-tent spatial evidence, together with GRA to reliably manage both caches by jointly considering class separation and representation un-certainty; (3) Extensive experiments on cross-dataset and out-of-distribution benchmarks demonstrate consistent state-of-the-art per-formance with both RN50 and ViT-B/16 backbones. 
+
+2. METHOD 
+
+The overall framework of RADC is illustrated in Fig. 1. After in-troducing the necessary preliminaries in Sec. 2.1, we present the Se-mantic Foreground Cache in Sec. 2.2 and describe the Gaussian Risk Admission in Sec. 2.3. 
+
+2.1. Preliminaries Zero-shot CLIP. CLIP [1] consists of a visual encoder Ev (·) and a text encoder Et(·) that align images and natural-language de-arXiv:2610.06932v1 [cs.CV] 3 Oct 2026 Fig. 1 . Overview of RADC. (a) RADC complements the global cache with SFC and combines zero-shot, global, and foreground logits for prediction. (b) SFC localizes category-consistent regions from spatial CLIP features to construct foreground queries. (c) GRA evaluates class separation and feature uncertainty to manage both global and foreground caches. scriptions in a shared embedding space. Given a test image x
+
+and the prompt Tc of class c, their normalized representations are 
+
+f = Ev (x) and tc = Et(Tc). For a C-class task, the zero-shot logit and prediction probability are: 
+
+szs  
+
+> c
+
+= f ⊤tc
+
+τ , pzs (y = c | x) = exp( szs  
+
+> c
+
+)
+
+PCj=1 exp( szs  
+
+> j
+
+) . (1) where τ denotes the temperature parameter. 
+
+Global Prototype Cache. DPE [8] maintains a class-wise prior-ity cache Qgc that retains low-entropy global features assigned by pseudo-labels. The corresponding prototype is 
+
+vgc = 1
+
+|Q gc |
+
+X
+
+> fi∈Q gc
+
+fi. (2) DPE adapts the textual and visual prototypes through zero-initialized residuals, etc = Norm( tc + ∆ tc) and evgc = Norm( vgc + ∆ vgc ), op-timized by one-step confidence minimization and cross-modal align-ment. For a global query qg , the cache score is sgc = αg exp[ −βg (1 −
+
+q⊤ 
+
+> g
+
+evgc )] , where αg and βg control its scale and sharpness. We retain this prototype construction and residual optimization. 
+
+2.2. Semantic Foreground Cache 
+
+Global cache representations encode the entire image and may therefore retain sample-specific backgrounds together with category-relevant content. Once stored, such irrelevant context can repeatedly participate in cache retrieval and prototype construction, causing background bias to propagate across the test stream. To alleviate this issue, we propose a Semantic Foreground Cache (SFC) that complements the global cache with category-relevant foreground evidence. Inspired by the spatial decomposition of CLIP representa-tions in [15], we obtain patch-level contributions for ViT from selected late self-attention layers following their decomposition. For CLIP-RN50, whose final image representation is aggregated by 
+
+AttentionPool2d , we further decompose this pooling opera-tion. The contribution of location i in the v-th augmented view is formulated as: 
+
+cRN  
+
+> v,i
+
+= Concat Hh=1 
+
+
+
+av,h,i Xv,i W hV
+
+
+
+WO . (3) where av,h,i denotes the attention weight in head h, Xv,i is the cor-responding spatial feature, and W hV and WO are the value and output projections. We use {cv,i }Ni=1 to uniformly denote the spatial con-tributions from either backbone. Using the adapted text prototypes etc, we compute the poste-rior probability that the v-th view belongs to class c as pv,c =softmax c
+
+ γg ⊤ 
+
+> v
+
+etc
+
+ . Directly combining several candidate text pro-totypes may obscure their semantic differences before the corre-sponding visual evidence is identified. We therefore retain the Top-1 prediction and remove Top-K candidates that are semantically in-consistent with it: 
+
+Kv = {kv, 1} ∪ 
+
+n
+
+k ∈ I Kv \ { kv, 1} cos( etk , etkv, 1 ) ≥ τs
+
+o
+
+. (4) where IKv is the Top-K class set, kv, 1 is the class with the highest posterior, and τs denotes the semantic similarity threshold. Each retained class is then localized independently, rather than being merged into a single text direction. The resulting masks are Table 1 . Top-1 accuracy (%) on cross-dataset generalization using ResNet-50 and ViT-B/16 CLIP visual backbones. The best result in each column is highlighted in bold , while the second-best result is underlined.                                                                                                                                                                                                                                          
+
+> Method Aircraft Caltech Cars DTD EuroSAT Flowers102 Food101 Pets SUN397 UCF101 Average
+> CLIP-RN50 [1] 15.66 85.88 55.70 40.37 23.69 61.75 73.97 83.57 58.80 58.84 55.82 CoOp [12] 15.12 86.53 55.32 37.29 26.20 61.55 75.59 87.00 58.15 59.05 56.18 TPT [7] 17.58 87.02 58.46 40.84 28.33 62.69 74.88 84.49 61.46 60.82 57.66 DiffTPT [13] 17.60 86.89 60.71 40.72 41.04 63.53 79.21 83.40 62.72 62.67 59.85 DMN-ZS [11] 22.77 90.14 60.02 50.41 48.72 67.93 76.70 86.78 64.39 65.34 63.32 TDA [9] 17.61 89.70 57.78 43.74 42.11 68.74 77.75 86.18 62.53 64.18 61.03 DPE [8] 19.80 90.83 59.26 50.18 41.67 67.60 77.83 85.97 64.23 61.98 61.94 BoostAdapter [10] 18.93 88.48 59.67 43.85 44.40 68.25 78.78 85.75 62.83 64.42 61.54 SCA [14] 20.82 91.03 59.73 53.31 43.33 71.09 76.51 86.15 64.50 66.40 63.29
+> RADC (Ours) 22.95 91.28 62.72 54.37 46.32 69.91 78.66 88.01 65.88 65.37 64.55 CLIP-ViT-B/16 [1] 23.67 93.35 65.48 44.27 42.01 67.44 83.65 88.25 62.59 65.13 63.58 CoOp [12] 18.47 93.70 64.51 41.92 46.39 68.71 85.30 89.14 64.15 66.55 63.88 TPT [7] 24.78 94.16 66.87 47.75 42.44 68.98 84.67 87.79 65.50 68.04 65.10 DiffTPT [13] 25.60 92.49 67.01 47.00 43.13 70.10 87.23 88.22 65.74 62.67 64.92 DMN-ZS [11] 30.03 95.38 67.96 55.85 59.43 74.49 85.08 92.04 70.18 72.51 70.30 TDA [9] 23.91 94.24 67.28 47.40 58.00 71.42 86.14 88.63 67.62 70.66 67.53 DPE [8] 28.95 94.81 67.31 54.20 55.79 75.07 86.17 91.14 70.07 70.44 69.40 BoostAdapter [10] 27.45 94.77 69.30 45.69 61.22 71.66 87.17 89.51 68.09 71.93 68.68 SCA [14] 28.50 94.85 68.49 57.09 57.16 76.09 86.09 91.44 70.27 73.43 70.34
+> RADC (Ours) 32.28 95.29 70.50 58.87 63.26 78.20 87.16 92.53 71.02 72.32 72.14
+
+fused only after their spatial responses have been obtained: 
+
+Mv,i,k = sigmoid 
+
+
+
+κ
+
+ cos( cv,i , etk ) − μv,k 
+
+max( σv,k , ϵ ) − δ
+
+ 
+
+,Mv,i = X
+
+> k∈K v
+
+¯pv,k Mv,i,k . (5) Here, μv,k and σv,k are the mean and standard deviation of the spa-tial responses for class k, and ¯pv,k denotes the posterior normalized over Kv . This procedure preserves the spatial evidence of each can-didate class before mask fusion. The fused mask Mv,i identifies foreground regions associated with the current category hypotheses. We use it to pool the spatial contributions and combine the resulting foreground evidence with the original global feature: 
+
+f fg  
+
+> v
+
+= Norm 
+
+"
+
+(1 − λb)gv + λb Norm 
+
+> N
+
+X
+
+> i=1
+
+Mv,i cv,i 
+
+!# 
+
+. (6) The residual combination preserves useful global information when the foreground localization is incomplete or uncertain. Let It denote the views with the lowest prediction entropy. Their foreground features are averaged and normalized to construct 
+
+qf = Norm  |I t|−1 P 
+
+> v∈I t
+
+f fg 
+
+> v
+
+. The query is assigned to the class with the highest similarity to the adapted text prototypes, while GRA(Sec. 2.3) determines its cache priority and admission. For each class c, the foreground prototype vfg  
+
+> c
+
+is obtained by av-eraging the previously admitted queries of that class. The historical cache is queried before the current foreground query is inserted, pre-venting the current sample from contributing to its own prediction. The foreground score is first computed from the similarity between the current query and the foreground prototype, and is then com-bined with the zero-shot and global cache scores for final prediction: 
+
+sfg  
+
+> c
+
+= αf exp 
+
+h
+
+−βf
+
+
+
+1 − q⊤ 
+
+> f
+
+vfg 
+
+> c
+
+i 
+
+,sfinal  
+
+> c
+
+= szs  
+
+> c
+
++ sgc + sfg  
+
+> c
+
+.
+
+(7) The foreground score is set to zero when class c has no historical support. 
+
+2.3. Gaussian Risk Admission 
+
+Prediction entropy reflects output confidence but does not capture the stability of the underlying representation. We therefore propose Gaussian Risk Admission (GRA) to evaluate each cache candidate using both its class margin and feature uncertainty. We model the visual evidence from selected views as a diagonal Gaussian distribution z ∼ N (μ, diag( σ2)) . Given a fixed pseudo-label y, we compare it with each class c in the text embedding space. Let tc and ty denote their corresponding text prototypes, and define the discriminative direction between them as dc = tc − ty . For each class c, we define a class-wise risk rc that accounts for both the mean class margin and the feature uncertainty along dc. The overall Gaussian risk R is then obtained by aggregating the risks over all classes: 
+
+rc = γμ⊤dc + γ2 
+
+> 2
+
+⟨σ2, d2 
+
+> c
+
+⟩, R = log 
+
+> C
+
+X
+
+> c=1
+
+erc . (8) In rc, the first term measures the mean logit difference between class 
+
+c and the pseudo-label class, while the second penalizes feature vari-ation along the corresponding discriminative direction. Therefore, a larger margin from competing classes and smaller feature variation lead to a lower R, indicating that the current representation is more stable around its pseudo-label. GRA is applied to both the Global Cache and SFC. For the global branch, μg = |I t|−1 P 
+
+> v∈I t
+
+gv and σ2 
+
+> g
+
+= |I t|−1 P 
+
+> v∈I t
+
+(gv −
+
+μg )2, capturing variation across the selected global views. For the foreground branch, μf = |I t|−1 P 
+
+> v∈I t
+
+f fg  
+
+> v
+
+, while the variance further includes localization uncertainty introduced by the semantic mask: 
+
+σ2 
+
+> f
+
+= 1
+
+|I t|
+
+X
+
+> v∈I t
+
+h
+
+σ2 
+
+> f,v
+
++ ( f fg  
+
+> v
+
+− μf )2i
+
+. (9) Here, σ2 
+
+> f,v
+
+is estimated from the Bernoulli mask variance Mv,i (1 −
+
+Mv,i ). The resulting risks Rg and Rf are used as priorities for the Global Cache and SFC, respectively. Lower-risk entries receive higher retention priority, reducing the chance of storing unstable rep-resentations based only on instantaneous prediction entropy. 
+
+3. EXPERIMENTS 3.1. Experiment Settings Datasets. Following standard test-time adaptation protocols [7], we evaluate our method on the Cross-Dataset (CD) and Out-of-Table 2 . Top-1 accuracy (%) on robustness to natural distribution shifts using ResNet-50 and ViT-B/16 CLIP visual backbones. The best result in each column is highlighted in bold , while the second-best result is underlined.                                                                                                                                                      
+
+> Method ImageNet ImageNet-A ImageNet-V2 ImageNet-R ImageNet-S Average OOD Average
+> CLIP-RN50 [1] 58.16 21.83 51.41 56.15 33.37 44.18 40.69 CoOp [12] 63.33 23.06 55.40 56.60 34.67 46.61 42.43 TPT [7] 60.74 26.67 54.70 59.11 35.09 47.26 43.89 DiffTPT [13] 60.80 31.06 55.80 58.80 37.10 48.71 45.69 DMN-ZS [11] 63.87 28.57 56.12 61.44 39.84 49.97 46.49 TDA [9] 61.35 30.29 55.54 62.58 38.12 49.58 46.63 DPE [8] 63.41 30.15 56.72 63.72 40.03 50.81 47.66 BoostAdapter [10] 61.08 35.12 56.14 62.66 38.87 50.77 48.20 SCA [14] 63.11 30.64 56.51 62.85 39.33 50.49 47.33
+> RADC (Ours) 64.31 35.16 57.33 63.87 40.59 52.25 49.24 CLIP-ViT-B/16 [1] 66.73 47.87 60.86 73.98 46.09 59.11 57.20 CoOp [12] 71.51 49.71 64.20 75.21 47.99 61.72 59.28 TPT [7] 68.98 54.77 63.45 77.06 47.94 62.44 60.81 DiffTPT [13] 70.30 55.68 65.10 75.00 46.80 62.58 60.65 DMN-ZS [11] 72.25 58.28 65.17 78.55 53.20 65.49 63.80 TDA [9] 69.51 60.11 64.67 80.24 50.54 65.01 63.89 DPE [8] 71.91 59.63 65.44 80.40 52.26 65.93 64.43 BoostAdapter [10] 69.39 64.53 65.51 80.95 51.28 66.33 65.57 SCA [14] 71.75 60.33 65.38 80.85 52.50 66.16 64.77
+> RADC (Ours) 72.59 64.63 66.04 80.75 53.29 67.46 66.18
+
+Table 3 . Ablation study of SFC and GRA on Flowers102, Pets, and Cars.                                    
+
+> Backbone SFC GRA Flowers102 Pets Cars Average RN50 ––67.60 85.97 59.26 70.94
+> ✓–69.43 87.90 62.34 73.22 –✓69.75 87.54 61.97 73.09
+> ✓✓69.91 88.01 62.72 73.55
+> ViT-B/16 ––75.07 86.17 67.31 76.18
+> ✓–78.12 92.40 70.41 80.31 –✓77.71 92.18 69.85 79.91
+> ✓✓78.20 92.53 70.50 80.41
+
+Distribution (OOD) benchmarks. The CD benchmark comprises Aircraft [16], Caltech101 [17], StanfordCars [18], DTD [19], Eu-roSAT [20], Flowers102 [21], Food101 [22], OxfordPets [23], SUN397 [24], and UCF101 [25]. The OOD benchmark uses ImageNet [26] as the in-distribution reference and evaluates nat-ural distribution shifts on ImageNet-A [27], ImageNet-V2 [28], ImageNet-R [29], and ImageNet-Sketch [30]. 
+
+Implementation Details. We implement our method with frozen CLIP-RN50 and CLIP-ViT-B/16 backbones. For each image, we re-tain the 10% lowest-entropy views among the original and 63 Aug-Mix views. SFC extracts spatial contributions from the last three ViT attention layers or the RN50 AttentionPool2d layer. We set (τs, κ, δ, ϵ, λ b) = (0 .7, 10 , 0.5, 10 −6, 0.1) , with a foreground cache capacity of 16, αf = 2 , and βf = βg . All settings are fixed across datasets, and experiments are conducted on a single NVIDIA RTX 4090 GPU. 
+
+3.2. Main Results CD Transfer. Table 1 shows that RADC achieves the best aver-age accuracies of 64.55% with RN50 and 72.14% with ViT-B/16, surpassing the corresponding runner-up by 1.23 and 1.80 points. It ranks first on six and seven datasets under the two backbones, demonstrating strong cross-domain transferability. 
+
+OOD Generalization. As shown in Table 2, RADC achieves the best overall/OOD averages of 52.25/49.24% with RN50 and 67.46/66.18% with ViT-B/16. It leads on all five datasets with RN50 and four with ViT-B/16, demonstrating consistent robustness to distribution shifts. 
+
+Fig. 2 . Hyperparameter sensitivity of RADC using ViT-B/16. Left: foreground blending weight λb. Right: global and foreground cache capacities. 
+
+Table 4 . Comparison with state-of-the-art methods on inference efficiency on ImageNet-A.                     
+
+> Method Time Memory Accuracy Gain CLIP-ViT-B/16 [1] 1.13 min 1122 MiB 47.87 0DPE [8] 19.40 min 6466 MiB 59.63 +11.76 SCA [14] 7.14 min 988 MiB 60.33 +12.46
+> RADC (Ours) 12.26 min 2084 MiB 64.63 +16.76
+
+3.3. Ablation Studies Component Ablation. As shown in Table 3, both SFC and GRA consistently improve the base model when applied independently. Combining them achieves the best results, demonstrating their ef-fectiveness and complementarity. 
+
+Hyperparameter Sensitivity. Figure 2 examines the foreground blending weight and the capacities of the global and foreground caches. The performance remains stable across different settings, indicating that RADC is robust to these hyperparameter choices. 
+
+3.4. Inference Efficiency Comparison 
+
+Evaluated on ImageNet-A with ViT-B/16 using a single NVIDIA RTX 4090 GPU, our method achieves the highest accuracy while maintaining competitive inference efficiency (Table 4). 
+
+4. CONCLUSION 
+
+We propose RADC, a risk-aware dual-cache framework for robust vision-language test-time adaptation. By complementing global rep-resentations with category-relevant foreground evidence and evalu-ating cache candidates through Gaussian risk, RADC retains more reliable and complementary representations for prototype learn-ing. This enables robust adaptation while mitigating background interference and representation uncertainty. Extensive experiments on cross-dataset and out-of-distribution benchmarks with RN50 and ViT-B/16 confirm its effectiveness, demonstrating consistent improvements over state-of-the-art methods. 
+
+5. REFERENCES 
+
+[1] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al., “Learning trans-ferable visual models from natural language supervision,” in 
+
+International conference on machine learning . PmLR, 2021, pp. 8748–8763. [2] Haowei Guo, Baolong Bi, Ruicheng Zhang, Bingqian Sun, and Wentao Zhang, “When should the teacher move? tempo-ral coupling and stability in self on-policy distillation,” arXiv preprint arXiv:2606.03532 , 2026. [3] Haocheng Luo, Jiahui Liu, Ruicheng Zhang, Zhizhou Zhong, Jiaqi Huang, Zunnan Xu, Quan Shi, Jun Zhou, Shuiyang Mao, Wei Liu, et al., “Learning visual spatial planning from sym-bolic state via modality-gap-aware self-distillation,” arXiv preprint arXiv:2606.06076 , 2026. [4] Mingliang Yan, Yanhua Yu, Ruochi Zhang, Zhiyuan Liu, Ruicheng Zhang, Yimeng Ren, Kangkang Lu, Zhiyong Huang, Feng Luo, and Zhen Cai, “Deepmoltex: Deep alignment of molecular graphs with large language models via mixture of modality experts,” in Proceedings of the 33rd ACM Interna-tional Conference on Multimedia , 2025, pp. 2323–2332. [5] Ruicheng Zhang, Kaixi Cong, Jun Zhou, Zhizhou Zhong, Zun-nan Xu, Shuiyang Mao, Wei Liu, and Xiu Li, “Kvpo: Ode-native grpo for autoregressive video alignment via kv semantic exploration,” arXiv preprint arXiv:2605.14278 , 2026. [6] Ruicheng Zhang, Jun Zhou, Zunnan Xu, Zihao Liu, Jiehui Huang, Mingyang Zhang, Yu Sun, and Xiu Li, “Zo3t: Zero-shot 3d-aware trajectory-guided image-to-video generation via test-time training,” in Proceedings of the AAAI Conference on Artificial Intelligence , 2026, vol. 40, pp. 12708–12716. [7] Manli Shu, Weili Nie, De-An Huang, Zhiding Yu, Tom Gold-stein, Anima Anandkumar, and Chaowei Xiao, “Test-time prompt tuning for zero-shot generalization in vision-language models,” Advances in Neural Information Processing Systems ,vol. 35, pp. 14274–14289, 2022. [8] Ce Zhang, Simon Stepputtis, Katia Sycara, and Yaqi Xie, “Dual prototype evolving for test-time generalization of vision-language models,” Advances in Neural Information Processing Systems , vol. 37, pp. 32111–32136, 2024. [9] Adilbek Karmanov, Dayan Guan, Shijian Lu, Abdulmotaleb El Saddik, and Eric Xing, “Efficient test-time adaptation of vision-language models,” in 2024 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2024, pp. 14162–14171. [10] Taolin Zhang, Jinpeng Wang, Hang Guo, Tao Dai, Bin Chen, and Shu-Tao Xia, “Boostadapter: Improving vision-language test-time adaptation via regional bootstrapping,” Advances in Neural Information Processing Systems , vol. 37, pp. 67795– 67825, 2024. [11] Yabin Zhang, Wenjie Zhu, Hui Tang, Zhiyuan Ma, Kaiyang Zhou, and Lei Zhang, “Dual memory networks: A versa-tile adaptation approach for vision-language models,” in 2024 IEEE/CVF Conference on Computer Vision and Pattern Recog-nition (CVPR) . IEEE, 2024, pp. 28718–28728. [12] Kaiyang Zhou, Jingkang Yang, Chen Change Loy, and Ziwei Liu, “Learning to prompt for vision-language models,” Inter-national journal of computer vision , vol. 130, no. 9, pp. 2337– 2348, 2022. [13] Chun-Mei Feng, Kai Yu, Yong Liu, Salman Khan, and Wang-meng Zuo, “Diverse data augmentation with diffusions for effective test-time prompt tuning,” in 2023 IEEE/CVF Inter-national Conference on Computer Vision (ICCV) . IEEE, 2023, pp. 2704–2714. [14] Zenghao Guan, Yucan Zhou, Wu Liu, and Xiaoyan Gu, “Statis-tics caching test-time adaptation for vision-language models,” 
+
+Advances in Neural Information Processing Systems , vol. 38, pp. 6616–6639, 2025. [15] Yossi Gandelsman, Alexei Efros, and Jacob Steinhardt, “Inter-preting clip’s image representation via text-based decomposi-tion,” in International conference on learning representations ,2024, vol. 2024, pp. 18395–18416. [16] Subhransu Maji, Esa Rahtu, Juho Kannala, Matthew Blaschko, and Andrea Vedaldi, “Fine-grained visual classification of air-craft,” arXiv preprint arXiv:1306.5151 , 2013. [17] Li Fei-Fei, Rob Fergus, and Pietro Perona, “Learning genera-tive visual models from few training examples: An incremen-tal bayesian approach tested on 101 object categories,” in 2004 conference on computer vision and pattern recognition work-shop . IEEE, 2004, pp. 178–178. [18] Jonathan Krause, Michael Stark, Jia Deng, and Li Fei-Fei, “3d object representations for fine-grained categorization,” in Pro-ceedings of the IEEE international conference on computer vi-sion workshops , 2013, pp. 554–561. [19] Mircea Cimpoi, Subhransu Maji, Iasonas Kokkinos, Sammy Mohamed, and Andrea Vedaldi, “Describing textures in the wild,” in Proceedings of the IEEE conference on computer vision and pattern recognition , 2014, pp. 3606–3613. [20] Patrick Helber, Benjamin Bischke, Andreas Dengel, and Damian Borth, “Eurosat: A novel dataset and deep learning benchmark for land use and land cover classification,” IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing , vol. 12, no. 7, pp. 2217–2226, 2019. [21] Maria-Elena Nilsback and Andrew Zisserman, “Automated flower classification over a large number of classes,” in 2008 Sixth Indian conference on computer vision, graphics & image processing . IEEE, 2008, pp. 722–729. [22] Lukas Bossard, Matthieu Guillaumin, and Luc Van Gool, “Food-101–mining discriminative components with random forests,” in European conference on computer vision . Springer, 2014, pp. 446–461. [23] Omkar M Parkhi, Andrea Vedaldi, Andrew Zisserman, and CV Jawahar, “Cats and dogs,” in 2012 IEEE conference on computer vision and pattern recognition . IEEE, 2012, pp. 3498–3505. [24] Jianxiong Xiao, James Hays, Krista A Ehinger, Aude Oliva, and Antonio Torralba, “Sun database: Large-scale scene recog-nition from abbey to zoo,” in 2010 IEEE computer society conference on computer vision and pattern recognition . IEEE, 2010, pp. 3485–3492. [25] Khurram Soomro, Amir Roshan Zamir, Mubarak Shah, et al., “A dataset of 101 human action classes from videos in the wild,” Center for Research in Computer Vision , vol. 2, no. 11, pp. 1–7, 2012. [26] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei, “Imagenet: A large-scale hierarchical image database,” in 2009 IEEE conference on computer vision and pattern recognition . Ieee, 2009, pp. 248–255. [27] Dan Hendrycks, Kevin Zhao, Steven Basart, Jacob Steinhardt, and Dawn Song, “Natural adversarial examples,” in Proceed-ings of the IEEE/CVF conference on computer vision and pat-tern recognition , 2021, pp. 15262–15271. [28] Benjamin Recht, Rebecca Roelofs, Ludwig Schmidt, and Vaishaal Shankar, “Do imagenet classifiers generalize to im-agenet?,” in International conference on machine learning .PMLR, 2019, pp. 5389–5400. [29] Dan Hendrycks, Steven Basart, Norman Mu, Saurav Kadavath, Frank Wang, Evan Dorundo, Rahul Desai, Tyler Zhu, Samyak Parajuli, Mike Guo, et al., “The many faces of robustness: A critical analysis of out-of-distribution generalization,” in 
+
+2021 IEEE/CVF International Conference on Computer Vision (ICCV) . IEEE, 2021, pp. 8320–8329. [30] Haohan Wang, Songwei Ge, Zachary Lipton, and Eric P Xing, “Learning robust global representations by penalizing local predictive power,” Advances in neural information processing systems , vol. 32, 2019.
