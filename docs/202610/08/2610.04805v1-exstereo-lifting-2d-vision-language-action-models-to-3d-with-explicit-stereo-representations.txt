@@ -1,0 +1,510 @@
+Title: ExStereo: Lifting 2D Vision-Language-Action Models to 3D with Explicit Stereo Representations
+
+URL Source: https://arxiv.org/pdf/2610.04805v1
+
+Published Time: Tue, 06 Oct 2026 01:25:07 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# ExStereo: Lifting 2D Vision-Language-Action Models to 3D with Explicit Stereo Representations 
+
+I-Chun Arthur Liu * Jason Chen * Gaurav S. Sukhatme Daniel Seita Viterbi School of Engineering, University of Southern California 
+
+Abstract —Three-dimensional perception is critical for robotic manipulation, particularly for high-precision tasks, as recovering metric depth and precise 3D object positions from monocular RGB observations is inherently ill-posed. However, many Vision-Language-Action (VLA) models rely solely on RGB observations for perception. Leveraging recent advances in foundation models for stereo matching, we introduce ExStereo, a stereo module that augments pre-trained 2D VLAs with 3D perception. ExStereo reconstructs scene geometry from stereo image pairs and renders multi-view observations as an explicit stereo representation for stereo feature extraction. The action tokens from the action expert selectively attend to the resulting stereo tokens through our proposed action-stereo cross-attention mechanism, enabling the policy to generate robot actions conditioned on 3D scene information. To learn robust 3D representations, we introduce a mid-training stage before task-specific post-training, using a self-supervised learning objective on large-scale stereo data. We validate our approach by fine-tuning two publicly available VLAs, π0.5 and SmolVLA, and evaluate them in simulation and on a real-world bimanual PiPER platform. Across both settings, VLAs fine-tuned with ExStereo consistently outperform baselines, demonstrating the effectiveness of stereo perception for robotic manipulation. Our anonymous project website is available at https://exstereo-vla.github.io/ExStereo/. 
+
+I. I NTRODUCTION 
+
+Vision-Language-Action (VLA) models have recently emerged as a powerful paradigm for robotic manipulation [1]– [3], demonstrating impressive visuomotor capabilities. By building on large-scale pretrained Vision-Language Models (VLMs) [4, 5], these policies learn from semantic priors, acquire diverse skills from demonstrations, and generalize across objects and instructions. However, most VLA models operate on monocular RGB observations processed through pre-trained 2D vision encoders to extract features for down-stream action generation. Operating on 2D visual tokens, these policies lack precise depth and geometric information. While effective in controlled settings, real-world interactions often require accurate spatial relationships and object locations, as well as robustness to occlusions and visual variations. Recent work has explored injecting 3D structure into VLAs [6]–[9], achieving strong performance on 3D manip-ulation tasks. However, these methods depend on RGB-D sensors, which require precise calibration and are sensitive to sensor noise. Meanwhile, StereoVLA [10] and StereoPol-icy [11] leverage stereo image pairs to obtain implicit stereo features for policy learning. StereoVLA requires training its VLA from scratch, while StereoPolicy provides only modest improvements to pre-trained VLAs. In this work, we show  
+
+> *Equal contribution. Stereo Camera
+> Left
+> Right
+> Off -the-Shelf Vision-Language Action Model
+> Vision-Language Model Action Expert
+
+ExStereo   
+
+> Action-Stereo Cross-Attention
+> Top
+> Explicit Stereo Representation
+> Front Left Right
+> Fig. 1: ExStereo is a stereo module that enables 3D spatial perception in pre-trained, off-the-shelf Vision-Language-Action models. Given a stereo image pair, it constructs four orthogonal views of the scene with metric 3D coordi-nates. This explicit 3D representation allows the models to selectively retrieve visual features relevant to the action tokens through our proposed action-stereo cross-attention mechanism, improving robotic manipulation performance.
+
+how effectively leveraging explicit stereo representations can equip 2D VLAs with metric 3D perception and substantially improve their performance. We propose lifting 2D Vision-Language-Action models to 3D with Ex plicit Stereo Representations (ExStereo), a stereo module that equips pre-trained, off-the-shelf VLAs with 3D spatial perception. It takes a stereo image pair as input and employs a pre-trained stereo foundation model [12] to obtain a disparity map. Using the camera intrinsics and stereo baseline, the disparity map is transformed into a metric depth map and 3D point cloud. The point cloud is rendered from four orthogonal viewpoints (Top, Front, Left, and Right) using z-buffering. The four views are then tiled horizontally to form a multi-view observation, which is fed into a Vision Transformer (ViT) [5] to obtain stereo tokens. The stereo tokens are utilized for action generation through the proposed action-stereo cross-attention mechanism, where the action tokens serve as queries and the stereo tokens serve as keys and values. This allows the action tokens to selectively attend to relevant 3D visual features without modifying the large prefix token sequence or the weights of VLMs, enabling pre-trained robot policies to efficiently integrate the stereo module during post-training. See Figure 1 for an overview. To learn robust 3D representations, we introduce amid-training stage with a masked autoencoding objective prior to post-training. During mid-training, patches of the multi-view observation are randomly masked, and the VLA is trained on a large-scale stereo dataset to reconstruct the missing patches while learning to extract relevant visual features for arXiv:2610.04805v1 [cs.RO] 3 Oct 2026 128 x 512 x depth-xyz-validity_mask                     
+
+> Stereo Foundation Model
+> Left
+> Right
+> Stereo Camera
+> 3D Point Cloud
+> 1
+> Vision Transformer
+> “stack two bowls”
+> Task Instruction Proprio RGB Image(s)
+> Off -the-Shelf VLA
+> Vision-Language Model Action Expert
+> Action-Stereo Cross-Attention
+> Action Tokens Qa′Stereo Tokens K,Vz
+> Cross-Attention
+> High attention weight
+> a′←a′+ CrossAttn( Q=a′,K=z,V=z)
+> Additional Mid-Training Objective
+> Vision Transformer
+> Transformer Decoder
+> Pixel reconstruction
+> 234
+> 1
+> 4
+> 2
+> 3
+
+Fig. 2: Overview of ExStereo. ExStereo enhances pre-trained VLA models by leveraging a stereo camera and a pre-trained, frozen stereo foundation model [12]. Given a stereo image pair, the stereo model predicts a disparity map, which is converted into a metric depth map and 3D point cloud using the camera intrinsics and stereo baseline. We render the point cloud from four orthogonal viewpoints (Top, Front, Left, and Right) using z-buffering. Each view is rasterized at a resolution of 128 × 128 and contains depth, 3D coordinates, and a validity mask. The four views are horizontally tiled into a multi-view observation of size 128 × 512 × 5, then processed by a Vision Transformer (ViT) [5] to extract stereo tokens z. We leverage z for action generation through our proposed action-stereo cross-attention, where action tokens a′ query z to selectively retrieve relevant 3D visual features while leaving the VLA’s prefix sequence and VLM weights unchanged. To learn robust 3D representations, we introduce mid-training with masked autoencoding (MAE), where the VLA reconstructs randomly masked multi-view patches from a large-scale stereo dataset while learning action-relevant features from incomplete observations. During VLA post-training, the ViT and action-stereo cross-attention block are frozen to prevent overfitting to task-specific demonstrations, while the MAE decoder is discarded. 
+
+action generation from incomplete observations. During post-training, the stereo module is frozen to prevent overfitting to task-specific demonstrations. We evaluate ExStereo on ten simulated RoboTwin [13] tasks and three real-world tasks using a bimanual AgileX PiPER platform. ExStereo improves the average simulation success rate of π0.5 from 51.2% to 76.4% and its real-world success rate from 16/60 to 50/60 trials, while also outperforming point-cloud and implicit-stereo baselines. The contributions of this paper are:  
+
+> •
+
+We propose ExStereo, a novel stereo module that lifts any 2D VLA to 3D for fast adaptation without requiring additional pre-training of the base policy.  
+
+> •
+
+We demonstrate that explicit stereo representations, when used appropriately, yield stronger downstream manipula-tion performance than implicit representations.  
+
+> •
+
+Extensive simulation and real-world experiments show that VLAs equipped with ExStereo greatly improve upon the performance of their base VLAs while outperforming other strong baselines. II. R ELATED WORK 
+
+A. Vision-Language-Action Models 
+
+Vision-Language-Action (VLA) models, also commonly referred to as robotic foundation models, fine-tune pretrained VLMs to output robot actions, such as end-effector pose deltas or joint targets, by training on large-scale teleoperation data [14]. Representative systems include RT-2, OpenVLA [1], SmolVLA [15], and the π family [2, 16]–[18]. We refer the reader to [19, 20] for surveys. Early VLAs discretized actions into tokens and predicted them autoregressively [1, 21], whereas recent policies attach a dedicated action expert trained with diffusion or flow matching to produce smooth, high-frequency action chunks [2, 15, 16]. Camera configurations have broadened in parallel, from a single third-person view to wrist-mounted cameras and to multi-camera rigs that observe the workspace from several sides [2]. Across these variants, each view is still processed by a monocular 2D encoder so metric scale and inter-object spatial relations must be inferred from appearance. Prior work has addressed these limitations by incorporating depth sensors [22]–[24], such as RGB-D cameras. However, these sensors often degrade on transparent [24] and reflective sur-faces and are sensitive to sensor noise, calibration errors, and point cloud artifacts, making high-quality 3D reconstruc-tion challenging. Beyond these hardware limitations, visual representations remain a key bottleneck. Existing 2D vision backbones [4, 25, 26] generalize well across diverse visual domains but lack explicit 3D structure. In contrast, 3D vision backbones directly capture geometry from point clouds [27]– [30], but tend to underperform their 2D counterparts due to the scarcity of large-scale 3D training data. These limitations motivate a 3D perception approach that preserves the scalability and representational strengths of 2D vision while providing explicit geometric information. Stereo setups are common on robot platforms and can recover such geometry from binocular disparity, yet the second image is rarely exploited by the policy. ExStereo builds on this observation and equips pre-trained VLAs with an explicit 3D representation computed from a stereo pair. 
+
+B. Stereo Vision in Computer Vision 
+
+Stereo matching recovers metric depth by estimating dis-parity between a rectified left–right image pair without active depth sensors. Previous classical methods build a cost vol-ume and refine disparity with 3D convolutions or recurrent updates [31]–[33]. More recently, the field has moved toward stereo foundation models that generalize zero-shot across domains by transferring priors from monocular depth models. FoundationStereo [34] establishes this direction through large-scale pretraining, and later work improves robustness on transparent, reflective, and textureless surfaces where depth sensors fail [35, 36]. Fast-FoundationStereo [12] distills these models for near real-time inference. We leverage it in ExStereo to obtain an explicit 3D representation. 
+
+C. Stereo Vision in Robotics 
+
+Stereo cameras recover depth from binocular disparity, making them more reliable for transparent, specular, and textureless objects, where conventional depth sensors often struggle. Prior work has applied stereo vision to challenging materials such as glass [24, 37], as well as to stereo-based grasping and tracking [38]. More recently, StereoPolicy [11] and StereoVLA [10] extract features from stereo modules, which we characterize as implicit representations (see Section IV-A for details), and combine them with language or RGB image features as inputs to a VLM for policy learning. In contrast, we use a stereo module to construct an explicit 3D representation of the scene and feed the corresponding tokens directly into the action expert for policy learning. III. P ROBLEM STATEMENT 
+
+Given a pre-trained VLA model πθ , parameterized by θ ,that maps an image observation It , proprioceptive state st , and language instruction ℓ to an action chunk at:t+H = πθ (It , st , ℓ ),where H denotes the action chunk size, our goal is to augment 
+
+πθ with a stereo module ψ that perceives the scene through a calibrated stereo camera. The stereo camera provides a left image ILt and a right image IRt , rectified using camera intrinsics 
+
+K and baseline B. The augmented VLA generates an action as 
+
+at:t+H = πψθ
+
+ ILt , IRt , st , ℓ , where the stereo module ψ comprises the frozen stereo foundation model, the geometric reconstruc-tion and rendering pipeline, the multi-view encoder ρ, and the action-stereo cross-attention block introduced in the action expert. Each dataset D consists of expert demonstrations of the form E =  IL 
+
+> 1
+
+, IR 
+
+> 1
+
+, a1, . . . , ILT , IRT , aT
+
+, where T denotes the number of time steps in each demonstration. We use the term VLA “fine-tuning” to refer to both mid-training and post-training, encompassing any additional training performed on the provided pre-trained VLA. IV. M ETHOD : E XSTEREO 
+
+ExStereo is the stereo module ψ that takes a stereo image pair as input, generates stereo tokens, and fuses them with action tokens from the VLA for 3D-conditioned action gener-ation. It first constructs a 3D scene point cloud for multi-view observation rendering (Section IV-A). The rendered multi-view observations are then fed into a point cloud encoder ρ to obtain multi-view tokens, which are cross-attended to queries from the action tokens. This allows each action timestep to selec-tively attend to any of the multi-view tokens (Section IV-B). In Section IV-C, we describe the two-stage training process. See Figure 2 for an overview. 
+
+A. Multi-View Observation Rendering 
+
+For a rectified stereo pair image (ILt , IRt ), we input it into a pre-trained, frozen Fast-FoundationStereo [12] F , a foundation model for stereo depth estimation, to obtain a dense disparity map dt = F (ILt , IRt ). We use the disparity map, horizontal focal length fx from K, and B to compute metric depth Zt = fxBdt . We then back-project the depth map using K
+
+to obtain a metric 3D point cloud in the left camera coordinate frame. To ensure consistent multi-view observations, we align the point cloud to a shared world coordinate frame: camera coordinates are remapped to a conventional world frame ( X
+
+right, Y forward, Z up). The dominant plane, corresponding to the table surface, is detected using RANSAC [39] and rotated to be level such that its normal is aligned with the +Z axis. The table surface is then shifted to z = 0, and the point cloud is horizontally re-centered by mean-centering the X and Y
+
+coordinates. We place four “virtual” cameras at orthogonal locations around the origin and render the point cloud into four orthographic views (Top, Front, Left, and Right) using a z-buffer that retains the nearest surface at each pixel. Each view is rasterized at a resolution of 128 × 128 and contains depth, 3D coordinates, and a validity mask. Note that the depth values are expressed in each virtual view’s coordinate frame, whereas the 3D coordinates are expressed in the world frame. The four views are concatenated horizontally to form the multi-view observation Ot ∈ R128 ×512 ×5.We define the explicit reconstruction of the point cloud and its multi-view rendering as an explicit stereo representation, in contrast to implicit stereo representations, which directly process stereo image pairs through a stereo module without explicitly reconstructing the underlying 3D geometry. This explicit representation enables the policy to perceive and reason about the environment in metric 3D space. 
+
+B. Multi-View Encoding and Action–Stereo Cross-Attention 
+
+We encode the multi-view observation Ot using a Vision Transformer (ViT) ρ [5]. The input is patchified using a strided convolution with a patch size of 16 × 16, yielding a total of 256 stereo tokens. Learned positional embeddings are added to the tokens, and neither a class token nor pooling is used. The encoder outputs the unpooled stereo tokens: 
+
+zt = ρ(Ot ) ∈ R256 ×d , (1) where d denotes the hidden dimension of the ViT. To effectively integrate the stereo module into a pre-trained VLA model, we propose fusing the action tokens with the stereo tokens using a single multi-head cross-attention block. We refer to this mechanism as action-stereo cross-attention. Given action tokens a′ 
+
+> t
+
+∈ RH×d generated from the VLA and stereo tokens zt , we construct queries from the action tokens and keys and values from the stereo tokens: 
+
+Q = a′
+
+> t
+
+W Q, K = ztW K , V = ztWV . (2) For each attention head i, we compute scaled dot-product attention as 
+
+Ai = softmax 
+
+ QiK⊤
+
+> i
+
+√dh
+
+
+
+Vi, i = 1, . . . , h, (3) where h is the number of attention heads and dh is the dimension of each head. The outputs from all attention heads are concatenated and projected through a learned output matrix 
+
+W O to obtain the stereo context for each action token. The resulting context is then added residually to the action tokens: 
+
+a′ 
+
+> t
+
+← a′ 
+
+> t
+
++
+
+Concat hi=1
+
+"
+
+softmax 
+
+ (a′
+
+> t
+
+W Q)i(ztW K )⊤
+
+> i
+
+√dh
+
+
+
+(ztWV )i
+
+#
+
+W O.
+
+(4) As the cross-attention block operates entirely on the action tokens and never modifies the prefix tokens or weights of the VLM, this stereo-conditioning mechanism is agnostic to the choice of VLM backbone and can be integrated into any VLA architecture that maintains an action-generation module. 
+
+C. Mid-Training and Post-Training 
+
+For VLA fine-tuning, we train πθ together with ψ in two stages: mid-training and post-training. Mid-training is an intermediate stage between pre-training a VLA on broad data and post-training on task-specific demonstrations. As shown empirically in our experiments, mid-training is particularly important for methods that introduce a new, unseen module after pre-training, as it allows the module to gradually adapt during policy learning. In this work, we mid-train πθ together with ψ on a large-scale stereo dataset to learn generalizable 3D representations for bimanual manipulation tasks. During mid-training, we leverage StereoEngine [40] to gen-erate a large-scale stereo dataset for real-world experiments. StereoEngine is a recent method that uses video diffusion to either lift existing monocular demonstrations into stereo pairs or directly generate both stereo views from simulation. In addition to the original VLA training objective (e.g., the flow-matching action loss), we introduce a masked autoencoding (MAE) [41] objective on the multi-view observations Ot .Specifically, at each training step, we uniformly sample and mask a subset of the 16 × 16 patches in Ot , producing a masked multi-view observation ˜Ot . The embedding of each masked patch is replaced with a learned mask token, while the total number of tokens remains unchanged. The resulting output of ρ, denoted by z′ 
+
+> t
+
+, therefore contains both visible and masked tokens. We provide z′ 
+
+> t
+
+to both the cross-attention block for action generation and a Transformer decoder Gmae 
+
+that reconstructs the depth, 3D coordinates, and validity mask of the masked patches. This objective encourages the policy to learn robust 3D rep-resentations from incomplete observations, which can improve                        
+
+> Fig. 3: Simulation Tasks with Domain Randomization. The following tasks are used for policy evaluation. Top: Lift Pot ,Adjust Bottle ,
+> Grab Roller ,Open Laptop ,and Beat Block Hammer ;Bottom:
+> Click Alarmclock ,Dump Bin Bigbin ,Handover Mic ,Press Stapler , and Stamp Seal . See the Appendix for details on domain randomization.
+
+robustness to occlusions, distractors, and sensor noise. Masked reconstruction has also been shown to produce representations that transfer effectively to downstream vision tasks [41]; here, we leverage this property to learn 3D representations useful for action generation. The MAE objective is defined as 
+
+LMAE = EOt ∼Dmid 
+
+h
+
+m ⊙  Gmae (z′ 
+
+> t
+
+) − Ot
+
+ 22
+
+i
+
+, (5) where m selects the masked patches. The overall mid-training objective is 
+
+LTotal = LVLA + λ LMAE , (6) where λ is a small fixed weighting coefficient. In post-training, we initialize the policy with the weights from the mid-training stage and keep the stereo module ψ
+
+frozen. The policy is then trained on a limited amount of task demonstrations Dpost using its standard Low-Rank Adaptation (LoRA) recipe [42]. Note that the MAE objective is not used during this stage, and the MAE decoder is discarded. This configuration preserves the general 3D representations learned at scale while preventing the stereo module from overfitting to the limited task-specific demonstrations. V. S IMULATION EXPERIMENTS 
+
+A. Experiment Setup 
+
+We conduct simulation experiments on the open-source RoboTwin [13] benchmark for bimanual manipulation using bimanual PiPER arms. We randomly select the following ten representative tasks from the full task suite for evaluation (see Figure 3 for an overview):  
+
+> •
+
+Lift Pot : Lift a pot with both arms.  
+
+> •
+
+Adjust Bottle : Reorient a bottle to an upright pose.  
+
+> •
+
+Grab Roller : Grasp and pick up a roller.  
+
+> •
+
+Open Laptop : Open the lid of a closed laptop.  
+
+> •
+
+Beat Block Hammer : Strike a block with a hammer.  
+
+> •
+
+Click Alarmclock : Press the button on top of an alarm clock.  
+
+> •
+
+Dump Bin Bigbin : Empty a small bin in a large bin.  
+
+> •
+
+Handover Mic : Pass a microphone from one arm to the other.  
+
+> •
+
+Press Stapler : Press down on a stapler.  
+
+> •
+
+Stamp Seal : Pick up a seal and stamp it on a target. Baselines π0.5 SmolVLA Task ACT DP3 StereoVLA Base ExStereo (w/o MT) ExStereo Base ExStereo Lift Pot 2.7 5.3 0.0 58.7 66.7 61.3 9.3 12.0                                                                                      
+
+> Adjust Bottle 10.7 2.7 53.3 76.0 89.3 96.0 58.7 96.0
+> Grab Roller 42.7 5.3 17.3 80.0 89.3 100.0 57.3 48.0 Open Laptop 0.0 5.3 2.7 61.3 72.0 92.0 2.7 44.0
+> Beat Block Hammer 0.0 4.0 0.0 25.3 45.3 70.7 1.3 24.0
+> Click Alarmclock 2.7 10.7 13.3 21.3 24.0 54.7 14.7 22.7
+> Dump Bin Bigbin 2.7 60.0 30.7 58.7 66.7 77.3 26.7 49.3
+> Handover Mic 0.0 28.0 6.7 26.7 49.3 77.3 0.0 65.3
+> Press Stapler 10.7 14.7 10.7 76.0 80.0 78.7 14.7 53.3
+> Stamp Seal 0.0 0.0 0.0 28.0 45.3 56.0 1.3 5.3
+> Average 7.2 13.6 13.5 51.2 62.8 76.4 18.7 42.0
+> TABLE I: Simulation Results. Per-task success rates (%) on ten bimanual RoboTwin tasks, averaged over three random seeds. We fine-tune two pre-trained VLAs, π0.5and SmolVLA, with ExStereo (highlighted in green) and compare them against their fine-tuned base policies. ACT (RGB), DP3 (point cloud), and StereoVLA serve as additional baselines. “w/o MT” denotes ExStereo without the mid-training stage. For each base VLA, the best result for each task is shown in bold . See Section V for more details.
+
+The average number of time steps across these ten tasks is 147. We compare ExStereo against the following baselines:  
+
+> •
+
+ACT [43] : State-of-the-art RGB behavior cloning policy for bimanual manipulation, serving as our 2D imitation learning baseline.  
+
+> •
+
+DP3 [44] : Point-cloud diffusion policy that operates on 3D point clouds and requires calibrated RGB-D sensors, whereas ExStereo uses only RGB cameras.  
+
+> •
+
+π0.5 [2] : Open-source, pre-trained RGB-based (2D) VLA post-trained without explicit 3D input.  
+
+> •
+
+SmolVLA [15] : Small, efficient, open-source, pre-trained RGB-based 2D VLA post-trained without explicit 3D input.  
+
+> •
+
+StereoVLA [10] : Stereo VLA that uses the pre-trained, frozen FoundationStereo model [34] to extract 3D cost-volume features as an implicit stereo representation for policy learning.  
+
+> •
+
+π0.5-ExStereo : Pre-trained π0.5 fine-tuned with our stereo module, including the mid-training stage. Note that the stereo module is frozen during post-training.  
+
+> •
+
+π0.5-ExStereo w/o mid-training : Pre-trained π0.5 post-trained with our stereo module (without the mid-training stage). This serves as an ablation of ExStereo. Note that the ViT and action-stereo cross-attention block are unfrozen during post-training.  
+
+> •
+
+SmolVLA-ExStereo : Pre-trained SmolVLA fine-tuned with our stereo module, including the mid-training. Note that the stereo module is frozen during post-training. Each method is evaluated on 25 unseen episodes with domain randomization, with results averaged over three training seeds. 
+
+B. Datasets 
+
+In mid-training, we train a pre-trained VLA with ExStereo on 500 episodes from each of seven RoboTwin tasks in simulation with domain randomization [45] (see Appendix): Click Bell , Handover Block , Move Can Pot , Move Playingcard Away , Place Bread Basket , Place Dual Shoes , and Place Fan . The av-erage number of time steps across these seven tasks is 175. Note that the mid-training tasks do not overlap with the evaluation tasks in terms of either tasks or objects. In post-training, we train each method on 100 clean (non-domain-randomized) episodes. 
+
+C. Simulation Results 
+
+Table I reports the test success rates of different methods in simulation. VLAs fine-tuned with ExStereo (columns high-lighted in green) demonstrate significant performance gains, with improvements of up to 50.6% for π0.5 and 65.3% for SmolVLA on Handover Mic . On average, ExStereo im-proves the success rates of π0.5 and SmolVLA by 25.2% and 23.3%, respectively. Moreover, VLAs with ExStereo outper-form the other baselines across all tasks. Qualitatively, VLAs fine-tuned with ExStereo are more precise when grasping and manipulating objects, including reorienting, handing over, and pressing them. With respect to π0.5-ExStereo (w/o MT), it outperforms the post-trained base π0.5 on all tasks. This demonstrates that post-training alone with ExStereo can consistently improve performance over the base VLA across a diverse set of tasks. With the inclusion of the mid-training stage, performance further improves on the majority of tasks. We attribute the performance degradation with mid-training on certain tasks to the choice of tasks used during mid-training. Specifically, we hypothesize that including mid-training tasks that are more similar to the post-training tasks in terms of task type and environmental variations may help address this issue. 
+
+D. Ablation Studies 
+
+VLM with Implicit Stereo Features vs. Action-Stereo Cross-Attention with Explicit Stereo Features. Prior works, namely StereoVLA [10] and StereoPolicy [11], both concate-nate implicit stereo tokens with image and language tokens as inputs to the VLM for policy learning. StereoVLA obtains these implicit features from the 3D cost-volume features of a pre-trained stereo foundation model, whereas StereoPol-icy obtains them from its Stereo Feature Extractor. In this work, we demonstrate how to construct explicit stereo tokens and leverage them directly in the action expert for policy Time 
+
+Close Fridge Door  Lift Glass Bottles Fig. 4: Real-World Rollouts with Multi-View Observations. Examples of successful π0.5-ExStereo rollouts on two real-world tasks using the bimanual AgileX PiPER platform. Each column shows a trajectory over time, with each row containing the left stereo image and its corresponding multi-view observations (Top, Front, Left, Right) at a given timestep. The left column shows Close Fridge Door , in which the left arm closes the fridge door; the right column shows Lift Glass Bottles , in which both arms grasp and lift two glass bottles. Method Lift Pot Open Laptop VLM with Implicit Stereo Features 32.0 20.0 ASCA with Explicit Stereo Features (Ours) 66.7 72.0         
+
+> Mid-training without MAE 57.3 90.7 Mid-training with MAE (Ours) 61.3 92.0
+> TABLE II: Ablation Studies of ExStereo. We compare the success rates (%) on two RoboTwin tasks between the VLM approach with implicit stereo features and our proposed action-stereo cross-attention (ASCA) approach with explicit stereo features (rows 1 and 2), as well as between mid-training without and with the masked autoencoding (MAE) objective (rows 3 and 4). All experiments use the pre-trained π0.5as the base policy. Results are averaged over three training seeds.
+
+learning. As shown in Table II, our approach outperforms the VLM approach with implicit stereo features when used during post-training, without retraining the VLA or requiring any additional training prior to post-training. Our approach is easier for the policy to optimize because the action expert is substantially smaller than the VLM, while the explicit multi-view observations reduce the overhead of inferring geometry from stereo image pairs or 3D cost volumes. 
+
+Mid-training with and without MAE. We ablate ExStereo during mid-training with and without the additional masked autoencoding (MAE) objective, which enables the policy to learn from incomplete observations while simultaneously re-constructing the masked observations. This is especially useful for our single-stereo-camera setup, where the reconstructed point cloud often contains holes due to occlusions. This training objective forces the policy to generate robot actions conditioned on imperfect observations. As shown in Table II, mid-training with MAE consistently outperforms the variant without MAE. VI. R EAL -W ORLD EXPERIMENTS 
+
+A. Real-World Experiment Setup 
+
+We use two AgileX PiPER robot arms and a ZED Mini 2 camera on a tabletop platform, as shown in the top-left “Stereo                  
+
+> Method Stack Two Bowls Lift Glass Bottles Close Fridge Door
+> π0.5(Baseline) 2 / 20 5 / 20 9 / 20 StereoVLA 0 / 20 4 / 20 7 / 20
+> π0.5-ExStereo w/o MT 9 / 20 11 / 20 16 / 20
+> π0.5-ExStereo 13 / 20 18 / 20 19 / 20
+> TABLE III: Real-world Experiments. Results comparing ExStereo with baselines, with 20 trials per method and task combination. ‘w/o MT” denotes ExStereo without the mid-training stage.
+
+Camera” image in Figure 2. We perform experiments using the following tasks:  
+
+> •
+
+Stack Two Bowls : Stack two bowls on top of each other in the correct order.  
+
+> •
+
+Lift Glass Bottles : Pick up two transparent glass bottles from the table.  
+
+> •
+
+Close Fridge Door : Close the fridge door using the left arm. We select Stack Two Bowls to demonstrate that our method works on standard bimanual manipulation tasks, Lift Glass Bottles to evaluate stereo-based depth perception on transparent objects, and Close Fridge Door to show that our method can also handle articulated objects. 
+
+B. Datasets 
+
+To perform mid-training, ExStereo requires large-scale real-world stereo bimanual datasets. Existing datasets, such as DROID [46] and RoboCOIN [47], are predominantly either single-arm or monocular. In addition, few AgileX PiPER datasets are publicly available, and those that do exist are pre-dominantly monocular. We therefore collect as many publicly available AgileX PiPER datasets from the Internet as we can find, yielding 20 datasets from 11 contributors and a total of 3469 clips. We also include datasets collected using the AgileX Cobot Magic robot, which extends the AgileX PiPER with a mobile base. We provide a complete list of the datasets used in the Appendix. After collecting these datasets, we feed the monocular left views into StereoEngine [40] to generate a large-scale stereo dataset consisting of left-right image pairs while preserving the action labels from the original data. We then use the resulting dataset for policy mid-training. For post-training, an experienced roboticist used a Meta Quest 2 to collect teleoperation data. Because each task has its own difficulty, we collect a different number of demonstrations for each task: 200 for Stack Two Bowls , 50 for Lift Glass Bottles , and 20 for Close Fridge Door .
+
+C. Real-World Results 
+
+Real-world results are presented in Table III, with exam-ple rollouts of π0.5-ExStereo shown in Figure 4. ExStereo demonstrates substantially improved robustness across all tasks compared to baselines. Aggregated over the three tasks, 
+
+π0.5-ExStereo succeeds on 50/60 trials (83.3%) versus 16/60 (26.7%) for the π0.5 baseline, with π0.5-ExStereo w/o MT in between at 36/60 (60.0%). StereoVLA, which uses implicit stereo features, performs worst at 11/60 (18.3%), falling below the RGB-only π0.5 baseline on every task. We hypothesize that StereoVLA has weaker generalization capabilities than π0.5, which is pre-trained on a larger and more diverse dataset. Combined with its VLM-based approach using implicit stereo features, post-training on a limited number of task demonstrations may be insufficient for StereoVLA to reach its optimal performance. The largest gain is on Lift Glass Bottles , where ExStereo reaches 18/20 while the 
+
+π0.5 baseline reaches only 5/20 and StereoVLA only 4/20. 
+
+Stack Two Bowls: The baseline methods frequently failed to grasp the bowls, either closing the gripper beside or above them. π0.5-ExStereo w/o MT and StereoVLA reliably grasped the left bowl but often failed to grasp the right bowl and stack it on top. In contrast, the RGB-only π0.5 baselines failed to grasp either bowl, highlighting the importance of 3D perception for successfully grasping these objects. 
+
+Lift Glass Bottles: The most common failure modes for the baselines were failing to pick up the bottles and knocking them over with the gripper. In contrast, π0.5-ExStereo is the most reliable policy for precisely grasping and lifting bottles. Because this task requires precise gripper positioning, incorporating 3D spatial information about the objects is essential, as demonstrated by the improved performance of 
+
+π0.5 with our 3D perception augmentation. Refer to Figure 5 for point cloud reconstructions of transparent objects using Fast-FoundationStereo [12]. 
+
+Close Fridge Door: The baseline methods often mis-judged the distance to the door and missed it entirely, driving the arms straight into the fridge. The RGB-only π0.5 baseline, in particular, tended to miss the door by reaching too far to the right or too high. In some cases, the arm applied excessive force and tipped the fridge over, which we counted as a failure. With accurate 3D perception, ExStereo contacts the door at the correct location and closes it consistently. Real Sense  Stereo Camera 
+
+RGB Image   
+
+> Fig. 5: Point Cloud Reconstruction of Transparent Objects. The bottom-left image shows the point cloud captured by a RealSense RGB-D camera, which contains substantial noise and missing geometry due to the trans-parent objects. In contrast, the bottom-right image shows the point cloud reconstructed from a stereo image pair captured by a ZED Mini using Fast-FoundationStereo [12], yielding cleaner and more geometrically consistent 3D points.
+
+VII. L IMITATIONS 
+
+First, ExStereo depends on a pre-trained stereo foundation model [12], which may degrade on distant, textureless, and thin structures, and these errors may affect the reconstructed multi-view observations. Second, the projected 3D point cloud is derived from a single stereo viewpoint, so occluded regions leave holes across all four rendered views. Third, our multi-view rendering assumes a planar surface, such as a tabletop, to define the world frame, which may not hold in cluttered or non-tabletop scenes. Finally, our mid-training data comes from a single benchmark and a single bimanual embodiment. Scaling to larger stereo robot datasets and more diverse embodiments remains an important direction for future work. VIII. C ONCLUSION 
+
+We present ExStereo, a stereo module that equips any pre-trained 2D VLA with 3D perception using only a stereo camera by reconstructing explicit scene geometry from astereo pair with an off-the-shelf stereo foundation model, rendering the geometry into a set of multi-view observations, and injecting the resulting stereo tokens into the base policy through our proposed action-stereo cross-attention mechanism. We mid-train the VLA with ExStereo on large-scale stereo data using a self-supervised objective and further post-train the model on a small set of task demonstrations while keeping ExStereo frozen. Across simulation and real-world experiments, VLAs fine-tuned with ExStereo substantially outperform their base policies, as well as RGB-, point-cloud-, and stereo-based baselines. Furthermore, we demonstrate that explicitly representing stereo geometry and leveraging it in the action expert is more effective than the standard VLM approach with implicit stereo geometry for direct fine-tuning. These results demonstrate that incorporating stereo vision is a promising approach for augmenting existing 2D VLAs with 3D spatial perception. IX. A CKNOWLEDGMENT 
+
+Daniel Seita acknowledges generous support from Samsung Research America, NSF grant #2447397, and the NVIDIA Academic Grant Program Award. REFERENCES 
+
+[1] M. Kim, K. Pertsch, S. Karamcheti, T. Xiao, A. Balakrishna, S. Nair, R. Rafailov, E. Foster, G. Lam, P. Sanketi, Q. Vuong, T. Kollar, B. Burchfiel, R. Tedrake, D. Sadigh, S. Levine, P. Liang, and C. Finn, “Openvla: An open-source vision-language-action model,” in Conference on Robot Learning (CoRL), 2024. [2] P. Intelligence et al., “ π0.5: a Vision-Language-Action Model with Open-World Generalization,” in Conference on Robot Learning (CoRL), 2025. [3] S. Liu, L. Wu, B. Li, H. Tan, H. Chen, Z. Wang, K. Xu, H. Su, and J. Zhu, “RDT-1B: a Diffusion Foundation Model for Bimanual Manipulation,” in International Conference on Learning Representations (ICLR), 2025. [4] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sas-try, A. Askell, P. Mishkin, J. Clark, G. Krueger, and I. Sutskever, “Learning Transferable Visual Models From Natural Language Supervision,” in International Conference on Machine Learning (ICML), 2021. [5] A. Dosovitskiy, L. Beyer, A. Kolesnikov, D. Weissenborn, X. Zhai, T. Unterthiner, M. Dehghani, M. Minderer, G. Heigold, S. Gelly, J. Uszkoreit, and N. Houlsby, “An image is worth 16x16 words: Transformers for image recognition at scale,” in International Conference on Learning Representations (ICLR), 2021. [6] P. Li, Y. Chen, H. Wu, X. Ma, X. Wu, Y. Huang, L. Wang, T. Kong, and T. Tan, “BridgeVLA: Input-Output Alignment for Efficient 3D Manipulation Learn-ing with Vision-Language Models,” in Neural Information Processing Systems (NeurIPS), 2025. [7] C. Li, J. Wen, Y. Peng, Y. Peng, F. Feng, and Y. Zhu, “PointVLA: Injecting the 3D World into Vision-Language-Action Models,” in IEEE Robotics and Automation Letters (RA-L), 2025. [8] L. Sun, B. Xie, Y. Liu, H. Shi, T. Wang, and J. Cao, “Geovla: Empowering 3d representations in vision-language-action models,” 2025. [Online]. Available: https://arxiv.org/abs/2508.09071 [9] H. Zhen, X. Qiu, P. Chen, J. Yang, X. Yan, Y. Du, Y. Hong, and C. Gan, “3D-VLA: 3D Vision-Language-Action Generative World Model,” in International Conference on Machine Learning (ICML), 2024. [10] S. Deng, M. Yan, Y. Zheng, J. Su, W. Zhang, Y. Zeng, X. Zhao, H. Cui, Z. Zhang, and H. Wang, “StereoVLA: Enhancing Vision-Language-Action Models with Stereo Vision,” in Robotics: Science and Systems (RSS), 2026. [11] E. Han, Y. Jiang, Y. Wang, H. Xiao, H. Huang, J. Xie, J. Wu, L. Fei-Fei, and R. Zhang, “StereoPolicy: Improving Robotic Manipulation Policies via Stereo Perception,” arXiv preprint arXiv:2605.09989, 2026. [12] B. Wen, S. Dewan, and S. Birchfield, “Fast-FoundationStereo: Real-time zero-shot stereo matching,” in IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2026. [13] T. Chen, Z. Chen, B. Chen, Z. Cai, Y. Liu, Z. Li, Q. Liang, X. Lin, Y. Ge, Z. Gu, W. Deng, Y. Guo, T. Nian, X. Xie, Q. Chen, K. Su, T. Xu, G. Liu, M. Hu, H. ang Gao, K. Wang, Z. Liang, Y. Qin, X. Yang, P. Luo, and Y. Mu, “Robotwin 2.0: A scalable data generator and benchmark with strong domain randomization for robust bimanual robotic manipulation,” in International Conference on Machine Learning (ICML), 2026. [14] O. X.-E. Collaboration, “Open X-Embodiment: Robotic Learning Datasets and RT-X Models,” in IEEE International Conference on Robotics and Automation (ICRA), 2024. [15] M. Shukor, D. Aubakirova, F. Capuano, P. Kooijmans, S. Palma, A. Zouitine, M. Aractingi, C. Pascal, M. Russi, A. Marafioti, S. Alibert, M. Cord, T. Wolf, and R. Cadene, “SmolVLA: A Vision-Language-Action Model for Affordable and Efficient Robotics,” arXiv preprint arXiv:2506.01844, 2025. [16] K. Black, N. Brown, D. Driess, A. Esmail, M. Equi, C. Finn, N. Fusai, L. Groom, K. Hausman, B. Ichter, S. Jakubczak, T. Jones, L. Ke, S. Levine, A. Li-Bell, M. Mothukuri, S. Nair, K. Pertsch, L. X. Shi, J. Tanner, Q. Vuong, A. Walling, H. Wang, and U. Zhilinsky, “ π0: A Vision-Language-Action Flow Model for General Robot Control,” in Robotics: Science and Systems (RSS), 2025. [17] P. Intelligence et al., “ π∗
+
+> 0.6
+
+: a VLA That Learns From Experience,” arXiv preprint arXiv:2511.14759, 2025. [18] ——, “ π0.7: a Steerable Generalist Robotic Foundation Model with Emergent Capabilities,” arXiv preprint arXiv:2604.15483, 2026. [19] R. Firoozi, J. Tucker, S. Tian, A. Majumdar, J. Sun, W. Liu, Y. Zhu, S. Song, A. Kapoor, K. Hausman, B. Ichter, D. Driess, J. Wu, C. Lu, and M. Schwager, “Foundation Models in Robotics: Applications, Challenges, and the Future,” arXiv preprint arXiv:2312.07843, 2023. [20] Y. Hu, Q. Xie, V. Jain, J. Francis, J. Patrikar, N. Keetha, S. Kim, Y. Xie, T. Zhang, S. Zhao, Y. Q. Chong, C. Wang, K. Sycara, M. Johnson-Roberson, D. Batra, X. Wang, S. Scherer, Z. Kira, F. Xia, and Y. Bisk, “Toward General-Purpose Robots via Foundation Models: A Survey and Meta-Analysis,” arXiv preprint arXiv:2312.08782, 2023. [21] A. Brohan, N. Brown, J. Carbajal, Y. Chebotar, X. Chen, K. Choromanski, T. Ding, D. Driess, A. Dubey, C. Finn, P. Florence, C. Fu, M. G. Arenas, K. Gopalakrishnan, K. Han, K. Hausman, A. Herzog, J. Hsu, B. Ichter, A. Irpan, N. Joshi, R. Julian, D. Kalashnikov, Y. Kuang, I. Leal, L. Lee, T.-W. E. Lee, S. Levine, Y. Lu, H. Michalewski, I. Mordatch, K. Pertsch, K. Rao, K. Reymann, M. Ryoo, G. Salazar, P. Sanketi, P. Sermanet, J. Singh, A. Singh, R. Soricut, H. Tran, V. Vanhoucke, Q. Vuong, A. Wahid, S. Welker, P. Wohlhart, J. Wu, F. Xia, T. Xiao, P. Xu, S. Xu, T. Yu, and B. Zitkovich, “RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control,” in Conference on Robot Learning (CoRL), 2023. [22] I.-C. A. Liu, K. Choromanski, S. Huang, and C. Schenck, “Clamp: Contrastive learning for 3d multi-view action-conditioned robotic manipulation pretraining,” in Robotics: Science and Systems (RSS), 2026. [23] Y. Jia, J. Liu, S. Chen, C. Gu, Z. Wang, L. Luo, L. Lee, P. Wang, Z. Wang, R. Zhang, and S. Zhang, “Lift3D Foundation Policy: Lifting 2D Large-Scale Pretrained Models for Robust 3D Robotic Manipulation,” in IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2025. [24] S. Wei, H. Geng, J. Chen, C. Deng, C. Wenbo, C. Zhao, X. Fang, L. Guibas, and H. Wang, “D3roma: Disparity diffusion-based depth sensing for material-agnostic robotic manipulation,” in Conference on Robot Learning (CoRL), 2024. [25] M. Tschannen, A. Gritsenko, X. Wang, M. F. Naeem, I. M. Alabdulmohsin, N. Parthasarathy, T. Evans, L. Beyer, Y. Xia, B. Mustafa, O. H’enaff, J. Harmsen, A. Steiner, and X.-Q. Zhai, “SigLIP 2: Multilingual Vision-Language Encoders with Improved Semantic Understanding, Localization, and Dense Features,” arXiv preprint arXiv:2502.14786, 2025. [26] O. Sim´ eoni, H. V. Vo, M. Seitzer, F. Baldassarre, M. Oquab, C. Jose, V. Khalidov, M. Szafraniec, S. Yi, M. Ramamonjisoa, F. Massa, D. Haziza, L. Wehrstedt, J. Wang, T. Darcet, T. Moutakanni, L. Sentana, C. Roberts, A. Vedaldi, J. Tolan, J. Brandt, C. Couprie, J. Mairal, H. J´ egou, P. Labatut, and P. Bojanowski, “DINOv3,” 2025. [Online]. Available: https://arxiv.org/abs/2508.10104 [27] X. Wu, D. DeTone, D. Frost, T. Shen, C. Xie, N. Yang, J. Engel, R. Newcombe, H. Zhao, and J. Straub, “Sonata: Self-supervised learning of reliable point representations,” in IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2025. [28] X. Wu, X. Wen, X. Liu, and H. Zhao, “Masked scene contrast: A scalable framework for unsupervised 3d representation learning,” in IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2023. [29] X. Wu, L. Jiang, P.-S. Wang, Z. Liu, X. Liu, Y. Qiao, W. Ouyang, T. He, and H. Zhao, “Point transformer v3: Simpler, faster, stronger,” in IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2024. [30] S. Xie, J. Gu, D. Guo, C. R. Qi, L. Guibas, and O. Litany, “Pointcontrast: Unsu-pervised pre-training for 3d point cloud understanding,” in European Conference on Computer Vision (ECCV), 2020. [31] J.-R. Chang and Y.-S. Chen, “Pyramid stereo matching network,” in The IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2018. [32] L. Lipson, Z. Teed, and J. Deng, “Raft-stereo: Multilevel recurrent field transforms for stereo matching,” in International Conference on 3D Vision (3DV), 2021. [33] G. Xu, X. Wang, Z. Zhang, J. Cheng, C. Liao, and X. Yang, “Igev++: Iterative multi-range geometry encoding volumes for stereo matching,” IEEE Transactions on Pattern Analysis and Machine Intelligence, 2025. [34] B. Wen, M. Trepte, J. Aribido, J. Kautz, O. Gallo, and S. Birchfield, “Foundation-stereo: Zero-shot stereo matching,” in IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2025. [35] L. Bartolomei, F. Tosi, M. Poggi, and S. Mattoccia, “Stereo anywhere: Robust zero-shot deep stereo matching even where either stereo or mono fail,” in IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2025. [36] X. Guo, C. Zhang, Y. Zhang, R. Wang, D. Nie, W. Zheng, M. Poggi, H. Zhao, M. Ye, Q. Zou, and L. Chen, “Stereo anything: Unifying stereo matching with large-scale mixed data,” 2024. [37] K. Bai, H. Zeng, L. Zhang, Y. Liu, H. Xu, Z. Chen, and J. Zhang, “Cleardepth: Enhanced stereo perception of transparent objects for robotic manipulation,” 2024. [38] J. Yu, K. Hari, K. El-Refai, A. Dalil, J. Kerr, C.-M. Kim, R. Cheng, M. Z. Irshad, and K. Goldberg, “Persistent object gaussian splat (pogs) for tracking human and robot manipulation of irregularly shaped objects,” in IEEE International Conference on Robotics and Automation (ICRA), 2025. [39] M. A. Fischler and R. C. Bolles, “Random sample consensus: a paradigm for model fitting with applications to image analysis and automated cartography,” Commun. ACM, vol. 24, no. 6, p. 381–395, Jun. 1981. [40] J. Chen, I.-C. A. Liu, G. Sukhatme, and D. Seita, “StereoEngine: Scaling Stereo Bimanual Robot Data without Stereo Cameras,” 2026. [41] K. He, X. Chen, S. Xie, Y. Li, P. Doll’ar, and R. B. Girshick, “Masked autoencoders are scalable vision learners,” in IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2021. [42] E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, and W. Chen, “Lora: Low-rank adaptation of large language models,” in International Conference on Learning Representations (ICLR), 2022. [43] T. Z. Zhao, V. Kumar, S. Levine, and C. Finn, “Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware,” in Robotics: Science and Systems (RSS), 2023. [44] Y. Ze, G. Zhang, K. Zhang, C. Hu, M. Wang, and H. Xu, “3D Diffusion Policy: Generalizable Visuomotor Policy Learning via Simple 3D Representations,” in Robotics: Science and Systems (RSS), 2024. [45] J. Tobin, R. Fong, A. Ray, J. Schneider, W. Zaremba, and P. Abbeel, “Domain Randomization for Transferring Deep Neural Networks from Simulation to the Real World,” in IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS), 2017. [46] A. Khazatsky et al., “Droid: A large-scale in-the-wild robot manipulation dataset,” in Robotics: Science and Systems (RSS), 2024. [47] S. Wu et al., “Robocoin: An open-sourced bimanual robotic data collection for integrated manipulation,” 2025. [Online]. Available: https://github.com/FlagOpen/ RoboCOIN APPENDIX 
+
+A. Implementation Details 
+
+ExStereo. The ExStereo module adds 21 .2M parameters to a VLA (3 .2M for the multi-view ViT, 17 .3M for the action-stereo cross-attention projections, and 0 .6M for the MAE decoder, which is discarded after mid-training). This is a minimal addition: for reference, π0.5 has a 2B-parameter VLM backbone and a 300M-parameter action expert. We mid-train the VLA with ExStereo for 300 , 000 training steps, followed by 30 , 000 steps of post-training. For π0.5 and SmolVLA, we use their default hyper-parameters: those from RoboTwin for 
+
+π0.5 and from the LeRobot GitHub repository for SmolVLA. We do not perform any hyper-parameter tuning and directly use the checkpoint from the final training step for evaluation. See Table IV for the hyper-parameters used in the ExStereo module. 
+
+StereoVLA, ACT, and DP3. As with ExStereo, we do not perform any hyperparameter tuning and use the default hyper-parameters from their respective codebases: the official StereoVLA GitHub repository for StereoVLA and RoboTwin for ACT and DP3. StereoVLA is trained for 30 , 000 steps, while ACT and DP3 are trained for 6 , 000 and 3 , 000 epochs, respectively.                                                       
+
+> TABLE IV: ExStereo module, shared by π0.5-ExStereo and SmolVLA-ExStereo.
+> Hyper-parameter Value
+> Point Cloud Reconstruction
+> Voxel downsampling 0.001 m Radius outlier removal 30 points within 0 .03 m Table-plane RANSAC threshold 0 .01 m, n=3, 1000 iterations Canonical frame table plane horizontal, surface at z=0
+> Orthographic Rendering
+> Camera distance 0.6 m lateral, 0 .5 m top Tile resolution 128 ×128 per view Channels [depth ,x,y,z,valid ]
+> Background fill −1.0 (channels 1–4), 0 .0 (valid mask) Output tensor 128 ×512 ×5
+> Multi-View ViT Encoder
+> Patch size 16 ×16 Number of patches 256 (8 ×32) Embedding width 256 Depth 4 blocks Attention heads 4Positional embedding learned
+> MAE objective (mid-training only)
+> Mask ratio 0.30 ( ⌊0.3·256 ⌋=76 patches) Loss weight λMAE 0.01 Decoder depth / width / heads 2 / 128 / 4
+
+B. Domain Randomization 
+
+We use the default domain randomization settings provided in the RoboTwin documentation. Specifically, we enable ran-dom backgrounds by applying random textures to the table and background, and add table clutter using distractor objects to simulate cluttered environments. The clean-background rate is set to 0 .02, such that 2% of samples retain a clean background despite background randomization. We randomly perturb the table height by up to ±0.03 m while keeping the head-camera position fixed with no random displacement. We also   
+
+> Fig. 6: Real-World Setup. Our real-world platform with two AgileX PiPER arms. The pink dashed circle marks the ZED Mini 2 stereo camera used to capture the stereo pairs.
+
+enable randomized lighting, with a crazy-light rate of 0 .02, corresponding to a 2% probability of applying extreme lighting conditions. 
+
+C. Additional Real-World Implementation Details 
+
+For the real-world setup, we use a bimanual AgileX PiPeR platform, as shown in Figure 6. For the Stack Two Bowls task, we use 3D-printed bowls. For the Lift Glass Bottles task, we use commercially available beverage bot-tles. For the Close Fridge Door task, we use a toy refrigerator door. For the mid-training stage of ExStereo, we provide a list of the monocular datasets used in our experiments. These datasets were converted into stereo pairs using StereoEngine [40], with links to the original data sources provided here:  
+
+> •
+
+Autobrik/bi piper pick and place fruits mantra  
+
+> •
+
+JohnnyXing/001 2026041415 bipiper  
+
+> •
+
+csjmacmi/piperx pick and place v1 4  
+
+> •
+
+gauravpradeep/t01 piper pick and place bimanual lerobot  
+
+> •
+
+mjung11/nc bi piper pot car apache merged  
+
+> •
+
+moonyh1230/piper wooden block dual realsense 0922  
+
+> •
+
+RoboSynChallenge/Piper real pour dual  
+
+> •
+
+RDLwicked/pick up green block drawer piperX  
+
+> •
+
+mjung11/nc bi piper pp grape pot depth mj A  
+
+> •
+
+mjung11/nc bi piper folding mj A  
+
+> •
+
+csjmacmi/piperx pick and place v1  
+
+> •
+
+csjmacmi/piperx pick and place v1 3  
+
+> •
+
+csjmacmi/eval piperx pick and place v1 5  
+
+> •
+
+mjung11/bi piper open tissue test  
+
+> •
+
+Sohaib03/piperx pick and place v1 2  
+
+> •
+
+12e21/bi piper subset  
+
+> •
+
+richardshkim/bi piper dataset  
+
+> •
+
+mjung11/eval bi piper tissue xvla  
+
+> •
+
+csjmacmi/piperx pick and place v1 2  
+
+> •
+
+csjmacmi/eval piperx pick and place v1 4
